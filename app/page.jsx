@@ -3,98 +3,82 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Camera,
   CheckCircle2,
   ClipboardList,
-  Clock3,
-  MapPin,
-  PackageCheck,
-  Plus,
-  Route,
+  FileSpreadsheet,
+  MapPinned,
+  MessageSquareWarning,
+  Navigation,
+  PackagePlus,
   Search,
+  Star,
+  Store,
   Truck,
-  UserRound,
-  WalletCards
+  UserCheck
 } from "lucide-react";
 
-const STORAGE_KEY = "hillkoff-delivery-system:v1";
+const STORE_KEY = "hillkoff-delivery-ops:v2";
 
 const DRIVERS = [
-  { id: "D1", name: "สมชาย", vehicle: "รถกระบะ 4 ล้อ", plate: "ชม 2145", capacity: 900, zone: "เมืองเชียงใหม่" },
-  { id: "D2", name: "วิชัย", vehicle: "รถตู้ทึบ", plate: "ชม 6732", capacity: 1200, zone: "สันกำแพง / ดอยสะเก็ด" },
-  { id: "D3", name: "อนันต์", vehicle: "รถกระบะคอก", plate: "ชม 8291", capacity: 1000, zone: "หางดง / สันป่าตอง" },
-  { id: "D4", name: "ธนวัฒน์", vehicle: "รถตู้เย็น", plate: "ชม 1187", capacity: 750, zone: "ลำพูน / ลำปาง" },
-  { id: "D5", name: "กิตติ", vehicle: "รถกระบะ 4 ล้อ", plate: "ชม 4428", capacity: 900, zone: "แม่ริม / เชียงราย" }
+  { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001" },
+  { id: "D2", name: "Wichai", plate: "ชม 6732", zone: "สันกำแพง / ดอยสะเก็ด", phone: "081-000-1002" },
+  { id: "D3", name: "Anan", plate: "ชม 8291", zone: "หางดง / สันป่าตอง", phone: "081-000-1003" },
+  { id: "D4", name: "Thanawat", plate: "ชม 1187", zone: "ลำพูน / ลำปาง", phone: "081-000-1004" },
+  { id: "D5", name: "Kitti", plate: "ชม 4428", zone: "แม่ริม / เชียงราย", phone: "081-000-1005" }
 ];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
-const STATUSES = ["รอจัดส่ง", "จัดคิวแล้ว", "กำลังส่ง", "ส่งสำเร็จ", "ติดปัญหา"];
-const STATUS_COLORS = {
-  "รอจัดส่ง": "#92400e",
-  "จัดคิวแล้ว": "#1d4ed8",
-  "กำลังส่ง": "#7c3aed",
-  "ส่งสำเร็จ": "#166534",
-  "ติดปัญหา": "#b91c1c"
-};
+const STATUS = ["รอคนขับรับ", "กำลังส่ง", "ส่งสำเร็จ", "ติดปัญหา"];
+const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c" };
 
-const sampleOrders = [
-  ["CM-260522-001", "Ristr8to Lab", "นิมมาน", "เมืองเชียงใหม่", "09:00-10:30", 42, 3850, "D1", "กำลังส่ง"],
-  ["CM-260522-002", "Graph Cafe", "ช้างม่อย", "เมืองเชียงใหม่", "10:00-12:00", 28, 2600, "D1", "จัดคิวแล้ว"],
-  ["CM-260522-003", "Akha Ama", "สันติธรรม", "เมืองเชียงใหม่", "13:00-15:00", 55, 4200, "D1", "รอจัดส่ง"],
-  ["CM-260522-004", "Transit Number 8", "สันกำแพง", "สันกำแพง", "09:30-11:30", 80, 9100, "D2", "จัดคิวแล้ว"],
-  ["CM-260522-005", "Mae On Roastery", "แม่ออน", "สันกำแพง", "11:30-14:00", 64, 7200, "D2", "กำลังส่ง"],
-  ["CM-260522-006", "Doi Saket Coffee", "ดอยสะเก็ด", "ดอยสะเก็ด", "14:00-16:00", 72, 6800, "D2", "รอจัดส่ง"],
-  ["CM-260522-007", "Hang Dong Bistro", "หางดง", "หางดง", "09:00-11:00", 96, 10500, "D3", "จัดคิวแล้ว"],
-  ["CM-260522-008", "Baan Tawai Cafe", "บ้านถวาย", "หางดง", "11:00-13:00", 40, 3600, "D3", "รอจัดส่ง"],
-  ["CM-260522-009", "San Pa Tong Mart", "สันป่าตอง", "สันป่าตอง", "13:00-16:30", 120, 13200, "D3", "รอจัดส่ง"],
-  ["CM-260522-010", "Lamphun Coffee Hub", "เมืองลำพูน", "ลำพูน", "10:00-12:00", 100, 11800, "D4", "กำลังส่ง"],
-  ["CM-260522-011", "Lampang Beans", "เมืองลำปาง", "ลำปาง", "13:00-17:00", 160, 18400, "D4", "จัดคิวแล้ว"],
-  ["CM-260522-012", "Mae Rim Garden", "แม่ริม", "แม่ริม", "09:00-11:00", 75, 8300, "D5", "ส่งสำเร็จ"],
-  ["CM-260522-013", "Mon Jam Cafe", "แม่ริม", "แม่ริม", "11:00-14:00", 48, 5200, "D5", "กำลังส่ง"],
-  ["CM-260522-014", "Chiang Rai Partner", "เมืองเชียงราย", "เชียงราย", "15:00-18:00", 180, 20500, "D5", "จัดคิวแล้ว"],
-  ["CM-260522-015", "Warorot Wholesale", "กาดหลวง", "เมืองเชียงใหม่", "08:30-10:00", 65, 7400, "D1", "ส่งสำเร็จ"],
-  ["CM-260522-016", "Chang Phueak Store", "ช้างเผือก", "เมืองเชียงใหม่", "10:30-12:00", 22, 1900, "", "รอจัดส่ง"],
-  ["CM-260522-017", "Sansai Cafe", "สันทราย", "เมืองเชียงใหม่", "13:30-15:30", 37, 3300, "", "รอจัดส่ง"],
-  ["CM-260522-018", "Pa Daet Coffee", "ป่าแดด", "เมืองเชียงใหม่", "15:00-17:00", 45, 4700, "", "รอจัดส่ง"],
-  ["CM-260522-019", "Mae Hia Market", "แม่เหียะ", "เมืองเชียงใหม่", "16:00-18:00", 58, 6100, "", "รอจัดส่ง"],
-  ["CM-260522-020", "Phayao Dealer", "เมืองพะเยา", "พะเยา", "14:00-18:00", 130, 14500, "", "รอจัดส่ง"]
-].map(([id, customer, area, zone, window, weight, cod, driverId, status]) => ({
-  id,
-  customer,
-  area,
-  zone,
-  window,
-  weight,
-  cod,
-  driverId,
-  status,
-  note: "",
-  docs: Math.random() > 0.45,
-  priority: weight >= 120 || zone === "เชียงราย" || zone === "ลำปาง" ? "ด่วน" : "ปกติ"
-}));
+const initialCustomers = [
+  { id: "C001", name: "Ristr8to Lab", contact: "คุณเมย์", phone: "053-000-101", zone: "เมืองเชียงใหม่", address: "นิมมาน ซอย 3", mapUrl: "https://maps.google.com/?q=Ristr8to+Lab+Chiang+Mai", note: "รับสินค้าเช้า / มีเอกสารวางบิล" },
+  { id: "C002", name: "Graph Cafe", contact: "คุณต้น", phone: "053-000-102", zone: "เมืองเชียงใหม่", address: "ช้างม่อย", mapUrl: "https://maps.google.com/?q=Graph+Cafe+Chiang+Mai", note: "โทรก่อนถึง 10 นาที" },
+  { id: "C003", name: "Lamphun Coffee Hub", contact: "คุณอ้อม", phone: "053-000-201", zone: "ลำพูน", address: "เมืองลำพูน", mapUrl: "https://maps.google.com/?q=Lamphun+Coffee", note: "รับ COD และใบกำกับภาษี" },
+  { id: "C004", name: "Mae Rim Garden", contact: "คุณบอย", phone: "053-000-301", zone: "แม่ริม", address: "แม่ริม", mapUrl: "https://maps.google.com/?q=Mae+Rim+Chiang+Mai", note: "จอดหน้าร้านได้" }
+];
 
-function money(value) {
-  return value.toLocaleString("th-TH");
+const initialOrders = [
+  { id: "DO-260522-001", customerId: "C001", customerName: "Ristr8to Lab", zone: "เมืองเชียงใหม่", address: "นิมมาน ซอย 3", mapUrl: "https://maps.google.com/?q=Ristr8to+Lab+Chiang+Mai", window: "09:00-10:30", boxes: 6, cod: 3850, driverId: "", status: "รอคนขับรับ", photo: "", checkInAt: "", deliveredAt: "", complaint: "", salesNote: "เมล็ดกาแฟ + syrup", createdAt: new Date().toISOString() },
+  { id: "DO-260522-002", customerId: "C002", customerName: "Graph Cafe", zone: "เมืองเชียงใหม่", address: "ช้างม่อย", mapUrl: "https://maps.google.com/?q=Graph+Cafe+Chiang+Mai", window: "10:00-12:00", boxes: 4, cod: 2600, driverId: "", status: "รอคนขับรับ", photo: "", checkInAt: "", deliveredAt: "", complaint: "", salesNote: "เก็บบิลเดิมกลับ", createdAt: new Date().toISOString() },
+  { id: "DO-260522-003", customerId: "C003", customerName: "Lamphun Coffee Hub", zone: "ลำพูน", address: "เมืองลำพูน", mapUrl: "https://maps.google.com/?q=Lamphun+Coffee", window: "13:00-15:00", boxes: 12, cod: 11800, driverId: "", status: "รอคนขับรับ", photo: "", checkInAt: "", deliveredAt: "", complaint: "", salesNote: "COD เงินสด", createdAt: new Date().toISOString() }
+];
+
+function defaultState() {
+  return {
+    customers: initialCustomers,
+    orders: initialOrders,
+    google: {
+      sheetUrl: "https://docs.google.com/spreadsheets/",
+      driveFolderUrl: "https://drive.google.com/drive/folders/",
+      mapsNote: "ใช้ Google Maps link ในข้อมูลลูกค้า และเก็บรูปยืนยันเข้า Google Drive ในเฟสถัดไป"
+    }
+  };
 }
 
-function loadOrders() {
-  if (typeof window === "undefined") return sampleOrders;
+function readState() {
+  if (typeof window === "undefined") return defaultState();
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : sampleOrders;
+    const saved = localStorage.getItem(STORE_KEY);
+    return saved ? JSON.parse(saved) : defaultState();
   } catch {
-    return sampleOrders;
+    return defaultState();
   }
 }
 
-function nextStatus(status) {
-  const index = STATUSES.indexOf(status);
-  return STATUSES[Math.min(index + 1, STATUSES.length - 1)];
+function money(value) {
+  return Number(value || 0).toLocaleString("th-TH");
 }
 
-function StatCard({ icon: Icon, label, value, sub, tone = "#166534" }) {
+function todayText() {
+  return new Date().toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
   return (
     <div className="card stat-card">
-      <div className="stat-icon" style={{ background: `${tone}16`, color: tone }}><Icon size={20} /></div>
+      <div className="stat-icon" style={{ color: tone, background: `${tone}17` }}><Icon size={20} /></div>
       <div>
         <div className="muted">{label}</div>
         <div className="stat-value">{value}</div>
@@ -105,79 +89,89 @@ function StatCard({ icon: Icon, label, value, sub, tone = "#166534" }) {
 }
 
 export default function App() {
-  const [orders, setOrders] = useState(sampleOrders);
-  const [query, setQuery] = useState("");
-  const [zone, setZone] = useState("ทั้งหมด");
-  const [status, setStatus] = useState("ทั้งหมด");
-  const [newOrder, setNewOrder] = useState({ customer: "", area: "", zone: "เมืองเชียงใหม่", window: "09:00-12:00", weight: "", cod: "" });
+  const [tab, setTab] = useState("sales");
+  const [state, setState] = useState(defaultState);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState("C001");
+  const [driverId, setDriverId] = useState("D1");
+  const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [orderForm, setOrderForm] = useState({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
 
+  useEffect(() => setState(readState()), []);
   useEffect(() => {
-    setOrders(loadOrders());
-  }, []);
+    if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }, [state]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+  const customers = state.customers;
+  const orders = state.orders;
+  const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || customers[0];
+  const driverOrders = orders.filter(order => order.driverId === driverId || (!order.driverId && order.status === "รอคนขับรับ"));
+
+  const report = useMemo(() => {
+    const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
+    const complaints = orders.filter(order => order.complaint);
+    const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
+    const driverScore = DRIVERS.map(driver => {
+      const jobs = orders.filter(order => order.driverId === driver.id);
+      const done = jobs.filter(order => order.status === "ส่งสำเร็จ").length;
+      const issues = jobs.filter(order => order.status === "ติดปัญหา" || order.complaint).length;
+      const photos = jobs.filter(order => order.photo).length;
+      const score = Math.max(1, Math.min(100, 70 + done * 6 + photos * 3 - issues * 12));
+      return { ...driver, jobs: jobs.length, done, issues, score };
+    });
+    return { delivered: delivered.length, complaints, cod, driverScore };
   }, [orders]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return orders.filter(order => {
-      const text = [order.id, order.customer, order.area, order.zone, order.driverId, order.status].join(" ").toLowerCase();
-      return (!q || text.includes(q)) && (zone === "ทั้งหมด" || order.zone === zone) && (status === "ทั้งหมด" || order.status === status);
-    });
-  }, [orders, query, zone, status]);
+  const filteredCustomers = customers.filter(customer => [customer.name, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
 
-  const totals = useMemo(() => ({
-    jobs: orders.length,
-    done: orders.filter(o => o.status === "ส่งสำเร็จ").length,
-    active: orders.filter(o => o.status === "กำลังส่ง").length,
-    problem: orders.filter(o => o.status === "ติดปัญหา").length,
-    cod: orders.reduce((sum, o) => sum + o.cod, 0),
-    weight: orders.reduce((sum, o) => sum + o.weight, 0)
-  }), [orders]);
-
-  const driverLoads = useMemo(() => DRIVERS.map(driver => {
-    const jobs = orders.filter(order => order.driverId === driver.id);
-    const weight = jobs.reduce((sum, order) => sum + order.weight, 0);
-    const done = jobs.filter(order => order.status === "ส่งสำเร็จ").length;
-    return { ...driver, jobs, weight, done, load: Math.round((weight / driver.capacity) * 100) };
-  }), [orders]);
-
-  const updateOrder = (id, patch) => setOrders(prev => prev.map(order => order.id === id ? { ...order, ...patch } : order));
-
-  const autoAssign = () => {
-    setOrders(prev => {
-      const loads = Object.fromEntries(DRIVERS.map(driver => [driver.id, prev.filter(order => order.driverId === driver.id).reduce((sum, order) => sum + order.weight, 0)]));
-      return prev.map(order => {
-        if (order.driverId) return order;
-        const preferred = DRIVERS.find(driver => driver.zone.includes(order.zone) || order.zone.includes(driver.zone.split(" / ")[0]));
-        const driver = preferred && loads[preferred.id] + order.weight <= preferred.capacity
-          ? preferred
-          : [...DRIVERS].sort((a, b) => loads[a.id] - loads[b.id])[0];
-        loads[driver.id] += order.weight;
-        return { ...order, driverId: driver.id, status: "จัดคิวแล้ว" };
-      });
-    });
+  const saveCustomer = () => {
+    if (!customerForm.name.trim()) return;
+    const id = `C${String(customers.length + 1).padStart(3, "0")}`;
+    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
+    setState(prev => ({ ...prev, customers: [nextCustomer, ...prev.customers] }));
+    setSelectedCustomerId(id);
+    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   };
 
-  const addOrder = () => {
-    if (!newOrder.customer.trim()) return;
-    const id = `CM-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
-    setOrders(prev => [{
+  const createOrder = () => {
+    if (!selectedCustomer) return;
+    const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
+    const nextOrder = {
       id,
-      customer: newOrder.customer.trim(),
-      area: newOrder.area.trim() || newOrder.zone,
-      zone: newOrder.zone,
-      window: newOrder.window,
-      weight: Number(newOrder.weight || 0),
-      cod: Number(newOrder.cod || 0),
+      customerId: selectedCustomer.id,
+      customerName: selectedCustomer.name,
+      zone: selectedCustomer.zone,
+      address: selectedCustomer.address,
+      mapUrl: selectedCustomer.mapUrl,
+      window: orderForm.window,
+      boxes: Number(orderForm.boxes || 0),
+      cod: Number(orderForm.cod || 0),
       driverId: "",
-      status: "รอจัดส่ง",
-      note: "",
-      docs: false,
-      priority: Number(newOrder.weight || 0) >= 120 ? "ด่วน" : "ปกติ"
-    }, ...prev]);
-    setNewOrder({ customer: "", area: "", zone: "เมืองเชียงใหม่", window: "09:00-12:00", weight: "", cod: "" });
+      status: "รอคนขับรับ",
+      photo: "",
+      checkInAt: "",
+      deliveredAt: "",
+      complaint: "",
+      salesNote: orderForm.salesNote,
+      createdAt: new Date().toISOString()
+    };
+    setState(prev => ({ ...prev, orders: [nextOrder, ...prev.orders] }));
+    setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setTab("driver");
+  };
+
+  const updateOrder = (id, patch) => setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
+
+  const acceptOrder = id => updateOrder(id, { driverId, status: "กำลังส่ง" });
+  const checkIn = id => updateOrder(id, { checkInAt: new Date().toLocaleString("th-TH") });
+  const confirmPhoto = id => updateOrder(id, { photo: `POD-${id}.jpg` });
+  const completeOrder = id => updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+
+  const totals = {
+    jobs: orders.length,
+    waiting: orders.filter(order => order.status === "รอคนขับรับ").length,
+    active: orders.filter(order => order.status === "กำลังส่ง").length,
+    done: orders.filter(order => order.status === "ส่งสำเร็จ").length
   };
 
   return (
@@ -185,122 +179,163 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">HK</div>
-          <div>
-            <strong>Hillkoff</strong>
-            <span>Delivery System</span>
-          </div>
+          <div><strong>Hillkoff</strong><span>Delivery System</span></div>
         </div>
         <nav>
-          <a className="active"><ClipboardList size={18} /> Dispatch</a>
-          <a><Route size={18} /> Routes</a>
-          <a><Truck size={18} /> Drivers</a>
-          <a><WalletCards size={18} /> COD</a>
+          <button className={tab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> Sales Dashboard</button>
+          <button className={tab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+          <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
         </nav>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p>เชียงใหม่และจังหวัดใกล้เคียง</p>
-            <h1>Daily Dispatch Board</h1>
+            <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
+            <h1>{tab === "sales" ? "Sales Delivery Dashboard" : tab === "driver" ? "Driver Realtime Orders" : "Daily Report & Service Quality"}</h1>
           </div>
-          <button className="primary" onClick={autoAssign}><Route size={18} /> จัดคิวอัตโนมัติ</button>
+          <div className="google-status"><FileSpreadsheet size={16} /> Google-ready: Sheets · Drive · Maps</div>
         </header>
 
         <div className="stats">
-          <StatCard icon={PackageCheck} label="งานวันนี้" value={`${totals.jobs} เจ้า`} sub="เป้าหมาย 20-30 เจ้า/วัน" />
-          <StatCard icon={Truck} label="กำลังส่ง" value={`${totals.active} งาน`} sub={`${totals.done} งานส่งสำเร็จ`} tone="#7c3aed" />
-          <StatCard icon={WalletCards} label="COD รวม" value={`${money(totals.cod)} บาท`} sub="รอปิดรอบกับคนขับ" tone="#1d4ed8" />
-          <StatCard icon={AlertTriangle} label="ติดปัญหา" value={`${totals.problem} งาน`} sub={`${totals.weight} กก. รวมทั้งหมด`} tone="#b91c1c" />
+          <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${totals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
+          <Stat icon={UserCheck} label="รอคนขับรับ" value={`${totals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
+          <Stat icon={Navigation} label="กำลังส่ง" value={`${totals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
+          <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
         </div>
 
-        <div className="grid">
-          <section className="panel drivers-panel">
-            <div className="panel-head">
-              <h2>Driver Load</h2>
-              <span>5 คนขับ</span>
-            </div>
-            {driverLoads.map(driver => (
-              <div key={driver.id} className="driver-card">
-                <div className="driver-top">
-                  <div className="avatar"><UserRound size={18} /></div>
-                  <div>
-                    <strong>{driver.name}</strong>
-                    <p>{driver.vehicle} · {driver.plate}</p>
-                  </div>
-                  <span className="job-pill">{driver.jobs.length} งาน</span>
-                </div>
-                <div className="loadbar"><span style={{ width: `${Math.min(driver.load, 100)}%`, background: driver.load > 100 ? "#b91c1c" : "#166534" }} /></div>
-                <div className="driver-meta">
-                  <span>{driver.zone}</span>
-                  <b>{driver.weight}/{driver.capacity} กก.</b>
-                </div>
+        {tab === "sales" && (
+          <div className="sales-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
+              <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
+              <div className="customer-list">
+                {filteredCustomers.map(customer => (
+                  <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
+                    <strong>{customer.name}</strong>
+                    <span>{customer.contact} · {customer.phone}</span>
+                    <span>{customer.zone} · {customer.address}</span>
+                  </button>
+                ))}
               </div>
-            ))}
-          </section>
+            </section>
 
-          <section className="panel orders-panel">
-            <div className="panel-head">
-              <h2>Delivery Orders</h2>
-              <span>{filtered.length} รายการ</span>
-            </div>
+            <section className="panel">
+              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>ไม่ต้องพิมพ์ลูกค้าซ้ำ</span></div>
+              {selectedCustomer && (
+                <div className="customer-detail">
+                  <div><b>{selectedCustomer.name}</b><p>{selectedCustomer.contact} · {selectedCustomer.phone}</p><p>{selectedCustomer.address}</p></div>
+                  <a href={selectedCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิด Google Map</a>
+                </div>
+              )}
+              <div className="form-grid">
+                <input value={orderForm.window} onChange={e => setOrderForm(p => ({ ...p, window: e.target.value }))} placeholder="ช่วงเวลาส่ง" />
+                <input value={orderForm.boxes} onChange={e => setOrderForm(p => ({ ...p, boxes: e.target.value }))} type="number" placeholder="จำนวนกล่อง" />
+                <input value={orderForm.cod} onChange={e => setOrderForm(p => ({ ...p, cod: e.target.value }))} type="number" placeholder="COD" />
+              </div>
+              <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
+              <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
+            </section>
 
-            <div className="filters">
-              <label className="search"><Search size={16} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาลูกค้า พื้นที่ เลขงาน" /></label>
-              <select value={zone} onChange={e => setZone(e.target.value)}>
-                <option>ทั้งหมด</option>
-                {ZONES.map(item => <option key={item}>{item}</option>)}
-              </select>
-              <select value={status} onChange={e => setStatus(e.target.value)}>
-                <option>ทั้งหมด</option>
-                {STATUSES.map(item => <option key={item}>{item}</option>)}
-              </select>
-            </div>
+            <section className="panel">
+              <div className="panel-head"><h2>เพิ่มลูกค้าใหม่</h2><span>บันทึกไว้ใช้ครั้งถัดไป</span></div>
+              <div className="form-grid two">
+                <input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อร้าน/ลูกค้า" />
+                <input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
+                <input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+                <select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
+              </div>
+              <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
+              <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Google Map link" />
+              <textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
+              <button className="secondary wide" onClick={saveCustomer}>บันทึกลูกค้า</button>
+            </section>
+          </div>
+        )}
 
-            <div className="add-row">
-              <input value={newOrder.customer} onChange={e => setNewOrder(p => ({ ...p, customer: e.target.value }))} placeholder="ชื่อลูกค้า" />
-              <input value={newOrder.area} onChange={e => setNewOrder(p => ({ ...p, area: e.target.value }))} placeholder="ย่าน/อำเภอ" />
-              <select value={newOrder.zone} onChange={e => setNewOrder(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(item => <option key={item}>{item}</option>)}</select>
-              <input value={newOrder.weight} onChange={e => setNewOrder(p => ({ ...p, weight: e.target.value }))} placeholder="กก." type="number" />
-              <input value={newOrder.cod} onChange={e => setNewOrder(p => ({ ...p, cod: e.target.value }))} placeholder="COD" type="number" />
-              <button onClick={addOrder}><Plus size={16} /></button>
-            </div>
+        {tab === "driver" && (
+          <div className="driver-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>เลือกคนขับ</h2><span>5 คน</span></div>
+              <select value={driverId} onChange={e => setDriverId(e.target.value)}>{DRIVERS.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
+              <div className="driver-summary">
+                {DRIVERS.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
+              </div>
+            </section>
 
-            <div className="table">
-              {filtered.map(order => {
-                const driver = DRIVERS.find(item => item.id === order.driverId);
-                return (
+            <section className="panel">
+              <div className="panel-head"><h2>ออเดอร์เรียลไทม์</h2><span>{driverOrders.length} งาน</span></div>
+              <div className="order-feed">
+                {driverOrders.map(order => (
                   <article key={order.id} className="order-card">
                     <div className="order-main">
                       <div>
-                        <div className="order-title">
-                          <strong>{order.customer}</strong>
-                          {order.priority === "ด่วน" && <span className="urgent">ด่วน</span>}
-                        </div>
-                        <p><MapPin size={14} /> {order.area} · {order.zone}</p>
-                        <p><Clock3 size={14} /> {order.window} · {order.weight} กก. · COD {money(order.cod)} บาท</p>
+                        <div className="order-title"><strong>{order.customerName}</strong><span style={{ color: statusColor[order.status] }}>{order.status}</span></div>
+                        <p>{order.address} · {order.zone}</p>
+                        <p>{order.window} · {order.boxes} กล่อง · COD {money(order.cod)} บาท</p>
+                        {order.salesNote && <p>หมายเหตุ: {order.salesNote}</p>}
                       </div>
-                      <div className="order-actions">
-                        <select value={order.driverId} onChange={e => updateOrder(order.id, { driverId: e.target.value, status: e.target.value ? "จัดคิวแล้ว" : "รอจัดส่ง" })}>
-                          <option value="">ยังไม่ assign</option>
-                          {DRIVERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                        </select>
-                        <button className="status-btn" style={{ color: STATUS_COLORS[order.status] }} onClick={() => updateOrder(order.id, { status: nextStatus(order.status) })}>
-                          <CheckCircle2 size={16} /> {order.status}
-                        </button>
-                      </div>
+                      <a className="map-link" href={order.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> Map</a>
                     </div>
-                    <div className="order-foot">
-                      <span>{order.id}</span>
-                      <span>{driver ? `${driver.name} · ${driver.plate}` : "รอจัดคนขับ"}</span>
-                      <span>{order.docs ? "มีเอกสารส่งคืน" : "ไม่มีเอกสาร"}</span>
+                    <div className="action-row">
+                      {!order.driverId && <button onClick={() => acceptOrder(order.id)}><UserCheck size={16} /> รับออเดอร์</button>}
+                      <button onClick={() => checkIn(order.id)}><Navigation size={16} /> เช็คอินร้าน</button>
+                      <button onClick={() => confirmPhoto(order.id)}><Camera size={16} /> ถ่ายรูปยืนยัน</button>
+                      <button onClick={() => completeOrder(order.id)}><CheckCircle2 size={16} /> ส่งสำเร็จ</button>
                     </div>
+                    <div className="proof-row">
+                      <span>เช็คอิน: {order.checkInAt || "-"}</span>
+                      <span>รูปยืนยัน: {order.photo || "-"}</span>
+                      <span>ปิดงาน: {order.deliveredAt || "-"}</span>
+                    </div>
+                    <textarea value={order.complaint} onChange={e => updateOrder(order.id, { complaint: e.target.value, status: e.target.value ? "ติดปัญหา" : order.status })} placeholder="บันทึกร้องเรียน/ปัญหาหน้างาน" rows={2} />
                   </article>
-                );
-              })}
-            </div>
-          </section>
-        </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {tab === "reports" && (
+          <div className="report-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>Google Sheets-ready</span></div>
+              <div className="report-lines">
+                <p>ออเดอร์ทั้งหมด <b>{orders.length}</b> งาน</p>
+                <p>ส่งสำเร็จ <b>{report.delivered}</b> งาน</p>
+                <p>COD รวม <b>{money(report.cod)}</b> บาท</p>
+                <p>ร้องเรียน/ปัญหา <b>{report.complaints.length}</b> รายการ</p>
+              </div>
+              <div className="google-box">
+                <b>Google Integration Plan</b>
+                <p>Sheets: เก็บ customers, orders, driver_logs, complaints</p>
+                <p>Drive: เก็บรูป POD ตามเลขออเดอร์</p>
+                <p>Maps: เปิดเส้นทางจาก mapUrl ของลูกค้า</p>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>คะแนนคนขับ</h2><span>จากงานสำเร็จ รูปยืนยัน และปัญหา</span></div>
+              {report.driverScore.map(driver => (
+                <div key={driver.id} className="score-row">
+                  <div><b>{driver.name}</b><span>{driver.jobs} งาน · สำเร็จ {driver.done} · ปัญหา {driver.issues}</span></div>
+                  <strong><Star size={16} /> {driver.score}</strong>
+                </div>
+              ))}
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>การร้องเรียน</h2><span>{report.complaints.length} รายการ</span></div>
+              {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
+                <div key={order.id} className="complaint-card">
+                  <b>{order.customerName}</b>
+                  <p>{order.complaint}</p>
+                  <span>{order.id}</span>
+                </div>
+              ))}
+            </section>
+          </div>
+        )}
       </section>
     </main>
   );

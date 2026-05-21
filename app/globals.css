@@ -71,16 +71,21 @@ nav {
   gap: 8px;
 }
 
-nav a {
+nav button {
+  border: none;
+  width: 100%;
+  background: transparent;
   color: rgba(255, 255, 255, 0.72);
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px;
   border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
 }
 
-nav a.active {
+nav button.active {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
 }
@@ -119,6 +124,7 @@ h2 {
 }
 
 .primary,
+.secondary,
 .add-row button {
   border: none;
   background: #176b3a;
@@ -130,6 +136,31 @@ h2 {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+}
+
+.secondary {
+  background: #eef5ea;
+  color: #176b3a;
+  border: 1px solid #cfe0c8;
+}
+
+.wide {
+  justify-content: center;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.google-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #176b3a;
+  background: #eef5ea;
+  border: 1px solid #cfe0c8;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .stats {
@@ -174,11 +205,25 @@ h2 {
   margin: 2px 0;
 }
 
-.grid {
+.sales-grid,
+.driver-grid,
+.report-grid {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
+}
+
+.sales-grid {
+  grid-template-columns: 340px minmax(0, 1fr) 360px;
+}
+
+.driver-grid {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+
+.report-grid {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 .panel {
@@ -284,7 +329,8 @@ h2 {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-width: 0;
   border: 1px solid #d7e0d2;
@@ -293,6 +339,12 @@ select {
   border-radius: 8px;
   padding: 10px 11px;
   outline: none;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+  margin-top: 8px;
 }
 
 .search {
@@ -307,15 +359,90 @@ select {
   padding-left: 0;
 }
 
+.customer-list,
+.order-feed,
 .table {
   display: grid;
   gap: 8px;
+  margin-top: 10px;
+}
+
+.customer-card {
+  border: 1px solid #e4eadf;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.customer-card.selected {
+  border-color: #176b3a;
+  background: #f2f8ef;
+}
+
+.customer-card strong,
+.customer-card span {
+  display: block;
+}
+
+.customer-card span {
+  color: #69756d;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.customer-detail {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8faf5;
+  border: 1px solid #e2eadc;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.customer-detail p {
+  margin: 4px 0 0;
+  color: #69756d;
+  font-size: 12px;
+}
+
+.customer-detail a,
+.map-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #176b3a;
+  background: #eef5ea;
+  border: 1px solid #cfe0c8;
+  border-radius: 8px;
+  padding: 9px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.form-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .order-card {
   border: 1px solid #e4eadf;
   border-radius: 8px;
   padding: 12px;
+  background: #fff;
 }
 
 .order-main {
@@ -327,6 +454,8 @@ select {
 
 .order-title {
   display: flex;
+  justify-content: space-between;
+  gap: 8px;
   align-items: center;
   min-width: 0;
 }
@@ -344,6 +473,26 @@ select {
   display: grid;
   grid-template-columns: 1fr;
   gap: 7px;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-row button {
+  border: 1px solid #d7e0d2;
+  background: #fbfcf8;
+  border-radius: 8px;
+  padding: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .status-btn {
@@ -365,6 +514,106 @@ select {
   margin-top: 10px;
 }
 
+.proof-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  color: #69756d;
+  font-size: 12px;
+  background: #f8faf5;
+  border-radius: 8px;
+  padding: 9px;
+  margin-top: 10px;
+}
+
+.driver-summary {
+  background: #f8faf5;
+  border: 1px solid #e2eadc;
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.driver-summary p {
+  color: #69756d;
+  margin: 5px 0 0;
+  font-size: 12px;
+}
+
+.report-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.report-lines p,
+.google-box p {
+  margin: 0;
+  color: #69756d;
+}
+
+.google-box {
+  border: 1px solid #cfe0c8;
+  background: #eef5ea;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e4eadf;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.score-row span {
+  display: block;
+  color: #69756d;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.score-row strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #176b3a;
+  font-size: 20px;
+}
+
+.empty,
+.complaint-card {
+  border: 1px solid #e4eadf;
+  border-radius: 8px;
+  padding: 14px;
+  color: #69756d;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.complaint-card {
+  margin-bottom: 8px;
+}
+
+.complaint-card p {
+  margin: 6px 0;
+  color: #172019;
+}
+
+.complaint-card span {
+  color: #69756d;
+  font-size: 12px;
+}
+
 @media (max-width: 1080px) {
   .sidebar {
     position: static;
@@ -378,14 +627,16 @@ select {
   }
 
   nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .grid {
+  .sales-grid,
+  .driver-grid,
+  .report-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -404,7 +655,15 @@ select {
   .stats,
   .filters,
   .add-row,
-  .order-main {
+  .order-main,
+  .form-grid,
+  .form-grid.two,
+  .action-row,
+  .proof-row {
     grid-template-columns: 1fr;
+  }
+
+  .customer-detail {
+    flex-direction: column;
   }
 }
