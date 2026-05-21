@@ -163,6 +163,24 @@ h2 {
   font-weight: 800;
 }
 
+.top-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sync-banner {
+  border: 1px solid #d7e0d2;
+  background: #fbfcf8;
+  color: #69756d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -224,6 +242,13 @@ h2 {
 
 .report-grid {
   grid-template-columns: 1fr 1fr 1fr;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .panel {
@@ -495,6 +520,24 @@ textarea {
   cursor: pointer;
 }
 
+.upload-btn {
+  border: 1px solid #d7e0d2;
+  background: #fbfcf8;
+  border-radius: 8px;
+  padding: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 800;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.upload-btn input {
+  display: none;
+}
+
 .status-btn {
   border: 1px solid #d7e0d2;
   background: #fff;
@@ -558,6 +601,21 @@ textarea {
   padding: 12px;
   margin-top: 12px;
   font-size: 12px;
+}
+
+.field-label {
+  display: block;
+  color: #69756d;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
 .score-row {
@@ -636,7 +694,8 @@ textarea {
 
   .sales-grid,
   .driver-grid,
-  .report-grid {
+  .report-grid,
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 }

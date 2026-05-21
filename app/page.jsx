@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardList,
   FileSpreadsheet,
+  FolderSync,
   MapPinned,
   MessageSquareWarning,
   Navigation,
@@ -15,7 +16,8 @@ import {
   Star,
   Store,
   Truck,
-  UserCheck
+  UserCheck,
+  Settings
 } from "lucide-react";
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
@@ -50,6 +52,7 @@ function defaultState() {
     customers: initialCustomers,
     orders: initialOrders,
     google: {
+      webAppUrl: "",
       sheetUrl: "https://docs.google.com/spreadsheets/",
       driveFolderUrl: "https://drive.google.com/drive/folders/",
       mapsNote: "ใช้ Google Maps link ในข้อมูลลูกค้า และเก็บรูปยืนยันเข้า Google Drive ในเฟสถัดไป"
@@ -96,6 +99,7 @@ export default function App() {
   const [driverId, setDriverId] = useState("D1");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+  const [syncStatus, setSyncStatus] = useState("Local mode");
 
   useEffect(() => setState(readState()), []);
   useEffect(() => {
@@ -161,6 +165,76 @@ export default function App() {
   };
 
   const updateOrder = (id, patch) => setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
+  const setGoogle = patch => setState(prev => ({ ...prev, google: { ...prev.google, ...patch } }));
+
+  const syncToGoogle = async () => {
+    if (!state.google.webAppUrl) {
+      setSyncStatus("กรุณาใส่ Google Apps Script Web App URL ก่อน");
+      setTab("settings");
+      return;
+    }
+    setSyncStatus("กำลัง sync ไป Google Sheets...");
+    try {
+      const response = await fetch(state.google.webAppUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Google sync failed");
+      setSyncStatus(`Sync สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
+    } catch (error) {
+      setSyncStatus(`Sync ไม่สำเร็จ: ${error.message}`);
+    }
+  };
+
+  const loadFromGoogle = async () => {
+    if (!state.google.webAppUrl) {
+      setSyncStatus("กรุณาใส่ Google Apps Script Web App URL ก่อน");
+      setTab("settings");
+      return;
+    }
+    setSyncStatus("กำลังโหลดข้อมูลจาก Google Sheets...");
+    try {
+      const response = await fetch(state.google.webAppUrl);
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
+      setState(prev => ({
+        ...prev,
+        customers: data.data?.customers?.length ? data.data.customers : prev.customers,
+        orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders
+      }));
+      setSyncStatus(`โหลดข้อมูลสำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
+    } catch (error) {
+      setSyncStatus(`โหลดไม่สำเร็จ: ${error.message}`);
+    }
+  };
+
+  const uploadPod = async (order, file) => {
+    if (!file) return;
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    updateOrder(order.id, { photo: file.name });
+    if (!state.google.webAppUrl) return;
+    try {
+      setSyncStatus("กำลังอัปโหลดรูปเข้า Google Drive...");
+      const response = await fetch(state.google.webAppUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "uploadPod", orderId: order.id, fileName: file.name, dataUrl })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "POD upload failed");
+      updateOrder(order.id, { photo: data.fileUrl });
+      setSyncStatus("อัปโหลดรูปเข้า Google Drive สำเร็จ");
+    } catch (error) {
+      setSyncStatus(`อัปโหลดรูปไม่สำเร็จ แต่เก็บชื่อไฟล์ไว้แล้ว: ${error.message}`);
+    }
+  };
 
   const acceptOrder = id => updateOrder(id, { driverId, status: "กำลังส่ง" });
   const checkIn = id => updateOrder(id, { checkInAt: new Date().toLocaleString("th-TH") });
@@ -185,6 +259,7 @@ export default function App() {
           <button className={tab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> Sales Dashboard</button>
           <button className={tab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
           <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
+          <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> Settings</button>
         </nav>
       </aside>
 
@@ -194,8 +269,12 @@ export default function App() {
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
             <h1>{tab === "sales" ? "Sales Delivery Dashboard" : tab === "driver" ? "Driver Realtime Orders" : "Daily Report & Service Quality"}</h1>
           </div>
-          <div className="google-status"><FileSpreadsheet size={16} /> Google-ready: Sheets · Drive · Maps</div>
+          <div className="top-actions">
+            <button className="secondary" onClick={loadFromGoogle}><FolderSync size={16} /> Load</button>
+            <button className="primary" onClick={syncToGoogle}><FileSpreadsheet size={16} /> Sync Google</button>
+          </div>
         </header>
+        <div className="sync-banner">{syncStatus}</div>
 
         <div className="stats">
           <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${totals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
@@ -280,7 +359,7 @@ export default function App() {
                     <div className="action-row">
                       {!order.driverId && <button onClick={() => acceptOrder(order.id)}><UserCheck size={16} /> รับออเดอร์</button>}
                       <button onClick={() => checkIn(order.id)}><Navigation size={16} /> เช็คอินร้าน</button>
-                      <button onClick={() => confirmPhoto(order.id)}><Camera size={16} /> ถ่ายรูปยืนยัน</button>
+                      <label className="upload-btn"><Camera size={16} /> ถ่ายรูปยืนยัน<input type="file" accept="image/*" capture="environment" onChange={e => uploadPod(order, e.target.files?.[0])} /></label>
                       <button onClick={() => completeOrder(order.id)}><CheckCircle2 size={16} /> ส่งสำเร็จ</button>
                     </div>
                     <div className="proof-row">
@@ -333,6 +412,37 @@ export default function App() {
                   <span>{order.id}</span>
                 </div>
               ))}
+            </section>
+          </div>
+        )}
+
+        {tab === "settings" && (
+          <div className="settings-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>Google Connection</h2><span>Sheets · Drive · Maps</span></div>
+              <label className="field-label">Google Apps Script Web App URL</label>
+              <input value={state.google.webAppUrl || ""} onChange={e => setGoogle({ webAppUrl: e.target.value })} placeholder="https://script.google.com/macros/s/.../exec" />
+              <div className="settings-actions">
+                <button className="secondary" onClick={loadFromGoogle}><FolderSync size={16} /> โหลดจาก Google</button>
+                <button className="primary" onClick={syncToGoogle}><FileSpreadsheet size={16} /> Sync ไป Google</button>
+              </div>
+              <div className="google-box">
+                <b>สิ่งที่ต้องมีเพื่อใช้งานจริง</b>
+                <p>1. Google Apps Script Web App URL จากไฟล์ `google-apps-script/Code.gs`</p>
+                <p>2. Google Sheet จะถูกสร้างอัตโนมัติเมื่อ sync ครั้งแรก</p>
+                <p>3. Google Drive folder สำหรับรูปส่งสำเร็จจะถูกสร้างตอนอัปโหลดรูปครั้งแรก</p>
+                <p>4. Google Maps ใช้ link ที่ฝ่ายขายใส่ในข้อมูลลูกค้า</p>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>Data Tables</h2><span>พร้อมลง Google Sheets</span></div>
+              <div className="report-lines">
+                <p>customers: <b>{customers.length}</b> records</p>
+                <p>orders: <b>{orders.length}</b> records</p>
+                <p>complaints: <b>{report.complaints.length}</b> records</p>
+                <p>drivers: <b>{DRIVERS.length}</b> fixed profiles</p>
+              </div>
             </section>
           </div>
         )}
