@@ -1,6 +1,6 @@
 const GOOGLE_WEB_APP_URL =
   process.env.GOOGLE_WEB_APP_URL ||
-  "https://script.google.com/macros/s/AKfycbw8Ebn5lMRntqw12CbMn0C_zhpduK1dr-PU3rpQ0zMna2US1g83sH5M3SLtDc-qeAn7/exec";
+  "https://script.google.com/macros/s/AKfycbwnfMUgWfrSdZt6qM5LllZx-hGSkc1e0BSYdEz6hT0e4K6vM6He1TbeHyUCBpCAI_y_/exec";
 
 async function proxyToGoogle(options = {}) {
   const response = await fetch(GOOGLE_WEB_APP_URL, {
