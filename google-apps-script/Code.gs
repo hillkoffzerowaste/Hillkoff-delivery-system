@@ -6,6 +6,7 @@ const CONFIG = {
 const SHEETS = {
   customers: ["id", "name", "contact", "phone", "zone", "address", "mapUrl", "note", "updatedAt"],
   orders: ["id", "customerId", "customerName", "zone", "address", "mapUrl", "window", "boxes", "cod", "driverId", "status", "photo", "checkInAt", "deliveredAt", "complaint", "salesNote", "createdAt", "updatedAt"],
+  drivers: ["id", "firstName", "lastName", "name", "phone", "vehicle", "plate", "zone", "createdAt", "updatedAt"],
   driver_logs: ["id", "orderId", "driverId", "action", "at", "note"],
   complaints: ["id", "orderId", "customerName", "driverId", "complaint", "status", "createdAt"]
 };
@@ -22,6 +23,7 @@ function doPost(e) {
   if (action === "sync") {
     upsertRows(db, "customers", body.customers || []);
     upsertRows(db, "orders", body.orders || []);
+    upsertRows(db, "drivers", body.drivers || []);
     upsertRows(db, "complaints", (body.orders || []).filter(order => order.complaint).map(order => ({
       id: `CMP-${order.id}`,
       orderId: order.id,
@@ -78,7 +80,8 @@ function readAll() {
   const db = getDatabase();
   return {
     customers: readSheet(db, "customers"),
-    orders: readSheet(db, "orders")
+    orders: readSheet(db, "orders"),
+    drivers: readSheet(db, "drivers")
   };
 }
 

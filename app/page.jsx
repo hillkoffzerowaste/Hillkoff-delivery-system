@@ -24,7 +24,7 @@ import {
 const STORE_KEY = "hillkoff-delivery-ops:v2";
 const DEFAULT_GOOGLE_ENDPOINT = "/api/google";
 
-const DRIVERS = [
+const initialDrivers = [
   { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001" },
   { id: "D2", name: "Wichai", plate: "ชม 6732", zone: "สันกำแพง / ดอยสะเก็ด", phone: "081-000-1002" },
   { id: "D3", name: "Anan", plate: "ชม 8291", zone: "หางดง / สันป่าตอง", phone: "081-000-1003" },
@@ -53,6 +53,8 @@ function defaultState() {
   return {
     customers: initialCustomers,
     orders: initialOrders,
+    drivers: initialDrivers,
+    auth: { role: "", name: "", phone: "", driverId: "" },
     google: {
       webAppUrl: DEFAULT_GOOGLE_ENDPOINT,
       sheetUrl: "https://docs.google.com/spreadsheets/",
@@ -68,7 +70,10 @@ function readState() {
     const saved = localStorage.getItem(STORE_KEY);
     const parsed = saved ? JSON.parse(saved) : defaultState();
     return {
+      ...defaultState(),
       ...parsed,
+      drivers: parsed.drivers?.length ? parsed.drivers : defaultState().drivers,
+      auth: { ...defaultState().auth, ...(parsed.auth || {}) },
       google: {
         ...defaultState().google,
         ...(parsed.google || {}),
@@ -107,6 +112,8 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("C001");
   const [driverId, setDriverId] = useState("D1");
+  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
+  const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
@@ -118,9 +125,14 @@ export default function App() {
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
   }, [state]);
+  useEffect(() => {
+    if (state.auth?.driverId) setDriverId(state.auth.driverId);
+  }, [state.auth?.driverId]);
 
   const customers = state.customers;
   const orders = state.orders;
+  const drivers = state.drivers?.length ? state.drivers : initialDrivers;
+  const auth = state.auth || {};
   const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || customers[0];
   const driverOrders = orders.filter(order => order.driverId === driverId || (!order.driverId && order.status === "รอคนขับรับ"));
 
@@ -128,7 +140,7 @@ export default function App() {
     const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
     const complaints = orders.filter(order => order.complaint);
     const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
-    const driverScore = DRIVERS.map(driver => {
+    const driverScore = drivers.map(driver => {
       const jobs = orders.filter(order => order.driverId === driver.id);
       const done = jobs.filter(order => order.status === "ส่งสำเร็จ").length;
       const issues = jobs.filter(order => order.status === "ติดปัญหา" || order.complaint).length;
@@ -137,7 +149,7 @@ export default function App() {
       return { ...driver, jobs: jobs.length, done, issues, score };
     });
     return { delivered: delivered.length, complaints, cod, driverScore };
-  }, [orders]);
+  }, [orders, drivers]);
 
   const filteredCustomers = customers.filter(customer => [customer.name, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
   const filteredOrders = orders.filter(order => {
@@ -156,6 +168,80 @@ export default function App() {
     setSelectedCustomerId(id);
     setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   };
+
+  const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
+
+  const loginSales = async () => {
+    if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
+    setAuth({ role: "sales", name: loginForm.name.trim(), phone: loginForm.phone.trim(), driverId: "" });
+    setTab("sales");
+    await loadFromGoogle();
+  };
+
+  const loginDriver = async () => {
+    if (!loginForm.phone.trim()) return;
+    const phone = loginForm.phone.trim();
+    let latestDrivers = state.drivers || [];
+    try {
+      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT);
+      const data = await response.json();
+      if (data.ok) {
+        latestDrivers = data.data?.drivers?.length ? data.data.drivers : latestDrivers;
+        setState(prev => ({
+          ...prev,
+          customers: data.data?.customers?.length ? data.data.customers : prev.customers,
+          orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders,
+          drivers: latestDrivers
+        }));
+      }
+    } catch {
+      // Keep local driver list available if Google is temporarily unreachable.
+    }
+    const found = latestDrivers.find(driver => String(driver.phone).trim() === phone);
+    if (found) {
+      setDriverId(found.id);
+      setAuth({ role: "driver", name: found.name, phone, driverId: found.id });
+      setTab("driver");
+      return;
+    }
+    setDriverForm(prev => ({ ...prev, phone }));
+    setAuth({ role: "driver-register", name: "", phone, driverId: "" });
+  };
+
+  const registerDriver = async () => {
+    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
+    const nextDriver = {
+      id: `D${Date.now()}`,
+      firstName: driverForm.firstName.trim(),
+      lastName: driverForm.lastName.trim(),
+      name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
+      phone: driverForm.phone.trim(),
+      vehicle: driverForm.vehicle.trim(),
+      plate: driverForm.plate.trim(),
+      zone: driverForm.zone,
+      createdAt: new Date().toISOString()
+    };
+    const nextDrivers = [nextDriver, ...(state.drivers || [])];
+    setState(prev => ({
+      ...prev,
+      drivers: nextDrivers,
+      auth: { role: "driver", name: nextDriver.name, phone: nextDriver.phone, driverId: nextDriver.id }
+    }));
+    setDriverId(nextDriver.id);
+    setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
+    setTab("driver");
+    try {
+      await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: nextDrivers })
+      });
+    } catch {
+      setSyncStatus("บันทึกคนขับไว้ในเครื่องแล้ว แต่ยัง sync Google ไม่สำเร็จ");
+    }
+  };
+
+  const logout = () => setAuth({ role: "", name: "", phone: "", driverId: "" });
 
   const createOrder = () => {
     if (!selectedCustomer) return;
@@ -202,7 +288,7 @@ export default function App() {
       const response = await fetch(state.google.webAppUrl, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders })
+        body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: state.drivers || [] })
       });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google sync failed");
@@ -226,7 +312,8 @@ export default function App() {
       setState(prev => ({
         ...prev,
         customers: data.data?.customers?.length ? data.data.customers : prev.customers,
-        orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders
+        orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders,
+        drivers: data.data?.drivers?.length ? data.data.drivers : prev.drivers
       }));
       setSyncStatus(`โหลดข้อมูลสำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
     } catch (error) {
@@ -272,6 +359,48 @@ export default function App() {
     done: orders.filter(order => order.status === "ส่งสำเร็จ").length
   };
 
+  if (!auth.role || auth.role === "driver-register") {
+    return (
+      <main className="login-page">
+        <section className="login-panel">
+          <div className="brand login-brand">
+            <div className="brand-mark">HK</div>
+            <div><strong>Hillkoff</strong><span>Delivery System</span></div>
+          </div>
+          {auth.role !== "driver-register" ? (
+            <>
+              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>Google Sheets connected</span></div>
+              <div className="segmented">
+                <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
+                <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
+              </div>
+              {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
+              <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+              <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
+                {loginForm.role === "sales" ? "เข้าหน้าแดชบอร์ดฝ่ายขาย" : "เข้าสู่ระบบคนขับ"}
+              </button>
+              <p className="login-note">ระบบจะโหลดข้อมูลลูกค้า ออเดอร์ และคนขับจาก Google Sheets หลังล็อกอิน</p>
+            </>
+          ) : (
+            <>
+              <div className="panel-head"><h1>ลงทะเบียนคนขับ</h1><span>ครั้งแรกเท่านั้น</span></div>
+              <div className="form-grid two">
+                <input value={driverForm.firstName} onChange={e => setDriverForm(p => ({ ...p, firstName: e.target.value }))} placeholder="ชื่อ" />
+                <input value={driverForm.lastName} onChange={e => setDriverForm(p => ({ ...p, lastName: e.target.value }))} placeholder="สกุล" />
+                <input value={driverForm.phone} onChange={e => setDriverForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+                <input value={driverForm.vehicle} onChange={e => setDriverForm(p => ({ ...p, vehicle: e.target.value }))} placeholder="รถที่ใช้" />
+                <input value={driverForm.plate} onChange={e => setDriverForm(p => ({ ...p, plate: e.target.value }))} placeholder="ทะเบียนรถ" />
+                <select value={driverForm.zone} onChange={e => setDriverForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
+              </div>
+              <button className="primary wide" onClick={registerDriver}>บันทึกและเข้าใช้งานคนขับ</button>
+              <button className="secondary wide" onClick={logout}>กลับไปหน้า Login</button>
+            </>
+          )}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main>
       <aside className="sidebar">
@@ -295,8 +424,10 @@ export default function App() {
             <h1>{tab === "sales" ? "Sales Delivery Dashboard" : tab === "dispatch" ? "Dispatch Work Dashboard" : tab === "driver" ? "Driver Realtime Orders" : tab === "settings" ? "System Settings" : "Daily Report & Service Quality"}</h1>
           </div>
           <div className="top-actions">
+            <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
             <button className="secondary" onClick={loadFromGoogle}><FolderSync size={16} /> Load</button>
             <button className="primary" onClick={syncToGoogle}><FileSpreadsheet size={16} /> Sync Google</button>
+            <button className="secondary" onClick={logout}>ออก</button>
           </div>
         </header>
         <div className="sync-banner">{syncStatus}</div>
@@ -381,14 +512,14 @@ export default function App() {
                   <span>COD</span>
                 </div>
                 {filteredOrders.map(order => {
-                  const assignedDriver = DRIVERS.find(driver => driver.id === order.driverId);
+                  const assignedDriver = drivers.find(driver => driver.id === order.driverId);
                   return (
                     <article key={order.id} className="dispatch-row">
                       <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
                       <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span></div>
                       <select value={order.driverId} onChange={e => assignDriver(order.id, e.target.value)}>
                         <option value="">รอคนขับรับเอง</option>
-                        {DRIVERS.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}
+                        {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}
                       </select>
                       <div className="status-stack">
                         <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
@@ -428,9 +559,9 @@ export default function App() {
           <div className="driver-grid">
             <section className="panel">
               <div className="panel-head"><h2>เลือกคนขับ</h2><span>5 คน</span></div>
-              <select value={driverId} onChange={e => setDriverId(e.target.value)}>{DRIVERS.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
+              <select value={driverId} onChange={e => setDriverId(e.target.value)}>{drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
               <div className="driver-summary">
-                {DRIVERS.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
+                {drivers.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
               </div>
             </section>
 
@@ -533,7 +664,7 @@ export default function App() {
                 <p>customers: <b>{customers.length}</b> records</p>
                 <p>orders: <b>{orders.length}</b> records</p>
                 <p>complaints: <b>{report.complaints.length}</b> records</p>
-                <p>drivers: <b>{DRIVERS.length}</b> fixed profiles</p>
+                <p>drivers: <b>{drivers.length}</b> records</p>
               </div>
             </section>
           </div>
