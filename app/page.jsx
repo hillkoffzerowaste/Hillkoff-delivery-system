@@ -25,11 +25,11 @@ const STORE_KEY = "hillkoff-delivery-ops:v2";
 const DEFAULT_GOOGLE_ENDPOINT = "/api/google";
 
 const initialDrivers = [
-  { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001" },
-  { id: "D2", name: "Wichai", plate: "ชม 6732", zone: "สันกำแพง / ดอยสะเก็ด", phone: "081-000-1002" },
-  { id: "D3", name: "Anan", plate: "ชม 8291", zone: "หางดง / สันป่าตอง", phone: "081-000-1003" },
-  { id: "D4", name: "Thanawat", plate: "ชม 1187", zone: "ลำพูน / ลำปาง", phone: "081-000-1004" },
-  { id: "D5", name: "Kitti", plate: "ชม 4428", zone: "แม่ริม / เชียงราย", phone: "081-000-1005" }
+  { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001", lat: 18.7883, lng: 98.9853 },
+  { id: "D2", name: "Wichai", plate: "ชม 6732", zone: "สันกำแพง / ดอยสะเก็ด", phone: "081-000-1002", lat: 18.9256, lng: 99.0853 },
+  { id: "D3", name: "Anan", plate: "ชม 8291", zone: "หางดง / สันป่าตอง", phone: "081-000-1003", lat: 18.8564, lng: 99.0456 },
+  { id: "D4", name: "Thanawat", plate: "ชม 1187", zone: "ลำพูน / ลำปาง", phone: "081-000-1004", lat: 18.5745, lng: 99.5025 },
+  { id: "D5", name: "Kitti", plate: "ชม 4428", zone: "แม่ริม / เชียงราย", phone: "081-000-1005", lat: 19.2244, lng: 99.8585 }
 ];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
@@ -55,6 +55,8 @@ function defaultState() {
     orders: initialOrders,
     drivers: initialDrivers,
     auth: { role: "", name: "", phone: "", driverId: "" },
+    loginHistory: [],
+    onlineDrivers: {},
     google: {
       webAppUrl: DEFAULT_GOOGLE_ENDPOINT,
       sheetUrl: "https://docs.google.com/spreadsheets/",
@@ -74,6 +76,8 @@ function readState() {
       ...parsed,
       drivers: parsed.drivers?.length ? parsed.drivers : defaultState().drivers,
       auth: { ...defaultState().auth, ...(parsed.auth || {}) },
+      loginHistory: parsed.loginHistory || [],
+      onlineDrivers: parsed.onlineDrivers || {},
       google: {
         ...defaultState().google,
         ...(parsed.google || {}),
@@ -118,7 +122,7 @@ export default function App() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
-  const [orderForm, setOrderForm] = useState({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+  const [orderForm, setOrderForm] = useState({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
   const [syncStatus, setSyncStatus] = useState("Local mode");
 
   useEffect(() => setState(readState()), []);
@@ -173,7 +177,19 @@ export default function App() {
 
   const loginSales = async () => {
     if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
+    const loginEntry = {
+      id: `L${Date.now()}`,
+      role: "sales",
+      name: loginForm.name.trim(),
+      phone: loginForm.phone.trim(),
+      loginAt: new Date().toLocaleString("th-TH"),
+      loginTime: new Date().getTime()
+    };
     setAuth({ role: "sales", name: loginForm.name.trim(), phone: loginForm.phone.trim(), driverId: "" });
+    setState(prev => ({
+      ...prev,
+      loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100)
+    }));
     setTab("sales");
     await loadFromGoogle();
   };
@@ -199,8 +215,22 @@ export default function App() {
     }
     const found = latestDrivers.find(driver => String(driver.phone).trim() === phone);
     if (found) {
+      const loginEntry = {
+        id: `L${Date.now()}`,
+        role: "driver",
+        name: found.name,
+        phone,
+        driverId: found.id,
+        loginAt: new Date().toLocaleString("th-TH"),
+        loginTime: new Date().getTime()
+      };
       setDriverId(found.id);
       setAuth({ role: "driver", name: found.name, phone, driverId: found.id });
+      setState(prev => ({
+        ...prev,
+        loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
+        onlineDrivers: { ...prev.onlineDrivers, [found.id]: new Date().getTime() }
+      }));
       setTab("driver");
       return;
     }
@@ -219,13 +249,26 @@ export default function App() {
       vehicle: driverForm.vehicle.trim(),
       plate: driverForm.plate.trim(),
       zone: driverForm.zone,
+      lat: 18.7883,
+      lng: 98.9853,
       createdAt: new Date().toISOString()
+    };
+    const loginEntry = {
+      id: `L${Date.now()}`,
+      role: "driver",
+      name: nextDriver.name,
+      phone: nextDriver.phone,
+      driverId: nextDriver.id,
+      loginAt: new Date().toLocaleString("th-TH"),
+      loginTime: new Date().getTime()
     };
     const nextDrivers = [nextDriver, ...(state.drivers || [])];
     setState(prev => ({
       ...prev,
       drivers: nextDrivers,
-      auth: { role: "driver", name: nextDriver.name, phone: nextDriver.phone, driverId: nextDriver.id }
+      auth: { role: "driver", name: nextDriver.name, phone: nextDriver.phone, driverId: nextDriver.id },
+      loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
+      onlineDrivers: { ...prev.onlineDrivers, [nextDriver.id]: new Date().getTime() }
     }));
     setDriverId(nextDriver.id);
     setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
@@ -241,18 +284,32 @@ export default function App() {
     }
   };
 
-  const logout = () => setAuth({ role: "", name: "", phone: "", driverId: "" });
+  const logout = () => {
+    setState(prev => {
+      const updated = { ...prev.onlineDrivers };
+      if (auth.driverId) delete updated[auth.driverId];
+      return { ...prev, onlineDrivers: updated };
+    });
+    setAuth({ role: "", name: "", phone: "", driverId: "" });
+  };
 
   const createOrder = () => {
-    if (!selectedCustomer) return;
+    let customer = selectedCustomer;
+    
+    // If customer name is typed directly, search for it
+    if (orderForm.customerName.trim()) {
+      customer = customers.find(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())) || selectedCustomer;
+    }
+    
+    if (!customer) return;
     const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
     const nextOrder = {
       id,
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name,
-      zone: selectedCustomer.zone,
-      address: selectedCustomer.address,
-      mapUrl: selectedCustomer.mapUrl,
+      customerId: customer.id,
+      customerName: customer.name,
+      zone: customer.zone,
+      address: customer.address,
+      mapUrl: customer.mapUrl,
       window: orderForm.window,
       boxes: Number(orderForm.boxes || 0),
       cod: Number(orderForm.cod || 0),
@@ -266,7 +323,7 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
     setState(prev => ({ ...prev, orders: [nextOrder, ...prev.orders] }));
-    setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setTab("driver");
   };
 
@@ -401,6 +458,9 @@ export default function App() {
     );
   }
 
+  // Force driver to stay on driver tab
+  const displayTab = auth.role === "driver" ? "driver" : tab;
+
   return (
     <main>
       <aside className="sidebar">
@@ -409,11 +469,19 @@ export default function App() {
           <div><strong>Hillkoff</strong><span>Delivery System</span></div>
         </div>
         <nav>
-          <button className={tab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> Sales Dashboard</button>
-          <button className={tab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> Dispatch Dashboard</button>
-          <button className={tab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
-          <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
-          <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> Settings</button>
+          {auth.role !== "driver" && (
+            <>
+              <button className={displayTab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> Sales Dashboard</button>
+              <button className={displayTab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> Dispatch Dashboard</button>
+            </>
+          )}
+          <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+          {auth.role !== "driver" && (
+            <>
+              <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
+              <button className={displayTab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> Settings</button>
+            </>
+          )}
         </nav>
       </aside>
 
@@ -421,7 +489,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{tab === "sales" ? "Sales Delivery Dashboard" : tab === "dispatch" ? "Dispatch Work Dashboard" : tab === "driver" ? "Driver Realtime Orders" : tab === "settings" ? "System Settings" : "Daily Report & Service Quality"}</h1>
+            <h1>{displayTab === "sales" ? "Sales Delivery Dashboard" : displayTab === "dispatch" ? "Dispatch Work Dashboard" : displayTab === "driver" ? "Driver Realtime Orders" : displayTab === "settings" ? "System Settings" : "Daily Report & Service Quality"}</h1>
           </div>
           <div className="top-actions">
             <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
@@ -439,7 +507,7 @@ export default function App() {
           <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
         </div>
 
-        {tab === "sales" && (
+        {displayTab === "sales" && (
           <div className="sales-grid">
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
@@ -456,7 +524,18 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>ไม่ต้องพิมพ์ลูกค้าซ้ำ</span></div>
+              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>พิมพ์ชื่อลูกค้าหรือเลือกจากรายชื่อ</span></div>
+              <label className="search"><Search size={16} /><input value={orderForm.customerName} onChange={e => setOrderForm(p => ({ ...p, customerName: e.target.value }))} placeholder="พิมพ์ชื่อลูกค้า (autocomplete)" /></label>
+              {orderForm.customerName && (
+                <div className="customer-list">
+                  {customers.filter(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())).slice(0, 5).map(c => (
+                    <button key={c.id} className="customer-card" onClick={() => { setOrderForm(p => ({ ...p, customerName: c.name })); setSelectedCustomerId(c.id); }}>
+                      <strong>{c.name}</strong>
+                      <span>{c.phone} · {c.zone}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {selectedCustomer && (
                 <div className="customer-detail">
                   <div><b>{selectedCustomer.name}</b><p>{selectedCustomer.contact} · {selectedCustomer.phone}</p><p>{selectedCustomer.address}</p></div>
@@ -488,7 +567,7 @@ export default function App() {
           </div>
         )}
 
-        {tab === "dispatch" && (
+        {displayTab === "dispatch" && (
           <div className="dispatch-grid">
             <section className="panel">
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
@@ -555,7 +634,7 @@ export default function App() {
           </div>
         )}
 
-        {tab === "driver" && (
+        {displayTab === "driver" && (
           <div className="driver-grid">
             <section className="panel">
               <div className="panel-head"><h2>เลือกคนขับ</h2><span>{drivers.length} คน</span></div>
@@ -598,7 +677,7 @@ export default function App() {
           </div>
         )}
 
-        {tab === "reports" && (
+        {displayTab === "reports" && (
           <div className="report-grid">
             <section className="panel">
               <div className="panel-head"><h2>รายงานประจำวัน</h2><span>Google Sheets-ready</span></div>
@@ -639,8 +718,83 @@ export default function App() {
           </div>
         )}
 
-        {tab === "settings" && (
+        {displayTab === "settings" && (
           <div className="settings-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>🟢 Online Status</h2><span>{Object.keys(state.onlineDrivers || {}).length} online</span></div>
+              <div className="report-lines">
+                {Object.keys(state.onlineDrivers || {}).length === 0 ? (
+                  <p className="muted">ไม่มีคนขับออนไลน์</p>
+                ) : (
+                  drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
+                    const lastSeen = state.onlineDrivers?.[driver.id];
+                    const timeDiff = Math.floor((new Date().getTime() - lastSeen) / 60000);
+                    return (
+                      <p key={driver.id}><b>🟢 {driver.name}</b><br/><small>{driver.plate} ({driver.zone}) - {timeDiff}m ago</small></p>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Mini Map</span></div>
+              <div style={{ width: "100%", height: "300px", background: "#f0f0f0", borderRadius: "8px", position: "relative", border: "1px solid #ddd", overflow: "hidden" }}>
+                <svg width="100%" height="100%" viewBox="0 0 400 300" style={{ background: "#fafafa" }}>
+                  <text x="200" y="30" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#333">Chiang Mai Delivery Zones</text>
+                  
+                  {/* Zone labels */}
+                  <text x="200" y="80" textAnchor="middle" fontSize="12" fill="#666">เมืองเชียงใหม่</text>
+                  <text x="80" y="150" textAnchor="middle" fontSize="11" fill="#666">แม่ริม</text>
+                  <text x="320" y="150" textAnchor="middle" fontSize="11" fill="#666">ดอยสะเก็ด</text>
+                  <text x="150" y="240" textAnchor="middle" fontSize="11" fill="#666">ลำพูน</text>
+                  
+                  {/* Driver markers */}
+                  {Object.keys(state.onlineDrivers || {}).length > 0 ? (
+                    drivers.filter(d => state.onlineDrivers?.[d.id]).map((driver, idx) => {
+                      const x = 50 + (idx * 70);
+                      const y = 100 + (Math.sin(idx) * 60);
+                      return (
+                        <g key={driver.id}>
+                          <circle cx={x} cy={y} r="8" fill="#ff4444" opacity="0.8"/>
+                          <circle cx={x} cy={y} r="12" fill="none" stroke="#ff4444" strokeWidth="1" opacity="0.4"/>
+                          <text x={x} y={y + 20} textAnchor="middle" fontSize="10" fill="#333">{driver.name}</text>
+                        </g>
+                      );
+                    })
+                  ) : (
+                    <text x="200" y="150" textAnchor="middle" fontSize="12" fill="#999">No drivers online</text>
+                  )}
+                </svg>
+              </div>
+              <div className="google-box" style={{ marginTop: "16px" }}>
+                <b>📊 Driver Info</b>
+                {drivers.map(d => (
+                  <p key={d.id} style={{ fontSize: "12px", margin: "4px 0" }}>
+                    <b>{d.name}</b> - {d.plate} ({d.zone}) 
+                    {state.onlineDrivers?.[d.id] ? " 🟢 Online" : " ⚫ Offline"}
+                  </p>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📋 Login History</h2><span>{(state.loginHistory || []).length} entries</span></div>
+              <div className="report-lines" style={{ maxHeight: "400px", overflowY: "auto" }}>
+                {(state.loginHistory || []).length === 0 ? (
+                  <p className="muted">ยังไม่มีการล็อกอิน</p>
+                ) : (
+                  state.loginHistory.slice(0, 20).map(entry => (
+                    <p key={entry.id} style={{ fontSize: "13px", paddingBottom: "8px", borderBottom: "1px solid #eee" }}>
+                      <b>{entry.name}</b> ({entry.role === "driver" ? "🚗 Driver" : "📦 Sales"}) <br/>
+                      <small>📱 {entry.phone}</small> <br/>
+                      <small>⏰ {entry.loginAt}</small>
+                    </p>
+                  ))
+                )}
+              </div>
+            </section>
+
             <section className="panel">
               <div className="panel-head"><h2>Google Connection</h2><span>Sheets · Drive · Maps</span></div>
               <label className="field-label">Google Apps Script Web App URL</label>
@@ -665,6 +819,7 @@ export default function App() {
                 <p>orders: <b>{orders.length}</b> records</p>
                 <p>complaints: <b>{report.complaints.length}</b> records</p>
                 <p>drivers: <b>{drivers.length}</b> records</p>
+                <p>login_entries: <b>{(state.loginHistory || []).length}</b> records</p>
               </div>
             </section>
           </div>
