@@ -61,9 +61,17 @@ function getDatabase() {
       sheet.clear();
       sheet.appendRow(headers);
     }
+    formatTextColumns(sheet, headers, ["id", "customerId", "phone", "driverId"]);
   });
 
   return spreadsheet;
+}
+
+function formatTextColumns(sheet, headers, columnNames) {
+  columnNames.forEach(name => {
+    const index = headers.indexOf(name);
+    if (index >= 0) sheet.getRange(1, index + 1, sheet.getMaxRows(), 1).setNumberFormat("@");
+  });
 }
 
 function readAll() {

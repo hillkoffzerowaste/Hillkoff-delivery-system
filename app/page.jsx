@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
+const DEFAULT_GOOGLE_ENDPOINT = "/api/google";
 
 const DRIVERS = [
   { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001" },
@@ -53,7 +54,7 @@ function defaultState() {
     customers: initialCustomers,
     orders: initialOrders,
     google: {
-      webAppUrl: "",
+      webAppUrl: DEFAULT_GOOGLE_ENDPOINT,
       sheetUrl: "https://docs.google.com/spreadsheets/",
       driveFolderUrl: "https://drive.google.com/drive/folders/",
       mapsNote: "ใช้ Google Maps link ในข้อมูลลูกค้า และเก็บรูปยืนยันเข้า Google Drive ในเฟสถัดไป"
@@ -65,7 +66,15 @@ function readState() {
   if (typeof window === "undefined") return defaultState();
   try {
     const saved = localStorage.getItem(STORE_KEY);
-    return saved ? JSON.parse(saved) : defaultState();
+    const parsed = saved ? JSON.parse(saved) : defaultState();
+    return {
+      ...parsed,
+      google: {
+        ...defaultState().google,
+        ...(parsed.google || {}),
+        webAppUrl: parsed.google?.webAppUrl || DEFAULT_GOOGLE_ENDPOINT
+      }
+    };
   } catch {
     return defaultState();
   }
