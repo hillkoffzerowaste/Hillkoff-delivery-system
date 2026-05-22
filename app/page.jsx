@@ -17,6 +17,7 @@ import {
   Store,
   Truck,
   UserCheck,
+  Users,
   Settings
 } from "lucide-react";
 
@@ -97,6 +98,9 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("C001");
   const [driverId, setDriverId] = useState("D1");
+  const [orderQuery, setOrderQuery] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+  const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
   const [syncStatus, setSyncStatus] = useState("Local mode");
@@ -127,6 +131,13 @@ export default function App() {
   }, [orders]);
 
   const filteredCustomers = customers.filter(customer => [customer.name, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
+  const filteredOrders = orders.filter(order => {
+    const queryText = [order.id, order.customerName, order.phone, order.zone, order.address, order.salesNote].join(" ").toLowerCase();
+    const matchesQuery = queryText.includes(orderQuery.toLowerCase());
+    const matchesStatus = orderStatusFilter === "all" || order.status === orderStatusFilter;
+    const matchesZone = orderZoneFilter === "all" || order.zone === orderZoneFilter;
+    return matchesQuery && matchesStatus && matchesZone;
+  });
 
   const saveCustomer = () => {
     if (!customerForm.name.trim()) return;
@@ -166,6 +177,10 @@ export default function App() {
 
   const updateOrder = (id, patch) => setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
   const setGoogle = patch => setState(prev => ({ ...prev, google: { ...prev.google, ...patch } }));
+  const assignDriver = (id, nextDriverId) => updateOrder(id, {
+    driverId: nextDriverId,
+    status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
+  });
 
   const syncToGoogle = async () => {
     if (!state.google.webAppUrl) {
@@ -257,6 +272,7 @@ export default function App() {
         </div>
         <nav>
           <button className={tab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> Sales Dashboard</button>
+          <button className={tab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> Dispatch Dashboard</button>
           <button className={tab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
           <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> Settings</button>
@@ -267,7 +283,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{tab === "sales" ? "Sales Delivery Dashboard" : tab === "driver" ? "Driver Realtime Orders" : "Daily Report & Service Quality"}</h1>
+            <h1>{tab === "sales" ? "Sales Delivery Dashboard" : tab === "dispatch" ? "Dispatch Work Dashboard" : tab === "driver" ? "Driver Realtime Orders" : tab === "settings" ? "System Settings" : "Daily Report & Service Quality"}</h1>
           </div>
           <div className="top-actions">
             <button className="secondary" onClick={loadFromGoogle}><FolderSync size={16} /> Load</button>
@@ -328,6 +344,73 @@ export default function App() {
               <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Google Map link" />
               <textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
               <button className="secondary wide" onClick={saveCustomer}>บันทึกลูกค้า</button>
+            </section>
+          </div>
+        )}
+
+        {tab === "dispatch" && (
+          <div className="dispatch-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
+              <div className="filters dispatch-filters">
+                <label className="search"><Search size={16} /><input value={orderQuery} onChange={e => setOrderQuery(e.target.value)} placeholder="ค้นหาเลขงาน ลูกค้า พื้นที่ หมายเหตุ" /></label>
+                <select value={orderStatusFilter} onChange={e => setOrderStatusFilter(e.target.value)}>
+                  <option value="all">ทุกสถานะ</option>
+                  {STATUS.map(status => <option key={status} value={status}>{status}</option>)}
+                </select>
+                <select value={orderZoneFilter} onChange={e => setOrderZoneFilter(e.target.value)}>
+                  <option value="all">ทุกพื้นที่</option>
+                  {ZONES.map(zone => <option key={zone} value={zone}>{zone}</option>)}
+                </select>
+              </div>
+              <div className="dispatch-table">
+                <div className="dispatch-head">
+                  <span>งาน</span>
+                  <span>ลูกค้า/พื้นที่</span>
+                  <span>คนขับ</span>
+                  <span>สถานะ</span>
+                  <span>COD</span>
+                </div>
+                {filteredOrders.map(order => {
+                  const assignedDriver = DRIVERS.find(driver => driver.id === order.driverId);
+                  return (
+                    <article key={order.id} className="dispatch-row">
+                      <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
+                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span></div>
+                      <select value={order.driverId} onChange={e => assignDriver(order.id, e.target.value)}>
+                        <option value="">รอคนขับรับเอง</option>
+                        {DRIVERS.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}
+                      </select>
+                      <div className="status-stack">
+                        <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
+                        <small>{assignedDriver ? assignedDriver.name : "ยังไม่มอบหมาย"}</small>
+                      </div>
+                      <strong>{money(order.cod)} บาท</strong>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>โหลดงานคนขับ</h2><span>วันนี้</span></div>
+              {report.driverScore.map(driver => {
+                const driverJobs = orders.filter(order => order.driverId === driver.id && order.status !== "ส่งสำเร็จ");
+                return (
+                  <div key={driver.id} className="driver-load-row">
+                    <div>
+                      <b>{driver.name}</b>
+                      <span>{driver.plate} · {driver.zone}</span>
+                    </div>
+                    <strong>{driverJobs.length} งาน</strong>
+                  </div>
+                );
+              })}
+              <div className="google-box">
+                <b>วิธีใช้งานเร็ว</b>
+                <p>ฝ่ายขายสร้างออเดอร์จากหน้า Sales แล้วงานจะเข้าคิวนี้ทันที</p>
+                <p>แอดมินเลือกคนขับจากคอลัมน์คนขับ หรือปล่อยให้คนขับกดรับเองจากหน้า Driver</p>
+              </div>
             </section>
           </div>
         )}

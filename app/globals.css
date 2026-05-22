@@ -225,7 +225,8 @@ h2 {
 
 .sales-grid,
 .driver-grid,
-.report-grid {
+.report-grid,
+.dispatch-grid {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 14px;
@@ -238,6 +239,10 @@ h2 {
 
 .driver-grid {
   grid-template-columns: 300px minmax(0, 1fr);
+}
+
+.dispatch-grid {
+  grid-template-columns: minmax(0, 1fr) 320px;
 }
 
 .report-grid {
@@ -461,6 +466,75 @@ textarea {
 
 .form-grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dispatch-table {
+  display: grid;
+  gap: 8px;
+}
+
+.dispatch-head,
+.dispatch-row {
+  display: grid;
+  grid-template-columns: 1.05fr 1.35fr 1.05fr 0.8fr 0.65fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.dispatch-head {
+  color: #69756d;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.dispatch-row {
+  border: 1px solid #e4eadf;
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.dispatch-row b,
+.dispatch-row span,
+.driver-load-row b,
+.driver-load-row span {
+  display: block;
+}
+
+.dispatch-row span,
+.driver-load-row span,
+.status-stack small {
+  color: #69756d;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.dispatch-row strong {
+  text-align: right;
+}
+
+.status-chip {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.driver-load-row {
+  border: 1px solid #e4eadf;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.driver-load-row strong {
+  color: #176b3a;
+  white-space: nowrap;
 }
 
 .order-card {
@@ -695,6 +769,7 @@ textarea {
   .sales-grid,
   .driver-grid,
   .report-grid,
+  .dispatch-grid,
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -718,8 +793,19 @@ textarea {
   .form-grid,
   .form-grid.two,
   .action-row,
-  .proof-row {
+  .proof-row,
+  .dispatch-head,
+  .dispatch-row,
+  .dispatch-filters {
     grid-template-columns: 1fr;
+  }
+
+  .dispatch-head {
+    display: none;
+  }
+
+  .dispatch-row strong {
+    text-align: left;
   }
 
   .customer-detail {
