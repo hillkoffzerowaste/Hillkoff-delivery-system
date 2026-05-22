@@ -558,7 +558,7 @@ export default function App() {
         {tab === "driver" && (
           <div className="driver-grid">
             <section className="panel">
-              <div className="panel-head"><h2>เลือกคนขับ</h2><span>5 คน</span></div>
+              <div className="panel-head"><h2>เลือกคนขับ</h2><span>{drivers.length} คน</span></div>
               <select value={driverId} onChange={e => setDriverId(e.target.value)}>{drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
               <div className="driver-summary">
                 {drivers.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
