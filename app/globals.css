@@ -105,11 +105,9 @@ main {
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
+  display: block;
   background: #f7c948;
-  color: #17351f;
-  font-weight: 900;
+  object-fit: cover;
 }
 
 .brand strong,

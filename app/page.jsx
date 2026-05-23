@@ -57,6 +57,7 @@ function defaultState() {
     auth: { role: "", name: "", phone: "", driverId: "" },
     loginHistory: [],
     onlineDrivers: {},
+    driverLocations: {},
     google: {
       webAppUrl: DEFAULT_GOOGLE_ENDPOINT,
       sheetUrl: "https://docs.google.com/spreadsheets/",
@@ -78,6 +79,7 @@ function readState() {
       auth: { ...defaultState().auth, ...(parsed.auth || {}) },
       loginHistory: parsed.loginHistory || [],
       onlineDrivers: parsed.onlineDrivers || {},
+      driverLocations: parsed.driverLocations || {},
       google: {
         ...defaultState().google,
         ...(parsed.google || {}),
@@ -405,7 +407,33 @@ export default function App() {
   };
 
   const acceptOrder = id => updateOrder(id, { driverId, status: "กำลังส่ง" });
-  const checkIn = id => updateOrder(id, { checkInAt: new Date().toLocaleString("th-TH") });
+  const checkIn = id => {
+    const order = orders.find(o => o.id === id);
+    const driver = drivers.find(d => d.id === driverId);
+    const checkInTime = new Date().toLocaleString("th-TH");
+    updateOrder(id, { checkInAt: checkInTime });
+    
+    if (driver) {
+      setState(prev => ({
+        ...prev,
+        driverLocations: {
+          ...prev.driverLocations,
+          [driverId]: {
+            driverId: driverId,
+            driverName: driver.name,
+            driverPhone: driver.phone,
+            plate: driver.plate,
+            zone: driver.zone,
+            orderId: id,
+            customerName: order?.customerName,
+            address: order?.address,
+            checkInTime: checkInTime,
+            timestamp: new Date().getTime()
+          }
+        }
+      }));
+    }
+  };
   const confirmPhoto = id => updateOrder(id, { photo: `POD-${id}.jpg` });
   const completeOrder = id => updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
 
@@ -421,7 +449,7 @@ export default function App() {
       <main className="login-page">
         <section className="login-panel">
           <div className="brand login-brand">
-            <div className="brand-mark">HK</div>
+            <img className="brand-mark" src="/delivery-logo.svg" alt="Hillkoff Delivery" />
             <div><strong>Hillkoff</strong><span>Delivery System</span></div>
           </div>
           {auth.role !== "driver-register" ? (
@@ -465,7 +493,7 @@ export default function App() {
     <main>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">HK</div>
+          <img className="brand-mark" src="/delivery-logo.svg" alt="Hillkoff Delivery" />
           <div><strong>Hillkoff</strong><span>Delivery System</span></div>
         </div>
         <nav>
@@ -563,6 +591,100 @@ export default function App() {
               <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Google Map link" />
               <textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
               <button className="secondary wide" onClick={saveCustomer}>บันทึกลูกค้า</button>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📍 ตำแหน่งคนขับล่าสุด</h2><span>{Object.keys(state.driverLocations || {}).length} คนเช็คอินแล้ว</span></div>
+              {Object.keys(state.driverLocations || {}).length === 0 ? (
+                <p className="muted">ยังไม่มีคนขับเช็คอิน</p>
+              ) : (
+                Object.values(state.driverLocations || {})
+                  .sort((a, b) => b.timestamp - a.timestamp)
+                  .map(location => (
+                    <div key={location.driverId} style={{ padding: "12px", borderBottom: "1px solid #eee", marginBottom: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                        <div>
+                          <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
+                          <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone} · {location.plate}</p>
+                          <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>🏪 {location.customerName}</p>
+                          <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address}</p>
+                          <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
+                        </div>
+                        <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </section>
+          </div>
+        )}
+
+        {displayTab === "driver" && (
+          <div className="driver-grid">
+            <section className="panel">
+              <div className="panel-head"><h2>เลือกคนขับ</h2><span>{drivers.length} คน</span></div>
+              <select value={driverId} onChange={e => setDriverId(e.target.value)}>{drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
+              <div className="driver-summary">
+                {drivers.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>ออเดอร์เรียลไทม์</h2><span>{driverOrders.length} งาน</span></div>
+              <div className="order-feed">
+                {driverOrders.map(order => (
+                  <article key={order.id} className="order-card">
+                    <div className="order-main">
+                      <div>
+                        <div className="order-title"><strong>{order.customerName}</strong><span style={{ color: statusColor[order.status] }}>{order.status}</span></div>
+                        <p>{order.address} · {order.zone}</p>
+                        <p>{order.window} · {order.boxes} กล่อง · COD {money(order.cod)} บาท</p>
+                        {order.salesNote && <p>หมายเหตุ: {order.salesNote}</p>}
+                      </div>
+                      <a className="map-link" href={order.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> Map</a>
+                    </div>
+                    <div className="action-row">
+                      {!order.driverId && <button onClick={() => acceptOrder(order.id)}><UserCheck size={16} /> รับออเดอร์</button>}
+                      <button onClick={() => checkIn(order.id)}><Navigation size={16} /> เช็คอินร้าน</button>
+                      <label className="upload-btn"><Camera size={16} /> ถ่ายรูปยืนยัน<input type="file" accept="image/*" capture="environment" onChange={e => uploadPod(order, e.target.files?.[0])} /></label>
+                      <button onClick={() => completeOrder(order.id)}><CheckCircle2 size={16} /> ส่งสำเร็จ</button>
+                    </div>
+                    <div className="proof-row">
+                      <span>เช็คอิน: {order.checkInAt || "-"}</span>
+                      <span>รูปยืนยัน: {order.photo || "-"}</span>
+                      <span>ปิดงาน: {order.deliveredAt || "-"}</span>
+                    </div>
+                    <textarea value={order.complaint} onChange={e => updateOrder(order.id, { complaint: e.target.value, status: e.target.value ? "ติดปัญหา" : order.status })} placeholder="บันทึกร้องเรียน/ปัญหาหน้างาน" rows={2} />
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📍 ตำแหน่งเช็คอินของคุณ</h2><span>{driverId && state.driverLocations && state.driverLocations[driverId] ? "1" : "0"} ตำแหน่ง</span></div>
+              {driverId && state.driverLocations && state.driverLocations[driverId] ? (
+                <div style={{ padding: "12px", borderBottom: "1px solid #eee" }}>
+                  {(() => {
+                    const loc = state.driverLocations[driverId];
+                    return (
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                          <div>
+                            <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {loc.driverName}</b>
+                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {loc.driverPhone} · {loc.plate}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>🏪 {loc.customerName}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {loc.address}</p>
+                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {loc.checkInTime}</p>
+                          </div>
+                          <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <p className="muted">ยังไม่มีการเช็คอิน</p>
+              )}
             </section>
           </div>
         )}
