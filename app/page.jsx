@@ -119,6 +119,16 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("C001");
   const [driverId, setDriverId] = useState("D1");
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
+  const [rememberPhone, setRememberPhone] = useState(false);
+
+  // Load remembered phone number on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("hillkoff-last-phone");
+    if (saved) {
+      setLoginForm(p => ({ ...p, phone: saved }));
+      setRememberPhone(true);
+    }
+  }, []);
   const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -179,6 +189,11 @@ export default function App() {
 
   const loginSales = async () => {
     if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
+    if (rememberPhone) {
+      localStorage.setItem("hillkoff-last-phone", loginForm.phone.trim());
+    } else {
+      localStorage.removeItem("hillkoff-last-phone");
+    }
     const loginEntry = {
       id: `L${Date.now()}`,
       role: "sales",
@@ -199,6 +214,11 @@ export default function App() {
   const loginDriver = async () => {
     if (!loginForm.phone.trim()) return;
     const phone = loginForm.phone.trim();
+    if (rememberPhone) {
+      localStorage.setItem("hillkoff-last-phone", phone);
+    } else {
+      localStorage.removeItem("hillkoff-last-phone");
+    }
     let latestDrivers = state.drivers || [];
     try {
       const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT);
@@ -435,7 +455,11 @@ export default function App() {
     }
   };
   const confirmPhoto = id => updateOrder(id, { photo: `POD-${id}.jpg` });
-  const completeOrder = id => updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+  const completeOrder = id => {
+    if (window.confirm("ยืนยันส่งสำเร็จหรือไม่? ตรวจสอบว่าได้รับเงินและมีรูปยืนยันแล้ว")) {
+      updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+    }
+  };
 
   const totals = {
     jobs: orders.length,
@@ -461,6 +485,10 @@ export default function App() {
               </div>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+                <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
+                จดจำเบอร์โทรในครั้งต่อไป
+              </label>
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
                 {loginForm.role === "sales" ? "เข้าหน้าแดชบอร์ดฝ่ายขาย" : "เข้าสู่ระบบคนขับ"}
               </button>
@@ -755,7 +783,16 @@ export default function App() {
                       <span>รูปยืนยัน: {order.photo || "-"}</span>
                       <span>ปิดงาน: {order.deliveredAt || "-"}</span>
                     </div>
-                    <textarea value={order.complaint} onChange={e => updateOrder(order.id, { complaint: e.target.value, status: e.target.value ? "ติดปัญหา" : order.status })} placeholder="บันทึกร้องเรียน/ปัญหาหน้างาน" rows={2} />
+                    <div style={{ marginTop: "12px", marginBottom: "12px" }}>
+                      <small style={{ color: "#666", display: "block", marginBottom: "8px" }}>เลือกหรือพิมพ์หมายเหตุปัญหา:</small>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "ของไม่ครบ", status: "ติดปัญหา" })}>ของไม่ครบ</button>
+                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "ลูกค้าโอนตาม", status: "ติดปัญหา" })}>ลูกค้าโอนตาม</button>
+                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "ได้ของผิด", status: "ติดปัญหา" })}>ได้ของผิด</button>
+                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "", status: order.status !== "ติดปัญหา" ? order.status : "กำลังส่ง" })}>ยกเลิก</button>
+                      </div>
+                    </div>
+                    <textarea value={order.complaint} onChange={e => updateOrder(order.id, { complaint: e.target.value, status: e.target.value ? "ติดปัญหา" : order.status })} placeholder="หรือพิมพ์หมายเหตุอื่นๆ..." rows={2} style={{ fontSize: "13px" }} />
                   </article>
                 ))}
               </div>
