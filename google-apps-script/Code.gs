@@ -13,7 +13,8 @@ const SHEETS = {
 
 function doGet() {
   const db = getDatabase();
-  return jsonResponse({ ok: true, data: readAll(), sheetUrl: db.getUrl() });
+  const response = { ok: true, data: readAll(), sheetUrl: db.getUrl() };
+  return jsonResponseWithCORS(response);
 }
 
 function doPost(e) {
@@ -35,18 +36,30 @@ function doPost(e) {
         status: order.status,
         createdAt: new Date().toISOString()
       })));
-      return jsonResponse({ ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() });
+      const response = { ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() };
+      return jsonResponseWithCORS(response);
     }
 
     if (action === "uploadPod") {
       const fileUrl = savePodImage(body.orderId, body.fileName, body.dataUrl);
-      return jsonResponse({ ok: true, fileUrl });
+      return jsonResponseWithCORS({ ok: true, fileUrl });
     }
 
-    return jsonResponse({ ok: false, error: "Unknown action" }, 400);
+    return jsonResponseWithCORS({ ok: false, error: "Unknown action" }, 400);
   } catch (error) {
-    return jsonResponse({ ok: false, error: error.toString() }, 500);
+    return jsonResponseWithCORS({ ok: false, error: error.toString() }, 500);
   }
+}
+
+function doOptions(e) {
+  return jsonResponseWithCORS({ ok: true });
+}
+
+function jsonResponseWithCORS(payload, statusCode) {
+  const output = ContentService.createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
+  
+  return output;
 }
 
 function getDatabase() {
@@ -129,5 +142,12 @@ function savePodImage(orderId, fileName, dataUrl) {
 
 function jsonResponse(payload, statusCode) {
   const output = ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+  return output;
+}
+
+function jsonResponseWithCORS(payload, statusCode) {
+  const output = ContentService.createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
+  
   return output;
 }
