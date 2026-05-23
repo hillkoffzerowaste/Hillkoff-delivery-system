@@ -619,76 +619,6 @@ export default function App() {
           </div>
         )}
 
-        {displayTab === "driver" && (
-          <div className="driver-grid">
-            <section className="panel">
-              <div className="panel-head"><h2>เลือกคนขับ</h2><span>{drivers.length} คน</span></div>
-              <select value={driverId} onChange={e => setDriverId(e.target.value)}>{drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
-              <div className="driver-summary">
-                {drivers.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>ออเดอร์เรียลไทม์</h2><span>{driverOrders.length} งาน</span></div>
-              <div className="order-feed">
-                {driverOrders.map(order => (
-                  <article key={order.id} className="order-card">
-                    <div className="order-main">
-                      <div>
-                        <div className="order-title"><strong>{order.customerName}</strong><span style={{ color: statusColor[order.status] }}>{order.status}</span></div>
-                        <p>{order.address} · {order.zone}</p>
-                        <p>{order.window} · {order.boxes} กล่อง · COD {money(order.cod)} บาท</p>
-                        {order.salesNote && <p>หมายเหตุ: {order.salesNote}</p>}
-                      </div>
-                      <a className="map-link" href={order.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> Map</a>
-                    </div>
-                    <div className="action-row">
-                      {!order.driverId && <button onClick={() => acceptOrder(order.id)}><UserCheck size={16} /> รับออเดอร์</button>}
-                      <button onClick={() => checkIn(order.id)}><Navigation size={16} /> เช็คอินร้าน</button>
-                      <label className="upload-btn"><Camera size={16} /> ถ่ายรูปยืนยัน<input type="file" accept="image/*" capture="environment" onChange={e => uploadPod(order, e.target.files?.[0])} /></label>
-                      <button onClick={() => completeOrder(order.id)}><CheckCircle2 size={16} /> ส่งสำเร็จ</button>
-                    </div>
-                    <div className="proof-row">
-                      <span>เช็คอิน: {order.checkInAt || "-"}</span>
-                      <span>รูปยืนยัน: {order.photo || "-"}</span>
-                      <span>ปิดงาน: {order.deliveredAt || "-"}</span>
-                    </div>
-                    <textarea value={order.complaint} onChange={e => updateOrder(order.id, { complaint: e.target.value, status: e.target.value ? "ติดปัญหา" : order.status })} placeholder="บันทึกร้องเรียน/ปัญหาหน้างาน" rows={2} />
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>📍 ตำแหน่งเช็คอินของคุณ</h2><span>{driverId && state.driverLocations && state.driverLocations[driverId] ? "1" : "0"} ตำแหน่ง</span></div>
-              {driverId && state.driverLocations && state.driverLocations[driverId] ? (
-                <div style={{ padding: "12px", borderBottom: "1px solid #eee" }}>
-                  {(() => {
-                    const loc = state.driverLocations[driverId];
-                    return (
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                          <div>
-                            <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {loc.driverName}</b>
-                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {loc.driverPhone} · {loc.plate}</p>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>🏪 {loc.customerName}</p>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {loc.address}</p>
-                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {loc.checkInTime}</p>
-                          </div>
-                          <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              ) : (
-                <p className="muted">ยังไม่มีการเช็คอิน</p>
-              )}
-            </section>
-          </div>
-        )}
-
         {displayTab === "dispatch" && (
           <div className="dispatch-grid">
             <section className="panel">
@@ -764,6 +694,40 @@ export default function App() {
               <div className="driver-summary">
                 {drivers.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
               </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📊 ออเดอร์วันนี้</h2><span>{driverOrders.length} งาน</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                <div style={{ background: "#f0f9ff", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #0ea5e9" }}>
+                  <small style={{ color: "#666" }}>กำลังส่ง</small>
+                  <b style={{ fontSize: "18px", color: "#0ea5e9" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length} งาน</b>
+                </div>
+                <div style={{ background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
+                  <small style={{ color: "#666" }}>สำเร็จ</small>
+                  <b style={{ fontSize: "18px", color: "#22c55e" }}>{driverOrders.filter(o => o.status === "ส่งสำเร็จ").length} งาน</b>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "16px", height: "24px", borderRadius: "4px", overflow: "hidden", background: "#f3f4f6" }}>
+                <div style={{ 
+                  flex: driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length, 
+                  background: "#fbbf24", 
+                  minWidth: driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length > 0 ? "8px" : "0"
+                }}></div>
+                <div style={{ 
+                  flex: driverOrders.filter(o => o.status === "ส่งสำเร็จ").length, 
+                  background: "#22c55e", 
+                  minWidth: driverOrders.filter(o => o.status === "ส่งสำเร็จ").length > 0 ? "8px" : "0"
+                }}></div>
+              </div>
+              {driverOrders.length === 0 ? (
+                <p className="muted">ยังไม่มีออเดอร์วันนี้</p>
+              ) : (
+                <div style={{ fontSize: "12px", color: "#666" }}>
+                  <p style={{ margin: "0 0 8px 0" }}>✓ สำเร็จ: {driverOrders.filter(o => o.status === "ส่งสำเร็จ").length}/{driverOrders.length}</p>
+                  <p style={{ margin: "0" }}>⏳ กำลังส่ง: {driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length}/{driverOrders.length}</p>
+                </div>
+              )}
             </section>
 
             <section className="panel">
