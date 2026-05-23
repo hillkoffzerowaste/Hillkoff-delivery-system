@@ -6,7 +6,9 @@ import {
   Camera,
   CheckCircle2,
   ClipboardList,
+  Download,
   FileSpreadsheet,
+  FileText,
   FolderSync,
   MapPinned,
   MessageSquareWarning,
@@ -176,13 +178,28 @@ export default function App() {
     return matchesQuery && matchesStatus && matchesZone;
   });
 
-  const saveCustomer = () => {
+  const saveCustomer = async () => {
     if (!customerForm.name.trim()) return;
     const id = `C${String(customers.length + 1).padStart(3, "0")}`;
     const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
-    setState(prev => ({ ...prev, customers: [nextCustomer, ...prev.customers] }));
+    const nextState = { ...state, customers: [nextCustomer, ...state.customers] };
+    setState(nextState);
     setSelectedCustomerId(id);
     setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+    
+    if (state.google.webAppUrl) {
+      setSyncStatus("กำลัง sync ลูกค้าใหม่ไป Google Sheets...");
+      try {
+        await fetch(state.google.webAppUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "sync", customers: nextState.customers, orders: nextState.orders, drivers: nextState.drivers || [] })
+        });
+        setSyncStatus(`บันทึกลูกค้าและ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
+      } catch (error) {
+        setSyncStatus(`บันทึกลูกค้าแล้ว แต่ sync Google ไม่สำเร็จ: ${error.message}`);
+      }
+    }
   };
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
@@ -461,6 +478,74 @@ export default function App() {
     }
   };
 
+  const generateDailyReport = () => {
+    const today = new Date().toLocaleDateString("th-TH");
+    const todayOrders = orders.filter(o => new Date(o.createdAt || o.assignedAt).toLocaleDateString("th-TH") === today);
+    const driverStats = {};
+
+    todayOrders.forEach(order => {
+      if (order.driverId) {
+        if (!driverStats[order.driverId]) {
+          const driver = (state.drivers || []).find(d => d.id === order.driverId);
+          driverStats[order.driverId] = {
+            name: driver?.name || "ไม่ทราบ",
+            plate: driver?.plate || "-",
+            zone: driver?.zone || "-",
+            total: 0,
+            completed: 0,
+            active: 0,
+            failed: 0,
+            checkins: []
+          };
+        }
+        driverStats[order.driverId].total += 1;
+        driverStats[order.driverId][order.status === "ส่งสำเร็จ" ? "completed" : order.status === "กำลังส่ง" ? "active" : "failed"] += 1;
+      }
+    });
+
+    Object.keys(state.driverLocations || {}).forEach(driverId => {
+      if (driverStats[driverId]) {
+        const loc = state.driverLocations[driverId];
+        driverStats[driverId].checkins.push({
+          address: loc.address,
+          time: new Date(loc.timestamp).toLocaleTimeString("th-TH"),
+          customer: loc.customerName
+        });
+      }
+    });
+
+    let report = `📋 รายงานการส่งของประจำวัน - ${today}\n`;
+    report += `${"=".repeat(50)}\n\n`;
+    report += `📊 สรุปรวม:\n`;
+    report += `  • ทั้งหมด: ${todayOrders.length} ออเดอร์\n`;
+    report += `  • สำเร็จ: ${todayOrders.filter(o => o.status === "ส่งสำเร็จ").length}\n`;
+    report += `  • กำลังส่ง: ${todayOrders.filter(o => o.status === "กำลังส่ง").length}\n`;
+    report += `  • รอรับ: ${todayOrders.filter(o => o.status === "รอคนขับรับ").length}\n\n`;
+
+    Object.entries(driverStats).forEach(([driverId, stats]) => {
+      report += `🚗 ${stats.name}\n`;
+      report += `  📍 เพลต: ${stats.plate} | โซน: ${stats.zone}\n`;
+      report += `  📦 ออเดอร์: รวม ${stats.total} | สำเร็จ ✅ ${stats.completed} | กำลังส่ง 🟡 ${stats.active} | ไม่สำเร็จ ❌ ${stats.failed}\n`;
+      report += `  ⏱️ ประสิทธิภาพ: ${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}%\n`;
+      if (stats.checkins.length > 0) {
+        report += `  📌 จุดเช็คอิน:\n`;
+        stats.checkins.slice(0, 5).forEach(c => {
+          report += `     • ${c.time} - ${c.customer} (${c.address})\n`;
+        });
+      }
+      report += "\n";
+    });
+    return report;
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert("คัดลอกรายงานสำเร็จ!");
+    }).catch(() => {
+      alert("คัดลอกไม่สำเร็จ กรุณาลองใหม่");
+    });
+  };
+
   const totals = {
     jobs: orders.length,
     waiting: orders.filter(order => order.status === "รอคนขับรับ").length,
@@ -531,7 +616,9 @@ export default function App() {
               <button className={displayTab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> Dispatch Dashboard</button>
             </>
           )}
-          <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+          {auth.role === "driver" && (
+            <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+          )}
           {auth.role !== "driver" && (
             <>
               <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
@@ -565,6 +652,24 @@ export default function App() {
 
         {displayTab === "sales" && (
           <div className="sales-grid">
+            {state.google.sheetUrl && (
+              <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                  <div>
+                    <b>📊 ลิงค์ Google Sheets</b>
+                    <p style={{ fontSize: "12px", color: "#666", margin: "4px 0" }}>คลิกเพื่อดูข้อมูลลูกค้าที่บันทึกไว้ และดาวน์โหลดรายงาน</p>
+                  </div>
+                  <a href={state.google.sheetUrl} target="_blank" rel="noreferrer" className="primary" style={{ whiteSpace: "nowrap" }}>
+                    <FileSpreadsheet size={16} style={{ marginRight: "6px" }} /> เปิด Sheet
+                  </a>
+                </div>
+              </section>
+            )}
+            {syncStatus && syncStatus !== "Local mode" && (
+              <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>✓ {syncStatus}</p>
+              </section>
+            )}
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
               <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
@@ -592,12 +697,15 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {selectedCustomer && (
-                <div className="customer-detail">
-                  <div><b>{selectedCustomer.name}</b><p>{selectedCustomer.contact} · {selectedCustomer.phone}</p><p>{selectedCustomer.address}</p></div>
-                  <a href={selectedCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิด Google Map</a>
-                </div>
-              )}
+              {(() => {
+                const foundCustomer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase()) || selectedCustomer;
+                return foundCustomer ? (
+                  <div className="customer-detail">
+                    <div><b>{foundCustomer.name}</b><p>{foundCustomer.contact} · {foundCustomer.phone}</p><p>{foundCustomer.address}</p></div>
+                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิด Google Map</a>
+                  </div>
+                ) : null;
+              })()}
               <div className="form-grid">
                 <input value={orderForm.window} onChange={e => setOrderForm(p => ({ ...p, window: e.target.value }))} placeholder="ช่วงเวลาส่ง" />
                 <input value={orderForm.boxes} onChange={e => setOrderForm(p => ({ ...p, boxes: e.target.value }))} type="number" placeholder="จำนวนกล่อง" />
@@ -644,6 +752,40 @@ export default function App() {
                   ))
               )}
             </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📦 สรุปการส่งของ</h2><span>กำลังส่ง {orders.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {orders.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
+              <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+                <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
+                  <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{orders.filter(o => o.status === "กำลังส่ง").length}</b>
+                </div>
+                <div style={{ flex: 1, background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
+                  <small style={{ color: "#166534" }}>✓ สำเร็จ</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{orders.filter(o => o.status === "ส่งสำเร็จ").length}</b>
+                </div>
+              </div>
+              <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                {orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 ? (
+                  <p className="muted">ยังไม่มีการส่ง</p>
+                ) : (
+                  orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
+                    const driver = drivers.find(d => d.id === order.driverId);
+                    return (
+                      <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
+                          <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
+                          <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdf4", color: order.status === "กำลังส่ง" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                        </div>
+                        <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
+                        <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
+                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driver?.name || "ยังไม่มอบหมาย"}</p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </section>
           </div>
         )}
 
@@ -675,7 +817,7 @@ export default function App() {
                   return (
                     <article key={order.id} className="dispatch-row">
                       <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
-                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span></div>
+                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
                       <select value={order.driverId} onChange={e => assignDriver(order.id, e.target.value)}>
                         <option value="">รอคนขับรับเอง</option>
                         {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}
@@ -916,6 +1058,24 @@ export default function App() {
                   ))
                 )}
               </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
+              <button className="secondary wide" onClick={() => {
+                const report = generateDailyReport();
+                copyToClipboard(report);
+              }}><FileText size={16} /> สร้างรายงานและคัดลอก</button>
+              <button className="secondary wide" onClick={() => {
+                const report = generateDailyReport();
+                const element = document.createElement("a");
+                element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(report));
+                element.setAttribute("download", `Hillkoff-Report-${new Date().toLocaleDateString("th-TH")}.txt`);
+                element.style.display = "none";
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
             </section>
 
             <section className="panel">
