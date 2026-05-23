@@ -1083,70 +1083,19 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Mini Map with Zoom</span></div>
+              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Live Map - Chiang Mai</span></div>
               <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-                <button className="secondary" onClick={() => setMapZoom(Math.max(0.5, mapZoom - 0.2))} style={{ padding: "6px 12px", fontSize: "14px" }}>➖ Zoom Out</button>
-                <button className="secondary" onClick={() => setMapZoom(Math.min(2, mapZoom + 0.2))} style={{ padding: "6px 12px", fontSize: "14px" }}>➕ Zoom In</button>
-                <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {(mapZoom * 100).toFixed(0)}%</span>
+                <button className="secondary" onClick={() => setMapZoom(Math.max(10, mapZoom - 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➖ Zoom Out</button>
+                <button className="secondary" onClick={() => setMapZoom(Math.min(18, mapZoom + 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➕ Zoom In</button>
+                <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {mapZoom}</span>
               </div>
-              <div style={{ width: "100%", height: "380px", background: "#fafafa", borderRadius: "8px", position: "relative", border: "1px solid #ddd", overflow: "auto" }}>
-                <svg width={400 * mapZoom} height={300 * mapZoom} viewBox="0 0 400 300" style={{ background: "linear-gradient(135deg, #e8f4f8 0%, #f0fafb 100%)" }}>
-                  {/* Header */}
-                  <text x="200" y="25" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#1a5490">🗺️ เชียงใหม่ - แผนที่โซนการส่ง</text>
-                  
-                  {/* Zone boundaries - grid layout */}
-                  <g fill="none" stroke="#ddd" strokeWidth="2" strokeDasharray="4">
-                    {/* Grid lines */}
-                    <line x1="0" y1="80" x2="400" y2="80" />
-                    <line x1="0" y1="160" x2="400" y2="160" />
-                    <line x1="133" y1="50" x2="133" y2="250" />
-                    <line x1="267" y1="50" x2="267" y2="250" />
-                  </g>
-
-                  {/* Zone boxes with labels */}
-                  <rect x="10" y="50" width="110" height="100" fill="#e3f2fd" opacity="0.5" stroke="#1976d2" strokeWidth="2" rx="4" />
-                  <text x="65" y="105" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#1976d2">แม่ริม</text>
-
-                  <rect x="145" y="50" width="110" height="100" fill="#f3e5f5" opacity="0.5" stroke="#7b1fa2" strokeWidth="2" rx="4" />
-                  <text x="200" y="105" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#7b1fa2">เมืองเชียงใหม่</text>
-
-                  <rect x="280" y="50" width="110" height="100" fill="#fce4ec" opacity="0.5" stroke="#c2185b" strokeWidth="2" rx="4" />
-                  <text x="335" y="105" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#c2185b">ดอยสะเก็ด</text>
-
-                  <rect x="10" y="160" width="110" height="100" fill="#f1f8e9" opacity="0.5" stroke="#558b2f" strokeWidth="2" rx="4" />
-                  <text x="65" y="215" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#558b2f">สันกำแพง</text>
-
-                  <rect x="145" y="160" width="110" height="100" fill="#fff3e0" opacity="0.5" stroke="#e65100" strokeWidth="2" rx="4" />
-                  <text x="200" y="215" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#e65100">ลำพูน</text>
-
-                  <rect x="280" y="160" width="110" height="100" fill="#fef5e7" opacity="0.5" stroke="#f9a825" strokeWidth="2" rx="4" />
-                  <text x="335" y="215" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#f9a825">หางดง</text>
-
-                  {/* Driver markers with pulse effect */}
-                  {Object.keys(state.onlineDrivers || {}).length > 0 ? (
-                    drivers.filter(d => state.onlineDrivers?.[d.id]).map((driver, idx) => {
-                      const positions = [
-                        { x: 65, y: 85 }, { x: 200, y: 100 }, { x: 335, y: 90 },
-                        { x: 65, y: 200 }, { x: 200, y: 210 }, { x: 335, y: 195 }
-                      ];
-                      const pos = positions[idx % positions.length];
-                      return (
-                        <g key={driver.id}>
-                          <circle cx={pos.x} cy={pos.y} r="14" fill="#ff4444" opacity="0.9"/>
-                          <circle cx={pos.x} cy={pos.y} r="18" fill="none" stroke="#ff4444" strokeWidth="2" opacity="0.3"/>
-                          <circle cx={pos.x} cy={pos.y} r="22" fill="none" stroke="#ff4444" strokeWidth="1" opacity="0.2"/>
-                          <text x={pos.x} y={pos.y + 28} textAnchor="middle" fontSize="9" fill="#333" fontWeight="bold">{driver.name}</text>
-                          <text x={pos.x} y={pos.y + 38} textAnchor="middle" fontSize="8" fill="#666">{driver.plate}</text>
-                        </g>
-                      );
-                    })
-                  ) : (
-                    <text x="200" y="150" textAnchor="middle" fontSize="14" fill="#999">📍 ไม่มีคนขับออนไลน์</text>
-                  )}
-                </svg>
-              </div>
+              <iframe 
+                src="https://www.openstreetmap.org/export/embed.html?bbox=98.8,18.7,99.1,18.9&layer=mapnik&marker=18.7883,98.9853"
+                style={{ width: "100%", height: "380px", border: "1px solid #ddd", borderRadius: "8px" }}
+                title="Chiang Mai Map"
+              />
               <div className="google-box" style={{ marginTop: "16px" }}>
-                <b>👥 สถานะคนขับ</b>
+                <b>👥 สถานะคนขับออนไลน์ ({Object.keys(state.onlineDrivers || {}).length})</b>
                 {drivers.length === 0 ? (
                   <p style={{ fontSize: "12px", color: "#999" }}>ยังไม่มีคนขับ</p>
                 ) : (

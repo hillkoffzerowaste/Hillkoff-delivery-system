@@ -12,9 +12,15 @@ const SHEETS = {
 };
 
 function doGet() {
-  const db = getDatabase();
-  const response = { ok: true, data: readAll(), sheetUrl: db.getUrl() };
-  return jsonResponseWithCORS(response);
+  try {
+    const db = getDatabase();
+    const data = readAll(db);
+    const response = { ok: true, data: data, sheetUrl: db.getUrl() };
+    return jsonResponseWithCORS(response);
+  } catch (error) {
+    Logger.log("Error in doGet: " + error.toString());
+    return jsonResponseWithCORS({ ok: false, error: error.toString() }, 500);
+  }
 }
 
 function doPost(e) {
@@ -26,11 +32,16 @@ function doPost(e) {
     const drivers = e.parameter.drivers ? JSON.parse(e.parameter.drivers) : [];
     
     const db = getDatabase();
+    Logger.log("Database obtained: " + db.getName());
 
     if (action === "sync") {
+      Logger.log("Syncing customers: " + customers.length);
       upsertRows(db, "customers", customers);
+      Logger.log("Syncing orders: " + orders.length);
       upsertRows(db, "orders", orders);
+      Logger.log("Syncing drivers: " + drivers.length);
       upsertRows(db, "drivers", drivers);
+      
       upsertRows(db, "complaints", orders.filter(order => order.complaint).map(order => ({
         id: `CMP-${order.id}`,
         orderId: order.id,
@@ -40,7 +51,10 @@ function doPost(e) {
         status: order.status,
         createdAt: new Date().toISOString()
       })));
-      return jsonResponseWithCORS({ ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() });
+      
+      const data = readAll(db);
+      Logger.log("Sync complete. Sheet URL: " + db.getUrl());
+      return jsonResponseWithCORS({ ok: true, syncedAt: new Date().toISOString(), data: data, sheetUrl: db.getUrl() });
     }
 
     if (action === "uploadPod") {
@@ -50,6 +64,7 @@ function doPost(e) {
 
     return jsonResponseWithCORS({ ok: false, error: "Unknown action" }, 400);
   } catch (error) {
+    Logger.log("Error in doPost: " + error.toString());
     return jsonResponseWithCORS({ ok: false, error: error.toString() }, 500);
   }
 }
@@ -71,34 +86,52 @@ function getDatabase() {
   let spreadsheet = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : null;
 
   if (!spreadsheet) {
+    Logger.log("Creating new spreadsheet: " + CONFIG.spreadsheetName);
     spreadsheet = SpreadsheetApp.create(CONFIG.spreadsheetName);
     props.setProperty("SPREADSHEET_ID", spreadsheet.getId());
+    Logger.log("Spreadsheet created: " + spreadsheet.getId());
   }
 
+  if (!spreadsheet) throw new Error("Failed to create or open spreadsheet");
+
   Object.entries(SHEETS).forEach(([name, headers]) => {
+    Logger.log("Processing sheet: " + name);
     let sheet = spreadsheet.getSheetByName(name);
-    if (!sheet) sheet = spreadsheet.insertSheet(name);
-    if (sheet.getLastRow() === 0) sheet.appendRow(headers);
+    if (!sheet) {
+      Logger.log("Creating sheet: " + name);
+      sheet = spreadsheet.insertSheet(name);
+    }
+    
+    const lastRow = sheet.getLastRow();
+    if (lastRow === 0) {
+      Logger.log("Adding headers to " + name);
+      sheet.appendRow(headers);
+    }
+    
     const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    if (current.join("|") !== headers.join("|")) {
+    if (JSON.stringify(current) !== JSON.stringify(headers)) {
+      Logger.log("Headers mismatch in " + name + ", clearing and re-adding");
       sheet.clear();
       sheet.appendRow(headers);
     }
+    
     formatTextColumns(sheet, headers, ["id", "customerId", "phone", "driverId"]);
   });
 
+  Logger.log("Database ready: " + spreadsheet.getUrl());
   return spreadsheet;
 }
 
 function formatTextColumns(sheet, headers, columnNames) {
+  const maxRows = Math.max(1000, sheet.getLastRow() + 100);
   columnNames.forEach(name => {
     const index = headers.indexOf(name);
-    if (index >= 0) sheet.getRange(1, index + 1, sheet.getMaxRows(), 1).setNumberFormat("@");
+    if (index >= 0) sheet.getRange(1, index + 1, maxRows, 1).setNumberFormat("@");
   });
 }
 
-function readAll() {
-  const db = getDatabase();
+function readAll(db) {
+  if (!db) db = getDatabase();
   return {
     customers: readSheet(db, "customers"),
     orders: readSheet(db, "orders"),
@@ -107,15 +140,35 @@ function readAll() {
 }
 
 function readSheet(db, name) {
+  if (!db) {
+    Logger.log("readSheet: db is null");
+    return [];
+  }
   const sheet = db.getSheetByName(name);
+  if (!sheet) {
+    Logger.log("readSheet: sheet " + name + " not found");
+    return [];
+  }
   const values = sheet.getDataRange().getValues();
   const headers = values.shift() || [];
   return values.filter(row => row.some(Boolean)).map(row => Object.fromEntries(headers.map((key, index) => [key, row[index]])));
 }
 
 function upsertRows(db, name, rows) {
+  if (!db) {
+    Logger.log("upsertRows: db is null");
+    return;
+  }
   const sheet = db.getSheetByName(name);
+  if (!sheet) {
+    Logger.log("upsertRows: sheet " + name + " not found");
+    return;
+  }
   const headers = SHEETS[name];
+  if (!headers) {
+    Logger.log("upsertRows: SHEETS[" + name + "] not found");
+    return;
+  }
   const existing = readSheet(db, name);
   const merged = new Map(existing.map(row => [String(row.id), row]));
   rows.forEach(row => merged.set(String(row.id), { ...(merged.get(String(row.id)) || {}), ...row, updatedAt: new Date().toISOString() }));
@@ -124,6 +177,7 @@ function upsertRows(db, name, rows) {
   sheet.appendRow(headers);
   const values = [...merged.values()].map(row => headers.map(header => row[header] ?? ""));
   if (values.length) sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  Logger.log("upsertRows: " + name + " - " + values.length + " rows");
 }
 
 function savePodImage(orderId, fileName, dataUrl) {
@@ -145,12 +199,5 @@ function savePodImage(orderId, fileName, dataUrl) {
 
 function jsonResponse(payload, statusCode) {
   const output = ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
-  return output;
-}
-
-function jsonResponseWithCORS(payload, statusCode) {
-  const output = ContentService.createTextOutput(JSON.stringify(payload))
-    .setMimeType(ContentService.MimeType.JSON);
-  
   return output;
 }
