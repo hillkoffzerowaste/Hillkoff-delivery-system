@@ -81,9 +81,9 @@ function jsonResponseWithCORS(payload, statusCode) {
 }
 
 function getDatabase() {
-  const props = PropertiesService.getScriptProperties();
-  let spreadsheetId = props.getProperty("SPREADSHEET_ID");
-  let spreadsheet = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : null;
+  var props = PropertiesService.getScriptProperties();
+  var spreadsheetId = props.getProperty("SPREADSHEET_ID");
+  var spreadsheet = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : null;
 
   if (!spreadsheet) {
     Logger.log("Creating new spreadsheet: " + CONFIG.spreadsheetName);
@@ -94,40 +94,44 @@ function getDatabase() {
 
   if (!spreadsheet) throw new Error("Failed to create or open spreadsheet");
 
-  Object.entries(SHEETS).forEach(([name, headers]) => {
-    Logger.log("Processing sheet: " + name);
-    let sheet = spreadsheet.getSheetByName(name);
+  for (var sheetName in SHEETS) {
+    var headers = SHEETS[sheetName];
+    Logger.log("Processing sheet: " + sheetName);
+    var sheet = spreadsheet.getSheetByName(sheetName);
     if (!sheet) {
-      Logger.log("Creating sheet: " + name);
-      sheet = spreadsheet.insertSheet(name);
+      Logger.log("Creating sheet: " + sheetName);
+      sheet = spreadsheet.insertSheet(sheetName);
     }
     
-    const lastRow = sheet.getLastRow();
+    var lastRow = sheet.getLastRow();
     if (lastRow === 0) {
-      Logger.log("Adding headers to " + name);
+      Logger.log("Adding headers to " + sheetName);
       sheet.appendRow(headers);
     }
     
-    const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    if (JSON.stringify(current) !== JSON.stringify(headers)) {
-      Logger.log("Headers mismatch in " + name + ", clearing and re-adding");
+    var current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+    var currentStr = JSON.stringify(current);
+    var headersStr = JSON.stringify(headers);
+    if (currentStr !== headersStr) {
+      Logger.log("Headers mismatch in " + sheetName + ", clearing and re-adding");
       sheet.clear();
       sheet.appendRow(headers);
     }
     
     formatTextColumns(sheet, headers, ["id", "customerId", "phone", "driverId"]);
-  });
+  }
 
   Logger.log("Database ready: " + spreadsheet.getUrl());
   return spreadsheet;
 }
 
 function formatTextColumns(sheet, headers, columnNames) {
-  const maxRows = Math.max(1000, sheet.getLastRow() + 100);
-  columnNames.forEach(name => {
-    const index = headers.indexOf(name);
+  var maxRows = Math.max(1000, sheet.getLastRow() + 100);
+  for (var i = 0; i < columnNames.length; i++) {
+    var name = columnNames[i];
+    var index = headers.indexOf(name);
     if (index >= 0) sheet.getRange(1, index + 1, maxRows, 1).setNumberFormat("@");
-  });
+  }
 }
 
 function readAll(db) {
@@ -144,14 +148,34 @@ function readSheet(db, name) {
     Logger.log("readSheet: db is null");
     return [];
   }
-  const sheet = db.getSheetByName(name);
+  var sheet = db.getSheetByName(name);
   if (!sheet) {
     Logger.log("readSheet: sheet " + name + " not found");
     return [];
   }
-  const values = sheet.getDataRange().getValues();
-  const headers = values.shift() || [];
-  return values.filter(row => row.some(Boolean)).map(row => Object.fromEntries(headers.map((key, index) => [key, row[index]])));
+  var values = sheet.getDataRange().getValues();
+  var headers = values.length > 0 ? values.shift() : [];
+  var result = [];
+  
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var hasData = false;
+    for (var j = 0; j < row.length; j++) {
+      if (row[j]) {
+        hasData = true;
+        break;
+      }
+    }
+    
+    if (hasData) {
+      var obj = {};
+      for (var k = 0; k < headers.length; k++) {
+        obj[headers[k]] = row[k] || "";
+      }
+      result.push(obj);
+    }
+  }
+  return result;
 }
 
 function upsertRows(db, name, rows) {
@@ -159,18 +183,57 @@ function upsertRows(db, name, rows) {
     Logger.log("upsertRows: db is null");
     return;
   }
-  const sheet = db.getSheetByName(name);
+  var sheet = db.getSheetByName(name);
   if (!sheet) {
     Logger.log("upsertRows: sheet " + name + " not found");
     return;
   }
-  const headers = SHEETS[name];
+  var headers = SHEETS[name];
   if (!headers) {
     Logger.log("upsertRows: SHEETS[" + name + "] not found");
     return;
   }
-  const existing = readSheet(db, name);
-  const merged = new Map(existing.map(row => [String(row.id), row]));
+  
+  var existing = readSheet(db, name);
+  var merged = {};
+  
+  for (var i = 0; i < existing.length; i++) {
+    var existingRow = existing[i];
+    merged[String(existingRow.id)] = existingRow;
+  }
+  
+  for (var j = 0; j < rows.length; j++) {
+    var newRow = rows[j];
+    var existingData = merged[String(newRow.id)] || {};
+    merged[String(newRow.id)] = {};
+    
+    for (var key in existingData) {
+      merged[String(newRow.id)][key] = existingData[key];
+    }
+    for (var key in newRow) {
+      merged[String(newRow.id)][key] = newRow[key];
+    }
+    merged[String(newRow.id)].updatedAt = new Date().toISOString();
+  }
+
+  sheet.clear();
+  sheet.appendRow(headers);
+  
+  var values = [];
+  for (var id in merged) {
+    var rowData = merged[id];
+    var rowValues = [];
+    for (var h = 0; h < headers.length; h++) {
+      rowValues.push(rowData[headers[h]] || "");
+    }
+    values.push(rowValues);
+  }
+  
+  if (values.length > 0) {
+    sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  }
+  Logger.log("upsertRows: " + name + " - " + values.length + " rows");
+}
   rows.forEach(row => merged.set(String(row.id), { ...(merged.get(String(row.id)) || {}), ...row, updatedAt: new Date().toISOString() }));
 
   sheet.clear();
@@ -181,20 +244,25 @@ function upsertRows(db, name, rows) {
 }
 
 function savePodImage(orderId, fileName, dataUrl) {
-  const props = PropertiesService.getScriptProperties();
-  let folderId = props.getProperty("POD_FOLDER_ID");
-  let folder = folderId ? DriveApp.getFolderById(folderId) : null;
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty("POD_FOLDER_ID");
+  var folder = folderId ? DriveApp.getFolderById(folderId) : null;
 
   if (!folder) {
     folder = DriveApp.createFolder(CONFIG.podFolderName);
     props.setProperty("POD_FOLDER_ID", folder.getId());
   }
 
-  const matches = String(dataUrl || "").match(/^data:(.+);base64,(.+)$/);
+  var dataStr = String(dataUrl || "");
+  var matches = dataStr.match(/^data:(.+);base64,(.+)$/);
   if (!matches) throw new Error("Invalid dataUrl");
-  const fileNameToUse = fileName || (orderId + ".jpg");
-  const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), matches[1], fileNameToUse);
-  const file = folder.createFile(blob);
+  
+  var fileNameToUse = fileName || (orderId + ".jpg");
+  var base64Str = matches[2];
+  var mimeType = matches[1];
+  var decoded = Utilities.base64Decode(base64Str);
+  var blob = Utilities.newBlob(decoded, mimeType, fileNameToUse);
+  var file = folder.createFile(blob);
   return file.getUrl();
 }
 

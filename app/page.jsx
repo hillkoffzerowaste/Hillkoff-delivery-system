@@ -56,7 +56,7 @@ function defaultState() {
     customers: initialCustomers,
     orders: initialOrders,
     drivers: initialDrivers,
-    auth: { role: "", name: "", phone: "", driverId: "" },
+    auth: { role: "", name: "", phone: "", driverId: "", email: "" },
     loginHistory: [],
     onlineDrivers: {},
     driverLocations: {},
@@ -137,6 +137,8 @@ export default function App() {
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
   const [syncStatus, setSyncStatus] = useState("Local mode");
+  const [showOrderConfirm, setShowOrderConfirm] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState(null);
 
   useEffect(() => setState(readState()), []);
   useEffect(() => {
@@ -366,8 +368,16 @@ export default function App() {
       salesNote: orderForm.salesNote,
       createdAt: new Date().toISOString()
     };
-    setState(prev => ({ ...prev, orders: [nextOrder, ...prev.orders] }));
+    setPendingOrder(nextOrder);
+    setShowOrderConfirm(true);
+  };
+
+  const confirmOrder = () => {
+    if (!pendingOrder) return;
+    setState(prev => ({ ...prev, orders: [pendingOrder, ...prev.orders] }));
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setShowOrderConfirm(false);
+    setPendingOrder(null);
     setTab("driver");
   };
 
@@ -981,43 +991,30 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>ออเดอร์เรียลไทม์</h2><span>{driverOrders.length} งาน</span></div>
-              <div className="order-feed">
-                {driverOrders.map(order => (
-                  <article key={order.id} className="order-card">
-                    <div className="order-main">
-                      <div>
-                        <div className="order-title"><strong>{order.customerName}</strong><span style={{ color: statusColor[order.status] }}>{order.status}</span></div>
-                        <p>{order.address} · {order.zone}</p>
-                        <p>{order.window} · {order.boxes} กล่อง · COD {money(order.cod)} บาท</p>
-                        {order.salesNote && <p>หมายเหตุ: {order.salesNote}</p>}
+              <div className="panel-head"><h2>📦 ออเดอร์เรียลไทม์</h2><span>{driverOrders.length} งาน</span></div>
+              {driverOrders.length === 0 ? (
+                <p className="muted">ยังไม่มีออเดอร์</p>
+              ) : (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {driverOrders.map(order => (
+                    <div key={order.id} style={{ background: "#f9fafb", padding: "12px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "6px" }}>
+                        <div>
+                          <b style={{ fontSize: "13px", display: "block" }}>{order.customerName} · {order.id}</b>
+                          <small style={{ color: "#666" }}>📍 {order.zone}</small>
+                        </div>
+                        <span style={{ background: statusColor[order.status], color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold" }}>
+                          {order.status === "ส่งสำเร็จ" ? "✅ เสร็จ" : order.driverId ? "🚗 " + drivers.find(d => d.id === order.driverId)?.name : "⏳ รอ"}
+                        </span>
                       </div>
-                      <a className="map-link" href={order.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> Map</a>
+                      <p style={{ fontSize: "12px", margin: "0", color: "#666" }}>
+                        {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}
+                        {order.checkInAt && ` · เช็คอิน: ${order.checkInAt}`}
+                      </p>
                     </div>
-                    <div className="action-row">
-                      {!order.driverId && <button onClick={() => acceptOrder(order.id)}><UserCheck size={16} /> รับออเดอร์</button>}
-                      <button onClick={() => checkIn(order.id)}><Navigation size={16} /> เช็คอินร้าน</button>
-                      <label className="upload-btn"><Camera size={16} /> ถ่ายรูปยืนยัน<input type="file" accept="image/*" capture="environment" onChange={e => uploadPod(order, e.target.files?.[0])} /></label>
-                      <button onClick={() => completeOrder(order.id)}><CheckCircle2 size={16} /> ส่งสำเร็จ</button>
-                    </div>
-                    <div className="proof-row">
-                      <span>เช็คอิน: {order.checkInAt || "-"}</span>
-                      <span>รูปยืนยัน: {order.photo || "-"}</span>
-                      <span>ปิดงาน: {order.deliveredAt || "-"}</span>
-                    </div>
-                    <div style={{ marginTop: "12px", marginBottom: "12px" }}>
-                      <small style={{ color: "#666", display: "block", marginBottom: "8px" }}>เลือกหรือพิมพ์หมายเหตุปัญหา:</small>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
-                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "ของไม่ครบ", status: "ติดปัญหา" })}>ของไม่ครบ</button>
-                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "ลูกค้าโอนตาม", status: "ติดปัญหา" })}>ลูกค้าโอนตาม</button>
-                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "ได้ของผิด", status: "ติดปัญหา" })}>ได้ของผิด</button>
-                        <button style={{ padding: "6px 10px", fontSize: "12px", background: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer" }} onClick={() => updateOrder(order.id, { complaint: "", status: order.status !== "ติดปัญหา" ? order.status : "กำลังส่ง" })}>ยกเลิก</button>
-                      </div>
-                    </div>
-                    <textarea value={order.complaint} onChange={e => updateOrder(order.id, { complaint: e.target.value, status: e.target.value ? "ติดปัญหา" : order.status })} placeholder="หรือพิมพ์หมายเหตุอื่นๆ..." rows={2} style={{ fontSize: "13px" }} />
-                  </article>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         )}
@@ -1065,6 +1062,22 @@ export default function App() {
 
         {displayTab === "settings" && (
           <div className="settings-grid">
+            {auth.email === "online_marketing@hillkoff.com" && (
+              <section className="panel">
+                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
+                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
+                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%" }} onClick={() => {
+                  if (confirm("⚠️ รีเซ็ตข้อมูลออเดอร์ทั้งหมดในวันนี้? การกระทำนี้ไม่สามารถยกเลิกได้")) {
+                    setState(prev => ({
+                      ...prev,
+                      orders: initialOrders
+                    }));
+                    alert("✅ รีเซ็ตข้อมูลเสร็จสิ้น");
+                  }
+                }}>🔄 รีเซ็ตข้อมูลวันนี้</button>
+              </section>
+            )}
+            
             <section className="panel">
               <div className="panel-head"><h2>🟢 Online Status</h2><span>{Object.keys(state.onlineDrivers || {}).length} online</span></div>
               <div className="report-lines">
@@ -1087,13 +1100,65 @@ export default function App() {
               <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
                 <button className="secondary" onClick={() => setMapZoom(Math.max(10, mapZoom - 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➖ Zoom Out</button>
                 <button className="secondary" onClick={() => setMapZoom(Math.min(18, mapZoom + 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➕ Zoom In</button>
-                <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {mapZoom}</span>
+                <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {mapZoom}%</span>
               </div>
-              <iframe 
-                src="https://www.openstreetmap.org/export/embed.html?bbox=98.8,18.7,99.1,18.9&layer=mapnik&marker=18.7883,98.9853"
-                style={{ width: "100%", height: "380px", border: "1px solid #ddd", borderRadius: "8px" }}
-                title="Chiang Mai Map"
-              />
+              
+              <svg viewBox="0 0 400 400" style={{ width: "100%", height: "380px", border: "1px solid #ddd", borderRadius: "8px", background: "#f8f9fa", transform: `scale(${mapZoom / 100})`, transformOrigin: "top center" }}>
+                <defs>
+                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="0.5"/>
+                  </pattern>
+                </defs>
+                <rect width="400" height="400" fill="url(#grid)" />
+                
+                <rect x="10" y="20" width="120" height="100" fill="#fef3c7" stroke="#f59e0b" strokeWidth="2" rx="4" />
+                <text x="70" y="75" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#b45309">เมืองเชียงใหม่</text>
+                
+                <rect x="200" y="50" width="100" height="80" fill="#dcfce7" stroke="#22c55e" strokeWidth="2" rx="4" />
+                <text x="250" y="100" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#166534">แม่ริม</text>
+                
+                <rect x="50" y="200" width="110" height="90" fill="#cffafe" stroke="#06b6d4" strokeWidth="2" rx="4" />
+                <text x="105" y="250" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#0c4a6e">ลำพูน</text>
+                
+                <rect x="250" y="250" width="130" height="100" fill="#f3e8ff" stroke="#a855f7" strokeWidth="2" rx="4" />
+                <text x="315" y="310" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#6b21a8">หางดง/สันป่า</text>
+                
+                {drivers.map((driver, idx) => {
+                  const location = state.driverLocations?.[driver.id];
+                  const isOnline = state.onlineDrivers?.[driver.id];
+                  let x, y;
+                  if (location && location.zone) {
+                    const zoneMap = {
+                      "เมืองเชียงใหม่": { x: 70, y: 70 },
+                      "แม่ริม": { x: 250, y: 90 },
+                      "ลำพูน": { x: 105, y: 245 },
+                      "หางดง": { x: 315, y: 300 },
+                      "สันป่าตอง": { x: 315, y: 280 }
+                    };
+                    const zonePos = zoneMap[location.zone] || { x: 70 + idx * 30, y: 70 + idx * 40 };
+                    x = zonePos.x;
+                    y = zonePos.y;
+                  } else {
+                    x = 70 + (idx % 2) * 150;
+                    y = 70 + Math.floor(idx / 2) * 80;
+                  }
+                  
+                  return (
+                    <g key={driver.id}>
+                      {isOnline && (
+                        <>
+                          <circle cx={x} cy={y} r="18" fill="#3b82f6" opacity="0.1" />
+                          <circle cx={x} cy={y} r="12" fill="#3b82f6" opacity="0.2" />
+                          <circle cx={x} cy={y} r="6" fill="#3b82f6" opacity="0.3" />
+                        </>
+                      )}
+                      <circle cx={x} cy={y} r="8" fill={isOnline ? "#10b981" : "#9ca3af"} stroke="white" strokeWidth="2" />
+                      <text x={x} y={y + 18} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#1f2937">{driver.name.slice(0, 3)}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+              
               <div className="google-box" style={{ marginTop: "16px" }}>
                 <b>👥 สถานะคนขับออนไลน์ ({Object.keys(state.onlineDrivers || {}).length})</b>
                 {drivers.length === 0 ? (
@@ -1146,19 +1211,25 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>Google Connection</h2><span>Sheets · Drive · Maps</span></div>
+              <div className="panel-head"><h2>Google Connection</h2><span>Auto-sync Active</span></div>
+              <p style={{ color: "#166534", fontWeight: "bold" }}>✅ ข้อมูลจะ sync อัตโนมัติเมื่อ:</p>
+              <ul style={{ fontSize: "12px", color: "#666", margin: "12px 0" }}>
+                <li>✓ บันทึกลูกค้าใหม่</li>
+                <li>✓ ส่งออเดอร์ใหม่</li>
+                <li>✓ ลงทะเบียนคนขับ</li>
+              </ul>
               <label className="field-label">Google Apps Script Web App URL</label>
               <input value={state.google.webAppUrl || ""} onChange={e => setGoogle({ webAppUrl: e.target.value })} placeholder="https://script.google.com/macros/s/.../exec" />
-              <div className="settings-actions">
-                <button className="secondary" onClick={loadFromGoogle}><FolderSync size={16} /> โหลดจาก Google</button>
-                <button className="primary" onClick={syncToGoogle}><FileSpreadsheet size={16} /> Sync ไป Google</button>
-              </div>
               <div className="google-box">
-                <b>สิ่งที่ต้องมีเพื่อใช้งานจริง</b>
-                <p>1. Google Apps Script Web App URL จากไฟล์ `google-apps-script/Code.gs`</p>
-                <p>2. Google Sheet จะถูกสร้างอัตโนมัติเมื่อ sync ครั้งแรก</p>
-                <p>3. Google Drive folder สำหรับรูปส่งสำเร็จจะถูกสร้างตอนอัปโหลดรูปครั้งแรก</p>
-                <p>4. Google Maps ใช้ link ที่ฝ่ายขายใส่ในข้อมูลลูกค้า</p>
+                <b>📊 Google Sheet URL:</b>
+                {state.google.sheetUrl ? (
+                  <>
+                    <p style={{ fontSize: "11px", color: "#16a34a", fontWeight: "bold", wordBreak: "break-all" }}>{state.google.sheetUrl}</p>
+                    <a href={state.google.sheetUrl} target="_blank" rel="noreferrer" className="primary" style={{ width: "100%", textAlign: "center", marginTop: "8px" }}>เปิด Sheet</a>
+                  </>
+                ) : (
+                  <p style={{ fontSize: "12px", color: "#999" }}>ยังไม่มี Sheet URL</p>
+                )}
               </div>
             </section>
 
@@ -1176,5 +1247,40 @@ export default function App() {
         )}
       </section>
     </main>
+    
+    {showOrderConfirm && pendingOrder && (
+      <div style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000
+      }}>
+        <div style={{
+          background: "white",
+          padding: "24px",
+          borderRadius: "8px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          maxWidth: "500px",
+          width: "90%"
+        }}>
+          <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
+          <div style={{ background: "#f3f4f6", padding: "12px", borderRadius: "6px", margin: "12px 0" }}>
+            <p><b>ลูกค้า:</b> {pendingOrder.customerName}</p>
+            <p><b>พื้นที่:</b> {pendingOrder.zone}</p>
+            <p><b>หน้าต่างเวลา:</b> {pendingOrder.window}</p>
+            <p><b>จำนวนกล่อง:</b> {pendingOrder.boxes} กล่อง</p>
+            <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
+            {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
+          </div>
+          <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
+            <button className="secondary" style={{ flex: 1 }} onClick={() => setShowOrderConfirm(false)}>❌ ยกเลิก</button>
+            <button className="primary" style={{ flex: 1 }} onClick={confirmOrder}>✅ ยืนยันส่ง</button>
+          </div>
+        </div>
+      </div>
+    )}
   );
 }
