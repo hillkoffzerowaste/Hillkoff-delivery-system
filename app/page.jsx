@@ -728,7 +728,19 @@ export default function App() {
         </div>
 
         {displayTab === "sales" && (
-          <div className="sales-grid">
+          <>
+            <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
+              <button className="secondary" onClick={() => {
+                const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:");
+                if (pwd === "2532") {
+                  setState(prev => ({ ...prev, orders: [] }));
+                  alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
+                } else if (pwd !== null) {
+                  alert("❌ รหัสไม่ถูกต้อง");
+                }
+              }} style={{ padding: "8px 12px", fontSize: "13px" }}>🔄 รีเซ็ต</button>
+            </div>
+            <div className="sales-grid">
             {state.google.sheetUrl && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
@@ -903,7 +915,8 @@ export default function App() {
               </div>
             </section>
           </div>
-        )}
+            </>
+          )}
 
         {displayTab === "dispatch" && (
           <div className="dispatch-grid">
@@ -1023,21 +1036,33 @@ export default function App() {
                 <p className="muted">ยังไม่มีออเดอร์</p>
               ) : (
                 <div style={{ display: "grid", gap: "8px" }}>
-                  {driverOrders.map(order => (
-                    <div key={order.id} style={{ background: "#f9fafb", padding: "10px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ flex: 1 }}>
-                        <b style={{ fontSize: "13px", display: "block" }}>{order.customerName} · {order.id}</b>
-                        <small style={{ color: "#666" }}>📍 {order.zone} · {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                  {driverOrders.map(order => {
+                    const getActionButton = () => {
+                      switch(order.status) {
+                        case "รอคนขับรับ":
+                          return <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { driverId, status: "กำลังส่ง" })}>✓ รับ</button>;
+                        case "กำลังส่ง":
+                          return <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { status: "กำลังจัดส่ง" })}>📷 จัดส่ง</button>;
+                        case "กำลังจัดส่ง":
+                          return <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") })}>✅ เสร็จ</button>;
+                        case "ส่งสำเร็จ":
+                          return <button className="secondary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับ</button>;
+                        case "กลับมา":
+                          return <span style={{ background: "#22c55e", color: "white", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", marginLeft: "8px", whiteSpace: "nowrap" }}>✅ เสร็จ</span>;
+                        default:
+                          return null;
+                      }
+                    };
+                    return (
+                      <div key={order.id} style={{ background: "#f9fafb", padding: "10px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ flex: 1 }}>
+                          <b style={{ fontSize: "13px", display: "block" }}>{order.customerName} · {order.id}</b>
+                          <small style={{ color: "#666" }}>📍 {order.zone} · {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                        </div>
+                        {getActionButton()}
                       </div>
-                      {!order.driverId ? (
-                        <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { driverId, status: "กำลังส่ง" })}>✓ รับ</button>
-                      ) : (
-                        <span style={{ background: statusColor[order.status], color: "white", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", marginLeft: "8px", whiteSpace: "nowrap" }}>
-                          {order.status === "ส่งสำเร็จ" ? "✅ เสร็จ" : "🚗 " + drivers.find(d => d.id === order.driverId)?.name}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
