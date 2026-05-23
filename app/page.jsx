@@ -187,18 +187,21 @@ export default function App() {
     setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
     
     if (state.google.webAppUrl) {
-      setSyncStatus("กำลัง sync ลูกค้าใหม่ไป Google Sheets...");
+      setSyncStatus("⏳ กำลัง sync ลูกค้าใหม่ไป Google Sheets...");
       try {
-        await fetch(state.google.webAppUrl, {
+        const response = await fetch(state.google.webAppUrl, {
           method: "POST",
-          mode: "no-cors",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "sync", customers: nextState.customers, orders: nextState.orders, drivers: nextState.drivers || [] })
         });
-        setSyncStatus(`บันทึกลูกค้าและ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Sync failed");
+        setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" และ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
       } catch (error) {
-        setSyncStatus(`บันทึกลูกค้าแล้ว แต่ sync Google ไม่สำเร็จ: ${error.message}`);
+        setSyncStatus(`⚠️ บันทึกลูกค้า "${nextCustomer.name}" แล้ว แต่ sync Google ไม่สำเร็จ: ${error.message}`);
       }
+    } else {
+      setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ (ยังไม่ได้ตั้ง Google)`);
     }
   };
 
@@ -238,7 +241,7 @@ export default function App() {
     }
     let latestDrivers = state.drivers || [];
     try {
-      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, { mode: "cors" });
+      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT);
       const data = await response.json();
       if (data.ok) {
         latestDrivers = data.data?.drivers?.length ? data.data.drivers : latestDrivers;
@@ -313,14 +316,17 @@ export default function App() {
     setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
     setTab("driver");
     try {
-      await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, {
+      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, {
         method: "POST",
-        mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: nextDrivers })
       });
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" และ sync Google สำเร็จ`);
+      }
     } catch {
-      setSyncStatus("บันทึกคนขับไว้ในเครื่องแล้ว แต่ยัง sync Google ไม่สำเร็จ");
+      setSyncStatus(`⚠️ ลงทะเบียนคนขับ "${nextDriver.name}" แล้ว แต่ sync Google ไม่สำเร็จ`);
     }
   };
 
@@ -375,33 +381,34 @@ export default function App() {
 
   const syncToGoogle = async () => {
     if (!state.google.webAppUrl) {
-      setSyncStatus("กรุณาใส่ Google Apps Script Web App URL ก่อน");
+      setSyncStatus("🔴 กรุณาใส่ Google Apps Script Web App URL ก่อน");
       setTab("settings");
       return;
     }
-    setSyncStatus("กำลัง sync ไป Google Sheets...");
+    setSyncStatus("⏳ กำลัง sync ไป Google Sheets...");
     try {
       const response = await fetch(state.google.webAppUrl, {
         method: "POST",
-        mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: state.drivers || [] })
       });
-      setSyncStatus(`Sync สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Google sync failed");
+      setSyncStatus(`✅ Sync สำเร็จ! ${new Date().toLocaleTimeString("th-TH")} (${state.customers.length} ลูกค้า, ${state.orders.length} ออเดอร์)`);
     } catch (error) {
-      setSyncStatus(`Sync ไม่สำเร็จ: ${error.message}`);
+      setSyncStatus(`❌ Sync ไม่สำเร็จ: ${error.message}`);
     }
   };
 
   const loadFromGoogle = async () => {
     if (!state.google.webAppUrl) {
-      setSyncStatus("กรุณาใส่ Google Apps Script Web App URL ก่อน");
+      setSyncStatus("🔴 กรุณาใส่ Google Apps Script Web App URL ก่อน");
       setTab("settings");
       return;
     }
-    setSyncStatus("กำลังโหลดข้อมูลจาก Google Sheets...");
+    setSyncStatus("⏳ กำลังโหลดข้อมูลจาก Google Sheets...");
     try {
-      const response = await fetch(state.google.webAppUrl, { mode: "cors" });
+      const response = await fetch(state.google.webAppUrl);
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
       setState(prev => ({
@@ -410,9 +417,9 @@ export default function App() {
         orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders,
         drivers: data.data?.drivers?.length ? data.data.drivers : prev.drivers
       }));
-      setSyncStatus(`โหลดข้อมูลสำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
+      setSyncStatus(`✅ โหลดข้อมูลสำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
     } catch (error) {
-      setSyncStatus(`โหลดไม่สำเร็จ: ${error.message}`);
+      setSyncStatus(`❌ โหลดไม่สำเร็จ: ${error.message}`);
     }
   };
 
@@ -477,12 +484,16 @@ export default function App() {
     }
   };
 
+  const [mapZoom, setMapZoom] = useState(1);
+
   const generateDailyReport = () => {
     const today = new Date().toLocaleDateString("th-TH");
     const todayOrders = orders.filter(o => new Date(o.createdAt || o.assignedAt).toLocaleDateString("th-TH") === today);
     const driverStats = {};
+    let totalCOD = 0;
 
     todayOrders.forEach(order => {
+      totalCOD += Number(order.cod || 0);
       if (order.driverId) {
         if (!driverStats[order.driverId]) {
           const driver = (state.drivers || []).find(d => d.id === order.driverId);
@@ -490,14 +501,17 @@ export default function App() {
             name: driver?.name || "ไม่ทราบ",
             plate: driver?.plate || "-",
             zone: driver?.zone || "-",
+            phone: driver?.phone || "-",
             total: 0,
             completed: 0,
             active: 0,
             failed: 0,
+            cod: 0,
             checkins: []
           };
         }
         driverStats[order.driverId].total += 1;
+        driverStats[order.driverId].cod += Number(order.cod || 0);
         driverStats[order.driverId][order.status === "ส่งสำเร็จ" ? "completed" : order.status === "กำลังส่ง" ? "active" : "failed"] += 1;
       }
     });
@@ -513,27 +527,54 @@ export default function App() {
       }
     });
 
-    let report = `📋 รายงานการส่งของประจำวัน - ${today}\n`;
-    report += `${"=".repeat(50)}\n\n`;
-    report += `📊 สรุปรวม:\n`;
-    report += `  • ทั้งหมด: ${todayOrders.length} ออเดอร์\n`;
-    report += `  • สำเร็จ: ${todayOrders.filter(o => o.status === "ส่งสำเร็จ").length}\n`;
-    report += `  • กำลังส่ง: ${todayOrders.filter(o => o.status === "กำลังส่ง").length}\n`;
-    report += `  • รอรับ: ${todayOrders.filter(o => o.status === "รอคนขับรับ").length}\n\n`;
+    let report = `\n${"═".repeat(60)}\n`;
+    report += `📋 รายงานการส่งของประจำวัน\n`;
+    report += `วันที่: ${today}\n`;
+    report += `เวลาสร้างรายงาน: ${new Date().toLocaleString("th-TH")}\n`;
+    report += `${"═".repeat(60)}\n\n`;
+    
+    report += `📊 สรุปข้อมูลรวมทั้งวัน:\n`;
+    report += `${"─".repeat(60)}\n`;
+    report += `  📦 ออเดอร์ทั้งหมด: ${todayOrders.length} งาน\n`;
+    report += `  ✅ สำเร็จ: ${todayOrders.filter(o => o.status === "ส่งสำเร็จ").length} งาน\n`;
+    report += `  🟡 กำลังส่ง: ${todayOrders.filter(o => o.status === "กำลังส่ง").length} งาน\n`;
+    report += `  ⏳ รอรับ: ${todayOrders.filter(o => o.status === "รอคนขับรับ").length} งาน\n`;
+    report += `  ❌ ติดปัญหา: ${todayOrders.filter(o => o.status === "ติดปัญหา").length} งาน\n`;
+    report += `  💰 รวม COD: ${money(totalCOD)} บาท\n\n`;
 
+    report += `👥 ข้อมูลรายคนขับ:\n`;
+    report += `${"─".repeat(60)}\n`;
+    
     Object.entries(driverStats).forEach(([driverId, stats]) => {
-      report += `🚗 ${stats.name}\n`;
-      report += `  📍 เพลต: ${stats.plate} | โซน: ${stats.zone}\n`;
-      report += `  📦 ออเดอร์: รวม ${stats.total} | สำเร็จ ✅ ${stats.completed} | กำลังส่ง 🟡 ${stats.active} | ไม่สำเร็จ ❌ ${stats.failed}\n`;
+      report += `\n🚗 ${stats.name}\n`;
+      report += `  📱 เบอร์โทร: ${stats.phone}\n`;
+      report += `  🏎️ เพลต: ${stats.plate}\n`;
+      report += `  📍 โซน: ${stats.zone}\n`;
+      report += `  ────────────────────────────────────────\n`;
+      report += `  📦 ออเดอร์รวม: ${stats.total} งาน\n`;
+      report += `     ✅ สำเร็จ: ${stats.completed} งาน\n`;
+      report += `     🟡 กำลังส่ง: ${stats.active} งาน\n`;
+      report += `     ❌ ไม่สำเร็จ: ${stats.failed} งาน\n`;
+      report += `  💰 COD รวม: ${money(stats.cod)} บาท\n`;
       report += `  ⏱️ ประสิทธิภาพ: ${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}%\n`;
+      
       if (stats.checkins.length > 0) {
-        report += `  📌 จุดเช็คอิน:\n`;
-        stats.checkins.slice(0, 5).forEach(c => {
-          report += `     • ${c.time} - ${c.customer} (${c.address})\n`;
+        report += `  📌 จุดเช็คอิน (${stats.checkins.length} จุด):\n`;
+        stats.checkins.slice(0, 8).forEach((c, idx) => {
+          report += `     ${idx + 1}. ${c.time} - ${c.customer}\n`;
+          report += `        📍 ${c.address}\n`;
         });
+        if (stats.checkins.length > 8) report += `     ... และอีก ${stats.checkins.length - 8} จุด\n`;
       }
-      report += "\n";
     });
+
+    report += `\n${"═".repeat(60)}\n`;
+    report += `📌 หมายเหตุ:\n`;
+    report += `  • รายงานนี้สร้างจากระบบ Hillkoff Delivery System\n`;
+    report += `  • ข้อมูลเป็นอัตเวลา ณ เวลาสร้างรายงาน\n`;
+    report += `  • ตรวจสอบเลขที่ออเดอร์และ COD ก่อนตัดสิน\n`;
+    report += `${"═".repeat(60)}\n`;
+    
     return report;
   };
 
@@ -668,6 +709,26 @@ export default function App() {
                 <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>✓ {syncStatus}</p>
               </section>
             )}
+            <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
+              <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
+                {Object.keys(state.onlineDrivers || {}).length === 0 ? (
+                  <p className="muted" style={{ gridColumn: "1 / -1" }}>ยังไม่มีคนขับออนไลน์</p>
+                ) : (
+                  drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
+                    const onlineTime = Math.floor((new Date().getTime() - (state.onlineDrivers?.[driver.id] || 0)) / 60000);
+                    return (
+                      <div key={driver.id} style={{ background: "white", padding: "12px", borderRadius: "6px", border: "1px solid #dcfce7", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#22c55e", marginBottom: "4px" }}>🟢 {driver.name}</div>
+                        <small style={{ color: "#666" }}>{driver.plate}</small><br />
+                        <small style={{ color: "#999" }}>{driver.zone}</small><br />
+                        <small style={{ color: "#16a34a", marginTop: "4px", display: "block" }}>Online {onlineTime}m ago</small>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </section>
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
               <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
@@ -1001,43 +1062,81 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Mini Map</span></div>
-              <div style={{ width: "100%", height: "300px", background: "#f0f0f0", borderRadius: "8px", position: "relative", border: "1px solid #ddd", overflow: "hidden" }}>
-                <svg width="100%" height="100%" viewBox="0 0 400 300" style={{ background: "#fafafa" }}>
-                  <text x="200" y="30" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#333">Chiang Mai Delivery Zones</text>
+              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Mini Map with Zoom</span></div>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                <button className="secondary" onClick={() => setMapZoom(Math.max(0.5, mapZoom - 0.2))} style={{ padding: "6px 12px", fontSize: "14px" }}>➖ Zoom Out</button>
+                <button className="secondary" onClick={() => setMapZoom(Math.min(2, mapZoom + 0.2))} style={{ padding: "6px 12px", fontSize: "14px" }}>➕ Zoom In</button>
+                <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {(mapZoom * 100).toFixed(0)}%</span>
+              </div>
+              <div style={{ width: "100%", height: "380px", background: "#fafafa", borderRadius: "8px", position: "relative", border: "1px solid #ddd", overflow: "auto" }}>
+                <svg width={400 * mapZoom} height={300 * mapZoom} viewBox="0 0 400 300" style={{ background: "linear-gradient(135deg, #e8f4f8 0%, #f0fafb 100%)" }}>
+                  {/* Header */}
+                  <text x="200" y="25" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#1a5490">🗺️ เชียงใหม่ - แผนที่โซนการส่ง</text>
                   
-                  {/* Zone labels */}
-                  <text x="200" y="80" textAnchor="middle" fontSize="12" fill="#666">เมืองเชียงใหม่</text>
-                  <text x="80" y="150" textAnchor="middle" fontSize="11" fill="#666">แม่ริม</text>
-                  <text x="320" y="150" textAnchor="middle" fontSize="11" fill="#666">ดอยสะเก็ด</text>
-                  <text x="150" y="240" textAnchor="middle" fontSize="11" fill="#666">ลำพูน</text>
-                  
-                  {/* Driver markers */}
+                  {/* Zone boundaries - grid layout */}
+                  <g fill="none" stroke="#ddd" strokeWidth="2" strokeDasharray="4">
+                    {/* Grid lines */}
+                    <line x1="0" y1="80" x2="400" y2="80" />
+                    <line x1="0" y1="160" x2="400" y2="160" />
+                    <line x1="133" y1="50" x2="133" y2="250" />
+                    <line x1="267" y1="50" x2="267" y2="250" />
+                  </g>
+
+                  {/* Zone boxes with labels */}
+                  <rect x="10" y="50" width="110" height="100" fill="#e3f2fd" opacity="0.5" stroke="#1976d2" strokeWidth="2" rx="4" />
+                  <text x="65" y="105" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#1976d2">แม่ริม</text>
+
+                  <rect x="145" y="50" width="110" height="100" fill="#f3e5f5" opacity="0.5" stroke="#7b1fa2" strokeWidth="2" rx="4" />
+                  <text x="200" y="105" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#7b1fa2">เมืองเชียงใหม่</text>
+
+                  <rect x="280" y="50" width="110" height="100" fill="#fce4ec" opacity="0.5" stroke="#c2185b" strokeWidth="2" rx="4" />
+                  <text x="335" y="105" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#c2185b">ดอยสะเก็ด</text>
+
+                  <rect x="10" y="160" width="110" height="100" fill="#f1f8e9" opacity="0.5" stroke="#558b2f" strokeWidth="2" rx="4" />
+                  <text x="65" y="215" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#558b2f">สันกำแพง</text>
+
+                  <rect x="145" y="160" width="110" height="100" fill="#fff3e0" opacity="0.5" stroke="#e65100" strokeWidth="2" rx="4" />
+                  <text x="200" y="215" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#e65100">ลำพูน</text>
+
+                  <rect x="280" y="160" width="110" height="100" fill="#fef5e7" opacity="0.5" stroke="#f9a825" strokeWidth="2" rx="4" />
+                  <text x="335" y="215" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#f9a825">หางดง</text>
+
+                  {/* Driver markers with pulse effect */}
                   {Object.keys(state.onlineDrivers || {}).length > 0 ? (
                     drivers.filter(d => state.onlineDrivers?.[d.id]).map((driver, idx) => {
-                      const x = 50 + (idx * 70);
-                      const y = 100 + (Math.sin(idx) * 60);
+                      const positions = [
+                        { x: 65, y: 85 }, { x: 200, y: 100 }, { x: 335, y: 90 },
+                        { x: 65, y: 200 }, { x: 200, y: 210 }, { x: 335, y: 195 }
+                      ];
+                      const pos = positions[idx % positions.length];
                       return (
                         <g key={driver.id}>
-                          <circle cx={x} cy={y} r="8" fill="#ff4444" opacity="0.8"/>
-                          <circle cx={x} cy={y} r="12" fill="none" stroke="#ff4444" strokeWidth="1" opacity="0.4"/>
-                          <text x={x} y={y + 20} textAnchor="middle" fontSize="10" fill="#333">{driver.name}</text>
+                          <circle cx={pos.x} cy={pos.y} r="14" fill="#ff4444" opacity="0.9"/>
+                          <circle cx={pos.x} cy={pos.y} r="18" fill="none" stroke="#ff4444" strokeWidth="2" opacity="0.3"/>
+                          <circle cx={pos.x} cy={pos.y} r="22" fill="none" stroke="#ff4444" strokeWidth="1" opacity="0.2"/>
+                          <text x={pos.x} y={pos.y + 28} textAnchor="middle" fontSize="9" fill="#333" fontWeight="bold">{driver.name}</text>
+                          <text x={pos.x} y={pos.y + 38} textAnchor="middle" fontSize="8" fill="#666">{driver.plate}</text>
                         </g>
                       );
                     })
                   ) : (
-                    <text x="200" y="150" textAnchor="middle" fontSize="12" fill="#999">No drivers online</text>
+                    <text x="200" y="150" textAnchor="middle" fontSize="14" fill="#999">📍 ไม่มีคนขับออนไลน์</text>
                   )}
                 </svg>
               </div>
               <div className="google-box" style={{ marginTop: "16px" }}>
-                <b>📊 Driver Info</b>
-                {drivers.map(d => (
-                  <p key={d.id} style={{ fontSize: "12px", margin: "4px 0" }}>
-                    <b>{d.name}</b> - {d.plate} ({d.zone}) 
-                    {state.onlineDrivers?.[d.id] ? " 🟢 Online" : " ⚫ Offline"}
-                  </p>
-                ))}
+                <b>👥 สถานะคนขับ</b>
+                {drivers.length === 0 ? (
+                  <p style={{ fontSize: "12px", color: "#999" }}>ยังไม่มีคนขับ</p>
+                ) : (
+                  drivers.map(d => (
+                    <p key={d.id} style={{ fontSize: "12px", margin: "6px 0", padding: "6px", background: state.onlineDrivers?.[d.id] ? "#e8f5e9" : "#f5f5f5", borderRadius: "4px" }}>
+                      <b>{state.onlineDrivers?.[d.id] ? "🟢" : "⚫"} {d.name}</b>
+                      <br />
+                      <small>📱 {d.phone} · {d.plate} · {d.zone}</small>
+                    </p>
+                  ))
+                )}
               </div>
             </section>
 
