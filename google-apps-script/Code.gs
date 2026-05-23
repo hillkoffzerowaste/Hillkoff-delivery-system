@@ -192,7 +192,8 @@ function savePodImage(orderId, fileName, dataUrl) {
 
   const matches = String(dataUrl || "").match(/^data:(.+);base64,(.+)$/);
   if (!matches) throw new Error("Invalid dataUrl");
-  const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), matches[1], fileName || `${orderId}.jpg`);
+  const fileNameToUse = fileName || (orderId + ".jpg");
+  const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), matches[1], fileNameToUse);
   const file = folder.createFile(blob);
   return file.getUrl();
 }
