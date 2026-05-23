@@ -381,6 +381,12 @@ export default function App() {
     setTab("driver");
   };
 
+  const deleteOrder = (orderId) => {
+    if (confirm("❌ ลบออเดอร์นี้หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้")) {
+      setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== orderId) }));
+    }
+  };
+
   const updateOrder = (id, patch) => setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
   const setGoogle = patch => setState(prev => ({ ...prev, google: { ...prev.google, ...patch } }));
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
@@ -845,6 +851,25 @@ export default function App() {
             </section>
 
             <section className="panel">
+              <div className="panel-head"><h2>📝 ออเดอร์ใหม่</h2><span>รอคนขับรับ {orders.filter(o => o.status === "รอคนขับรับ").length}</span></div>
+              {orders.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
+                <p className="muted">ไม่มีออเดอร์ใหม่</p>
+              ) : (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {orders.filter(o => o.status === "รอคนขับรับ").map(order => (
+                    <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ flex: 1 }}>
+                        <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
+                        <small style={{ color: "#666" }}>{order.zone} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                      </div>
+                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px", marginLeft: "8px" }} onClick={() => deleteOrder(order.id)}>🗑️ ลบ</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="panel">
               <div className="panel-head"><h2>📦 สรุปการส่งของ</h2><span>กำลังส่ง {orders.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {orders.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
                 <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
@@ -899,9 +924,9 @@ export default function App() {
                 <div className="dispatch-head">
                   <span>งาน</span>
                   <span>ลูกค้า/พื้นที่</span>
-                  <span>คนขับ</span>
                   <span>สถานะ</span>
                   <span>COD</span>
+                  <span></span>
                 </div>
                 {filteredOrders.map(order => {
                   const assignedDriver = drivers.find(driver => driver.id === order.driverId);
@@ -909,15 +934,12 @@ export default function App() {
                     <article key={order.id} className="dispatch-row">
                       <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
                       <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
-                      <select value={order.driverId} onChange={e => assignDriver(order.id, e.target.value)}>
-                        <option value="">รอคนขับรับเอง</option>
-                        {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}
-                      </select>
                       <div className="status-stack">
                         <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
-                        <small>{assignedDriver ? assignedDriver.name : "ยังไม่มอบหมาย"}</small>
+                        <small>{assignedDriver ? assignedDriver.name : "รอคนขับรับ"}</small>
                       </div>
                       <strong>{money(order.cod)} บาท</strong>
+                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️</button>
                     </article>
                   );
                 })}
@@ -1104,25 +1126,29 @@ export default function App() {
                 <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {mapZoom}%</span>
               </div>
               
-              <svg viewBox="0 0 400 400" style={{ width: "100%", height: "380px", border: "1px solid #ddd", borderRadius: "8px", background: "#f8f9fa", transform: `scale(${mapZoom / 100})`, transformOrigin: "top center" }}>
+              <svg viewBox="0 0 400 400" style={{ width: "100%", height: "380px", border: "1px solid #ddd", borderRadius: "8px", background: "linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)", transform: `scale(${mapZoom / 100})`, transformOrigin: "top center" }}>
                 <defs>
-                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="0.5"/>
+                  <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <circle cx="10" cy="10" r="1" fill="#d1d5db" opacity="0.4"/>
                   </pattern>
+                  <linearGradient id="zoneGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style={{ stopColor: "#fef9e7", stopOpacity: 1 }} />
+                    <stop offset="100%" style={{ stopColor: "#fef3c7", stopOpacity: 1 }} />
+                  </linearGradient>
                 </defs>
-                <rect width="400" height="400" fill="url(#grid)" />
+                <rect width="400" height="400" fill="url(#dots)" />
                 
-                <rect x="10" y="20" width="120" height="100" fill="#fef3c7" stroke="#f59e0b" strokeWidth="2" rx="4" />
-                <text x="70" y="75" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#b45309">เมืองเชียงใหม่</text>
+                <rect x="10" y="20" width="120" height="100" fill="url(#zoneGrad1)" stroke="#d97706" strokeWidth="2" rx="6" opacity="0.9" />
+                <text x="70" y="75" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#b45309">เมืองเชียงใหม่</text>
                 
-                <rect x="200" y="50" width="100" height="80" fill="#dcfce7" stroke="#22c55e" strokeWidth="2" rx="4" />
-                <text x="250" y="100" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#166534">แม่ริม</text>
+                <rect x="200" y="50" width="100" height="80" fill="#dcfce7" stroke="#16a34a" strokeWidth="2" rx="6" opacity="0.9" />
+                <text x="250" y="100" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#166534">แม่ริม</text>
                 
-                <rect x="50" y="200" width="110" height="90" fill="#cffafe" stroke="#06b6d4" strokeWidth="2" rx="4" />
-                <text x="105" y="250" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#0c4a6e">ลำพูน</text>
+                <rect x="50" y="200" width="110" height="90" fill="#cffafe" stroke="#0891b2" strokeWidth="2" rx="6" opacity="0.9" />
+                <text x="105" y="250" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#164e63">ลำพูน</text>
                 
-                <rect x="250" y="250" width="130" height="100" fill="#f3e8ff" stroke="#a855f7" strokeWidth="2" rx="4" />
-                <text x="315" y="310" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#6b21a8">หางดง/สันป่า</text>
+                <rect x="250" y="250" width="130" height="100" fill="#f3e8ff" stroke="#a855f7" strokeWidth="2" rx="6" opacity="0.9" />
+                <text x="315" y="310" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#6b21a8">หางดง/สันป่า</text>
                 
                 {drivers.map((driver, idx) => {
                   const location = state.driverLocations?.[driver.id];

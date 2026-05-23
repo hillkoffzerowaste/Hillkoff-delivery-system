@@ -147,15 +147,15 @@ nav button.active {
 
 .workspace {
   margin-left: 248px;
-  padding: 24px;
+  padding: 16px;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .topbar p {
@@ -239,8 +239,8 @@ h2 {
 .stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .card,
@@ -253,8 +253,8 @@ h2 {
 
 .stat-card {
   display: flex;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .stat-icon {
@@ -284,7 +284,7 @@ h2 {
 .dispatch-grid {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -307,19 +307,19 @@ h2 {
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 14px;
+  gap: 10px;
   align-items: start;
 }
 
 .panel {
-  padding: 14px;
+  padding: 12px;
 }
 
 .panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .panel-head span {
@@ -330,14 +330,14 @@ h2 {
 .driver-card {
   border: 1px solid #e3eadf;
   border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
 }
 
 .driver-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .driver-top p {
@@ -374,11 +374,11 @@ h2 {
 }
 
 .loadbar {
-  height: 7px;
+  height: 6px;
   background: #edf0e9;
   border-radius: 999px;
   overflow: hidden;
-  margin: 10px 0 8px;
+  margin: 8px 0 6px;
 }
 
 .loadbar span {
@@ -390,7 +390,7 @@ h2 {
 .order-foot {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   color: #69756d;
   font-size: 12px;
 }
@@ -399,8 +399,8 @@ h2 {
 .add-row {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 160px 150px;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .add-row {
@@ -448,15 +448,15 @@ textarea {
 .order-feed,
 .table {
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .customer-card {
   border: 1px solid #e4eadf;
   background: #fff;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   text-align: left;
   cursor: pointer;
 }
@@ -481,16 +481,16 @@ textarea {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   background: #f8faf5;
   border: 1px solid #e2eadc;
   border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
 }
 
 .customer-detail p {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   color: #69756d;
   font-size: 12px;
 }
@@ -505,7 +505,7 @@ textarea {
   background: #eef5ea;
   border: 1px solid #cfe0c8;
   border-radius: 8px;
-  padding: 9px 10px;
+  padding: 7px 8px;
   text-decoration: none;
   white-space: nowrap;
   font-size: 12px;
@@ -515,8 +515,8 @@ textarea {
 .form-grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr 0.8fr;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .form-grid.two {
@@ -525,7 +525,7 @@ textarea {
 
 .dispatch-table {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dispatch-head,
