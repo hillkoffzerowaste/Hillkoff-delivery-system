@@ -121,7 +121,6 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
 
-  // Load remembered phone number on mount
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
     if (saved) {
@@ -318,7 +317,6 @@ export default function App() {
   const createOrder = () => {
     let customer = selectedCustomer;
     
-    // If customer name is typed directly, search for it
     if (orderForm.customerName.trim()) {
       customer = customers.find(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())) || selectedCustomer;
     }
@@ -514,7 +512,6 @@ export default function App() {
     );
   }
 
-  // Force driver to stay on driver tab
   const displayTab = auth.role === "driver" ? "driver" : tab;
 
   return (
@@ -594,12 +591,15 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {selectedCustomer && (
-                <div className="customer-detail">
-                  <div><b>{selectedCustomer.name}</b><p>{selectedCustomer.contact} · {selectedCustomer.phone}</p><p>{selectedCustomer.address}</p></div>
-                  <a href={selectedCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิด Google Map</a>
-                </div>
-              )}
+              {(() => {
+                const foundCustomer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase()) || selectedCustomer;
+                return foundCustomer ? (
+                  <div className="customer-detail">
+                    <div><b>{foundCustomer.name}</b><p>{foundCustomer.contact} · {foundCustomer.phone}</p><p>{foundCustomer.address}</p></div>
+                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิด Google Map</a>
+                  </div>
+                ) : null;
+              })()}
               <div className="form-grid">
                 <input value={orderForm.window} onChange={e => setOrderForm(p => ({ ...p, window: e.target.value }))} placeholder="ช่วงเวลาส่ง" />
                 <input value={orderForm.boxes} onChange={e => setOrderForm(p => ({ ...p, boxes: e.target.value }))} type="number" placeholder="จำนวนกล่อง" />
@@ -645,6 +645,40 @@ export default function App() {
                     </div>
                   ))
               )}
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>📦 สรุปการส่งของ</h2><span>กำลังส่ง {orders.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {orders.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
+              <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+                <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
+                  <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{orders.filter(o => o.status === "กำลังส่ง").length}</b>
+                </div>
+                <div style={{ flex: 1, background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
+                  <small style={{ color: "#166534" }}>✓ สำเร็จ</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{orders.filter(o => o.status === "ส่งสำเร็จ").length}</b>
+                </div>
+              </div>
+              <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                {orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 ? (
+                  <p className="muted">ยังไม่มีการส่ง</p>
+                ) : (
+                  orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
+                    const driver = drivers.find(d => d.id === order.driverId);
+                    return (
+                      <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
+                          <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
+                          <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdf4", color: order.status === "กำลังส่ง" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                        </div>
+                        <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
+                        <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
+                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driver?.name || "ยังไม่มอบหมาย"}</p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </section>
           </div>
         )}
