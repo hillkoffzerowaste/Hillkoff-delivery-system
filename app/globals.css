@@ -580,11 +580,11 @@ textarea {
 .driver-load-row {
   border: 1px solid #e4eadf;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .driver-load-row strong {
@@ -595,7 +595,7 @@ textarea {
 .order-card {
   border: 1px solid #e4eadf;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   background: #fff;
 }
 

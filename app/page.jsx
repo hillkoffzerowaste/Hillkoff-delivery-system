@@ -972,21 +972,25 @@ export default function App() {
         {displayTab === "driver" && (
           <div className="driver-grid">
             <section className="panel">
-              <div className="panel-head"><h2>เลือกคนขับ</h2><span>{drivers.length} คน</span></div>
-              <select value={driverId} onChange={e => setDriverId(e.target.value)}>{drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}</select>
-              <div className="driver-summary">
-                {drivers.filter(driver => driver.id === driverId).map(driver => <div key={driver.id}><b>{driver.name}</b><p>{driver.zone}</p><p>{driver.phone}</p></div>)}
-              </div>
+              <div className="panel-head"><h2>👤 ข้อมูลคนขับ</h2><span>ของคุณ</span></div>
+              {drivers.filter(driver => driver.id === driverId).map(driver => (
+                <div key={driver.id} style={{ background: "#f0fdf4", padding: "12px", borderRadius: "8px", borderLeft: "4px solid #22c55e" }}>
+                  <b style={{ fontSize: "14px", display: "block" }}>{driver.name}</b>
+                  <small style={{ color: "#666", display: "block", marginTop: "4px" }}>🚗 {driver.plate}</small>
+                  <small style={{ color: "#666", display: "block" }}>📍 {driver.zone}</small>
+                  <small style={{ color: "#666", display: "block" }}>📞 {driver.phone}</small>
+                </div>
+              ))}
             </section>
 
             <section className="panel">
               <div className="panel-head"><h2>📊 ออเดอร์วันนี้</h2><span>{driverOrders.length} งาน</span></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-                <div style={{ background: "#f0f9ff", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #0ea5e9" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                <div style={{ background: "#f0f9ff", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #0ea5e9" }}>
                   <small style={{ color: "#666" }}>กำลังส่ง</small>
                   <b style={{ fontSize: "18px", color: "#0ea5e9" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length} งาน</b>
                 </div>
-                <div style={{ background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
+                <div style={{ background: "#f0fdf4", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
                   <small style={{ color: "#666" }}>สำเร็จ</small>
                   <b style={{ fontSize: "18px", color: "#22c55e" }}>{driverOrders.filter(o => o.status === "ส่งสำเร็จ").length} งาน</b>
                 </div>
@@ -1020,20 +1024,18 @@ export default function App() {
               ) : (
                 <div style={{ display: "grid", gap: "8px" }}>
                   {driverOrders.map(order => (
-                    <div key={order.id} style={{ background: "#f9fafb", padding: "12px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "6px" }}>
-                        <div>
-                          <b style={{ fontSize: "13px", display: "block" }}>{order.customerName} · {order.id}</b>
-                          <small style={{ color: "#666" }}>📍 {order.zone}</small>
-                        </div>
-                        <span style={{ background: statusColor[order.status], color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold" }}>
-                          {order.status === "ส่งสำเร็จ" ? "✅ เสร็จ" : order.driverId ? "🚗 " + drivers.find(d => d.id === order.driverId)?.name : "⏳ รอ"}
-                        </span>
+                    <div key={order.id} style={{ background: "#f9fafb", padding: "10px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ flex: 1 }}>
+                        <b style={{ fontSize: "13px", display: "block" }}>{order.customerName} · {order.id}</b>
+                        <small style={{ color: "#666" }}>📍 {order.zone} · {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
                       </div>
-                      <p style={{ fontSize: "12px", margin: "0", color: "#666" }}>
-                        {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}
-                        {order.checkInAt && ` · เช็คอิน: ${order.checkInAt}`}
-                      </p>
+                      {!order.driverId ? (
+                        <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { driverId, status: "กำลังส่ง" })}>✓ รับ</button>
+                      ) : (
+                        <span style={{ background: statusColor[order.status], color: "white", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", marginLeft: "8px", whiteSpace: "nowrap" }}>
+                          {order.status === "ส่งสำเร็จ" ? "✅ เสร็จ" : "🚗 " + drivers.find(d => d.id === order.driverId)?.name}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
