@@ -531,7 +531,9 @@ export default function App() {
               <button className={displayTab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> Dispatch Dashboard</button>
             </>
           )}
-          <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+          {auth.role === "driver" && (
+            <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+          )}
           {auth.role !== "driver" && (
             <>
               <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> Daily Reports</button>
@@ -675,7 +677,7 @@ export default function App() {
                   return (
                     <article key={order.id} className="dispatch-row">
                       <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
-                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span></div>
+                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
                       <select value={order.driverId} onChange={e => assignDriver(order.id, e.target.value)}>
                         <option value="">รอคนขับรับเอง</option>
                         {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name} · {driver.plate}</option>)}
