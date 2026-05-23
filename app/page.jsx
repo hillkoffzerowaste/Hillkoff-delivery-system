@@ -122,6 +122,8 @@ export default function App() {
   const [driverId, setDriverId] = useState("D1");
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
+  const [editingCustomerId, setEditingCustomerId] = useState(null);
+  const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
 
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
@@ -392,6 +394,10 @@ export default function App() {
   };
 
   const updateOrder = (id, patch) => setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
+  const updateCustomer = (id, patch) => {
+    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
+    setEditingCustomerId(null);
+  };
   const setGoogle = patch => setState(prev => ({ ...prev, google: { ...prev.google, ...patch } }));
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
     driverId: nextDriverId,
@@ -795,7 +801,44 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              {selectedCustomer && (
+                <div style={{ marginTop: "16px", padding: "12px", background: "#f0fdf4", borderRadius: "8px", border: "1px solid #dcfce7" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+                    <div>
+                      <b style={{ fontSize: "14px", display: "block" }}>{selectedCustomer.name}</b>
+                      <small style={{ color: "#666" }}>📞 {selectedCustomer.phone}</small><br/>
+                      <small style={{ color: "#666" }}>👤 {selectedCustomer.contact}</small><br/>
+                      <small style={{ color: "#666" }}>📍 {selectedCustomer.zone}</small><br/>
+                      <small style={{ color: "#666" }}>{selectedCustomer.address}</small>
+                    </div>
+                  </div>
+                  <button className="secondary" style={{ width: "100%", padding: "8px", fontSize: "12px" }} onClick={() => {
+                    setEditingCustomerId(selectedCustomer.id);
+                    setEditCustomerForm(selectedCustomer);
+                  }}>✏️ แก้ไขข้อมูล</button>
+                </div>
+              )}
             </section>
+
+            {editingCustomerId && (
+              <section className="panel" style={{ background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
+                <div className="panel-head"><h2>✏️ แก้ไขข้อมูลลูกค้า</h2><span>หมายเลข: {editingCustomerId}</span></div>
+                <div className="form-grid">
+                  <input value={editCustomerForm.name} onChange={e => setEditCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อร้าน/ลูกค้า" />
+                  <input value={editCustomerForm.contact} onChange={e => setEditCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
+                  <input value={editCustomerForm.phone} onChange={e => setEditCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+                  <select value={editCustomerForm.zone} onChange={e => setEditCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
+                </div>
+                <input value={editCustomerForm.address} onChange={e => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
+                <input value={editCustomerForm.mapUrl} onChange={e => setEditCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Google Map link" />
+                <textarea value={editCustomerForm.note} onChange={e => setEditCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <button className="secondary" onClick={() => setEditingCustomerId(null)}>ยกเลิก</button>
+                  <button className="primary" onClick={() => updateCustomer(editingCustomerId, editCustomerForm)}>💾 บันทึก</button>
+                </div>
+              </section>
+            )}
 
             <section className="panel">
               <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>พิมพ์ชื่อลูกค้าหรือเลือกจากรายชื่อ</span></div>
