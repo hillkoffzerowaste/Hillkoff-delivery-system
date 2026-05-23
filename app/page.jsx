@@ -387,7 +387,7 @@ export default function App() {
     setSyncStatus("⏳ กำลัง sync ไป Google Sheets...");
     try {
       // ใช้ API proxy (server-to-server ไม่มี CORS issue)
-      const response = await fetch("/api/sync", {
+      const response = await fetch("/api/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -421,7 +421,7 @@ export default function App() {
     setSyncStatus("⏳ กำลังโหลดข้อมูลจาก Google Sheets...");
     try {
       // ใช้ API proxy (server-to-server ไม่มี CORS issue)
-      const response = await fetch(`/api/sync?webAppUrl=${encodeURIComponent(state.google.webAppUrl)}`);
+      const response = await fetch("/api/google?url=" + encodeURIComponent(state.google.webAppUrl));
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
       
