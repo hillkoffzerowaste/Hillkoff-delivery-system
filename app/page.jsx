@@ -123,7 +123,6 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
 
-  // Load remembered phone number on mount
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
     if (saved) {
@@ -335,7 +334,6 @@ export default function App() {
   const createOrder = () => {
     let customer = selectedCustomer;
     
-    // If customer name is typed directly, search for it
     if (orderForm.customerName.trim()) {
       customer = customers.find(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())) || selectedCustomer;
     }
@@ -599,7 +597,6 @@ export default function App() {
     );
   }
 
-  // Force driver to stay on driver tab
   const displayTab = auth.role === "driver" ? "driver" : tab;
 
   return (
