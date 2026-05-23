@@ -386,17 +386,21 @@ export default function App() {
     }
     setSyncStatus("⏳ กำลัง sync ไป Google Sheets...");
     try {
-      // ใช้ URLSearchParams เพื่อส่งเป็น form-encoded (simple request, no preflight)
-      const params = new URLSearchParams();
-      params.append("action", "sync");
-      params.append("customers", JSON.stringify(state.customers));
-      params.append("orders", JSON.stringify(state.orders));
-      params.append("drivers", JSON.stringify(state.drivers || []));
-      
-      await fetch(state.google.webAppUrl, {
+      // ใช้ API proxy (server-to-server ไม่มี CORS issue)
+      const response = await fetch("/api/sync", {
         method: "POST",
-        body: params
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webAppUrl: state.google.webAppUrl,
+          action: "sync",
+          customers: state.customers,
+          orders: state.orders,
+          drivers: state.drivers || []
+        })
       });
+      
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Sync failed");
       
       // รอแล้วโหลดข้อมูลกลับ
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -416,7 +420,8 @@ export default function App() {
     }
     setSyncStatus("⏳ กำลังโหลดข้อมูลจาก Google Sheets...");
     try {
-      const response = await fetch(state.google.webAppUrl);
+      // ใช้ API proxy (server-to-server ไม่มี CORS issue)
+      const response = await fetch(`/api/sync?webAppUrl=${encodeURIComponent(state.google.webAppUrl)}`);
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
       
