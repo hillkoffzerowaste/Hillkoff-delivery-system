@@ -35,8 +35,8 @@ const initialDrivers = [
 ];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
-const STATUS = ["รอคนขับรับ", "กำลังส่ง", "ส่งสำเร็จ", "ติดปัญหา"];
-const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c" };
+const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก", "กลับมา"];
+const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626", "กลับมา": "#22c55e" };
 
 const initialCustomers = [
   { id: "C001", name: "Ristr8to Lab", contact: "คุณเมย์", phone: "053-000-101", zone: "เมืองเชียงใหม่", address: "นิมมาน ซอย 3", mapUrl: "https://maps.google.com/?q=Ristr8to+Lab+Chiang+Mai", note: "รับสินค้าเช้า / มีเอกสารวางบิล" },
@@ -353,6 +353,7 @@ export default function App() {
       id,
       customerId: customer.id,
       customerName: customer.name,
+      customerPhone: customer.phone,
       zone: customer.zone,
       address: customer.address,
       mapUrl: customer.mapUrl,
@@ -360,6 +361,9 @@ export default function App() {
       boxes: Number(orderForm.boxes || 0),
       cod: Number(orderForm.cod || 0),
       driverId: "",
+      driverName: "",
+      salesName: auth.name,
+      salesPhone: auth.phone,
       status: "รอคนขับรับ",
       photo: "",
       checkInAt: "",
@@ -994,114 +998,156 @@ export default function App() {
         )}
 
         {displayTab === "driver" && (
-          <div className="driver-grid">
-            <section className="panel">
-              <div className="panel-head"><h2>👤 ข้อมูลคนขับ</h2><span>ของคุณ</span></div>
-              {drivers.filter(driver => driver.id === driverId).map(driver => (
-                <div key={driver.id} style={{ background: "#f0fdf4", padding: "12px", borderRadius: "8px", borderLeft: "4px solid #22c55e" }}>
-                  <b style={{ fontSize: "14px", display: "block" }}>{driver.name}</b>
-                  <small style={{ color: "#666", display: "block", marginTop: "4px" }}>🚗 {driver.plate}</small>
-                  <small style={{ color: "#666", display: "block" }}>📍 {driver.zone}</small>
-                  <small style={{ color: "#666", display: "block" }}>📞 {driver.phone}</small>
+          <div style={{ display: "grid", gap: "16px" }}>
+            {/* ส่วนข้อมูลคนขับ */}
+            <section className="panel" style={{ background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
+                <div>
+                  {drivers.filter(driver => driver.id === driverId).map(driver => (
+                    <div key={driver.id}>
+                      <b style={{ fontSize: "16px", display: "block" }}>👤 {driver.name}</b>
+                      <small style={{ color: "#666" }}>🚗 {driver.plate} · 📍 {driver.zone}</small>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>📊 ออเดอร์วันนี้</h2><span>{driverOrders.length} งาน</span></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
-                <div style={{ background: "#f0f9ff", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #0ea5e9" }}>
-                  <small style={{ color: "#666" }}>กำลังส่ง</small>
-                  <b style={{ fontSize: "18px", color: "#0ea5e9" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length} งาน</b>
-                </div>
-                <div style={{ background: "#f0fdf4", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
-                  <small style={{ color: "#666" }}>สำเร็จ</small>
-                  <b style={{ fontSize: "18px", color: "#22c55e" }}>{driverOrders.filter(o => o.status === "ส่งสำเร็จ").length} งาน</b>
+                <div style={{ textAlign: "right" }}>
+                  <b style={{ fontSize: "20px", color: "#22c55e", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
+                  <small style={{ color: "#666" }}>งานที่ยังเหลือ</small>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "8px", marginBottom: "16px", height: "24px", borderRadius: "4px", overflow: "hidden", background: "#f3f4f6" }}>
-                <div style={{ 
-                  flex: driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length, 
-                  background: "#fbbf24", 
-                  minWidth: driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length > 0 ? "8px" : "0"
-                }}></div>
-                <div style={{ 
-                  flex: driverOrders.filter(o => o.status === "ส่งสำเร็จ").length, 
-                  background: "#22c55e", 
-                  minWidth: driverOrders.filter(o => o.status === "ส่งสำเร็จ").length > 0 ? "8px" : "0"
-                }}></div>
-              </div>
-              {driverOrders.length === 0 ? (
-                <p className="muted">ยังไม่มีออเดอร์วันนี้</p>
-              ) : (
-                <div style={{ fontSize: "12px", color: "#666" }}>
-                  <p style={{ margin: "0 0 8px 0" }}>✓ สำเร็จ: {driverOrders.filter(o => o.status === "ส่งสำเร็จ").length}/{driverOrders.length}</p>
-                  <p style={{ margin: "0" }}>⏳ กำลังส่ง: {driverOrders.filter(o => o.status !== "ส่งสำเร็จ").length}/{driverOrders.length}</p>
-                </div>
-              )}
             </section>
 
-            <section className="panel">
-              <div className="panel-head"><h2>📦 ออเดอร์เรียลไทม์</h2><span>{driverOrders.length} งาน</span></div>
-              {driverOrders.length === 0 ? (
-                <p className="muted">ยังไม่มีออเดอร์</p>
-              ) : (
-                <div style={{ display: "grid", gap: "8px" }}>
-                  {driverOrders.map(order => (
-                    <div key={order.id} style={{ background: "#f9fafb", padding: "12px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}`, border: "1px solid #e5e7eb" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+            {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
+            {orders.filter(o => o.status === "รอคนขับรับ").length > 0 && (
+              <section className="panel">
+                <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{orders.filter(o => o.status === "รอคนขับรับ").length} งาน</span></div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+                  {orders.filter(o => o.status === "รอคนขับรับ").map(order => {
+                    const salesName = order.salesName || "ไม่มี";
+                    const salesPhone = order.salesPhone || "-";
+                    return (
+                      <div key={order.id} style={{ background: "#fef9e7", padding: "12px", borderRadius: "8px", border: "2px solid #f59e0b", display: "flex", flexDirection: "column", gap: "10px" }}>
                         <div>
-                          <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.customerName} · {order.id}</b>
-                          <small style={{ color: "#666" }}>📍 {order.zone} · {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
-                          {order.address && <small style={{ color: "#999", display: "block", marginTop: "4px" }}>📬 {order.address}</small>}
+                          <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.id}</b>
+                          <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
+                          <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
+                          <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
+                          <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                        </div>
+                        
+                        <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #fcd34d" }}>
+                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 ลูกค้า: {order.customerPhone}</small>
+                          <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
+                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>🗺️ แผนที่</a>}
+                          </div>
+                        </div>
+                        
+                        <div style={{ background: "#f3e8ff", padding: "8px", borderRadius: "6px", border: "1px solid #d8b4fe" }}>
+                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>ฝ่ายขาย: {salesName}</small>
+                          <small style={{ color: "#666", display: "block" }}>{salesPhone}</small>
+                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "6px", fontSize: "11px", marginTop: "4px", display: "block", textAlign: "center", textDecoration: "none" }}>📞 โทรหาฝ่ายขาย</a>
+                        </div>
+                        
+                        {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>📬 {order.address}</small>}
+                        
+                        <button className="primary" style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px" }} onClick={() => updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" })}>✓ รับออเดอร์นี้</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
+            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).length > 0 && (
+              <section className="panel">
+                <div className="panel-head"><h2>🚗 ออเดอร์ที่รับแล้ว</h2><span>{orders.filter(o => o.driverId === driverId && o.status !== "ส่งสำเร็จ").length} งาน · สำเร็จ {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length}</span></div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).map(order => (
+                    <div key={order.id} style={{ background: order.status === "ส่งสำเร็จ" ? "#f0fdf4" : "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div>
+                        <b style={{ fontSize: "14px", display: "block", marginBottom: "4px", color: statusColor[order.status] }}>{order.id}</b>
+                        <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
+                        <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
+                        <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
+                        <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                      </div>
+                      
+                      <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #ddd" }}>
+                        <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 {order.customerPhone}</small>
+                        <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                          <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
+                          {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>🗺️ แผนที่</a>}
                         </div>
                       </div>
                       
-                      {order.status !== "กลับมา" && (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px", marginBottom: "10px" }}>
-                          {order.status === "รอคนขับรับ" && (
-                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { driverId, status: "กำลังส่ง" })}>✓ รับงาน</button>
-                          )}
-                          {(order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง") && (
-                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "กำลังจัดส่ง" })}>🚗 กำลังจัดส่ง</button>
-                          )}
-                          {order.status === "กำลังจัดส่ง" && (
-                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") })}>📷 ถ่ายรูป & เสร็จ</button>
-                          )}
-                          {order.status === "ส่งสำเร็จ" && (
-                            <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับมา</button>
-                          )}
-                          {order.status !== "ส่งสำเร็จ" && (
+                      {order.address && <small style={{ color: "#999", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "8px" }}>📬 {order.address}</small>}
+                      
+                      {/* Status Actions */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        {order.status === "กำลังส่ง" && (
+                          <>
+                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "กำลังจัดส่ง" })}>🚗 ไปถึงแล้ว</button>
                             <button className="secondary" style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} onClick={() => {
-                              const reason = prompt("📝 เหตุผลในการยกเลิก:\n1. สินค้าขาด\n2. ติดต่อลูกค้าไม่ได้\n3. ร้านปิด\n4. อื่นๆ\n\nกรุณาระบุเหตุผล:");
+                              const reason = prompt("📝 เหตุผลในการยกเลิก:");
                               if (reason) updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
                             }}>❌ ยกเลิก</button>
-                          )}
+                          </>
+                        )}
+                        {order.status === "กำลังจัดส่ง" && (
+                          <>
+                            <label className="primary" style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
+                              📷 ถ่ายรูป
+                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (evt) => {
+                                    updateOrder(order.id, { photo: evt.target?.result });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }} />
+                            </label>
+                            <button className="secondary" style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} onClick={() => {
+                              const reason = prompt("📝 เหตุผลในการยกเลิก:");
+                              if (reason) updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                            }}>❌ ยกเลิก</button>
+                          </>
+                        )}
+                        {order.status === "กำลังจัดส่ง" && order.photo && (
+                          <button className="primary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} onClick={() => updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") })}>✅ ส่งสำเร็จ</button>
+                        )}
+                        {order.status === "ส่งสำเร็จ" && (
+                          <button className="secondary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับมา</button>
+                        )}
+                      </div>
+
+                      {/* Photo Preview */}
+                      {order.photo && (
+                        <div style={{ marginTop: "8px", borderRadius: "6px", overflow: "hidden", border: "2px solid #22c55e" }}>
+                          <img src={order.photo} alt="proof" style={{ width: "100%", height: "auto" }} />
                         </div>
                       )}
                       
                       {order.status === "ส่งสำเร็จ" && (
-                        <div style={{ background: "#f0fdf4", padding: "8px", borderRadius: "4px", fontSize: "12px", color: "#166534", fontWeight: "bold", marginBottom: "10px", borderLeft: "3px solid #22c55e" }}>
-                          ✅ ส่งสำเร็จ · {order.deliveredAt}
-                        </div>
-                      )}
-                      
-                      {order.status === "ยกเลิก" && (
-                        <div style={{ background: "#fef2f2", padding: "8px", borderRadius: "4px", fontSize: "12px", color: "#991b1b", marginBottom: "10px", borderLeft: "3px solid #dc2626" }}>
-                          ❌ ยกเลิก: {order.complaint}
-                        </div>
-                      )}
-                      
-                      {order.salesNote && (
-                        <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "4px", fontSize: "12px", color: "#92400e", borderLeft: "3px solid #f59e0b" }}>
-                          📌 หมายเหตุ: {order.salesNote}
+                        <div style={{ background: "#f0fdf4", padding: "6px", borderRadius: "4px", fontSize: "11px", color: "#166534", fontWeight: "bold", textAlign: "center" }}>
+                          ✅ {order.deliveredAt}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-              )}
-            </section>
+              </section>
+            )}
+
+            {driverOrders.length === 0 && (
+              <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
+                <p style={{ fontSize: "32px", margin: "0" }}>😴</p>
+                <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
+              </section>
+            )}
           </div>
         )}
 
