@@ -731,14 +731,14 @@ export default function App() {
           <>
             <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
               <button className="secondary" onClick={() => {
-                const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:");
+                const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:\n(รหัส: 2532)");
                 if (pwd === "2532") {
                   setState(prev => ({ ...prev, orders: [] }));
-                  alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
+                  alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
                 } else if (pwd !== null) {
                   alert("❌ รหัสไม่ถูกต้อง");
                 }
-              }} style={{ padding: "8px 12px", fontSize: "13px" }}>🔄 รีเซ็ต</button>
+              }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตแดชบอร์ด</button>
             </div>
             <div className="sales-grid">
             {state.google.sheetUrl && (
@@ -921,6 +921,17 @@ export default function App() {
         {displayTab === "dispatch" && (
           <div className="dispatch-grid">
             <section className="panel">
+              <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
+                <button className="secondary" onClick={() => {
+                  const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:\n(รหัส: 2532)");
+                  if (pwd === "2532") {
+                    setState(prev => ({ ...prev, orders: [] }));
+                    alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
+                  } else if (pwd !== null) {
+                    alert("❌ รหัสไม่ถูกต้อง");
+                  }
+                }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตแดชบอร์ด</button>
+              </div>
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
               <div className="filters dispatch-filters">
                 <label className="search"><Search size={16} /><input value={orderQuery} onChange={e => setOrderQuery(e.target.value)} placeholder="ค้นหาเลขงาน ลูกค้า พื้นที่ หมายเหตุ" /></label>
@@ -1036,33 +1047,58 @@ export default function App() {
                 <p className="muted">ยังไม่มีออเดอร์</p>
               ) : (
                 <div style={{ display: "grid", gap: "8px" }}>
-                  {driverOrders.map(order => {
-                    const getActionButton = () => {
-                      switch(order.status) {
-                        case "รอคนขับรับ":
-                          return <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { driverId, status: "กำลังส่ง" })}>✓ รับ</button>;
-                        case "กำลังส่ง":
-                          return <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { status: "กำลังจัดส่ง" })}>📷 จัดส่ง</button>;
-                        case "กำลังจัดส่ง":
-                          return <button className="primary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") })}>✅ เสร็จ</button>;
-                        case "ส่งสำเร็จ":
-                          return <button className="secondary" style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "8px", whiteSpace: "nowrap" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับ</button>;
-                        case "กลับมา":
-                          return <span style={{ background: "#22c55e", color: "white", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", marginLeft: "8px", whiteSpace: "nowrap" }}>✅ เสร็จ</span>;
-                        default:
-                          return null;
-                      }
-                    };
-                    return (
-                      <div key={order.id} style={{ background: "#f9fafb", padding: "10px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ flex: 1 }}>
-                          <b style={{ fontSize: "13px", display: "block" }}>{order.customerName} · {order.id}</b>
+                  {driverOrders.map(order => (
+                    <div key={order.id} style={{ background: "#f9fafb", padding: "12px", borderRadius: "6px", borderLeft: `4px solid ${statusColor[order.status]}`, border: "1px solid #e5e7eb" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                        <div>
+                          <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.customerName} · {order.id}</b>
                           <small style={{ color: "#666" }}>📍 {order.zone} · {order.window} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                          {order.address && <small style={{ color: "#999", display: "block", marginTop: "4px" }}>📬 {order.address}</small>}
                         </div>
-                        {getActionButton()}
                       </div>
-                    );
-                  })}
+                      
+                      {order.status !== "กลับมา" && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px", marginBottom: "10px" }}>
+                          {order.status === "รอคนขับรับ" && (
+                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { driverId, status: "กำลังส่ง" })}>✓ รับงาน</button>
+                          )}
+                          {(order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง") && (
+                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "กำลังจัดส่ง" })}>🚗 กำลังจัดส่ง</button>
+                          )}
+                          {order.status === "กำลังจัดส่ง" && (
+                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") })}>📷 ถ่ายรูป & เสร็จ</button>
+                          )}
+                          {order.status === "ส่งสำเร็จ" && (
+                            <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับมา</button>
+                          )}
+                          {order.status !== "ส่งสำเร็จ" && (
+                            <button className="secondary" style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} onClick={() => {
+                              const reason = prompt("📝 เหตุผลในการยกเลิก:\n1. สินค้าขาด\n2. ติดต่อลูกค้าไม่ได้\n3. ร้านปิด\n4. อื่นๆ\n\nกรุณาระบุเหตุผล:");
+                              if (reason) updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                            }}>❌ ยกเลิก</button>
+                          )}
+                        </div>
+                      )}
+                      
+                      {order.status === "ส่งสำเร็จ" && (
+                        <div style={{ background: "#f0fdf4", padding: "8px", borderRadius: "4px", fontSize: "12px", color: "#166534", fontWeight: "bold", marginBottom: "10px", borderLeft: "3px solid #22c55e" }}>
+                          ✅ ส่งสำเร็จ · {order.deliveredAt}
+                        </div>
+                      )}
+                      
+                      {order.status === "ยกเลิก" && (
+                        <div style={{ background: "#fef2f2", padding: "8px", borderRadius: "4px", fontSize: "12px", color: "#991b1b", marginBottom: "10px", borderLeft: "3px solid #dc2626" }}>
+                          ❌ ยกเลิก: {order.complaint}
+                        </div>
+                      )}
+                      
+                      {order.salesNote && (
+                        <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "4px", fontSize: "12px", color: "#92400e", borderLeft: "3px solid #f59e0b" }}>
+                          📌 หมายเหตุ: {order.salesNote}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
@@ -1116,15 +1152,18 @@ export default function App() {
               <section className="panel">
                 <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
                 <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
-                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%" }} onClick={() => {
-                  if (confirm("⚠️ รีเซ็ตข้อมูลออเดอร์ทั้งหมดในวันนี้? การกระทำนี้ไม่สามารถยกเลิกได้")) {
+                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
+                  const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:");
+                  if (pwd === "2532") {
                     setState(prev => ({
                       ...prev,
-                      orders: initialOrders
+                      orders: []
                     }));
-                    alert("✅ รีเซ็ตข้อมูลเสร็จสิ้น");
+                    alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
+                  } else if (pwd !== null) {
+                    alert("❌ รหัสไม่ถูกต้อง");
                   }
-                }}>🔄 รีเซ็ตข้อมูลวันนี้</button>
+                }}>🔄 รีเซ็ตแดชบอร์ด (รหัส: 2532)</button>
               </section>
             )}
             
