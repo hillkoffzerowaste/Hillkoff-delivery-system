@@ -189,12 +189,13 @@ export default function App() {
     if (state.google.webAppUrl) {
       setSyncStatus("⏳ กำลัง sync ลูกค้าใหม่ไป Google Sheets...");
       try {
-        await fetch(state.google.webAppUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "sync", customers: nextState.customers, orders: nextState.orders, drivers: nextState.drivers || [] })
-        });
+        const params = new URLSearchParams();
+        params.append("action", "sync");
+        params.append("customers", JSON.stringify(nextState.customers));
+        params.append("orders", JSON.stringify(nextState.orders));
+        params.append("drivers", JSON.stringify(nextState.drivers || []));
+        
+        await fetch(state.google.webAppUrl, { method: "POST", body: params });
         setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" และ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
       } catch (error) {
         setSyncStatus(`⚠️ บันทึกลูกค้า "${nextCustomer.name}" แล้ว แต่ sync Google ไม่สำเร็จ: ${error.message}`);
@@ -315,12 +316,13 @@ export default function App() {
     setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
     setTab("driver");
     try {
-      await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: nextDrivers })
-      });
+      const params = new URLSearchParams();
+      params.append("action", "sync");
+      params.append("customers", JSON.stringify(state.customers));
+      params.append("orders", JSON.stringify(state.orders));
+      params.append("drivers", JSON.stringify(nextDrivers));
+      
+      await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, { method: "POST", body: params });
       setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" และ sync Google สำเร็จ`);
     } catch {
       setSyncStatus(`⚠️ ลงทะเบียนคนขับ "${nextDriver.name}" แล้ว แต่ sync Google ไม่สำเร็จ`);
@@ -384,16 +386,20 @@ export default function App() {
     }
     setSyncStatus("⏳ กำลัง sync ไป Google Sheets...");
     try {
-      // ส่งข้อมูลแบบ no-cors (ไม่ได้รับ response)
+      // ใช้ URLSearchParams เพื่อส่งเป็น form-encoded (simple request, no preflight)
+      const params = new URLSearchParams();
+      params.append("action", "sync");
+      params.append("customers", JSON.stringify(state.customers));
+      params.append("orders", JSON.stringify(state.orders));
+      params.append("drivers", JSON.stringify(state.drivers || []));
+      
       await fetch(state.google.webAppUrl, {
         method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: state.drivers || [] })
+        body: params
       });
       
-      // รอ 2 วินาทีแล้วโหลดข้อมูลกลับเพื่อดึง Sheet URL
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // รอแล้วโหลดข้อมูลกลับ
+      await new Promise(resolve => setTimeout(resolve, 1500));
       await loadFromGoogle();
       
       setSyncStatus(`✅ Sync สำเร็จ! ${new Date().toLocaleTimeString("th-TH")} (${state.customers.length} ลูกค้า, ${state.orders.length} ออเดอร์)`);

@@ -19,15 +19,19 @@ function doGet() {
 
 function doPost(e) {
   try {
-    const body = JSON.parse(e.postData.contents || "{}");
-    const action = body.action || "sync";
+    // รับจาก form-encoded parameters
+    const action = e.parameter.action || "sync";
+    const customers = e.parameter.customers ? JSON.parse(e.parameter.customers) : [];
+    const orders = e.parameter.orders ? JSON.parse(e.parameter.orders) : [];
+    const drivers = e.parameter.drivers ? JSON.parse(e.parameter.drivers) : [];
+    
     const db = getDatabase();
 
     if (action === "sync") {
-      upsertRows(db, "customers", body.customers || []);
-      upsertRows(db, "orders", body.orders || []);
-      upsertRows(db, "drivers", body.drivers || []);
-      upsertRows(db, "complaints", (body.orders || []).filter(order => order.complaint).map(order => ({
+      upsertRows(db, "customers", customers);
+      upsertRows(db, "orders", orders);
+      upsertRows(db, "drivers", drivers);
+      upsertRows(db, "complaints", orders.filter(order => order.complaint).map(order => ({
         id: `CMP-${order.id}`,
         orderId: order.id,
         customerName: order.customerName,
@@ -36,12 +40,11 @@ function doPost(e) {
         status: order.status,
         createdAt: new Date().toISOString()
       })));
-      const response = { ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() };
-      return jsonResponseWithCORS(response);
+      return jsonResponseWithCORS({ ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() });
     }
 
     if (action === "uploadPod") {
-      const fileUrl = savePodImage(body.orderId, body.fileName, body.dataUrl);
+      const fileUrl = savePodImage(e.parameter.orderId, e.parameter.fileName, e.parameter.dataUrl);
       return jsonResponseWithCORS({ ok: true, fileUrl });
     }
 
