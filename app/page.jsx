@@ -673,7 +673,8 @@ export default function App() {
   const displayTab = auth.role === "driver" ? "driver" : tab;
 
   return (
-    <main>
+    <>
+      <main>
       <aside className="sidebar">
         <div className="brand">
           <img className="brand-mark" src="/delivery-logo.svg" alt="Hillkoff Delivery" />
@@ -1247,7 +1248,7 @@ export default function App() {
         )}
       </section>
     </main>
-    
+
     {showOrderConfirm && pendingOrder && (
       <div style={{
         position: "fixed",
@@ -1282,5 +1283,6 @@ export default function App() {
         </div>
       </div>
     )}
+    </>
   );
 }
