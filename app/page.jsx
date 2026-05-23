@@ -394,6 +394,15 @@ export default function App() {
       });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google sync failed");
+      
+      // บันทึก Sheet URL ที่ได้มาจาก Google
+      if (data.sheetUrl) {
+        setState(prev => ({
+          ...prev,
+          google: { ...prev.google, sheetUrl: data.sheetUrl }
+        }));
+      }
+      
       setSyncStatus(`✅ Sync สำเร็จ! ${new Date().toLocaleTimeString("th-TH")} (${state.customers.length} ลูกค้า, ${state.orders.length} ออเดอร์)`);
     } catch (error) {
       setSyncStatus(`❌ Sync ไม่สำเร็จ: ${error.message}`);
@@ -411,12 +420,20 @@ export default function App() {
       const response = await fetch(state.google.webAppUrl);
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
+      
+      // บันทึก Sheet URL ถ้ามี
+      const newState = {
+        customers: data.data?.customers?.length ? data.data.customers : state.customers,
+        orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : state.orders,
+        drivers: data.data?.drivers?.length ? data.data.drivers : state.drivers
+      };
+      
       setState(prev => ({
         ...prev,
-        customers: data.data?.customers?.length ? data.data.customers : prev.customers,
-        orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders,
-        drivers: data.data?.drivers?.length ? data.data.drivers : prev.drivers
+        ...newState,
+        google: { ...prev.google, ...(data.sheetUrl ? { sheetUrl: data.sheetUrl } : {}) }
       }));
+      
       setSyncStatus(`✅ โหลดข้อมูลสำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
     } catch (error) {
       setSyncStatus(`❌ โหลดไม่สำเร็จ: ${error.message}`);

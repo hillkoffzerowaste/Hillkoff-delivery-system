@@ -12,7 +12,8 @@ const SHEETS = {
 };
 
 function doGet() {
-  return jsonResponse({ ok: true, data: readAll() });
+  const db = getDatabase();
+  return jsonResponse({ ok: true, data: readAll(), sheetUrl: db.getUrl() });
 }
 
 function doPost(e) {
@@ -33,7 +34,7 @@ function doPost(e) {
       status: order.status,
       createdAt: new Date().toISOString()
     })));
-    return jsonResponse({ ok: true, syncedAt: new Date().toISOString(), data: readAll() });
+    return jsonResponse({ ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() });
   }
 
   if (action === "uploadPod") {
