@@ -191,7 +191,8 @@ export default function App() {
       try {
         await fetch(state.google.webAppUrl, {
           method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "sync", customers: nextState.customers, orders: nextState.orders, drivers: nextState.drivers || [] })
         });
         setSyncStatus(`บันทึกลูกค้าและ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
@@ -237,7 +238,7 @@ export default function App() {
     }
     let latestDrivers = state.drivers || [];
     try {
-      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT);
+      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, { mode: "cors" });
       const data = await response.json();
       if (data.ok) {
         latestDrivers = data.data?.drivers?.length ? data.data.drivers : latestDrivers;
@@ -314,7 +315,8 @@ export default function App() {
     try {
       await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: nextDrivers })
       });
     } catch {
@@ -381,11 +383,10 @@ export default function App() {
     try {
       const response = await fetch(state.google.webAppUrl, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: state.drivers || [] })
       });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Google sync failed");
       setSyncStatus(`Sync สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
     } catch (error) {
       setSyncStatus(`Sync ไม่สำเร็จ: ${error.message}`);
@@ -400,7 +401,7 @@ export default function App() {
     }
     setSyncStatus("กำลังโหลดข้อมูลจาก Google Sheets...");
     try {
-      const response = await fetch(state.google.webAppUrl);
+      const response = await fetch(state.google.webAppUrl, { mode: "cors" });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
       setState(prev => ({
