@@ -191,11 +191,14 @@ export default function App() {
       try {
         const response = await fetch(state.google.webAppUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ action: "sync", customers: nextState.customers, orders: nextState.orders, drivers: nextState.drivers || [] })
         });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || "Sync failed");
+        if (data.sheetUrl) {
+          setState(prev => ({ ...prev, google: { ...prev.google, sheetUrl: data.sheetUrl } }));
+        }
         setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" และ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
       } catch (error) {
         setSyncStatus(`⚠️ บันทึกลูกค้า "${nextCustomer.name}" แล้ว แต่ sync Google ไม่สำเร็จ: ${error.message}`);
@@ -318,11 +321,14 @@ export default function App() {
     try {
       const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: nextDrivers })
       });
       const data = await response.json();
       if (response.ok && data.ok) {
+        if (data.sheetUrl) {
+          setState(prev => ({ ...prev, google: { ...prev.google, sheetUrl: data.sheetUrl } }));
+        }
         setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" และ sync Google สำเร็จ`);
       }
     } catch {
@@ -389,13 +395,12 @@ export default function App() {
     try {
       const response = await fetch(state.google.webAppUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "sync", customers: state.customers, orders: state.orders, drivers: state.drivers || [] })
       });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Google sync failed");
       
-      // บันทึก Sheet URL ที่ได้มาจาก Google
       if (data.sheetUrl) {
         setState(prev => ({
           ...prev,

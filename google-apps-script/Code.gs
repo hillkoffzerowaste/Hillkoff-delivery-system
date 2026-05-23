@@ -17,32 +17,36 @@ function doGet() {
 }
 
 function doPost(e) {
-  const body = JSON.parse(e.postData.contents || "{}");
-  const action = body.action || "sync";
-  const db = getDatabase();
+  try {
+    const body = JSON.parse(e.postData.contents || "{}");
+    const action = body.action || "sync";
+    const db = getDatabase();
 
-  if (action === "sync") {
-    upsertRows(db, "customers", body.customers || []);
-    upsertRows(db, "orders", body.orders || []);
-    upsertRows(db, "drivers", body.drivers || []);
-    upsertRows(db, "complaints", (body.orders || []).filter(order => order.complaint).map(order => ({
-      id: `CMP-${order.id}`,
-      orderId: order.id,
-      customerName: order.customerName,
-      driverId: order.driverId,
-      complaint: order.complaint,
-      status: order.status,
-      createdAt: new Date().toISOString()
-    })));
-    return jsonResponse({ ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() });
+    if (action === "sync") {
+      upsertRows(db, "customers", body.customers || []);
+      upsertRows(db, "orders", body.orders || []);
+      upsertRows(db, "drivers", body.drivers || []);
+      upsertRows(db, "complaints", (body.orders || []).filter(order => order.complaint).map(order => ({
+        id: `CMP-${order.id}`,
+        orderId: order.id,
+        customerName: order.customerName,
+        driverId: order.driverId,
+        complaint: order.complaint,
+        status: order.status,
+        createdAt: new Date().toISOString()
+      })));
+      return jsonResponse({ ok: true, syncedAt: new Date().toISOString(), data: readAll(), sheetUrl: db.getUrl() });
+    }
+
+    if (action === "uploadPod") {
+      const fileUrl = savePodImage(body.orderId, body.fileName, body.dataUrl);
+      return jsonResponse({ ok: true, fileUrl });
+    }
+
+    return jsonResponse({ ok: false, error: "Unknown action" }, 400);
+  } catch (error) {
+    return jsonResponse({ ok: false, error: error.toString() }, 500);
   }
-
-  if (action === "uploadPod") {
-    const fileUrl = savePodImage(body.orderId, body.fileName, body.dataUrl);
-    return jsonResponse({ ok: true, fileUrl });
-  }
-
-  return jsonResponse({ ok: false, error: "Unknown action" }, 400);
 }
 
 function getDatabase() {
