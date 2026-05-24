@@ -172,27 +172,27 @@ export default function App() {
         const newState = { ...prev };
         
         // For orders: merge - keep local unsaved orders, update existing ones from Supabase
-        if (supabaseOrders && prev.orders) {
+        if (Array.isArray(supabaseOrders) && Array.isArray(prev.orders)) {
+          console.log(`🔄 Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
           const merged = [...prev.orders];
+          
           for (const sbOrder of supabaseOrders) {
             const idx = merged.findIndex(o => o.id === sbOrder.id);
             if (idx >= 0) {
               // Update existing order with latest from Supabase
               merged[idx] = { ...merged[idx], ...sbOrder };
-              console.log(`📝 Updated order ${sbOrder.id} from Supabase`);
+              console.log(`📝 Updated order ${sbOrder.id}`);
             } else {
               // New order from Supabase - add it
               merged.push(sbOrder);
               console.log(`➕ Added new order ${sbOrder.id} from Supabase`);
             }
           }
-          // Remove orders that are in local but not in Supabase (were deleted)
-          const localStr = JSON.stringify(prev.orders);
-          const newStr = JSON.stringify(merged);
-          if (localStr !== newStr) {
+          
+          if (merged.length !== prev.orders.length) {
+            console.log(`⚠️ Order count changed: ${prev.orders.length} → ${merged.length}`);
             newState.orders = merged;
             changed = true;
-            console.log("📦 Orders merged from Supabase");
           }
         }
         
@@ -284,13 +284,18 @@ export default function App() {
         console.log("✅ Customers synced:", currentState.customers.length);
       }
       
-      // Sync orders
-      if (currentState.orders?.length) {
+      // Sync orders (always sync, even if empty)
+      console.log("📤 Syncing orders to Supabase:", currentState.orders?.length || 0);
+      if (currentState.orders && Array.isArray(currentState.orders)) {
         for (const order of currentState.orders) {
-          const { error } = await supabase.from("orders").upsert(order, { onConflict: "id" });
-          if (error) console.error("❌ Order sync error:", error, order.id);
+          const { error } = await supabase.from("orders").upsert(order, { onConflict: "id" }).throwOnError();
+          if (error) {
+            console.error("❌ Order sync error:", error.message, "Order:", order.id);
+          } else {
+            console.log(`✅ Order synced: ${order.id}`);
+          }
         }
-        console.log("✅ Orders synced:", currentState.orders.length);
+        console.log("✅ All orders synced to Supabase");
       }
       
       // Sync drivers
@@ -557,10 +562,11 @@ export default function App() {
   const confirmOrder = async () => {
     if (!pendingOrder) return;
     
-    console.log("📤 confirmOrder: Adding order to state", pendingOrder);
+    console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
     setState(prev => {
       const updated = { ...prev, orders: [pendingOrder, ...prev.orders] };
-      console.log("📤 confirmOrder: State updated with orders count:", updated.orders.length);
+      console.log("📤 confirmOrder: State updated - total orders:", updated.orders.length);
+      console.log("📤 confirmOrder: Orders in state:", updated.orders.map(o => o.id));
       return updated;
     });
     
@@ -569,13 +575,13 @@ export default function App() {
     setPendingOrder(null);
     setSyncStatus(`⏳ กำลังส่งออเดอร์เข้าคิว...`);
     
-    // Wait longer for Supabase to actually save before refreshing
+    // Wait longer for Supabase to actually save before switching tabs
     setTimeout(async () => {
-      console.log("⏰ Waiting 2000ms for Supabase to save...");
-      // Don't refresh - let polling pick it up naturally
-      // refreshFromSupabase can overwrite if not saved yet
+      console.log("⏰ Waiting 2000ms complete");
       setTab("driver");
       setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
+      // Let polling refresh the data
+      await refreshFromSupabase();
     }, 2000);
   };
 
@@ -1178,15 +1184,18 @@ export default function App() {
             </section>
 
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
-            {orders.filter(o => o.status === "รอคนขับรับ").length > 0 && (
-              <section className="panel">
-                <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{orders.filter(o => o.status === "รอคนขับรับ").length} งาน</span></div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
-                  {orders.filter(o => o.status === "รอคนขับรับ").map(order => {
-                    const salesName = order.salesName || "ไม่มี";
-                    const salesPhone = order.salesPhone || "-";
-                    return (
-                      <div key={order.id} style={{ background: "#fef9e7", padding: "12px", borderRadius: "8px", border: "2px solid #f59e0b", display: "flex", flexDirection: "column", gap: "10px" }}>
+            {(() => {
+              const pending = orders.filter(o => o.status === "รอคนขับรับ");
+              console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length);
+              return pending.length > 0 && (
+                <section className="panel">
+                  <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+                    {pending.map(order => {
+                      const salesName = order.salesName || "ไม่มี";
+                      const salesPhone = order.salesPhone || "-";
+                      return (
+                        <div key={order.id} style={{ background: "#fef9e7", padding: "12px", borderRadius: "8px", border: "2px solid #f59e0b", display: "flex", flexDirection: "column", gap: "10px" }}>
                         <div>
                           <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.id}</b>
                           <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
@@ -1220,7 +1229,8 @@ export default function App() {
                   })}
                 </div>
               </section>
-            )}
+            );
+            })()}
 
             {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
             {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).length > 0 && (
