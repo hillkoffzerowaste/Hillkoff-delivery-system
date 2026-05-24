@@ -1200,13 +1200,15 @@ export default function App() {
                       setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด (ทั้ง Local + Supabase)...");
                       console.log("🔍 [RESET] Starting complete order reset process...");
                       
-                      // STEP 1: Clear localStorage FIRST
-                      console.log("🧹 [RESET] Step 1: Clearing localStorage...");
+                      // STEP 1: Clear ALL localStorage FIRST
+                      console.log("🧹 [RESET] Step 1: Clearing all localStorage...");
                       try {
                         localStorage.removeItem(STORE_KEY);
-                        console.log("✅ [RESET] localStorage.removeItem(STORE_KEY) completed");
+                        localStorage.clear();
+                        console.log("✅ [RESET] localStorage completely cleared");
+                        console.log("✅ [RESET] localStorage size after clear:", localStorage.length);
                       } catch (e) {
-                        console.error("❌ [RESET] localStorage.removeItem failed:", e);
+                        console.error("❌ [RESET] localStorage.clear failed:", e);
                       }
                       
                       // STEP 2: Clear React state
@@ -1289,12 +1291,31 @@ export default function App() {
                         throw e;
                       }
                       
-                      // STEP 4: Wait to ensure everything is synced
-                      console.log("⏳ [RESET] Waiting for final sync...");
-                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      // STEP 4: Wait to ensure everything is synced and polling stays off
+                      console.log("⏳ [RESET] Waiting 5 seconds to ensure deletion is complete and synced...");
+                      await new Promise(resolve => setTimeout(resolve, 5000));
                       
-                      // STEP 5: Enable sync again
+                      // STEP 5: Double-check localStorage is still empty
+                      console.log("🔍 [RESET] Final localStorage check:", { size: localStorage.length, STORE_KEY: localStorage.getItem(STORE_KEY) });
+                      
+                      // STEP 6: Force fetch from Supabase one more time to ensure cache is empty
+                      console.log("🔄 [RESET] Final verification: fetching from Supabase...");
+                      const { data: finalCheck, error: finalCheckError } = await supabase
+                        .from("orders")
+                        .select("id");
+                      
+                      console.log("🔄 [RESET] Final Supabase check:", {
+                        ordersRemaining: finalCheck?.length || 0,
+                        error: finalCheckError?.message || "none"
+                      });
+                      
+                      if (finalCheck && finalCheck.length > 0) {
+                        console.warn("⚠️ [RESET] WARNING: Orders still in Supabase after delete:", finalCheck.map(o => o.id));
+                      }
+                      
+                      // STEP 7: Re-enable sync again
                       console.log("🔄 [RESET] Re-enabling polling and sync...");
+                      console.log("🔄 [RESET] Setting isResettingOrders = false");
                       setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!");
                       alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมด (Local + Supabase)\n✓ ล้างข้อมูล localStorage\n✓ รีเซ็ตสถานะทั้งระบบ");
                       setIsResettingOrders(false);
