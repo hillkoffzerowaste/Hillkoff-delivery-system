@@ -143,6 +143,63 @@ export default function App() {
 
   useEffect(() => setState(readState()), []);
   
+  // Real-time subscription to Supabase changes
+  useEffect(() => {
+    if (!supabase) return;
+    
+    const channels = [];
+    
+    // Subscribe to orders changes
+    channels.push(
+      supabase
+        .channel("orders_changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders" },
+          async () => {
+            const { data } = await supabase.from("orders").select("*");
+            setState(prev => ({ ...prev, orders: data || [] }));
+          }
+        )
+        .subscribe()
+    );
+    
+    // Subscribe to customers changes
+    channels.push(
+      supabase
+        .channel("customers_changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "customers" },
+          async () => {
+            const { data } = await supabase.from("customers").select("*");
+            setState(prev => ({ ...prev, customers: data || [] }));
+          }
+        )
+        .subscribe()
+    );
+    
+    // Subscribe to drivers changes
+    channels.push(
+      supabase
+        .channel("drivers_changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "drivers" },
+          async () => {
+            const { data } = await supabase.from("drivers").select("*");
+            setState(prev => ({ ...prev, drivers: data || [] }));
+          }
+        )
+        .subscribe()
+    );
+    
+    // Cleanup subscriptions
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, []);
+  
   const syncToSupabase = async (currentState) => {
     if (!supabase) return;
     try {
