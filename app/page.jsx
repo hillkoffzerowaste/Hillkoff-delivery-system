@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   AlertTriangle,
@@ -164,7 +164,10 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
-  const [isResettingOrders, setIsResettingOrders] = useState(false);
+  
+  // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
+  // useState is async and causes stale closures in syncToSupabase
+  const isResettingOrdersRef = useRef(false);
 
   useEffect(() => setState(readState()), []);
 
@@ -277,7 +280,7 @@ export default function App() {
     }
     
     // Skip refresh during reset to prevent old data from being restored
-    if (isResettingOrders) {
+    if (isResettingOrdersRef.current) {
       console.log("⏸️ Skipping refreshFromSupabase during reset");
       return;
     }
@@ -301,7 +304,7 @@ export default function App() {
         const newState = { ...prev };
         
         // Skip all merging during reset to prevent old data from being restored
-        if (isResettingOrders) {
+        if (isResettingOrdersRef.current) {
           console.log("⏸️ [RESET] Skipping merge during reset - isResettingOrders = true");
           return prev;
         }
@@ -413,18 +416,18 @@ export default function App() {
     }
     
     // When reset ends, delay first poll to ensure delete completed
-    const delayFirstPoll = isResettingOrders ? 0 : 3000;
+    const delayFirstPoll = isResettingOrdersRef.current ? 0 : 3000;
     
     const pollInterval = setInterval(() => {
       // Skip polling during reset to prevent old data from being pulled back
-      if (!isResettingOrders) {
+      if (!isResettingOrdersRef.current) {
         refreshFromSupabase();
       }
     }, 2000); // Poll every 2 seconds (allow Supabase time to save)
     
     // If reset just ended, add extra delay before first poll
     let timeout;
-    if (!isResettingOrders && delayFirstPoll > 0) {
+    if (!isResettingOrdersRef.current && delayFirstPoll > 0) {
       console.log("🔄 [RESET-RECOVERY] Delaying first poll by 3s to let delete complete...");
       timeout = setTimeout(() => {
         refreshFromSupabase();
@@ -435,7 +438,7 @@ export default function App() {
       clearInterval(pollInterval);
       if (timeout) clearTimeout(timeout);
     };
-  }, [isResettingOrders]);
+  }, []);
   
   const upsertOrderToSupabase = async (order) => {
     if (!supabase) return { ok: false, error: "Supabase not initialized" };
@@ -475,7 +478,7 @@ export default function App() {
   
   const syncToSupabase = async (currentState) => {
     // CRITICAL: Don't sync during reset - prevents deleted orders from being re-created
-    if (isResettingOrders) {
+    if (isResettingOrdersRef.current) {
       console.log("⏸️ [RESET] Skipping syncToSupabase - reset is in progress");
       return;
     }
@@ -614,20 +617,19 @@ export default function App() {
 
   useEffect(() => {
     // Skip saving to localStorage during reset
-    if (!isResettingOrders && typeof window !== "undefined") {
+    if (!isResettingOrdersRef.current && typeof window !== "undefined") {
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
     // Auto-sync to Supabase on any data change (but skip during reset)
     // Only track orders, customers, auth - not drivers (drivers change frequently from polling)
-    if (!isResettingOrders) {
+    if (!isResettingOrdersRef.current) {
       console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
       syncToSupabase(state);
     }
   }, [
     JSON.stringify(state.orders),
     JSON.stringify(state.customers),
-    JSON.stringify(state.auth),
-    isResettingOrders
+    JSON.stringify(state.auth)
   ]);
   useEffect(() => {
     if (state.auth?.driverId) setDriverId(state.auth.driverId);
@@ -1226,12 +1228,12 @@ export default function App() {
                   (async () => {
                     try {
                       // Disable polling during reset to prevent race condition
-                      setIsResettingOrders(true);
+                      isResettingOrdersRef.current = true;
                       
                       if (!supabase) supabase = initSupabase();
                       if (!supabase) {
                         alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-                        setIsResettingOrders(false);
+                        isResettingOrdersRef.current = false;
                         return;
                       }
 
@@ -1362,14 +1364,14 @@ export default function App() {
                       console.log("🔄 [RESET] Setting isResettingOrders = false");
                       setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!");
                       alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมด (Local + Supabase)\n✓ ล้างข้อมูล localStorage\n✓ รีเซ็ตสถานะทั้งระบบ");
-                      setIsResettingOrders(false);
+                      isResettingOrdersRef.current = false;
                       
                       console.log("✅ [RESET] Process completed successfully!");
                     } catch (e) {
                       console.error("❌ [RESET] Process failed:", e);
                       setSyncStatus(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
                       alert(`❌ รีเซ็ตไม่สำเร็จ:\n${e?.message || String(e)}\n\n(ตรวจสอบ console สำหรับรายละเอียด)`);
-                      setIsResettingOrders(false);
+                      isResettingOrdersRef.current = false;
                     }
                   })();
                 } else if (pwd !== null) {
