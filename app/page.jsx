@@ -149,38 +149,40 @@ export default function App() {
     
     const pollInterval = setInterval(async () => {
       try {
-        // Fetch latest orders
+        // Fetch latest data from Supabase
         const { data: orders } = await supabase.from("orders").select("*");
-        setState(prev => {
-          const orderIds = new Set(prev.orders.map(o => o.id));
-          const newOrderIds = new Set((orders || []).map(o => o.id));
-          // If orders changed, update state
-          if (orderIds.size !== newOrderIds.size || ![...orderIds].every(id => newOrderIds.has(id))) {
-            return { ...prev, orders: orders || [] };
-          }
-          return prev;
-        });
-        
-        // Fetch latest customers
         const { data: customers } = await supabase.from("customers").select("*");
-        setState(prev => {
-          const custIds = new Set(prev.customers.map(c => c.id));
-          const newCustIds = new Set((customers || []).map(c => c.id));
-          if (custIds.size !== newCustIds.size || ![...custIds].every(id => newCustIds.has(id))) {
-            return { ...prev, customers: customers || [] };
-          }
-          return prev;
-        });
-        
-        // Fetch latest drivers
         const { data: drivers } = await supabase.from("drivers").select("*");
+        
         setState(prev => {
-          const drvIds = new Set(prev.drivers.map(d => d.id));
-          const newDrvIds = new Set((drivers || []).map(d => d.id));
-          if (drvIds.size !== newDrvIds.size || ![...drvIds].every(id => newDrvIds.has(id))) {
-            return { ...prev, drivers: drivers || [] };
+          let changed = false;
+          const newState = { ...prev };
+          
+          // Compare orders (complete data comparison)
+          const ordersStr = JSON.stringify(prev.orders || []);
+          const newOrdersStr = JSON.stringify(orders || []);
+          if (ordersStr !== newOrdersStr) {
+            newState.orders = orders || [];
+            changed = true;
           }
-          return prev;
+          
+          // Compare customers (complete data comparison)
+          const customersStr = JSON.stringify(prev.customers || []);
+          const newCustomersStr = JSON.stringify(customers || []);
+          if (customersStr !== newCustomersStr) {
+            newState.customers = customers || [];
+            changed = true;
+          }
+          
+          // Compare drivers (complete data comparison)
+          const driversStr = JSON.stringify(prev.drivers || []);
+          const newDriversStr = JSON.stringify(drivers || []);
+          if (driversStr !== newDriversStr) {
+            newState.drivers = drivers || [];
+            changed = true;
+          }
+          
+          return changed ? newState : prev;
         });
       } catch (error) {
         console.log("Polling error:", error);
