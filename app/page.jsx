@@ -306,7 +306,7 @@ export default function App() {
           return prev;
         }
         
-        // For orders: merge - keep local unsaved orders, update existing ones from Supabase
+        // For orders: merge - keep local orders, update status/data from Supabase, but DON'T add old orders back
         if (Array.isArray(supabaseOrders) && Array.isArray(prev.orders)) {
           console.log(`🔄 Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
           const merged = [...prev.orders];
@@ -316,11 +316,13 @@ export default function App() {
             const order = convertToCamelCase(sbOrder);
             const idx = merged.findIndex(o => o.id === order.id);
             if (idx >= 0) {
+              // Only update existing orders (user has this order locally)
               merged[idx] = { ...merged[idx], ...order };
               console.log(`📝 Updated order ${order.id}`);
             } else {
-              merged.push(order);
-              console.log(`➕ Added new order ${order.id} from Supabase`);
+              // SKIP adding new orders from Supabase - they should come via syncToSupabase
+              // This prevents deleted orders from being pulled back
+              console.log(`⏭️ Skipping order ${order.id} from Supabase (not in local state)`);
             }
           }
           
