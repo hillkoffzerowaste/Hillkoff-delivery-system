@@ -461,20 +461,37 @@ export default function App() {
     setAuth({ role: "", name: "", phone: "", driverId: "" });
   };
 
-  const createOrder = () => {
-    let customer = selectedCustomer;
+  const createOrder = async () => {
+    if (!orderForm.customerName.trim()) {
+      setSyncStatus("❌ กรุณากรอกชื่อลูกค้า");
+      return;
+    }
+
+    let customer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase());
     
-    if (orderForm.customerName.trim()) {
-      customer = customers.find(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())) || selectedCustomer;
+    // If customer doesn't exist, create new one automatically
+    if (!customer) {
+      customer = {
+        id: `C${Date.now()}`,
+        name: orderForm.customerName.trim(),
+        contact: "",
+        phone: "",
+        zone: ZONES[0],
+        address: "",
+        mapUrl: "",
+        note: ""
+      };
+      // Auto-save new customer
+      setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
+      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
     }
     
-    if (!customer) return;
     const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
     const nextOrder = {
       id,
       customerId: customer.id,
       customerName: customer.name,
-      customerPhone: customer.phone,
+      customerPhone: customer.phone || "",
       zone: customer.zone,
       address: customer.address,
       mapUrl: customer.mapUrl,
@@ -499,16 +516,26 @@ export default function App() {
 
   const confirmOrder = async () => {
     if (!pendingOrder) return;
-    setState(prev => ({ ...prev, orders: [pendingOrder, ...prev.orders] }));
+    
+    console.log("📤 confirmOrder: Adding order to state", pendingOrder);
+    setState(prev => {
+      const updated = { ...prev, orders: [pendingOrder, ...prev.orders] };
+      console.log("📤 confirmOrder: State updated with orders count:", updated.orders.length);
+      return updated;
+    });
+    
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
     setPendingOrder(null);
-    setSyncStatus(`⏳ รอคนขับรับออเดอร์ "${pendingOrder.id}"...`);
+    setSyncStatus(`⏳ กำลังส่งออเดอร์เข้าคิว...`);
     
     // Wait for state to sync to Supabase, then refresh immediately
     setTimeout(async () => {
+      console.log("⏰ Waiting 800ms complete, refreshing from Supabase");
       await refreshFromSupabase();
+      console.log("✅ Refreshed from Supabase, switching to driver tab");
       setTab("driver");
+      setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
     }, 800);
   };
 
@@ -518,7 +545,10 @@ export default function App() {
     }
   };
 
-  const updateOrder = (id, patch) => setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
+  const updateOrder = (id, patch) => {
+    console.log(`📝 updateOrder: ${id}`, patch);
+    setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
+  };
   const updateCustomer = (id, patch) => {
     setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
     setEditingCustomerId(null);
