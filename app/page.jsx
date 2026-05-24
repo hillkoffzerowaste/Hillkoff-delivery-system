@@ -1211,31 +1211,47 @@ export default function App() {
                       await new Promise(resolve => setTimeout(resolve, 100));
                       
                       try {
-                        // Try fetching first to see what's there
-                        const { data: checkData, error: checkError } = await supabase.from("orders").select("id").limit(1);
-                        console.log("📋 Supabase orders check:", { hasData: !!checkData?.length, error: checkError?.message });
+                        // Step 1: Fetch all order IDs
+                        console.log("📋 Fetching all order IDs from Supabase...");
+                        const { data: allOrders, error: fetchError } = await supabase.from("orders").select("id");
+                        console.log("📋 Supabase orders check:", { count: allOrders?.length, error: fetchError?.message });
                         
-                        // Try to delete all records
-                        const { data, error, count } = await supabase.from("orders").delete().neq("id", "");
-                        console.log("🗑️ Delete result:", { data, error, count });
-                        
-                        if (error) {
-                          console.error("❌ Supabase delete error:", error);
-                          const errorMsg = error.message || JSON.stringify(error);
-                          alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}\n\n(ตรวจสอบ console ของ browser เพื่อข้อมูลเพิ่มเติม)`);
-                          setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}`);
-                          setIsResettingOrders(false);
-                          return;
+                        if (fetchError) {
+                          console.error("❌ Fetch error:", fetchError);
+                          throw new Error(`Fetch error: ${fetchError.message}`);
                         }
                         
-                        console.log(`✅ Successfully deleted ${count} orders from Supabase`);
+                        // Step 2: If there are orders, delete them by ID
+                        if (allOrders && allOrders.length > 0) {
+                          const orderIds = allOrders.map(o => o.id);
+                          console.log(`🗑️ Deleting ${orderIds.length} orders...`, orderIds);
+                          
+                          const { error: deleteError, count } = await supabase
+                            .from("orders")
+                            .delete()
+                            .in("id", orderIds);
+                          
+                          console.log("🗑️ Delete result:", { deletedCount: count, error: deleteError?.message });
+                          
+                          if (deleteError) {
+                            console.error("❌ Supabase delete error:", deleteError);
+                            const errorMsg = deleteError.message || JSON.stringify(deleteError);
+                            alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}\n\n(ตรวจสอบ console ของ browser เพื่อข้อมูลเพิ่มเติม)`);
+                            setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}`);
+                            setIsResettingOrders(false);
+                            return;
+                          }
+                          
+                          console.log(`✅ Successfully deleted ${count} orders from Supabase`);
+                        } else {
+                          console.log("ℹ️ No orders to delete in Supabase");
+                        }
                       } catch (e) {
                         console.error("❌ Delete exception:", e);
                         alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}\n\n(เช็ค console สำหรับรายละเอียด)`);
                         setSyncStatus(`❌ ลบไม่สำเร็จ: ${e?.message || String(e)}`);
                         setIsResettingOrders(false);
-                        return;
-                      }
+                        return;\n                      }
 
                       // Wait a moment to ensure deletion is fully processed
                       await new Promise(resolve => setTimeout(resolve, 300));
