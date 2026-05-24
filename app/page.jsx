@@ -339,19 +339,7 @@ export default function App() {
       loginHistory: [loginEntry, ...(state.loginHistory || [])].slice(0, 100)
     };
     setState(updatedState);
-    // Sync auth state to Supabase
-    if (supabase) {
-      try {
-        await supabase.from("auth_sessions").insert([{
-          user_phone: loginForm.phone.trim(),
-          role: "sales",
-          name: loginForm.name.trim(),
-          login_at: new Date().toISOString()
-        }]).throwOnError();
-      } catch (error) {
-        console.log("Auth sync error:", error.message);
-      }
-    }
+    // Auth state synced automatically via syncToSupabase
     setTab("sales");
   };
 
@@ -404,17 +392,7 @@ export default function App() {
       setState(updatedState);
       // Sync auth state to Supabase
       if (supabase) {
-        try {
-          await supabase.from("auth_sessions").insert([{
-            user_phone: phone,
-            role: "driver",
-            name: found.name,
-            driver_id: found.id,
-            login_at: new Date().toISOString()
-          }]).throwOnError();
-        } catch (error) {
-          console.log("Auth sync error:", error.message);
-        }
+        // Auth state synced automatically via syncToSupabase
       }
       setTab("driver");
       return;
@@ -458,22 +436,8 @@ export default function App() {
     setDriverId(nextDriver.id);
     setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
     setTab("driver");
-    // Sync new driver to Supabase
-    if (supabase) {
-      try {
-        await supabase.from("drivers").upsert(nextDriver, { onConflict: "id" }).throwOnError();
-        await supabase.from("auth_sessions").insert([{
-          user_phone: nextDriver.phone,
-          role: "driver",
-          name: nextDriver.name,
-          driver_id: nextDriver.id,
-          login_at: new Date().toISOString()
-        }]).throwOnError();
-        setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" สำเร็จ`);
-      } catch (error) {
-        setSyncStatus(`⚠️ ลงทะเบียนคนขับ "${nextDriver.name}" แล้ว (Supabase sync: ${error.message})`);
-      }
-    }
+    // Driver synced automatically via syncToSupabase
+    setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" สำเร็จ`);
   };
 
   const logout = () => {
