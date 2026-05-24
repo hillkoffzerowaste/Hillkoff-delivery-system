@@ -5,10 +5,10 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "lucide-react": "^0.468.0",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest",
-    "lucide-react": "^0.468.0"
-  },
-  "devDependencies": {}
+    "react-dom": "latest"
+  }
 }

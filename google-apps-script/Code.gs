@@ -234,14 +234,6 @@ function upsertRows(db, name, rows) {
   }
   Logger.log("upsertRows: " + name + " - " + values.length + " rows");
 }
-  rows.forEach(row => merged.set(String(row.id), { ...(merged.get(String(row.id)) || {}), ...row, updatedAt: new Date().toISOString() }));
-
-  sheet.clear();
-  sheet.appendRow(headers);
-  const values = [...merged.values()].map(row => headers.map(header => row[header] ?? ""));
-  if (values.length) sheet.getRange(2, 1, values.length, headers.length).setValues(values);
-  Logger.log("upsertRows: " + name + " - " + values.length + " rows");
-}
 
 function savePodImage(orderId, fileName, dataUrl) {
   var props = PropertiesService.getScriptProperties();

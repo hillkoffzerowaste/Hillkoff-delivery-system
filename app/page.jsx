@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   Camera,
@@ -24,7 +25,15 @@ import {
 } from "lucide-react";
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
-const DEFAULT_GOOGLE_ENDPOINT = "/api/google";
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+let supabase = null;
+
+if (typeof window !== "undefined" && supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
 
 const initialDrivers = [
   { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001", lat: 18.7883, lng: 98.9853 },
@@ -144,25 +153,36 @@ export default function App() {
 
   useEffect(() => setState(readState()), []);
   
-  const syncToGoogle = async (currentState) => {
-    if (!currentState.google?.webAppUrl) return;
+  const syncToSupabase = async (currentState) => {
+    if (!supabase) return;
     try {
-      const params = new URLSearchParams();
-      params.append("action", "sync");
-      params.append("customers", JSON.stringify(currentState.customers));
-      params.append("orders", JSON.stringify(currentState.orders));
-      params.append("drivers", JSON.stringify(currentState.drivers || []));
-      
-      await fetch(currentState.google.webAppUrl, { method: "POST", body: params });
-    } catch {
-      // Silently fail - data is still saved in localStorage
+      // Sync customers
+      if (currentState.customers?.length) {
+        for (const customer of currentState.customers) {
+          await supabase.from("customers").upsert(customer, { onConflict: "id" });
+        }
+      }
+      // Sync orders
+      if (currentState.orders?.length) {
+        for (const order of currentState.orders) {
+          await supabase.from("orders").upsert(order, { onConflict: "id" });
+        }
+      }
+      // Sync drivers
+      if (currentState.drivers?.length) {
+        for (const driver of currentState.drivers) {
+          await supabase.from("drivers").upsert(driver, { onConflict: "id" });
+        }
+      }
+    } catch (error) {
+      console.log("Supabase sync error:", error.message);
     }
   };
 
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    // Auto-sync to Google Sheet on any data change
-    syncToGoogle(state);
+    // Auto-sync to Supabase on any data change
+    syncToSupabase(state);
   }, [state]);
   useEffect(() => {
     if (state.auth?.driverId) setDriverId(state.auth.driverId);
