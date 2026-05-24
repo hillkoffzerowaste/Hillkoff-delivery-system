@@ -300,6 +300,12 @@ export default function App() {
         let changed = false;
         const newState = { ...prev };
         
+        // Skip all merging during reset to prevent old data from being restored
+        if (isResettingOrders) {
+          console.log("⏸️ [RESET] Skipping merge during reset - isResettingOrders = true");
+          return prev;
+        }
+        
         // For orders: merge - keep local unsaved orders, update existing ones from Supabase
         if (Array.isArray(supabaseOrders) && Array.isArray(prev.orders)) {
           console.log(`🔄 Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
@@ -584,7 +590,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    // Skip saving to localStorage during reset
+    if (!isResettingOrders && typeof window !== "undefined") {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }
     // Auto-sync to Supabase on any data change (but skip during reset)
     if (!isResettingOrders) {
       console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
