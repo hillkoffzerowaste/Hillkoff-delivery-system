@@ -610,11 +610,17 @@ export default function App() {
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
     // Auto-sync to Supabase on any data change (but skip during reset)
+    // Only track orders, customers, auth - not drivers (drivers change frequently from polling)
     if (!isResettingOrders) {
       console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
       syncToSupabase(state);
     }
-  }, [state, isResettingOrders]);
+  }, [
+    JSON.stringify(state.orders),
+    JSON.stringify(state.customers),
+    JSON.stringify(state.auth),
+    isResettingOrders
+  ]);
   useEffect(() => {
     if (state.auth?.driverId) setDriverId(state.auth.driverId);
   }, [state.auth?.driverId]);
