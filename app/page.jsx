@@ -1198,7 +1198,9 @@ export default function App() {
                         return;
                       }
 
+                      // Clear from local state AND localStorage
                       setState(prev => ({ ...prev, orders: [] }));
+                      localStorage.setItem(STORE_KEY, JSON.stringify({ ...state, orders: [] }));
                       
                       // Wait a moment to ensure Supabase deletion is fully processed
                       await new Promise(resolve => setTimeout(resolve, 500));
@@ -1210,8 +1212,8 @@ export default function App() {
                       await new Promise(resolve => setTimeout(resolve, 300));
                       setIsResettingOrders(false);
                       
-                      // Refresh to sync with Supabase (should be empty now)
-                      await refreshFromSupabase();
+                      // Do NOT refresh - data should already be empty
+                      // Refresh would cause unnecessary API calls
                     } catch (e) {
                       alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
                       setIsResettingOrders(false);
