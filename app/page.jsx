@@ -474,6 +474,12 @@ export default function App() {
   };
   
   const syncToSupabase = async (currentState) => {
+    // CRITICAL: Don't sync during reset - prevents deleted orders from being re-created
+    if (isResettingOrders) {
+      console.log("⏸️ [RESET] Skipping syncToSupabase - reset is in progress");
+      return;
+    }
+    
     if (!supabase) {
       console.warn("❌ Supabase not initialized");
       return;
