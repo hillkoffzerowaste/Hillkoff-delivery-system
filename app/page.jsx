@@ -495,7 +495,7 @@ export default function App() {
     setTimeout(() => {
       setTab("driver");
     }, 500);
-    setSyncStatus(`✅ บันทึกออเดอร์ "${pendingOrder.id}" สำเร็จ`);
+    setSyncStatus(`⏳ รอคนขับรับออเดอร์ "${pendingOrder.id}"...`);
   };
 
   const deleteOrder = (orderId) => {
@@ -1121,7 +1121,10 @@ export default function App() {
                         
                         {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>📬 {order.address}</small>}
                         
-                        <button className="primary" style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px" }} onClick={() => updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" })}>✓ รับออเดอร์นี้</button>
+                        <button className="primary" style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px" }} onClick={() => {
+                          updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" });
+                          setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
+                        }}>✓ รับออเดอร์นี้</button>
                       </div>
                     );
                   })}
@@ -1158,10 +1161,16 @@ export default function App() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                         {order.status === "กำลังส่ง" && (
                           <>
-                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => updateOrder(order.id, { status: "กำลังจัดส่ง" })}>🚗 ไปถึงแล้ว</button>
+                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => {
+                              updateOrder(order.id, { status: "กำลังจัดส่ง" });
+                              setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
+                            }}>🚗 ไปถึงแล้ว</button>
                             <button className="secondary" style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} onClick={() => {
                               const reason = prompt("📝 เหตุผลในการยกเลิก:");
-                              if (reason) updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                              if (reason) {
+                                updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                                setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
+                              }
                             }}>❌ ยกเลิก</button>
                           </>
                         )}
@@ -1187,7 +1196,10 @@ export default function App() {
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && order.photo && (
-                          <button className="primary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} onClick={() => updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") })}>✅ ส่งสำเร็จ</button>
+                          <button className="primary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} onClick={() => {
+                            updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+                            setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
+                          }}>✅ ส่งสำเร็จ</button>
                         )}
                         {order.status === "ส่งสำเร็จ" && (
                           <button className="secondary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับมา</button>
