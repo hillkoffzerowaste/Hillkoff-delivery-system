@@ -164,6 +164,7 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
+  const [isResettingOrders, setIsResettingOrders] = useState(false);
 
   useEffect(() => setState(readState()), []);
 
@@ -398,11 +399,14 @@ export default function App() {
     }
     
     const pollInterval = setInterval(() => {
-      refreshFromSupabase();
+      // Skip polling during reset to prevent old data from being pulled back
+      if (!isResettingOrders) {
+        refreshFromSupabase();
+      }
     }, 2000); // Poll every 2 seconds (allow Supabase time to save)
     
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [isResettingOrders]);
   
   const upsertOrderToSupabase = async (order) => {
     if (!supabase) return { ok: false, error: "Supabase not initialized" };
@@ -1175,9 +1179,13 @@ export default function App() {
 
                   (async () => {
                     try {
+                      // Disable polling during reset to prevent race condition
+                      setIsResettingOrders(true);
+                      
                       if (!supabase) supabase = initSupabase();
                       if (!supabase) {
                         alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                        setIsResettingOrders(false);
                         return;
                       }
 
@@ -1186,15 +1194,27 @@ export default function App() {
                       if (error) {
                         alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
                         setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                        setIsResettingOrders(false);
                         return;
                       }
 
                       setState(prev => ({ ...prev, orders: [] }));
+                      
+                      // Wait a moment to ensure Supabase deletion is fully processed
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      
                       setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
                       alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      
+                      // Wait a bit more then refresh with polling enabled
+                      await new Promise(resolve => setTimeout(resolve, 300));
+                      setIsResettingOrders(false);
+                      
+                      // Refresh to sync with Supabase (should be empty now)
                       await refreshFromSupabase();
                     } catch (e) {
                       alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                      setIsResettingOrders(false);
                     }
                   })();
                 } else if (pwd !== null) {
