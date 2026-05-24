@@ -1255,8 +1255,8 @@ export default function App() {
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
               const pending = orders.filter(o => o.status === "รอคนขับรับ");
-              console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length);
-              return pending.length > 0 && (
+              console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
+              return (
                 <section className="panel">
                   <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
