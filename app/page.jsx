@@ -527,7 +527,11 @@ export default function App() {
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
     setPendingOrder(null);
-    setTab("driver");
+    // Auto-switch to driver tab after 500ms to let state update
+    setTimeout(() => {
+      setTab("driver");
+    }, 500);
+    setSyncStatus(`✅ บันทึกออเดอร์ "${pendingOrder.id}" สำเร็จ`);
   };
 
   const deleteOrder = (orderId) => {
