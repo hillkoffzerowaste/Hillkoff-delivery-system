@@ -151,55 +151,67 @@ export default function App() {
     supabase = initSupabase();
     console.log("Component mounted, supabase:", !!supabase);
   }, []);
-  
+
   // Polling mechanism for real-time sync
+  const refreshFromSupabase = async () => {
+    if (!supabase) {
+      console.warn("⚠️ Supabase not initialized yet");
+      return;
+    }
+    
+    try {
+      // Fetch latest data from Supabase
+      const { data: orders } = await supabase.from("orders").select("*");
+      const { data: customers } = await supabase.from("customers").select("*");
+      const { data: drivers } = await supabase.from("drivers").select("*");
+      
+      setState(prev => {
+        let changed = false;
+        const newState = { ...prev };
+        
+        // Compare orders (complete data comparison)
+        const ordersStr = JSON.stringify(prev.orders || []);
+        const newOrdersStr = JSON.stringify(orders || []);
+        if (ordersStr !== newOrdersStr) {
+          newState.orders = orders || [];
+          changed = true;
+          console.log("📦 Orders refreshed from Supabase:", orders?.length);
+        }
+        
+        // Compare customers (complete data comparison)
+        const customersStr = JSON.stringify(prev.customers || []);
+        const newCustomersStr = JSON.stringify(customers || []);
+        if (customersStr !== newCustomersStr) {
+          newState.customers = customers || [];
+          changed = true;
+          console.log("👤 Customers refreshed from Supabase:", customers?.length);
+        }
+        
+        // Compare drivers (complete data comparison)
+        const driversStr = JSON.stringify(prev.drivers || []);
+        const newDriversStr = JSON.stringify(drivers || []);
+        if (driversStr !== newDriversStr) {
+          newState.drivers = drivers || [];
+          changed = true;
+          console.log("🚗 Drivers refreshed from Supabase:", drivers?.length);
+        }
+        
+        return changed ? newState : prev;
+      });
+    } catch (error) {
+      console.log("⚠️ Polling error:", error);
+    }
+  };
+
   useEffect(() => {
     if (!supabase) {
       console.warn("⚠️ Supabase not initialized yet");
       return;
     }
     
-    const pollInterval = setInterval(async () => {
-      try {
-        // Fetch latest data from Supabase
-        const { data: orders } = await supabase.from("orders").select("*");
-        const { data: customers } = await supabase.from("customers").select("*");
-        const { data: drivers } = await supabase.from("drivers").select("*");
-        
-        setState(prev => {
-          let changed = false;
-          const newState = { ...prev };
-          
-          // Compare orders (complete data comparison)
-          const ordersStr = JSON.stringify(prev.orders || []);
-          const newOrdersStr = JSON.stringify(orders || []);
-          if (ordersStr !== newOrdersStr) {
-            newState.orders = orders || [];
-            changed = true;
-          }
-          
-          // Compare customers (complete data comparison)
-          const customersStr = JSON.stringify(prev.customers || []);
-          const newCustomersStr = JSON.stringify(customers || []);
-          if (customersStr !== newCustomersStr) {
-            newState.customers = customers || [];
-            changed = true;
-          }
-          
-          // Compare drivers (complete data comparison)
-          const driversStr = JSON.stringify(prev.drivers || []);
-          const newDriversStr = JSON.stringify(drivers || []);
-          if (driversStr !== newDriversStr) {
-            newState.drivers = drivers || [];
-            changed = true;
-          }
-          
-          return changed ? newState : prev;
-        });
-      } catch (error) {
-        console.log("Polling error:", error);
-      }
-    }, 2000); // Poll every 2 seconds
+    const pollInterval = setInterval(() => {
+      refreshFromSupabase();
+    }, 1000); // Poll every 1 second for faster updates
     
     return () => clearInterval(pollInterval);
   }, []);
@@ -485,17 +497,19 @@ export default function App() {
     setShowOrderConfirm(true);
   };
 
-  const confirmOrder = () => {
+  const confirmOrder = async () => {
     if (!pendingOrder) return;
     setState(prev => ({ ...prev, orders: [pendingOrder, ...prev.orders] }));
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
     setPendingOrder(null);
-    // Auto-switch to driver tab after 500ms to let state update
-    setTimeout(() => {
-      setTab("driver");
-    }, 500);
     setSyncStatus(`⏳ รอคนขับรับออเดอร์ "${pendingOrder.id}"...`);
+    
+    // Wait for state to sync to Supabase, then refresh immediately
+    setTimeout(async () => {
+      await refreshFromSupabase();
+      setTab("driver");
+    }, 800);
   };
 
   const deleteOrder = (orderId) => {
