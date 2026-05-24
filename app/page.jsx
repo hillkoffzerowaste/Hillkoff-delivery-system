@@ -161,39 +161,79 @@ export default function App() {
     
     try {
       // Fetch latest data from Supabase
-      const { data: orders } = await supabase.from("orders").select("*");
-      const { data: customers } = await supabase.from("customers").select("*");
-      const { data: drivers } = await supabase.from("drivers").select("*");
+      const { data: supabaseOrders } = await supabase.from("orders").select("*");
+      const { data: supabaseCustomers } = await supabase.from("customers").select("*");
+      const { data: supabaseDrivers } = await supabase.from("drivers").select("*");
+      
+      console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, drivers: supabaseDrivers?.length });
       
       setState(prev => {
         let changed = false;
         const newState = { ...prev };
         
-        // Compare orders (complete data comparison)
-        const ordersStr = JSON.stringify(prev.orders || []);
-        const newOrdersStr = JSON.stringify(orders || []);
-        if (ordersStr !== newOrdersStr) {
-          newState.orders = orders || [];
-          changed = true;
-          console.log("📦 Orders refreshed from Supabase:", orders?.length);
+        // For orders: merge - keep local unsaved orders, update existing ones from Supabase
+        if (supabaseOrders && prev.orders) {
+          const merged = [...prev.orders];
+          for (const sbOrder of supabaseOrders) {
+            const idx = merged.findIndex(o => o.id === sbOrder.id);
+            if (idx >= 0) {
+              // Update existing order with latest from Supabase
+              merged[idx] = { ...merged[idx], ...sbOrder };
+              console.log(`📝 Updated order ${sbOrder.id} from Supabase`);
+            } else {
+              // New order from Supabase - add it
+              merged.push(sbOrder);
+              console.log(`➕ Added new order ${sbOrder.id} from Supabase`);
+            }
+          }
+          // Remove orders that are in local but not in Supabase (were deleted)
+          const localStr = JSON.stringify(prev.orders);
+          const newStr = JSON.stringify(merged);
+          if (localStr !== newStr) {
+            newState.orders = merged;
+            changed = true;
+            console.log("📦 Orders merged from Supabase");
+          }
         }
         
-        // Compare customers (complete data comparison)
-        const customersStr = JSON.stringify(prev.customers || []);
-        const newCustomersStr = JSON.stringify(customers || []);
-        if (customersStr !== newCustomersStr) {
-          newState.customers = customers || [];
-          changed = true;
-          console.log("👤 Customers refreshed from Supabase:", customers?.length);
+        // For customers: merge similarly
+        if (supabaseCustomers && prev.customers) {
+          const merged = [...prev.customers];
+          for (const sbCustomer of supabaseCustomers) {
+            const idx = merged.findIndex(c => c.id === sbCustomer.id);
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...sbCustomer };
+            } else {
+              merged.push(sbCustomer);
+            }
+          }
+          const localStr = JSON.stringify(prev.customers);
+          const newStr = JSON.stringify(merged);
+          if (localStr !== newStr) {
+            newState.customers = merged;
+            changed = true;
+            console.log("👤 Customers merged from Supabase");
+          }
         }
         
-        // Compare drivers (complete data comparison)
-        const driversStr = JSON.stringify(prev.drivers || []);
-        const newDriversStr = JSON.stringify(drivers || []);
-        if (driversStr !== newDriversStr) {
-          newState.drivers = drivers || [];
-          changed = true;
-          console.log("🚗 Drivers refreshed from Supabase:", drivers?.length);
+        // For drivers: merge similarly
+        if (supabaseDrivers && prev.drivers) {
+          const merged = [...prev.drivers];
+          for (const sbDriver of supabaseDrivers) {
+            const idx = merged.findIndex(d => d.id === sbDriver.id);
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...sbDriver };
+            } else {
+              merged.push(sbDriver);
+            }
+          }
+          const localStr = JSON.stringify(prev.drivers);
+          const newStr = JSON.stringify(merged);
+          if (localStr !== newStr) {
+            newState.drivers = merged;
+            changed = true;
+            console.log("🚗 Drivers merged from Supabase");
+          }
         }
         
         return changed ? newState : prev;
@@ -211,7 +251,7 @@ export default function App() {
     
     const pollInterval = setInterval(() => {
       refreshFromSupabase();
-    }, 1000); // Poll every 1 second for faster updates
+    }, 2000); // Poll every 2 seconds (allow Supabase time to save)
     
     return () => clearInterval(pollInterval);
   }, []);
@@ -529,14 +569,14 @@ export default function App() {
     setPendingOrder(null);
     setSyncStatus(`⏳ กำลังส่งออเดอร์เข้าคิว...`);
     
-    // Wait for state to sync to Supabase, then refresh immediately
+    // Wait longer for Supabase to actually save before refreshing
     setTimeout(async () => {
-      console.log("⏰ Waiting 800ms complete, refreshing from Supabase");
-      await refreshFromSupabase();
-      console.log("✅ Refreshed from Supabase, switching to driver tab");
+      console.log("⏰ Waiting 2000ms for Supabase to save...");
+      // Don't refresh - let polling pick it up naturally
+      // refreshFromSupabase can overwrite if not saved yet
       setTab("driver");
       setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
-    }, 800);
+    }, 2000);
   };
 
   const deleteOrder = (orderId) => {
