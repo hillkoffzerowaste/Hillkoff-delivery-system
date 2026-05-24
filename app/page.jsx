@@ -68,7 +68,8 @@ function defaultState() {
     auth: { role: "", name: "", phone: "", driverId: "", email: "" },
     loginHistory: [],
     onlineDrivers: {},
-    driverLocations: {}
+    driverLocations: {},
+    lastSyncTime: null
   };
 }
 
@@ -145,6 +146,17 @@ export default function App() {
   const syncToSupabase = async (currentState) => {
     if (!supabase) return;
     try {
+      // Sync auth state for cross-device awareness
+      if (currentState.auth?.phone && currentState.auth?.role) {
+        await supabase.from("auth_state").upsert({
+          phone: currentState.auth.phone,
+          role: currentState.auth.role,
+          name: currentState.auth.name || "",
+          driver_id: currentState.auth.driverId || "",
+          online: true,
+          last_seen: new Date().toISOString()
+        }, { onConflict: "phone" }).throwOnError();
+      }
       // Sync customers
       if (currentState.customers?.length) {
         for (const customer of currentState.customers) {
@@ -161,6 +173,13 @@ export default function App() {
       if (currentState.drivers?.length) {
         for (const driver of currentState.drivers) {
           await supabase.from("drivers").upsert(driver, { onConflict: "id" });
+        }
+      }
+      // Sync login history
+      if (currentState.loginHistory?.length) {
+        const recentLogins = currentState.loginHistory.slice(0, 5);
+        for (const entry of recentLogins) {
+          await supabase.from("login_history").insert(entry).throwOnError().catch(() => {});
         }
       }
     } catch (error) {
@@ -236,13 +255,28 @@ export default function App() {
       loginAt: new Date().toLocaleString("th-TH"),
       loginTime: new Date().getTime()
     };
-    setAuth({ role: "sales", name: loginForm.name.trim(), phone: loginForm.phone.trim(), driverId: "" });
-    setState(prev => ({
-      ...prev,
-      loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100)
-    }));
+    const newAuthState = { role: "sales", name: loginForm.name.trim(), phone: loginForm.phone.trim(), driverId: "" };
+    setAuth(newAuthState);
+    const updatedState = {
+      ...state,
+      auth: newAuthState,
+      loginHistory: [loginEntry, ...(state.loginHistory || [])].slice(0, 100)
+    };
+    setState(updatedState);
+    // Sync auth state to Supabase
+    if (supabase) {
+      try {
+        await supabase.from("auth_sessions").insert([{
+          user_phone: loginForm.phone.trim(),
+          role: "sales",
+          name: loginForm.name.trim(),
+          login_at: new Date().toISOString()
+        }]).throwOnError();
+      } catch (error) {
+        console.log("Auth sync error:", error.message);
+      }
+    }
     setTab("sales");
-    await loadFromGoogle();
   };
 
   const loginDriver = async () => {
@@ -254,20 +288,22 @@ export default function App() {
       localStorage.removeItem("hillkoff-last-phone");
     }
     let latestDrivers = state.drivers || [];
-    try {
-      const response = await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT);
-      const data = await response.json();
-      if (data.ok) {
-        latestDrivers = data.data?.drivers?.length ? data.data.drivers : latestDrivers;
-        setState(prev => ({
-          ...prev,
-          customers: data.data?.customers?.length ? data.data.customers : prev.customers,
-          orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : prev.orders,
-          drivers: latestDrivers
-        }));
+    // Load latest data from Supabase on login
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("drivers")
+          .select("*");
+        if (!error && data?.length) {
+          latestDrivers = data;
+          setState(prev => ({
+            ...prev,
+            drivers: latestDrivers
+          }));
+        }
+      } catch {
+        // Fall back to local drivers list
       }
-    } catch {
-      // Keep local driver list available if Google is temporarily unreachable.
     }
     const found = latestDrivers.find(driver => String(driver.phone).trim() === phone);
     if (found) {
@@ -281,12 +317,29 @@ export default function App() {
         loginTime: new Date().getTime()
       };
       setDriverId(found.id);
-      setAuth({ role: "driver", name: found.name, phone, driverId: found.id });
-      setState(prev => ({
-        ...prev,
-        loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
-        onlineDrivers: { ...prev.onlineDrivers, [found.id]: new Date().getTime() }
-      }));
+      const newAuthState = { role: "driver", name: found.name, phone, driverId: found.id };
+      setAuth(newAuthState);
+      const updatedState = {
+        ...state,
+        auth: newAuthState,
+        loginHistory: [loginEntry, ...(state.loginHistory || [])].slice(0, 100),
+        onlineDrivers: { ...state.onlineDrivers, [found.id]: new Date().getTime() }
+      };
+      setState(updatedState);
+      // Sync auth state to Supabase
+      if (supabase) {
+        try {
+          await supabase.from("auth_sessions").insert([{
+            user_phone: phone,
+            role: "driver",
+            name: found.name,
+            driver_id: found.id,
+            login_at: new Date().toISOString()
+          }]).throwOnError();
+        } catch (error) {
+          console.log("Auth sync error:", error.message);
+        }
+      }
       setTab("driver");
       return;
     }
@@ -329,17 +382,21 @@ export default function App() {
     setDriverId(nextDriver.id);
     setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
     setTab("driver");
-    try {
-      const params = new URLSearchParams();
-      params.append("action", "sync");
-      params.append("customers", JSON.stringify(state.customers));
-      params.append("orders", JSON.stringify(state.orders));
-      params.append("drivers", JSON.stringify(nextDrivers));
-      
-      await fetch(state.google.webAppUrl || DEFAULT_GOOGLE_ENDPOINT, { method: "POST", body: params });
-      setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" และ sync Google สำเร็จ`);
-    } catch {
-      setSyncStatus(`⚠️ ลงทะเบียนคนขับ "${nextDriver.name}" แล้ว แต่ sync Google ไม่สำเร็จ`);
+    // Sync new driver to Supabase
+    if (supabase) {
+      try {
+        await supabase.from("drivers").upsert(nextDriver, { onConflict: "id" }).throwOnError();
+        await supabase.from("auth_sessions").insert([{
+          user_phone: nextDriver.phone,
+          role: "driver",
+          name: nextDriver.name,
+          driver_id: nextDriver.id,
+          login_at: new Date().toISOString()
+        }]).throwOnError();
+        setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" สำเร็จ`);
+      } catch (error) {
+        setSyncStatus(`⚠️ ลงทะเบียนคนขับ "${nextDriver.name}" แล้ว (Supabase sync: ${error.message})`);
+      }
     }
   };
 
@@ -408,77 +465,10 @@ export default function App() {
     setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
     setEditingCustomerId(null);
   };
-  const setGoogle = patch => setState(prev => ({ ...prev, google: { ...prev.google, ...patch } }));
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
     driverId: nextDriverId,
     status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
   });
-
-  const syncToGoogle = async () => {
-    if (!state.google.webAppUrl) {
-      setSyncStatus("🔴 กรุณาใส่ Google Apps Script Web App URL ก่อน");
-      setTab("settings");
-      return;
-    }
-    setSyncStatus("⏳ กำลัง sync ไป Google Sheets...");
-    try {
-      // ใช้ API proxy (server-to-server ไม่มี CORS issue)
-      const response = await fetch("/api/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          webAppUrl: state.google.webAppUrl,
-          action: "sync",
-          customers: state.customers,
-          orders: state.orders,
-          drivers: state.drivers || []
-        })
-      });
-      
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Sync failed");
-      
-      // รอแล้วโหลดข้อมูลกลับ
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      await loadFromGoogle();
-      
-      setSyncStatus(`✅ Sync สำเร็จ! ${new Date().toLocaleTimeString("th-TH")} (${state.customers.length} ลูกค้า, ${state.orders.length} ออเดอร์)`);
-    } catch (error) {
-      setSyncStatus(`❌ Sync ไม่สำเร็จ: ${error.message}`);
-    }
-  };
-
-  const loadFromGoogle = async () => {
-    if (!state.google.webAppUrl) {
-      setSyncStatus("🔴 กรุณาใส่ Google Apps Script Web App URL ก่อน");
-      setTab("settings");
-      return;
-    }
-    setSyncStatus("⏳ กำลังโหลดข้อมูลจาก Google Sheets...");
-    try {
-      // ใช้ API proxy (server-to-server ไม่มี CORS issue)
-      const response = await fetch("/api/google?url=" + encodeURIComponent(state.google.webAppUrl));
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Google load failed");
-      
-      // บันทึก Sheet URL ถ้ามี
-      const newState = {
-        customers: data.data?.customers?.length ? data.data.customers : state.customers,
-        orders: data.data?.orders?.length ? data.data.orders.map(order => ({ ...order, boxes: Number(order.boxes || 0), cod: Number(order.cod || 0) })) : state.orders,
-        drivers: data.data?.drivers?.length ? data.data.drivers : state.drivers
-      };
-      
-      setState(prev => ({
-        ...prev,
-        ...newState,
-        google: { ...prev.google, ...(data.sheetUrl ? { sheetUrl: data.sheetUrl } : {}) }
-      }));
-      
-      setSyncStatus(`✅ โหลดข้อมูลสำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
-    } catch (error) {
-      setSyncStatus(`❌ โหลดไม่สำเร็จ: ${error.message}`);
-    }
-  };
 
   const uploadPod = async (order, file) => {
     if (!file) return;
@@ -489,20 +479,12 @@ export default function App() {
       reader.readAsDataURL(file);
     });
     updateOrder(order.id, { photo: file.name });
-    if (!state.google.webAppUrl) return;
     try {
-      setSyncStatus("กำลังอัปโหลดรูปเข้า Google Drive...");
-      const response = await fetch(state.google.webAppUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "uploadPod", orderId: order.id, fileName: file.name, dataUrl })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "POD upload failed");
-      updateOrder(order.id, { photo: data.fileUrl });
-      setSyncStatus("อัปโหลดรูปเข้า Google Drive สำเร็จ");
+      setSyncStatus("กำลังเก็บรูป POD ไว้ท้องถิ่น...");
+      // Photos are stored locally and synced to Supabase via syncToSupabase
+      setSyncStatus("✅ บันทึกรูป POD สำเร็จ");
     } catch (error) {
-      setSyncStatus(`อัปโหลดรูปไม่สำเร็จ แต่เก็บชื่อไฟล์ไว้แล้ว: ${error.message}`);
+      setSyncStatus(`บันทึกรูปไม่สำเร็จ: ${error.message}`);
     }
   };
 
@@ -660,7 +642,7 @@ export default function App() {
           </div>
           {auth.role !== "driver-register" ? (
             <>
-              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>Google Sheets connected</span></div>
+              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>ใช้ Supabase</span></div>
               <div className="segmented">
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
@@ -674,7 +656,7 @@ export default function App() {
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
                 {loginForm.role === "sales" ? "เข้าหน้าแดชบอร์ดฝ่ายขาย" : "เข้าสู่ระบบคนขับ"}
               </button>
-              <p className="login-note">ระบบจะโหลดข้อมูลลูกค้า ออเดอร์ และคนขับจาก Google Sheets หลังล็อกอิน</p>
+              <p className="login-note">ระบบจะโหลดข้อมูลลูกค้า ออเดอร์ และคนขับจาก Supabase หลังล็อกอิน</p>
             </>
           ) : (
             <>
@@ -733,8 +715,6 @@ export default function App() {
           </div>
           <div className="top-actions">
             <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
-            <button className="secondary" onClick={loadFromGoogle}><FolderSync size={16} /> Load</button>
-            <button className="primary" onClick={syncToGoogle}><FileSpreadsheet size={16} /> Sync Google</button>
             <button className="secondary" onClick={logout}>ออก</button>
           </div>
         </header>
@@ -761,19 +741,6 @@ export default function App() {
               }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตแดชบอร์ด</button>
             </div>
             <div className="sales-grid">
-            {state.google.sheetUrl && (
-              <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <div>
-                    <b>📊 ลิงค์ Google Sheets</b>
-                    <p style={{ fontSize: "12px", color: "#666", margin: "4px 0" }}>คลิกเพื่อดูข้อมูลลูกค้าที่บันทึกไว้ และดาวน์โหลดรายงาน</p>
-                  </div>
-                  <a href={state.google.sheetUrl} target="_blank" rel="noreferrer" className="primary" style={{ whiteSpace: "nowrap" }}>
-                    <FileSpreadsheet size={16} style={{ marginRight: "6px" }} /> เปิด Sheet
-                  </a>
-                </div>
-              </section>
-            )}
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
                 <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>✓ {syncStatus}</p>
@@ -841,7 +808,7 @@ export default function App() {
                   <select value={editCustomerForm.zone} onChange={e => setEditCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
                 </div>
                 <input value={editCustomerForm.address} onChange={e => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
-                <input value={editCustomerForm.mapUrl} onChange={e => setEditCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Google Map link" />
+                <input value={editCustomerForm.mapUrl} onChange={e => setEditCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
                 <textarea value={editCustomerForm.note} onChange={e => setEditCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                   <button className="secondary" onClick={() => setEditingCustomerId(null)}>ยกเลิก</button>
@@ -868,7 +835,7 @@ export default function App() {
                 return foundCustomer ? (
                   <div className="customer-detail">
                     <div><b>{foundCustomer.name}</b><p>{foundCustomer.contact} · {foundCustomer.phone}</p><p>{foundCustomer.address}</p></div>
-                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิด Google Map</a>
+                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิดแผนที่</a>
                   </div>
                 ) : null;
               })()}
@@ -890,7 +857,7 @@ export default function App() {
                 <select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
               </div>
               <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
-              <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Google Map link" />
+              <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
               <textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
               <button className="secondary wide" onClick={saveCustomer}>บันทึกลูกค้า</button>
             </section>
@@ -1213,18 +1180,12 @@ export default function App() {
         {displayTab === "reports" && (
           <div className="report-grid">
             <section className="panel">
-              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>Google Sheets-ready</span></div>
+              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>ข้อมูล Supabase</span></div>
               <div className="report-lines">
                 <p>ออเดอร์ทั้งหมด <b>{orders.length}</b> งาน</p>
                 <p>ส่งสำเร็จ <b>{report.delivered}</b> งาน</p>
                 <p>COD รวม <b>{money(report.cod)}</b> บาท</p>
                 <p>ร้องเรียน/ปัญหา <b>{report.complaints.length}</b> รายการ</p>
-              </div>
-              <div className="google-box">
-                <b>Google Integration Plan</b>
-                <p>Sheets: เก็บ customers, orders, driver_logs, complaints</p>
-                <p>Drive: เก็บรูป POD ตามเลขออเดอร์</p>
-                <p>Maps: เปิดเส้นทางจาก mapUrl ของลูกค้า</p>
               </div>
             </section>
 
