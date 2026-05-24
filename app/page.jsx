@@ -143,8 +143,26 @@ export default function App() {
   const [pendingOrder, setPendingOrder] = useState(null);
 
   useEffect(() => setState(readState()), []);
+  
+  const syncToGoogle = async (currentState) => {
+    if (!currentState.google?.webAppUrl) return;
+    try {
+      const params = new URLSearchParams();
+      params.append("action", "sync");
+      params.append("customers", JSON.stringify(currentState.customers));
+      params.append("orders", JSON.stringify(currentState.orders));
+      params.append("drivers", JSON.stringify(currentState.drivers || []));
+      
+      await fetch(currentState.google.webAppUrl, { method: "POST", body: params });
+    } catch {
+      // Silently fail - data is still saved in localStorage
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    // Auto-sync to Google Sheet on any data change
+    syncToGoogle(state);
   }, [state]);
   useEffect(() => {
     if (state.auth?.driverId) setDriverId(state.auth.driverId);
@@ -892,20 +910,26 @@ export default function App() {
               ) : (
                 Object.values(state.driverLocations || {})
                   .sort((a, b) => b.timestamp - a.timestamp)
-                  .map(location => (
-                    <div key={location.driverId} style={{ padding: "12px", borderBottom: "1px solid #eee", marginBottom: "8px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                        <div>
-                          <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
-                          <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone} · {location.plate}</p>
-                          <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>🏪 {location.customerName}</p>
-                          <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address}</p>
-                          <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
+                  .map(location => {
+                    const currentOrder = orders.find(o => o.driverId === location.driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง"));
+                    const customer = currentOrder ? customers.find(c => c.name === currentOrder.customerName) : null;
+                    return (
+                      <div key={location.driverId} style={{ padding: "12px", borderBottom: "1px solid #eee", marginBottom: "8px", background: "#f0f9ff", borderRadius: "6px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                          <div>
+                            <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
+                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone} · {location.plate}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>🏪 {location.customerName}</p>
+                            {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>👤 ติดต่อ: {customer.contact}</p>}
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address}</p>
+                            {currentOrder && <p style={{ margin: "4px 0", fontSize: "11px", color: "#7c2d12", background: "#fed7aa", padding: "2px 6px", borderRadius: "3px", display: "inline-block" }}>📦 สถานะ: {currentOrder.status}</p>}
+                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
+                          </div>
+                          <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
                         </div>
-                        <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
               )}
             </section>
 
@@ -1393,37 +1417,13 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>Google Connection</h2><span>Auto-sync Active</span></div>
-              <p style={{ color: "#166534", fontWeight: "bold" }}>✅ ข้อมูลจะ sync อัตโนมัติเมื่อ:</p>
-              <ul style={{ fontSize: "12px", color: "#666", margin: "12px 0" }}>
-                <li>✓ บันทึกลูกค้าใหม่</li>
-                <li>✓ ส่งออเดอร์ใหม่</li>
-                <li>✓ ลงทะเบียนคนขับ</li>
-              </ul>
-              <label className="field-label">Google Apps Script Web App URL</label>
-              <input value={state.google.webAppUrl || ""} onChange={e => setGoogle({ webAppUrl: e.target.value })} placeholder="https://script.google.com/macros/s/.../exec" />
-              <div className="google-box">
-                <b>📊 Google Sheet URL:</b>
-                {state.google.sheetUrl ? (
-                  <>
-                    <p style={{ fontSize: "11px", color: "#16a34a", fontWeight: "bold", wordBreak: "break-all" }}>{state.google.sheetUrl}</p>
-                    <a href={state.google.sheetUrl} target="_blank" rel="noreferrer" className="primary" style={{ width: "100%", textAlign: "center", marginTop: "8px" }}>เปิด Sheet</a>
-                  </>
-                ) : (
-                  <p style={{ fontSize: "12px", color: "#999" }}>ยังไม่มี Sheet URL</p>
-                )}
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>Data Tables</h2><span>พร้อมลง Google Sheets</span></div>
-              <div className="report-lines">
-                <p>customers: <b>{customers.length}</b> records</p>
-                <p>orders: <b>{orders.length}</b> records</p>
-                <p>complaints: <b>{report.complaints.length}</b> records</p>
-                <p>drivers: <b>{drivers.length}</b> records</p>
-                <p>login_entries: <b>{(state.loginHistory || []).length}</b> records</p>
-              </div>
+              <div className="panel-head"><h2>🔧 System Control</h2><span>เฉพาะฉุกเฉิน</span></div>
+              <button className="primary wide" onClick={() => window.location.reload()} style={{ background: "#2563eb", color: "white", padding: "12px", fontSize: "14px", fontWeight: "bold" }}>
+                🔄 รีโหลดระบบ
+              </button>
+              <p style={{ fontSize: "12px", color: "#666", marginTop: "10px", textAlign: "center" }}>
+                กรณีไม่สามารถรับงาน หรือเชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กด ปุ่มนี้เพื่อรีโหลดระบบ
+              </p>
             </section>
           </div>
         )}
