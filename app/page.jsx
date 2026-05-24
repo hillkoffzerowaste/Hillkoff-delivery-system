@@ -68,13 +68,7 @@ function defaultState() {
     auth: { role: "", name: "", phone: "", driverId: "", email: "" },
     loginHistory: [],
     onlineDrivers: {},
-    driverLocations: {},
-    google: {
-      webAppUrl: DEFAULT_GOOGLE_ENDPOINT,
-      sheetUrl: "https://docs.google.com/spreadsheets/",
-      driveFolderUrl: "https://drive.google.com/drive/folders/",
-      mapsNote: "ใช้ Google Maps link ในข้อมูลลูกค้า และเก็บรูปยืนยันเข้า Google Drive ในเฟสถัดไป"
-    }
+    driverLocations: {}
   };
 }
 
@@ -90,12 +84,7 @@ function readState() {
       auth: { ...defaultState().auth, ...(parsed.auth || {}) },
       loginHistory: parsed.loginHistory || [],
       onlineDrivers: parsed.onlineDrivers || {},
-      driverLocations: parsed.driverLocations || {},
-      google: {
-        ...defaultState().google,
-        ...(parsed.google || {}),
-        webAppUrl: parsed.google?.webAppUrl || DEFAULT_GOOGLE_ENDPOINT
-      }
+      driverLocations: parsed.driverLocations || {}
     };
   } catch {
     return defaultState();
@@ -227,24 +216,7 @@ export default function App() {
     setState(nextState);
     setSelectedCustomerId(id);
     setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
-    
-    if (state.google.webAppUrl) {
-      setSyncStatus("⏳ กำลัง sync ลูกค้าใหม่ไป Google Sheets...");
-      try {
-        const params = new URLSearchParams();
-        params.append("action", "sync");
-        params.append("customers", JSON.stringify(nextState.customers));
-        params.append("orders", JSON.stringify(nextState.orders));
-        params.append("drivers", JSON.stringify(nextState.drivers || []));
-        
-        await fetch(state.google.webAppUrl, { method: "POST", body: params });
-        setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" และ sync Google สำเร็จ ${new Date().toLocaleTimeString("th-TH")}`);
-      } catch (error) {
-        setSyncStatus(`⚠️ บันทึกลูกค้า "${nextCustomer.name}" แล้ว แต่ sync Google ไม่สำเร็จ: ${error.message}`);
-      }
-    } else {
-      setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ (ยังไม่ได้ตั้ง Google)`);
-    }
+    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
   };
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
