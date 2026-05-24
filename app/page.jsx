@@ -261,6 +261,8 @@ export default function App() {
       console.warn("❌ Supabase not initialized");
       return;
     }
+    console.log("🌐 syncToSupabase called - orders count:", currentState.orders?.length);
+    
     try {
       // Sync auth state for cross-device awareness
       if (currentState.auth?.phone && currentState.auth?.role) {
@@ -288,11 +290,15 @@ export default function App() {
       console.log("📤 Syncing orders to Supabase:", currentState.orders?.length || 0);
       if (currentState.orders && Array.isArray(currentState.orders)) {
         for (const order of currentState.orders) {
-          const { error } = await supabase.from("orders").upsert(order, { onConflict: "id" }).throwOnError();
-          if (error) {
-            console.error("❌ Order sync error:", error.message, "Order:", order.id);
-          } else {
-            console.log(`✅ Order synced: ${order.id}`);
+          try {
+            const { error, status } = await supabase.from("orders").upsert(order, { onConflict: "id" });
+            if (error) {
+              console.error("❌ Order sync error:", error.message, "Order:", order.id);
+            } else {
+              console.log(`✅ Order synced: ${order.id} (status: ${status})`);
+            }
+          } catch (e) {
+            console.error("❌ Exception syncing order:", order.id, e.message);
           }
         }
         console.log("✅ All orders synced to Supabase");
@@ -323,6 +329,7 @@ export default function App() {
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
     // Auto-sync to Supabase on any data change
+    console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
     syncToSupabase(state);
   }, [state]);
   useEffect(() => {
