@@ -35,30 +35,15 @@ if (typeof window !== "undefined" && supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
-const initialDrivers = [
-  { id: "D1", name: "Somchai", plate: "ชม 2145", zone: "เมืองเชียงใหม่", phone: "081-000-1001", lat: 18.7883, lng: 98.9853 },
-  { id: "D2", name: "Wichai", plate: "ชม 6732", zone: "สันกำแพง / ดอยสะเก็ด", phone: "081-000-1002", lat: 18.9256, lng: 99.0853 },
-  { id: "D3", name: "Anan", plate: "ชม 8291", zone: "หางดง / สันป่าตอง", phone: "081-000-1003", lat: 18.8564, lng: 99.0456 },
-  { id: "D4", name: "Thanawat", plate: "ชม 1187", zone: "ลำพูน / ลำปาง", phone: "081-000-1004", lat: 18.5745, lng: 99.5025 },
-  { id: "D5", name: "Kitti", plate: "ชม 4428", zone: "แม่ริม / เชียงราย", phone: "081-000-1005", lat: 19.2244, lng: 99.8585 }
-];
+const initialDrivers = [];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก", "กลับมา"];
 const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626", "กลับมา": "#22c55e" };
 
-const initialCustomers = [
-  { id: "C001", name: "Ristr8to Lab", contact: "คุณเมย์", phone: "053-000-101", zone: "เมืองเชียงใหม่", address: "นิมมาน ซอย 3", mapUrl: "https://maps.google.com/?q=Ristr8to+Lab+Chiang+Mai", note: "รับสินค้าเช้า / มีเอกสารวางบิล" },
-  { id: "C002", name: "Graph Cafe", contact: "คุณต้น", phone: "053-000-102", zone: "เมืองเชียงใหม่", address: "ช้างม่อย", mapUrl: "https://maps.google.com/?q=Graph+Cafe+Chiang+Mai", note: "โทรก่อนถึง 10 นาที" },
-  { id: "C003", name: "Lamphun Coffee Hub", contact: "คุณอ้อม", phone: "053-000-201", zone: "ลำพูน", address: "เมืองลำพูน", mapUrl: "https://maps.google.com/?q=Lamphun+Coffee", note: "รับ COD และใบกำกับภาษี" },
-  { id: "C004", name: "Mae Rim Garden", contact: "คุณบอย", phone: "053-000-301", zone: "แม่ริม", address: "แม่ริม", mapUrl: "https://maps.google.com/?q=Mae+Rim+Chiang+Mai", note: "จอดหน้าร้านได้" }
-];
+const initialCustomers = [];
 
-const initialOrders = [
-  { id: "DO-260522-001", customerId: "C001", customerName: "Ristr8to Lab", zone: "เมืองเชียงใหม่", address: "นิมมาน ซอย 3", mapUrl: "https://maps.google.com/?q=Ristr8to+Lab+Chiang+Mai", window: "09:00-10:30", boxes: 6, cod: 3850, driverId: "", status: "รอคนขับรับ", photo: "", checkInAt: "", deliveredAt: "", complaint: "", salesNote: "เมล็ดกาแฟ + syrup", createdAt: new Date().toISOString() },
-  { id: "DO-260522-002", customerId: "C002", customerName: "Graph Cafe", zone: "เมืองเชียงใหม่", address: "ช้างม่อย", mapUrl: "https://maps.google.com/?q=Graph+Cafe+Chiang+Mai", window: "10:00-12:00", boxes: 4, cod: 2600, driverId: "", status: "รอคนขับรับ", photo: "", checkInAt: "", deliveredAt: "", complaint: "", salesNote: "เก็บบิลเดิมกลับ", createdAt: new Date().toISOString() },
-  { id: "DO-260522-003", customerId: "C003", customerName: "Lamphun Coffee Hub", zone: "ลำพูน", address: "เมืองลำพูน", mapUrl: "https://maps.google.com/?q=Lamphun+Coffee", window: "13:00-15:00", boxes: 12, cod: 11800, driverId: "", status: "รอคนขับรับ", photo: "", checkInAt: "", deliveredAt: "", complaint: "", salesNote: "COD เงินสด", createdAt: new Date().toISOString() }
-];
+const initialOrders = [];
 
 function defaultState() {
   return {
