@@ -141,6 +141,9 @@ export default function App() {
   const [rememberPhone, setRememberPhone] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatText, setChatText] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
@@ -148,6 +151,8 @@ export default function App() {
       setLoginForm(p => ({ ...p, phone: saved }));
       setRememberPhone(true);
     }
+    const savedSalesName = localStorage.getItem("hillkoff-last-sales-name");
+    if (savedSalesName) setLoginForm(p => ({ ...p, name: savedSalesName }));
   }, []);
   const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
   const [orderQuery, setOrderQuery] = useState("");
@@ -218,6 +223,50 @@ export default function App() {
     supabase = initSupabase();
     console.log("Component mounted, supabase:", !!supabase);
   }, []);
+
+  const refreshChat = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .order("id", { ascending: false })
+        .limit(50);
+      if (error) return;
+      setChatMessages((data || []).slice().reverse());
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    if (!supabase) supabase = initSupabase();
+    refreshChat();
+    const t = setInterval(refreshChat, 3000);
+    return () => clearInterval(t);
+  }, [chatOpen]);
+
+  const sendChat = async () => {
+    const text = (chatText || "").trim();
+    if (!text) return;
+    if (!supabase) supabase = initSupabase();
+    if (!supabase) {
+      alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+      return;
+    }
+    setChatText("");
+    const payload = {
+      sender_role: state.auth?.role || "",
+      sender_name: state.auth?.name || "",
+      sender_phone: state.auth?.phone || "",
+      message: text
+    };
+    const { error } = await supabase.from("chat_messages").insert(payload);
+    if (error) {
+      alert(`❌ ส่งข้อความไม่สำเร็จ: ${error.message}`);
+      return;
+    }
+    await refreshChat();
+  };
 
   // Polling mechanism for real-time sync
   const refreshFromSupabase = async () => {
@@ -359,16 +408,20 @@ export default function App() {
     if (!supabase) return { ok: false, error: "Supabase not initialized" };
     try {
       const orderForDB = {
-        id: order.id,
-        customerId: order.customerId || "",
-        customerName: order.customerName || "",
+               id: order.id,
+                customerId: order.customerId || "",
+                customerName: order.customerName || "",
+                customerPhone: order.customerPhone || "",
         zone: order.zone || "",
         address: order.address || "",
         mapUrl: order.mapUrl || "",
         window: order.window || "",
         boxes: Number(order.boxes || 0),
         cod: Number(order.cod || 0),
-        driverId: order.driverId || "",
+                driverId: order.driverId || "",
+                driverName: order.driverName || "",
+                salesName: order.salesName || "",
+                salesPhone: order.salesPhone || "",
         status: order.status || "รอคนขับรับ",
         photo: order.photo || "",
         checkInAt: order.checkInAt || "",
@@ -578,8 +631,10 @@ export default function App() {
     if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
     if (rememberPhone) {
       localStorage.setItem("hillkoff-last-phone", loginForm.phone.trim());
+      localStorage.setItem("hillkoff-last-sales-name", loginForm.name.trim());
     } else {
       localStorage.removeItem("hillkoff-last-phone");
+      localStorage.removeItem("hillkoff-last-sales-name");
     }
     const loginEntry = {
       id: `L${Date.now()}`,
@@ -591,6 +646,7 @@ export default function App() {
     };
     const newAuthState = { role: "sales", name: loginForm.name.trim(), phone: loginForm.phone.trim(), driverId: "" };
     setAuth(newAuthState);
+    if (!supabase) supabase = initSupabase();
     const updatedState = {
       ...state,
       auth: newAuthState,
@@ -609,6 +665,8 @@ export default function App() {
     } else {
       localStorage.removeItem("hillkoff-last-phone");
     }
+    localStorage.removeItem("hillkoff-last-sales-name");
+    if (!supabase) supabase = initSupabase();
     let latestDrivers = state.drivers || [];
     // Load latest data from Supabase on login
     if (supabase) {
@@ -838,6 +896,7 @@ export default function App() {
           .from("orders")
           .update({
             driverId: driverId,
+            driverName: driverName,
             status: "กำลังส่ง"
           })
           .eq("id", id)
@@ -1109,14 +1168,39 @@ export default function App() {
           <>
             <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
               <button className="secondary" onClick={() => {
-                const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:\n(รหัส: 2532)");
+                const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตออเดอร์ทั้งหมด (ทั้งระบบ):\n(รหัส: 2532)");
                 if (pwd === "2532") {
-                  setState(prev => ({ ...prev, orders: [] }));
-                  alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
+                  const ok = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และรีเซ็ตทุกเครื่องใช่ไหม?");
+                  if (!ok) return;
+
+                  (async () => {
+                    try {
+                      if (!supabase) supabase = initSupabase();
+                      if (!supabase) {
+                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                        return;
+                      }
+
+                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
+                      const { error } = await supabase.from("orders").delete().neq("id", "__never__");
+                      if (error) {
+                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                        return;
+                      }
+
+                      setState(prev => ({ ...prev, orders: [] }));
+                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      await refreshFromSupabase();
+                    } catch (e) {
+                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                    }
+                  })();
                 } else if (pwd !== null) {
                   alert("❌ รหัสไม่ถูกต้อง");
                 }
-              }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตแดชบอร์ด</button>
+              }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
             </div>
             <div className="sales-grid">
             {syncStatus && syncStatus !== "Local mode" && (
@@ -1431,14 +1515,39 @@ export default function App() {
             <section className="panel">
               <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
                 <button className="secondary" onClick={() => {
-                  const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:\n(รหัส: 2532)");
+                  const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตออเดอร์ทั้งหมด (ทั้งระบบ):\n(รหัส: 2532)");
                   if (pwd === "2532") {
-                    setState(prev => ({ ...prev, orders: [] }));
-                    alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
+                    const ok = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และรีเซ็ตทุกเครื่องใช่ไหม?");
+                    if (!ok) return;
+
+                    (async () => {
+                      try {
+                        if (!supabase) supabase = initSupabase();
+                        if (!supabase) {
+                          alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                          return;
+                        }
+
+                        setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
+                        const { error } = await supabase.from("orders").delete().neq("id", "__never__");
+                        if (error) {
+                          alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                          setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                          return;
+                        }
+
+                        setState(prev => ({ ...prev, orders: [] }));
+                        setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                        alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                        await refreshFromSupabase();
+                      } catch (e) {
+                        alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                      }
+                    })();
                   } else if (pwd !== null) {
                     alert("❌ รหัสไม่ถูกต้อง");
                   }
-                }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตแดชบอร์ด</button>
+                }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
               </div>
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
               <div className="filters dispatch-filters">
@@ -1876,6 +1985,56 @@ export default function App() {
         )}
       </section>
     </main>
+
+    <button
+      className="primary"
+      onClick={() => setChatOpen(true)}
+      style={{
+        position: "fixed",
+        right: "16px",
+        bottom: "16px",
+        width: "52px",
+        height: "52px",
+        borderRadius: "999px",
+        display: "grid",
+        placeItems: "center",
+        zIndex: 1200
+      }}
+      title="แชท"
+    >
+      💬
+    </button>
+
+    {chatOpen && (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 1300, display: "grid", placeItems: "end center", padding: "16px" }}>
+        <div style={{ width: "min(520px, 100%)", background: "white", borderRadius: "12px", boxShadow: "0 12px 30px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+          <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+            <b>💬 แชททีม</b>
+            <button className="secondary" onClick={() => setChatOpen(false)} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
+          </div>
+          <div style={{ padding: "12px 14px", maxHeight: "280px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "8px" }}>
+            {chatMessages.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อความ</p>
+            ) : (
+              chatMessages.map(m => (
+                <div key={m.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", padding: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
+                    <b style={{ fontSize: "12px" }}>{m.sender_name || "ไม่ระบุ"} {m.sender_role ? `(${m.sender_role})` : ""}</b>
+                    <small style={{ color: "#6b7280" }}>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString("th-TH") : ""}</small>
+                  </div>
+                  <div style={{ fontSize: "13px", whiteSpace: "pre-wrap" }}>{m.message}</div>
+                  {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "none" }}>📞 {m.sender_phone}</a>}
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
+            <input value={chatText} onChange={e => setChatText(e.target.value)} placeholder="พิมพ์ข้อความ..." style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }} />
+            <button className="primary" onClick={sendChat} style={{ padding: "10px 14px" }}>ส่ง</button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {showOrderConfirm && pendingOrder && (
       <div style={{
