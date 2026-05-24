@@ -276,6 +276,12 @@ export default function App() {
       return;
     }
     
+    // Skip refresh during reset to prevent old data from being restored
+    if (isResettingOrders) {
+      console.log("⏸️ Skipping refreshFromSupabase during reset");
+      return;
+    }
+    
     try {
       // Fetch latest data from Supabase
       const { data: supabaseOrders, error: ordersError } = await supabase.from("orders").select("*");
@@ -579,10 +585,12 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    // Auto-sync to Supabase on any data change
-    console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
-    syncToSupabase(state);
-  }, [state]);
+    // Auto-sync to Supabase on any data change (but skip during reset)
+    if (!isResettingOrders) {
+      console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
+      syncToSupabase(state);
+    }
+  }, [state, isResettingOrders]);
   useEffect(() => {
     if (state.auth?.driverId) setDriverId(state.auth.driverId);
   }, [state.auth?.driverId]);
