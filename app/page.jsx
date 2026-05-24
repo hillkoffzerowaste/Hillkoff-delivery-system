@@ -143,61 +143,51 @@ export default function App() {
 
   useEffect(() => setState(readState()), []);
   
-  // Real-time subscription to Supabase changes
+  // Polling mechanism for real-time sync (fallback if Realtime fails)
   useEffect(() => {
     if (!supabase) return;
     
-    const channels = [];
-    
-    // Subscribe to orders changes
-    channels.push(
-      supabase
-        .channel("orders_changes")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "orders" },
-          async () => {
-            const { data } = await supabase.from("orders").select("*");
-            setState(prev => ({ ...prev, orders: data || [] }));
+    const pollInterval = setInterval(async () => {
+      try {
+        // Fetch latest orders
+        const { data: orders } = await supabase.from("orders").select("*");
+        setState(prev => {
+          const orderIds = new Set(prev.orders.map(o => o.id));
+          const newOrderIds = new Set((orders || []).map(o => o.id));
+          // If orders changed, update state
+          if (orderIds.size !== newOrderIds.size || ![...orderIds].every(id => newOrderIds.has(id))) {
+            return { ...prev, orders: orders || [] };
           }
-        )
-        .subscribe()
-    );
-    
-    // Subscribe to customers changes
-    channels.push(
-      supabase
-        .channel("customers_changes")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "customers" },
-          async () => {
-            const { data } = await supabase.from("customers").select("*");
-            setState(prev => ({ ...prev, customers: data || [] }));
+          return prev;
+        });
+        
+        // Fetch latest customers
+        const { data: customers } = await supabase.from("customers").select("*");
+        setState(prev => {
+          const custIds = new Set(prev.customers.map(c => c.id));
+          const newCustIds = new Set((customers || []).map(c => c.id));
+          if (custIds.size !== newCustIds.size || ![...custIds].every(id => newCustIds.has(id))) {
+            return { ...prev, customers: customers || [] };
           }
-        )
-        .subscribe()
-    );
-    
-    // Subscribe to drivers changes
-    channels.push(
-      supabase
-        .channel("drivers_changes")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "drivers" },
-          async () => {
-            const { data } = await supabase.from("drivers").select("*");
-            setState(prev => ({ ...prev, drivers: data || [] }));
+          return prev;
+        });
+        
+        // Fetch latest drivers
+        const { data: drivers } = await supabase.from("drivers").select("*");
+        setState(prev => {
+          const drvIds = new Set(prev.drivers.map(d => d.id));
+          const newDrvIds = new Set((drivers || []).map(d => d.id));
+          if (drvIds.size !== newDrvIds.size || ![...drvIds].every(id => newDrvIds.has(id))) {
+            return { ...prev, drivers: drivers || [] };
           }
-        )
-        .subscribe()
-    );
+          return prev;
+        });
+      } catch (error) {
+        console.log("Polling error:", error);
+      }
+    }, 2000); // Poll every 2 seconds
     
-    // Cleanup subscriptions
-    return () => {
-      channels.forEach(channel => supabase.removeChannel(channel));
-    };
+    return () => clearInterval(pollInterval);
   }, []);
   
   const syncToSupabase = async (currentState) => {
