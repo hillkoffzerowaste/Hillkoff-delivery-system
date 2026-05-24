@@ -1198,10 +1198,31 @@ export default function App() {
                       }
 
                       setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
-                      const { error } = await supabase.from("orders").delete().neq("id", "__never__");
-                      if (error) {
-                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
-                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                      console.log("🔍 Attempting to delete all orders from Supabase");
+                      
+                      try {
+                        // Try fetching first to see what's there
+                        const { data: checkData, error: checkError } = await supabase.from("orders").select("id").limit(1);
+                        console.log("📋 Supabase orders check:", { hasData: !!checkData?.length, error: checkError?.message });
+                        
+                        // Try to delete all records
+                        const { data, error, count } = await supabase.from("orders").delete().neq("id", "");
+                        console.log("🗑️ Delete result:", { data, error, count });
+                        
+                        if (error) {
+                          console.error("❌ Supabase delete error:", error);
+                          const errorMsg = error.message || JSON.stringify(error);
+                          alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}\n\n(ตรวจสอบ console ของ browser เพื่อข้อมูลเพิ่มเติม)`);
+                          setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}`);
+                          setIsResettingOrders(false);
+                          return;
+                        }
+                        
+                        console.log(`✅ Successfully deleted ${count} orders from Supabase`);
+                      } catch (e) {
+                        console.error("❌ Delete exception:", e);
+                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}\n\n(เช็ค console สำหรับรายละเอียด)`);
+                        setSyncStatus(`❌ ลบไม่สำเร็จ: ${e?.message || String(e)}`);
                         setIsResettingOrders(false);
                         return;
                       }
