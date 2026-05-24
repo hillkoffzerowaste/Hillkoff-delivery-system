@@ -102,6 +102,22 @@ function todayText() {
   return new Date().toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function osmPageUrl(lat, lng, zoom = 16) {
+  if (lat == null || lng == null) return "";
+  return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lng)}#map=${encodeURIComponent(zoom)}/${encodeURIComponent(lat)}/${encodeURIComponent(lng)}`;
+}
+
+function osmEmbedUrl(lat, lng, zoom = 16) {
+  if (lat == null || lng == null) return "";
+  const delta = 0.01;
+  const left = Number(lng) - delta;
+  const right = Number(lng) + delta;
+  const top = Number(lat) + delta;
+  const bottom = Number(lat) - delta;
+  const bbox = `${left},${bottom},${right},${top}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
 function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
   return (
     <div className="card stat-card">
@@ -142,8 +158,48 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("Local mode");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
+  const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
 
   useEffect(() => setState(readState()), []);
+
+  useEffect(() => {
+    if (state.auth?.role !== "driver") return;
+    if (!driverId) return;
+    if (typeof window === "undefined") return;
+    if (!navigator?.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const driver = (state.drivers || []).find(d => d.id === driverId);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const timestamp = new Date().getTime();
+
+        setState(prev => ({
+          ...prev,
+          driverLocations: {
+            ...(prev.driverLocations || {}),
+            [driverId]: {
+              ...(prev.driverLocations?.[driverId] || {}),
+              driverId,
+              driverName: driver?.name || prev.driverLocations?.[driverId]?.driverName || "",
+              plate: driver?.plate || prev.driverLocations?.[driverId]?.plate || "",
+              zone: driver?.zone || prev.driverLocations?.[driverId]?.zone || "",
+              lat,
+              lng,
+              timestamp
+            }
+          }
+        }));
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 10_000 }
+    );
+
+    return () => {
+      try { navigator.geolocation.clearWatch(watchId); } catch {}
+    };
+  }, [state.auth?.role, driverId, state.drivers]);
   
   // Helper function to convert snake_case from Supabase to camelCase
   const convertToCamelCase = (obj) => {
@@ -172,9 +228,15 @@ export default function App() {
     
     try {
       // Fetch latest data from Supabase
-      const { data: supabaseOrders } = await supabase.from("orders").select("*");
-      const { data: supabaseCustomers } = await supabase.from("customers").select("*");
-      const { data: supabaseDrivers } = await supabase.from("drivers").select("*");
+      const { data: supabaseOrders, error: ordersError } = await supabase.from("orders").select("*");
+      const { data: supabaseCustomers, error: customersError } = await supabase.from("customers").select("*");
+      const { data: supabaseDrivers, error: driversError } = await supabase.from("drivers").select("*");
+      const { data: supabaseDriverLocations, error: driverLocationsError } = await supabase.from("driver_locations").select("*");
+
+      if (ordersError) setSyncStatus?.(`⚠️ Supabase orders error: ${ordersError.message}`);
+      if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
+      if (driversError) console.warn("⚠️ Supabase drivers pull error:", driversError.message);
+      if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
       
       console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, drivers: supabaseDrivers?.length });
       
@@ -200,8 +262,7 @@ export default function App() {
             }
           }
           
-          if (merged.length !== prev.orders.length) {
-            console.log(`⚠️ Order count changed: ${prev.orders.length} → ${merged.length}`);
+          if (JSON.stringify(prev.orders) !== JSON.stringify(merged)) {
             newState.orders = merged;
             changed = true;
           }
@@ -250,6 +311,29 @@ export default function App() {
             console.log("🚗 Drivers merged from Supabase");
           }
         }
+
+        // For driver locations: replace (DB is source of truth when available)
+        if (Array.isArray(supabaseDriverLocations) && supabaseDriverLocations.length) {
+          const next = { ...(prev.driverLocations || {}) };
+          for (const row of supabaseDriverLocations) {
+            next[row.driver_id] = {
+              ...(next[row.driver_id] || {}),
+              driverId: row.driver_id,
+              driverName: row.driver_name || "",
+              plate: row.plate || "",
+              zone: row.zone || "",
+              lat: row.lat,
+              lng: row.lng,
+              timestamp: row.timestamp
+            };
+          }
+          const localStr = JSON.stringify(prev.driverLocations || {});
+          const newStr = JSON.stringify(next);
+          if (localStr !== newStr) {
+            newState.driverLocations = next;
+            changed = true;
+          }
+        }
         
         return changed ? newState : prev;
       });
@@ -270,6 +354,38 @@ export default function App() {
     
     return () => clearInterval(pollInterval);
   }, []);
+  
+  const upsertOrderToSupabase = async (order) => {
+    if (!supabase) return { ok: false, error: "Supabase not initialized" };
+    try {
+      const orderForDB = {
+        id: order.id,
+        customerId: order.customerId || "",
+        customerName: order.customerName || "",
+        zone: order.zone || "",
+        address: order.address || "",
+        mapUrl: order.mapUrl || "",
+        window: order.window || "",
+        boxes: Number(order.boxes || 0),
+        cod: Number(order.cod || 0),
+        driverId: order.driverId || "",
+        status: order.status || "รอคนขับรับ",
+        photo: order.photo || "",
+        checkInAt: order.checkInAt || "",
+        deliveredAt: order.deliveredAt || "",
+        complaint: order.complaint || "",
+        salesNote: order.salesNote || "",
+        createdAt: order.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from("orders").upsert(orderForDB, { onConflict: "id" });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) };
+    }
+  };
   
   const syncToSupabase = async (currentState) => {
     if (!supabase) {
@@ -294,7 +410,7 @@ export default function App() {
               phone: customer.phone || "",
               zone: customer.zone || "",
               address: customer.address || "",
-              map_url: customer.mapUrl || "",
+              mapUrl: customer.mapUrl || "",
               note: customer.note || ""
             };
             
@@ -315,27 +431,24 @@ export default function App() {
             // Convert camelCase to snake_case for Supabase
             const orderForDB = {
               id: order.id,
-              customer_id: order.customerId || "",
-              customer_name: order.customerName || "",
-              customer_phone: order.customerPhone || "",
+               customerId: order.customerId || "",
+               customerName: order.customerName || "",
               zone: order.zone || "",
               address: order.address || "",
-              map_url: order.mapUrl || "",
+               mapUrl: order.mapUrl || "",
               window: order.window || "",
               boxes: order.boxes || 0,
               cod: order.cod || 0,
-              driver_id: order.driverId || "",
-              driver_name: order.driverName || "",
-              sales_name: order.salesName || "",
-              sales_phone: order.salesPhone || "",
+               driverId: order.driverId || "",
               status: order.status || "รอคนขับรับ",
               photo: order.photo || "",
-              check_in_at: order.checkInAt || "",
-              delivered_at: order.deliveredAt || "",
+               checkInAt: order.checkInAt || "",
+               deliveredAt: order.deliveredAt || "",
               complaint: order.complaint || "",
-              sales_note: order.salesNote || "",
-              created_at: order.createdAt || new Date().toISOString()
-            };
+               salesNote: order.salesNote || "",
+               createdAt: order.createdAt || new Date().toISOString(),
+               updatedAt: new Date().toISOString()
+             };
             
             const { error, status } = await supabase.from("orders").upsert(orderForDB, { onConflict: "id" });
             if (error) {
@@ -350,20 +463,23 @@ export default function App() {
         console.log("✅ All orders synced to Supabase");
       }
       
-      // Sync drivers
-      if (currentState.drivers?.length) {
+       // Sync drivers
+       if (currentState.drivers?.length) {
         for (const driver of currentState.drivers) {
           try {
             // Convert camelCase to snake_case for Supabase
             const driverForDB = {
               id: driver.id,
-              first_name: driver.firstName || "",
-              last_name: driver.lastName || "",
+              firstName: driver.firstName || "",
+              lastName: driver.lastName || "",
               name: driver.name || "",
               phone: driver.phone || "",
               vehicle: driver.vehicle || "",
               plate: driver.plate || "",
-              zone: driver.zone || ""
+              zone: driver.zone || "",
+              lat: driver.lat ?? null,
+              lng: driver.lng ?? null,
+              updatedAt: new Date().toISOString()
             };
             
             const { error } = await supabase.from("drivers").upsert(driverForDB, { onConflict: "id" });
@@ -372,11 +488,34 @@ export default function App() {
             console.error("❌ Exception syncing driver:", driver.id, e.message);
           }
         }
-        console.log("✅ Drivers synced:", currentState.drivers.length);
-      }
-      
-      // Sync login history
-      if (currentState.loginHistory?.length) {
+         console.log("✅ Drivers synced:", currentState.drivers.length);
+       }
+
+       // Sync driver locations (optional table)
+       if (currentState.driverLocations && Object.keys(currentState.driverLocations).length) {
+         for (const did of Object.keys(currentState.driverLocations)) {
+           const loc = currentState.driverLocations[did];
+           if (!loc?.lat || !loc?.lng) continue;
+           try {
+             const payload = {
+               driver_id: did,
+               driver_name: loc.driverName || "",
+               plate: loc.plate || "",
+               zone: loc.zone || "",
+               lat: Number(loc.lat),
+               lng: Number(loc.lng),
+               timestamp: Number(loc.timestamp || Date.now())
+             };
+             const { error } = await supabase.from("driver_locations").upsert(payload, { onConflict: "driver_id" });
+             if (error) console.warn("⚠️ driver_locations sync skipped:", error.message);
+           } catch (e) {
+             console.warn("⚠️ driver_locations sync exception:", e?.message || String(e));
+           }
+         }
+       }
+       
+       // Sync login history
+       if (false && currentState.loginHistory?.length) {
         const recentLogins = currentState.loginHistory.slice(0, 5);
         for (const entry of recentLogins) {
           const { error } = await supabase.from("login_history").insert(entry);
@@ -520,6 +659,11 @@ export default function App() {
       if (supabase) {
         // Auth state synced automatically via syncToSupabase
       }
+      const saved = await upsertOrderToSupabase(pendingOrder);
+      if (!saved.ok) {
+        setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
+      }
+
       setTab("driver");
       return;
     }
@@ -644,14 +788,14 @@ export default function App() {
     setPendingOrder(null);
     setSyncStatus(`⏳ กำลังส่งออเดอร์เข้าคิว...`);
     
-    // Wait longer for Supabase to actually save before switching tabs
-    setTimeout(async () => {
+    // Wait longer for Supabase to actually save before switching tabs (deprecated)
+    (async () => {
       console.log("⏰ Waiting 2000ms complete");
       setTab("driver");
       setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
       // Let polling refresh the data
       await refreshFromSupabase();
-    }, 2000);
+    })();
   };
 
   const deleteOrder = (orderId) => {
@@ -691,7 +835,45 @@ export default function App() {
     }
   };
 
-  const acceptOrder = id => updateOrder(id, { driverId, status: "กำลังส่ง" });
+  const acceptOrder = async (id) => {
+    const driver = drivers.find(d => d.id === driverId);
+    const driverName = driver?.name || "";
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("orders")
+          .update({
+            driverId: driverId,
+            status: "กำลังส่ง"
+          })
+          .eq("id", id)
+          .or("driverId.is.null,driverId.eq.")
+          .select("*")
+          .maybeSingle();
+
+        if (error) {
+          setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${error.message}`);
+          return;
+        }
+
+        if (!data) {
+          setSyncStatus(`⚠️ ออเดอร์ "${id}" ถูกคนอื่นรับไปแล้ว`);
+          await refreshFromSupabase();
+          return;
+        }
+
+        setSyncStatus(`✅ รับออเดอร์ "${id}" เรียบร้อย`);
+        await refreshFromSupabase();
+        return;
+      } catch (e) {
+        setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}`);
+        return;
+      }
+    }
+
+    updateOrder(id, { driverId, driverName, status: "กำลังส่ง" });
+  };
   const checkIn = id => {
     const order = orders.find(o => o.id === id);
     const driver = drivers.find(d => d.id === driverId);
@@ -881,7 +1063,7 @@ export default function App() {
     );
   }
 
-  const displayTab = auth.role === "driver" ? "driver" : tab;
+  const displayTab = auth.role === "driver" ? "driver" : (tab === "driver" ? "sales" : tab);
 
   return (
     <>
@@ -969,6 +1151,100 @@ export default function App() {
                 )}
               </div>
             </section>
+
+            <section className="panel" style={{ gridColumn: "1 / -1" }}>
+              {(() => {
+                const locs = state.driverLocations || {};
+                const driverIds = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
+                const effectiveId = selectedMapDriverId || driverIds[0] || "";
+                const selected = effectiveId ? locs[effectiveId] : null;
+                const embed = selected ? osmEmbedUrl(selected.lat, selected.lng, 15) : "";
+
+                return (
+                  <>
+                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{driverIds.length} คนมีพิกัด</span></div>
+                    {driverIds.length === 0 ? (
+                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีพิกัดคนขับ (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                          {driverIds.map(did => {
+                            const d = locs[did];
+                            const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
+                            return (
+                              <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
+                                📍 {name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {selected && (
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
+                              <b>{selected.driverName || effectiveId}</b>
+                              <small style={{ color: "#6b7280" }}>{selected.zone || "-"}</small>
+                            </div>
+                            <iframe title="osm-mini-map" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
+                            <a href={osmPageUrl(selected.lat, selected.lng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
+                              เปิดแผนที่เต็ม (OpenStreetMap)
+                            </a>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </section>
+
+            <section className="panel" style={{ gridColumn: "1 / -1" }}>
+              {(() => {
+                const inProgress = orders.filter(o => o.driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง"));
+                const byDriver = {};
+                inProgress.forEach(o => {
+                  byDriver[o.driverId] = byDriver[o.driverId] || [];
+                  byDriver[o.driverId].push(o);
+                });
+
+                return (
+                  <>
+                    <div className="panel-head"><h2>🚚 งานที่คนขับกำลังส่ง</h2><span>{inProgress.length} งาน</span></div>
+                    {inProgress.length === 0 ? (
+                      <p className="muted" style={{ textAlign: "center", padding: "8px 0" }}>ยังไม่มีงานที่กำลังส่ง</p>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+                        {Object.keys(byDriver).map(did => {
+                          const driver = drivers.find(d => d.id === did);
+                          const items = byDriver[did] || [];
+                          return (
+                            <div key={did} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+                                <b>{driver?.name || items[0]?.driverName || "ไม่ทราบชื่อคนขับ"}</b>
+                                <small style={{ color: "#6b7280" }}>{driver?.plate || "-"}</small>
+                              </div>
+                              <small style={{ color: "#6b7280" }}>{driver?.zone || "-"}</small>
+                              <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+                                {items.slice(0, 5).map(o => (
+                                  <div key={o.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "8px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                                      <b style={{ color: statusColor[o.status] || "#111827" }}>{o.id}</b>
+                                      <small style={{ color: statusColor[o.status] || "#111827" }}>{o.status}</small>
+                                    </div>
+                                    <small style={{ color: "#374151" }}>{o.customerName} · {o.zone}</small>
+                                  </div>
+                                ))}
+                                {items.length > 5 && <small style={{ color: "#6b7280" }}>+ อีก {items.length - 5} งาน</small>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </section>
+
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
               {customers.length === 0 ? (
@@ -1232,7 +1508,7 @@ export default function App() {
           </div>
         )}
 
-        {displayTab === "driver" && (
+        {auth.role === "driver" && displayTab === "driver" && (
           <div style={{ display: "grid", gap: "16px" }}>
             {/* ส่วนข้อมูลคนขับ */}
             <section className="panel" style={{ background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
