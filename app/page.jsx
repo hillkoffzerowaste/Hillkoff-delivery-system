@@ -514,14 +514,7 @@ export default function App() {
          }
        }
        
-       // Sync login history
-       if (false && currentState.loginHistory?.length) {
-        const recentLogins = currentState.loginHistory.slice(0, 5);
-        for (const entry of recentLogins) {
-          const { error } = await supabase.from("login_history").insert(entry);
-          if (error) console.error("❌ Login history error:", error);
-        }
-      }
+       // login_history table is optional; intentionally skipped.
     } catch (error) {
       console.error("❌ Supabase sync error:", error);
     }
