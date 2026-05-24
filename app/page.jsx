@@ -26,13 +26,25 @@ import {
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Initialize Supabase client - will be set in useEffect
 let supabase = null;
 
-if (typeof window !== "undefined" && supabaseUrl && supabaseKey) {
+function initSupabase() {
+  if (typeof window === "undefined") return null;
+  if (supabase) return supabase;
+  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("❌ Missing Supabase env vars:", { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
+    return null;
+  }
+  
+  const { createClient } = require("@supabase/supabase-js");
   supabase = createClient(supabaseUrl, supabaseKey);
+  console.log("✅ Supabase initialized:", supabaseUrl);
+  return supabase;
 }
 
 const initialDrivers = [];
@@ -62,11 +74,16 @@ function readState() {
   if (typeof window === "undefined") return defaultState();
   try {
     const saved = localStorage.getItem(STORE_KEY);
-    const parsed = saved ? JSON.parse(saved) : defaultState();
+    const parsed = saved ? JSON.parse(saved) : null;
+    
+    // If nothing saved, return defaults
+    if (!parsed) return defaultState();
+    
+    // Preserve saved data, only fill in missing pieces from defaults
     return {
-      ...defaultState(),
-      ...parsed,
-      drivers: parsed.drivers?.length ? parsed.drivers : defaultState().drivers,
+      customers: parsed.customers || [],
+      orders: parsed.orders || [],
+      drivers: parsed.drivers || [],
       auth: { ...defaultState().auth, ...(parsed.auth || {}) },
       loginHistory: parsed.loginHistory || [],
       onlineDrivers: parsed.onlineDrivers || {},
@@ -130,7 +147,17 @@ export default function App() {
   
   // Polling mechanism for real-time sync (fallback if Realtime fails)
   useEffect(() => {
-    if (!supabase) return;
+    // Initialize Supabase on component mount
+    supabase = initSupabase();
+    console.log("Component mounted, supabase:", !!supabase);
+  }, []);
+  
+  // Polling mechanism for real-time sync
+  useEffect(() => {
+    if (!supabase) {
+      console.warn("⚠️ Supabase not initialized yet");
+      return;
+    }
     
     const pollInterval = setInterval(async () => {
       try {
@@ -178,46 +205,61 @@ export default function App() {
   }, []);
   
   const syncToSupabase = async (currentState) => {
-    if (!supabase) return;
+    if (!supabase) {
+      console.warn("❌ Supabase not initialized");
+      return;
+    }
     try {
       // Sync auth state for cross-device awareness
       if (currentState.auth?.phone && currentState.auth?.role) {
-        await supabase.from("auth_state").upsert({
+        const { error: authError } = await supabase.from("auth_state").upsert({
           phone: currentState.auth.phone,
           role: currentState.auth.role,
           name: currentState.auth.name || "",
           driver_id: currentState.auth.driverId || "",
           online: true,
           last_seen: new Date().toISOString()
-        }, { onConflict: "phone" }).throwOnError();
+        }, { onConflict: "phone" });
+        if (authError) console.error("❌ Auth sync error:", authError);
       }
+      
       // Sync customers
       if (currentState.customers?.length) {
         for (const customer of currentState.customers) {
-          await supabase.from("customers").upsert(customer, { onConflict: "id" });
+          const { error } = await supabase.from("customers").upsert(customer, { onConflict: "id" });
+          if (error) console.error("❌ Customer sync error:", error, customer.id);
         }
+        console.log("✅ Customers synced:", currentState.customers.length);
       }
+      
       // Sync orders
       if (currentState.orders?.length) {
         for (const order of currentState.orders) {
-          await supabase.from("orders").upsert(order, { onConflict: "id" });
+          const { error } = await supabase.from("orders").upsert(order, { onConflict: "id" });
+          if (error) console.error("❌ Order sync error:", error, order.id);
         }
+        console.log("✅ Orders synced:", currentState.orders.length);
       }
+      
       // Sync drivers
       if (currentState.drivers?.length) {
         for (const driver of currentState.drivers) {
-          await supabase.from("drivers").upsert(driver, { onConflict: "id" });
+          const { error } = await supabase.from("drivers").upsert(driver, { onConflict: "id" });
+          if (error) console.error("❌ Driver sync error:", error, driver.id);
         }
+        console.log("✅ Drivers synced:", currentState.drivers.length);
       }
+      
       // Sync login history
       if (currentState.loginHistory?.length) {
         const recentLogins = currentState.loginHistory.slice(0, 5);
         for (const entry of recentLogins) {
-          await supabase.from("login_history").insert(entry).throwOnError().catch(() => {});
+          const { error } = await supabase.from("login_history").insert(entry);
+          if (error) console.error("❌ Login history error:", error);
         }
       }
     } catch (error) {
-      console.log("Supabase sync error:", error.message);
+      console.error("❌ Supabase sync error:", error);
     }
   };
 
