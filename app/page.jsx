@@ -119,7 +119,7 @@ export default function App() {
   const [tab, setTab] = useState("sales");
   const [state, setState] = useState(defaultState);
   const [customerQuery, setCustomerQuery] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState("C001");
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
@@ -826,16 +826,22 @@ export default function App() {
             </section>
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
-              <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
-              <div className="customer-list">
-                {filteredCustomers.map(customer => (
-                  <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
-                    <strong>{customer.name}</strong>
-                    <span>{customer.contact} · {customer.phone}</span>
-                    <span>{customer.zone} · {customer.address}</span>
-                  </button>
-                ))}
-              </div>
+              {customers.length === 0 ? (
+                <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
+              ) : (
+                <>
+                  <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
+                  <div className="customer-list">
+                    {filteredCustomers.map(customer => (
+                      <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
+                        <strong>{customer.name}</strong>
+                        <span>{customer.contact} · {customer.phone}</span>
+                        <span>{customer.zone} · {customer.address}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
 
               {selectedCustomer && (
                 <div style={{ marginTop: "16px", padding: "12px", background: "#f0fdf4", borderRadius: "8px", border: "1px solid #dcfce7" }}>
