@@ -1197,72 +1197,113 @@ export default function App() {
                         return;
                       }
 
-                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
-                      console.log("🔍 Attempting to delete all orders from Supabase");
+                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด (ทั้ง Local + Supabase)...");
+                      console.log("🔍 [RESET] Starting complete order reset process...");
                       
-                      // CRITICAL: Clear local state FIRST before deleting from Supabase
-                      // This prevents syncToSupabase from pushing old orders back up
-                      const clearedState = { ...state, orders: [] };
-                      setState(clearedState);
-                      localStorage.setItem(STORE_KEY, JSON.stringify(clearedState));
-                      console.log("✅ Local state and localStorage cleared");
+                      // STEP 1: Clear localStorage FIRST
+                      console.log("🧹 [RESET] Step 1: Clearing localStorage...");
+                      try {
+                        localStorage.removeItem(STORE_KEY);
+                        console.log("✅ [RESET] localStorage.removeItem(STORE_KEY) completed");
+                      } catch (e) {
+                        console.error("❌ [RESET] localStorage.removeItem failed:", e);
+                      }
                       
-                      // Wait for state update to be processed
-                      await new Promise(resolve => setTimeout(resolve, 100));
+                      // STEP 2: Clear React state
+                      console.log("🧹 [RESET] Step 2: Clearing React state (orders = [])...");
+                      const emptyState = JSON.parse(JSON.stringify(state)); // Deep copy
+                      emptyState.orders = [];
+                      emptyState.customers = [];
+                      setState(emptyState);
+                      console.log("✅ [RESET] React state cleared", { orders: emptyState.orders.length, customers: emptyState.customers.length });
+                      
+                      // Wait for state update
+                      await new Promise(resolve => setTimeout(resolve, 200));
+                      console.log("✅ [RESET] State update delay completed");
+                      
+                      // STEP 3: Delete from Supabase
+                      console.log("🗑️ [RESET] Step 3: Deleting from Supabase...");
                       
                       try {
-                        // Step 1: Fetch all order IDs
-                        console.log("📋 Fetching all order IDs from Supabase...");
-                        const { data: allOrders, error: fetchError } = await supabase.from("orders").select("id");
-                        console.log("📋 Supabase orders check:", { count: allOrders?.length, error: fetchError?.message });
+                        // Fetch all order IDs
+                        console.log("📋 [RESET] Fetching all order IDs...");
+                        const { data: allOrders, error: fetchError } = await supabase
+                          .from("orders")
+                          .select("id");
+                        
+                        console.log("📋 [RESET] Fetch result:", { 
+                          ordersCount: allOrders?.length || 0, 
+                          hasError: !!fetchError,
+                          errorMsg: fetchError?.message || "none"
+                        });
                         
                         if (fetchError) {
-                          console.error("❌ Fetch error:", fetchError);
-                          throw new Error(`Fetch error: ${fetchError.message}`);
+                          console.error("❌ [RESET] Fetch failed:", fetchError);
+                          throw new Error(`Fetch failed: ${fetchError.message}`);
                         }
                         
-                        // Step 2: If there are orders, delete them by ID
+                        // Delete orders
                         if (allOrders && allOrders.length > 0) {
                           const orderIds = allOrders.map(o => o.id);
-                          console.log(`🗑️ Deleting ${orderIds.length} orders...`, orderIds);
+                          console.log(`🗑️ [RESET] Deleting ${orderIds.length} orders...`);
+                          console.log("🗑️ [RESET] Order IDs:", orderIds);
                           
-                          const { error: deleteError, count } = await supabase
+                          const { error: deleteError, count, status } = await supabase
                             .from("orders")
                             .delete()
                             .in("id", orderIds);
                           
-                          console.log("🗑️ Delete result:", { deletedCount: count, error: deleteError?.message });
+                          console.log("🗑️ [RESET] Delete response:", { 
+                            deletedCount: count, 
+                            httpStatus: status,
+                            hasError: !!deleteError,
+                            errorMsg: deleteError?.message || "none"
+                          });
                           
                           if (deleteError) {
-                            console.error("❌ Supabase delete error:", deleteError);
-                            const errorMsg = deleteError.message || JSON.stringify(deleteError);
-                            alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}\n\n(ตรวจสอบ console ของ browser เพื่อข้อมูลเพิ่มเติม)`);
-                            setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${errorMsg}`);
-                            setIsResettingOrders(false);
-                            return;
+                            console.error("❌ [RESET] Delete query failed:", deleteError);
+                            throw new Error(`Delete failed: ${deleteError.message}`);
                           }
                           
-                          console.log(`✅ Successfully deleted ${count} orders from Supabase`);
+                          // Verify deletion
+                          console.log("✅ [RESET] Delete query completed, verifying...");
+                          await new Promise(resolve => setTimeout(resolve, 500));
+                          
+                          const { data: afterDelete, error: verifyError } = await supabase
+                            .from("orders")
+                            .select("id");
+                          
+                          console.log("✅ [RESET] Verification:", { 
+                            ordersRemaining: afterDelete?.length || 0,
+                            verifyError: verifyError?.message || "none"
+                          });
+                          
+                          if (afterDelete && afterDelete.length > 0) {
+                            console.warn("⚠️ [RESET] WARNING: Orders still exist after delete:", afterDelete);
+                          }
                         } else {
-                          console.log("ℹ️ No orders to delete in Supabase");
+                          console.log("ℹ️ [RESET] No orders to delete");
                         }
                       } catch (e) {
-                        console.error("❌ Delete exception:", e);
-                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}\n\n(เช็ค console สำหรับรายละเอียด)`);
-                        setSyncStatus(`❌ ลบไม่สำเร็จ: ${e?.message || String(e)}`);
-                        setIsResettingOrders(false);
-                        return;\n                      }
-
-                      // Wait a moment to ensure deletion is fully processed
-                      await new Promise(resolve => setTimeout(resolve, 300));
+                        console.error("❌ [RESET] Delete step failed:", e);
+                        throw e;
+                      }
                       
-                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      // STEP 4: Wait to ensure everything is synced
+                      console.log("⏳ [RESET] Waiting for final sync...");
+                      await new Promise(resolve => setTimeout(resolve, 1000));
                       
-                      // Re-enable polling and syncing
+                      // STEP 5: Enable sync again
+                      console.log("🔄 [RESET] Re-enabling polling and sync...");
+                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!");
+                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมด (Local + Supabase)\n✓ ล้างข้อมูล localStorage\n✓ รีเซ็ตสถานะทั้งระบบ");
                       setIsResettingOrders(false);
+                      
+                      console.log("✅ [RESET] Process completed successfully!");
                     } catch (e) {
-                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                      console.error("❌ [RESET] Process failed:", e);
+                      setSyncStatus(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                      alert(`❌ รีเซ็ตไม่สำเร็จ:\n${e?.message || String(e)}\n\n(ตรวจสอบ console สำหรับรายละเอียด)`);
                       setIsResettingOrders(false);
                     }
                   })();
