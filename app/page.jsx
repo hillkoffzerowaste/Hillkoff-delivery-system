@@ -145,6 +145,17 @@ export default function App() {
 
   useEffect(() => setState(readState()), []);
   
+  // Helper function to convert snake_case from Supabase to camelCase
+  const convertToCamelCase = (obj) => {
+    if (!obj) return obj;
+    const converted = {};
+    for (const key in obj) {
+      const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+      converted[camelKey] = obj[key];
+    }
+    return converted;
+  };
+
   // Polling mechanism for real-time sync (fallback if Realtime fails)
   useEffect(() => {
     // Initialize Supabase on component mount
@@ -177,15 +188,15 @@ export default function App() {
           const merged = [...prev.orders];
           
           for (const sbOrder of supabaseOrders) {
-            const idx = merged.findIndex(o => o.id === sbOrder.id);
+            // Convert snake_case to camelCase
+            const order = convertToCamelCase(sbOrder);
+            const idx = merged.findIndex(o => o.id === order.id);
             if (idx >= 0) {
-              // Update existing order with latest from Supabase
-              merged[idx] = { ...merged[idx], ...sbOrder };
-              console.log(`📝 Updated order ${sbOrder.id}`);
+              merged[idx] = { ...merged[idx], ...order };
+              console.log(`📝 Updated order ${order.id}`);
             } else {
-              // New order from Supabase - add it
-              merged.push(sbOrder);
-              console.log(`➕ Added new order ${sbOrder.id} from Supabase`);
+              merged.push(order);
+              console.log(`➕ Added new order ${order.id} from Supabase`);
             }
           }
           
@@ -200,11 +211,13 @@ export default function App() {
         if (supabaseCustomers && prev.customers) {
           const merged = [...prev.customers];
           for (const sbCustomer of supabaseCustomers) {
-            const idx = merged.findIndex(c => c.id === sbCustomer.id);
+            // Convert snake_case to camelCase
+            const customer = convertToCamelCase(sbCustomer);
+            const idx = merged.findIndex(c => c.id === customer.id);
             if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...sbCustomer };
+              merged[idx] = { ...merged[idx], ...customer };
             } else {
-              merged.push(sbCustomer);
+              merged.push(customer);
             }
           }
           const localStr = JSON.stringify(prev.customers);
@@ -220,11 +233,13 @@ export default function App() {
         if (supabaseDrivers && prev.drivers) {
           const merged = [...prev.drivers];
           for (const sbDriver of supabaseDrivers) {
-            const idx = merged.findIndex(d => d.id === sbDriver.id);
+            // Convert snake_case to camelCase
+            const driver = convertToCamelCase(sbDriver);
+            const idx = merged.findIndex(d => d.id === driver.id);
             if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...sbDriver };
+              merged[idx] = { ...merged[idx], ...driver };
             } else {
-              merged.push(sbDriver);
+              merged.push(driver);
             }
           }
           const localStr = JSON.stringify(prev.drivers);
@@ -264,24 +279,30 @@ export default function App() {
     console.log("🌐 syncToSupabase called - orders count:", currentState.orders?.length);
     
     try {
-      // Sync auth state for cross-device awareness
-      if (currentState.auth?.phone && currentState.auth?.role) {
-        const { error: authError } = await supabase.from("auth_state").upsert({
-          phone: currentState.auth.phone,
-          role: currentState.auth.role,
-          name: currentState.auth.name || "",
-          driver_id: currentState.auth.driverId || "",
-          online: true,
-          last_seen: new Date().toISOString()
-        }, { onConflict: "phone" });
-        if (authError) console.error("❌ Auth sync error:", authError);
-      }
+      // Skip auth_state sync - table doesn't exist
+      // if (currentState.auth?.phone && currentState.auth?.role) { ... }
       
       // Sync customers
       if (currentState.customers?.length) {
         for (const customer of currentState.customers) {
-          const { error } = await supabase.from("customers").upsert(customer, { onConflict: "id" });
-          if (error) console.error("❌ Customer sync error:", error, customer.id);
+          try {
+            // Convert camelCase to snake_case for Supabase
+            const customerForDB = {
+              id: customer.id,
+              name: customer.name || "",
+              contact: customer.contact || "",
+              phone: customer.phone || "",
+              zone: customer.zone || "",
+              address: customer.address || "",
+              map_url: customer.mapUrl || "",
+              note: customer.note || ""
+            };
+            
+            const { error } = await supabase.from("customers").upsert(customerForDB, { onConflict: "id" });
+            if (error) console.error("❌ Customer sync error:", error.message, customer.id);
+          } catch (e) {
+            console.error("❌ Exception syncing customer:", customer.id, e.message);
+          }
         }
         console.log("✅ Customers synced:", currentState.customers.length);
       }
@@ -291,7 +312,32 @@ export default function App() {
       if (currentState.orders && Array.isArray(currentState.orders)) {
         for (const order of currentState.orders) {
           try {
-            const { error, status } = await supabase.from("orders").upsert(order, { onConflict: "id" });
+            // Convert camelCase to snake_case for Supabase
+            const orderForDB = {
+              id: order.id,
+              customer_id: order.customerId || "",
+              customer_name: order.customerName || "",
+              customer_phone: order.customerPhone || "",
+              zone: order.zone || "",
+              address: order.address || "",
+              map_url: order.mapUrl || "",
+              window: order.window || "",
+              boxes: order.boxes || 0,
+              cod: order.cod || 0,
+              driver_id: order.driverId || "",
+              driver_name: order.driverName || "",
+              sales_name: order.salesName || "",
+              sales_phone: order.salesPhone || "",
+              status: order.status || "รอคนขับรับ",
+              photo: order.photo || "",
+              check_in_at: order.checkInAt || "",
+              delivered_at: order.deliveredAt || "",
+              complaint: order.complaint || "",
+              sales_note: order.salesNote || "",
+              created_at: order.createdAt || new Date().toISOString()
+            };
+            
+            const { error, status } = await supabase.from("orders").upsert(orderForDB, { onConflict: "id" });
             if (error) {
               console.error("❌ Order sync error:", error.message, "Order:", order.id);
             } else {
@@ -307,8 +353,24 @@ export default function App() {
       // Sync drivers
       if (currentState.drivers?.length) {
         for (const driver of currentState.drivers) {
-          const { error } = await supabase.from("drivers").upsert(driver, { onConflict: "id" });
-          if (error) console.error("❌ Driver sync error:", error, driver.id);
+          try {
+            // Convert camelCase to snake_case for Supabase
+            const driverForDB = {
+              id: driver.id,
+              first_name: driver.firstName || "",
+              last_name: driver.lastName || "",
+              name: driver.name || "",
+              phone: driver.phone || "",
+              vehicle: driver.vehicle || "",
+              plate: driver.plate || "",
+              zone: driver.zone || ""
+            };
+            
+            const { error } = await supabase.from("drivers").upsert(driverForDB, { onConflict: "id" });
+            if (error) console.error("❌ Driver sync error:", error.message, driver.id);
+          } catch (e) {
+            console.error("❌ Exception syncing driver:", driver.id, e.message);
+          }
         }
         console.log("✅ Drivers synced:", currentState.drivers.length);
       }
