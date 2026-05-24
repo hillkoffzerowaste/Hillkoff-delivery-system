@@ -1200,6 +1200,16 @@ export default function App() {
                       setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
                       console.log("🔍 Attempting to delete all orders from Supabase");
                       
+                      // CRITICAL: Clear local state FIRST before deleting from Supabase
+                      // This prevents syncToSupabase from pushing old orders back up
+                      const clearedState = { ...state, orders: [] };
+                      setState(clearedState);
+                      localStorage.setItem(STORE_KEY, JSON.stringify(clearedState));
+                      console.log("✅ Local state and localStorage cleared");
+                      
+                      // Wait for state update to be processed
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      
                       try {
                         // Try fetching first to see what's there
                         const { data: checkData, error: checkError } = await supabase.from("orders").select("id").limit(1);
@@ -1227,22 +1237,14 @@ export default function App() {
                         return;
                       }
 
-                      // Clear from local state AND localStorage
-                      setState(prev => ({ ...prev, orders: [] }));
-                      localStorage.setItem(STORE_KEY, JSON.stringify({ ...state, orders: [] }));
-                      
-                      // Wait a moment to ensure Supabase deletion is fully processed
-                      await new Promise(resolve => setTimeout(resolve, 500));
+                      // Wait a moment to ensure deletion is fully processed
+                      await new Promise(resolve => setTimeout(resolve, 300));
                       
                       setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
                       alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
                       
-                      // Wait a bit more then refresh with polling enabled
-                      await new Promise(resolve => setTimeout(resolve, 300));
+                      // Re-enable polling and syncing
                       setIsResettingOrders(false);
-                      
-                      // Do NOT refresh - data should already be empty
-                      // Refresh would cause unnecessary API calls
                     } catch (e) {
                       alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
                       setIsResettingOrders(false);
