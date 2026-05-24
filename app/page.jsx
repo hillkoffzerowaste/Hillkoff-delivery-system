@@ -410,6 +410,9 @@ export default function App() {
       return;
     }
     
+    // When reset ends, delay first poll to ensure delete completed
+    const delayFirstPoll = isResettingOrders ? 0 : 3000;
+    
     const pollInterval = setInterval(() => {
       // Skip polling during reset to prevent old data from being pulled back
       if (!isResettingOrders) {
@@ -417,7 +420,19 @@ export default function App() {
       }
     }, 2000); // Poll every 2 seconds (allow Supabase time to save)
     
-    return () => clearInterval(pollInterval);
+    // If reset just ended, add extra delay before first poll
+    let timeout;
+    if (!isResettingOrders && delayFirstPoll > 0) {
+      console.log("🔄 [RESET-RECOVERY] Delaying first poll by 3s to let delete complete...");
+      timeout = setTimeout(() => {
+        refreshFromSupabase();
+      }, delayFirstPoll);
+    }
+    
+    return () => {
+      clearInterval(pollInterval);
+      if (timeout) clearTimeout(timeout);
+    };
   }, [isResettingOrders]);
   
   const upsertOrderToSupabase = async (order) => {
@@ -1265,6 +1280,7 @@ export default function App() {
                             .in("id", orderIds);
                           
                           console.log("🗑️ [RESET] Delete response:", { 
+                            totalRequested: orderIds.length,
                             deletedCount: count, 
                             httpStatus: status,
                             hasError: !!deleteError,
@@ -1276,9 +1292,13 @@ export default function App() {
                             throw new Error(`Delete failed: ${deleteError.message}`);
                           }
                           
+                          if (count !== orderIds.length) {
+                            console.warn(`⚠️ [RESET] WARNING: Only ${count} of ${orderIds.length} orders were deleted!`);
+                          }
+                          
                           // Verify deletion
                           console.log("✅ [RESET] Delete query completed, verifying...");
-                          await new Promise(resolve => setTimeout(resolve, 500));
+                          await new Promise(resolve => setTimeout(resolve, 1000));
                           
                           const { data: afterDelete, error: verifyError } = await supabase
                             .from("orders")
@@ -1290,7 +1310,8 @@ export default function App() {
                           });
                           
                           if (afterDelete && afterDelete.length > 0) {
-                            console.warn("⚠️ [RESET] WARNING: Orders still exist after delete:", afterDelete);
+                            console.warn("⚠️ [RESET] WARNING: Orders still exist after delete:", afterDelete.map(o => o.id));
+                            console.warn("⚠️ [RESET] Remaining order IDs should be:", afterDelete.map(o => o.id).join(", "));
                           }
                         } else {
                           console.log("ℹ️ [RESET] No orders to delete");
