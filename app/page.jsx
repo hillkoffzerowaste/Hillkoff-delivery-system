@@ -946,8 +946,19 @@ export default function App() {
   };
 
   const acceptOrder = async (id) => {
+    // Check if driver is logged in
+    if (!driverId) {
+      setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
+      return;
+    }
+
     const driver = drivers.find(d => d.id === driverId);
-    const driverName = driver?.name || "";
+    if (!driver) {
+      setSyncStatus(`⚠️ ข้อมูลคนขับ "${driverId}" ไม่พบในระบบ ลองรีเฟรชหน้าดูครับ`);
+      return;
+    }
+
+    const driverName = driver.name || "";
 
     if (supabase) {
       try {
@@ -993,8 +1004,18 @@ export default function App() {
     updateOrder(id, { driverId, driverName, status: "กำลังส่ง" });
   };
   const checkIn = id => {
+    if (!driverId) {
+      setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
+      return;
+    }
+
     const order = orders.find(o => o.id === id);
     const driver = drivers.find(d => d.id === driverId);
+    if (!driver) {
+      setSyncStatus(`⚠️ ข้อมูลคนขับ "${driverId}" ไม่พบในระบบ ลองรีเฟรชหน้าดูครับ`);
+      return;
+    }
+
     const checkInTime = new Date().toLocaleString("th-TH");
     updateOrder(id, { checkInAt: checkInTime });
     
