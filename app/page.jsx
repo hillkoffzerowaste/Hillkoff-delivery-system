@@ -1391,10 +1391,9 @@ export default function App() {
           <>
             <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
               <button className="secondary" onClick={() => {
-                const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตออเดอร์ทั้งหมด (ทั้งระบบ):\n(รหัส: 2532)");
-                if (pwd === "2532") {
-                  const ok = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และรีเซ็ตทุกเครื่องใช่ไหม?");
-                  if (!ok) return;
+                if (window.confirm("⚠️ ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) {
+                  const confirmDelete = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และรีเซ็ตทุกเครื่องใช่ไหม?");
+                  if (!confirmDelete) return;
 
                   (async () => {
                     try {
@@ -1562,8 +1561,6 @@ export default function App() {
                       isResettingOrdersRef.current = false;
                     }
                   })();
-                } else if (pwd !== null) {
-                  alert("❌ รหัสไม่ถูกต้อง");
                 }
               }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
             </div>
