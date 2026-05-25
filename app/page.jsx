@@ -80,10 +80,11 @@ function readState() {
     if (!parsed) return defaultState();
     
     // Preserve saved data, only fill in missing pieces from defaults
+    // Note: drivers array is intentionally empty by design - always use initialDrivers
     return {
       customers: parsed.customers || [],
       orders: parsed.orders || [],
-      drivers: parsed.drivers || [],
+      drivers: [], // Always empty - drivers table is deprecated
       auth: { ...defaultState().auth, ...(parsed.auth || {}) },
       loginHistory: parsed.loginHistory || [],
       onlineDrivers: parsed.onlineDrivers || {},
@@ -331,12 +332,11 @@ export default function App() {
       // Fetch latest data from Supabase
       const { data: supabaseOrders, error: ordersError } = await supabase.from("orders").select("*");
       const { data: supabaseCustomers, error: customersError } = await supabase.from("customers").select("*");
-      const { data: supabaseDrivers, error: driversError } = await supabase.from("drivers").select("*");
+      // Note: drivers table is intentionally empty by design - no fetch needed
       const { data: supabaseDriverLocations, error: driverLocationsError } = await supabase.from("driver_locations").select("*");
 
       if (ordersError) setSyncStatus?.(`⚠️ Supabase orders error: ${ordersError.message}`);
       if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
-      if (driversError) console.warn("⚠️ Supabase drivers pull error:", driversError.message);
       if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
       
       console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, drivers: supabaseDrivers?.length });
@@ -430,27 +430,7 @@ export default function App() {
           }
         }
         
-        // For drivers: merge similarly
-        if (supabaseDrivers && prev.drivers) {
-          const merged = [...prev.drivers];
-          for (const sbDriver of supabaseDrivers) {
-            // Convert snake_case to camelCase
-            const driver = convertToCamelCase(sbDriver);
-            const idx = merged.findIndex(d => d.id === driver.id);
-            if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...driver };
-            } else {
-              merged.push(driver);
-            }
-          }
-          const localStr = JSON.stringify(prev.drivers);
-          const newStr = JSON.stringify(merged);
-          if (localStr !== newStr) {
-            newState.drivers = merged;
-            changed = true;
-            console.log("🚗 Drivers merged from Supabase");
-          }
-        }
+        // Note: Drivers merge intentionally skipped - drivers table is empty by design
 
         // For driver locations: replace (DB is source of truth when available)
         if (Array.isArray(supabaseDriverLocations) && supabaseDriverLocations.length) {
@@ -671,33 +651,7 @@ export default function App() {
         console.log("✅ All orders synced to Supabase");
       }
       
-       // Sync drivers
-       if (currentState.drivers?.length) {
-        for (const driver of currentState.drivers) {
-          try {
-            // Convert camelCase to snake_case for Supabase
-            const driverForDB = {
-              id: driver.id,
-              firstName: driver.firstName || "",
-              lastName: driver.lastName || "",
-              name: driver.name || "",
-              phone: driver.phone || "",
-              vehicle: driver.vehicle || "",
-              plate: driver.plate || "",
-              zone: driver.zone || "",
-              lat: driver.lat ?? null,
-              lng: driver.lng ?? null,
-              updatedAt: new Date().toISOString()
-            };
-            
-            const { error } = await supabase.from("drivers").upsert(driverForDB, { onConflict: "id" });
-            if (error) console.error("❌ Driver sync error:", error.message, driver.id);
-          } catch (e) {
-            console.error("❌ Exception syncing driver:", driver.id, e.message);
-          }
-        }
-         console.log("✅ Drivers synced:", currentState.drivers.length);
-       }
+       // Note: Drivers table is intentionally empty by design - no driver sync needed
 
        // Sync driver locations (optional table)
        if (currentState.driverLocations && Object.keys(currentState.driverLocations).length) {
@@ -756,22 +710,20 @@ export default function App() {
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
   const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || customers[0];
-  const driverOrders = orders.filter(order => order.driverId === driverId || (!order.driverId && order.status === "รอคนขับรับ"));
+  // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
+  const driverOrders = orders.filter(order => {
+    const isAvailable = !order.driverId || order.driverId === "";
+    const isAssignedToMe = order.driverId === driverId;
+    return isAvailable || isAssignedToMe;
+  });
 
   const report = useMemo(() => {
     const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
     const complaints = orders.filter(order => order.complaint);
     const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
-    const driverScore = drivers.map(driver => {
-      const jobs = orders.filter(order => order.driverId === driver.id);
-      const done = jobs.filter(order => order.status === "ส่งสำเร็จ").length;
-      const issues = jobs.filter(order => order.status === "ติดปัญหา" || order.complaint).length;
-      const photos = jobs.filter(order => order.photo).length;
-      const score = Math.max(1, Math.min(100, 70 + done * 6 + photos * 3 - issues * 12));
-      return { ...driver, jobs: jobs.length, done, issues, score };
-    });
-    return { delivered: delivered.length, complaints, cod, driverScore };
-  }, [orders, drivers]);
+    // Note: driverScore is now skipped since drivers table is intentionally empty
+    return { delivered: delivered.length, complaints, cod, driverScore: [] };
+  }, [orders]);
 
   const filteredCustomers = customers.filter(customer => [customer.name, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
   const filteredOrders = orders.filter(order => {
@@ -835,25 +787,9 @@ export default function App() {
     }
     localStorage.removeItem("hillkoff-last-sales-name");
     if (!supabase) supabase = initSupabase();
-    let latestDrivers = state.drivers || [];
-    // Load latest data from Supabase on login
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from("drivers")
-          .select("*");
-        if (!error && data?.length) {
-          latestDrivers = data;
-          setState(prev => ({
-            ...prev,
-            drivers: latestDrivers
-          }));
-        }
-      } catch {
-        // Fall back to local drivers list
-      }
-    }
-    const found = latestDrivers.find(driver => String(driver.phone).trim() === phone);
+    
+    // Look for driver in local state only (Supabase drivers table is now empty by design)
+    const found = state.drivers?.find(driver => String(driver.phone).trim() === phone);
     if (found) {
       const loginEntry = {
         id: `L${Date.now()}`,
@@ -874,10 +810,6 @@ export default function App() {
         onlineDrivers: { ...state.onlineDrivers, [found.id]: new Date().getTime() }
       };
       setState(updatedState);
-      // Sync auth state to Supabase
-      if (supabase) {
-        // Auth state synced automatically via syncToSupabase
-      }
       const saved = await upsertOrderToSupabase(pendingOrder);
       if (!saved.ok) {
         setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
