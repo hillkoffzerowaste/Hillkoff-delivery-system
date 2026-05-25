@@ -2,7 +2,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "backup": "node lib/backup/cli.js backup",
+    "backup:list": "node lib/backup/cli.js list",
+    "backup:restore": "node lib/backup/cli.js restore",
+    "backup:export-csv": "node lib/backup/cli.js export-csv"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
@@ -10,5 +14,8 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.0"
   }
 }

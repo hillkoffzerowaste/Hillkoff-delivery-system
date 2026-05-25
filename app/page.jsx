@@ -50,8 +50,8 @@ function initSupabase() {
 const initialDrivers = [];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
-const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก", "กลับมา"];
-const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626", "กลับมา": "#22c55e" };
+const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
+const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
 
 const initialCustomers = [];
 
@@ -168,6 +168,9 @@ export default function App() {
   // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
   // useState is async and causes stale closures in syncToSupabase
   const isResettingOrdersRef = useRef(false);
+  const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
+  const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
+  const audioRef = useRef(null); // Reference to audio element for notification sound
 
   useEffect(() => setState(readState()), []);
 
@@ -226,6 +229,38 @@ export default function App() {
       converted[camelKey] = obj[key];
     }
     return converted;
+  };
+
+  // Function to play notification sound when new orders arrive
+  const playNotificationSound = () => {
+    try {
+      // Create a simple beep sound using Web Audio API
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioContext.currentTime;
+      
+      // Create oscillator for beep
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      
+      // Set frequency and duration
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.setValueAtTime(800, now + 0.1);
+      osc.frequency.setValueAtTime(600, now + 0.1);
+      osc.frequency.setValueAtTime(600, now + 0.2);
+      
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+      
+      osc.start(now);
+      osc.stop(now + 0.2);
+      
+      console.log("🔊 Notification sound played");
+    } catch (e) {
+      console.error("❌ Error playing notification sound:", e);
+    }
   };
 
   // Polling mechanism for real-time sync (fallback if Realtime fails)
@@ -320,6 +355,8 @@ export default function App() {
         if (Array.isArray(supabaseOrders) && Array.isArray(prev.orders)) {
           console.log(`🔄 Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
           const merged = [...prev.orders];
+          let newOrdersAdded = 0;
+          const currentDriverId = prev.auth?.driverId || "";
           
           for (const sbOrder of supabaseOrders) {
             // Convert snake_case to camelCase
@@ -329,25 +366,41 @@ export default function App() {
               // Update existing orders - but preserve local status/photo changes that haven't synced yet
               const localOrder = merged[idx];
               // Keep local status if it's more advanced (e.g., local "กำลังจัดส่ง" shouldn't revert to "กำลังส่ง")
-              const statusHierarchy = { "รอคนขับรับ": 0, "กำลังส่ง": 1, "กำลังจัดส่ง": 2, "ส่งสำเร็จ": 3, "ยกเลิก": 4, "กลับมา": 5 };
+              const statusHierarchy = { "รอคนขับรับ": 0, "กำลังส่ง": 1, "กำลังจัดส่ง": 2, "ส่งสำเร็จ": 3, "ยกเลิก": 4 };
               const shouldKeepLocalStatus = (statusHierarchy[localOrder.status] || -1) > (statusHierarchy[order.status] || -1);
               const photo = localOrder.photo || order.photo; // Keep photo if either has it
               
               merged[idx] = { ...order, ...localOrder, status: shouldKeepLocalStatus ? localOrder.status : order.status, photo };
               console.log(`📝 Updated order ${order.id}${shouldKeepLocalStatus ? ` (kept local status: ${localOrder.status})` : ""}`);
-            } else if (prev.auth?.role === "driver" && (!order.driverId || order.driverId === "" || order.status === "รอคนขับรับ")) {
-              // Driver page: ADD new orders that are waiting for a driver (available orders)
-              merged.push(order);
-              console.log(`➕ Added available order ${order.id} for driver`);
+            } else if (prev.auth?.role === "driver") {
+              // Driver page: STRICT FILTER - only add available orders OR orders already assigned to this driver
+              const isAvailable = !order.driverId || order.driverId === "" || order.status === "รอคนขับรับ";
+              const isMyOrder = order.driverId === currentDriverId;
+              
+              if (isAvailable || isMyOrder) {
+                merged.push(order);
+                if (isAvailable) newOrdersAdded++;
+                console.log(`➕ [NEW ORDER] Added order ${order.id} for driver - ${order.customerName} ${isMyOrder ? "(already assigned)" : "(available)"}`);
+              } else {
+                console.log(`❌ [FILTERED] Skipping order ${order.id} (assigned to different driver: ${order.driverId})`);
+              }
             } else if (prev.auth?.role === "sales") {
               // Sales page: ADD all new orders from Supabase
               merged.push(order);
-              console.log(`➕ Added new order ${order.id} for sales`);
+              newOrdersAdded++;
+              console.log(`➕ [NEW ORDER] Added new order ${order.id} for sales - ${order.customerName}`);
             } else {
               // Skip in other cases to prevent deleted orders from being pulled back
               console.log(`⏭️ Skipping order ${order.id} from Supabase (not applicable for current role)`);
             }
           }
+          
+          // Play sound notification if new available orders were added (not already assigned ones)
+          if (newOrdersAdded > 0 && previousOrderCountRef.current < merged.filter(o => !o.driverId || o.driverId === "" || o.status === "รอคนขับรับ").length) {
+            console.log(`🔔 ${newOrdersAdded} new available order(s) detected! Playing notification sound...`);
+            playNotificationSound();
+          }
+          previousOrderCountRef.current = merged.length;
           
           if (JSON.stringify(prev.orders) !== JSON.stringify(merged)) {
             newState.orders = merged;
@@ -454,9 +507,49 @@ export default function App() {
       }, delayFirstPoll);
     }
     
+    // Set up real-time subscription for orders
+    const subscription = supabase
+      .channel("orders-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Listen for INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "orders"
+        },
+        (payload) => {
+          console.log("📡 Real-time orders update:", payload.eventType, payload.new?.id);
+          
+          // Check if an order was accepted by another driver
+          if (payload.eventType === "UPDATE" && payload.new?.driverId) {
+            const oldOrder = payload.old;
+            const newOrder = payload.new;
+            
+            // If driverId changed from empty to assigned (someone accepted the order)
+            if ((!oldOrder?.driverId || oldOrder.driverId === "") && newOrder.driverId) {
+              const assignedDriver = state.drivers?.find(d => d.id === newOrder.driverId);
+              const driverName = assignedDriver?.name || newOrder.driverName || newOrder.driverId;
+              console.log(`🎯 Order ${newOrder.id} was accepted by ${driverName}`);
+              setSyncStatus(`📦 ${newOrder.id} ถูกรับไปโดย ${driverName}`);
+              playNotificationSound();
+              
+              // Show notification to other drivers
+              if (state.auth?.role === "driver" && state.auth?.driverId !== newOrder.driverId) {
+                console.log(`ℹ️ Notifying other drivers about accepted order`);
+              }
+            }
+          }
+          
+          // Refresh data to keep everyone in sync
+          refreshFromSupabase();
+        }
+      )
+      .subscribe();
+    
     return () => {
       clearInterval(pollInterval);
       if (timeout) clearTimeout(timeout);
+      subscription?.unsubscribe();
     };
   }, []);
   
@@ -628,6 +721,9 @@ export default function App() {
            }
          }
        }
+       
+       // Clear pending order updates after successful sync
+       pendingOrderUpdatesRef.current.clear();
        
        // login_history table is optional; intentionally skipped.
     } catch (error) {
@@ -929,7 +1025,26 @@ export default function App() {
 
   const updateOrder = (id, patch) => {
     console.log(`📝 updateOrder: ${id}`, patch);
-    setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
+    setState(prev => {
+      const updated = { ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) };
+      
+      // Auto-sync to Supabase immediately
+      if (supabase) {
+        const order = updated.orders.find(o => o.id === id);
+        if (order) {
+          (async () => {
+            const { ok, error } = await upsertOrderToSupabase(order);
+            if (!ok) {
+              console.error(`❌ Failed to sync order ${id}:`, error);
+            } else {
+              console.log(`✅ Order ${id} synced to Supabase`);
+            }
+          })();
+        }
+      }
+      
+      return updated;
+    });
   };
   const updateCustomer = (id, patch) => {
     setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
@@ -942,19 +1057,18 @@ export default function App() {
 
   const uploadPod = async (order, file) => {
     if (!file) return;
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    updateOrder(order.id, { photo: file.name });
     try {
-      setSyncStatus("กำลังเก็บรูป POD ไว้ท้องถิ่น...");
-      // Photos are stored locally and synced to Supabase via syncToSupabase
+      setSyncStatus("กำลังเก็บรูป POD...");
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      updateOrder(order.id, { photo: dataUrl });
       setSyncStatus("✅ บันทึกรูป POD สำเร็จ");
     } catch (error) {
-      setSyncStatus(`บันทึกรูปไม่สำเร็จ: ${error.message}`);
+      setSyncStatus(`❌ บันทึกรูปไม่สำเร็จ: ${error.message}`);
     }
   };
 
@@ -1055,9 +1169,15 @@ export default function App() {
   };
   const confirmPhoto = id => updateOrder(id, { photo: `POD-${id}.jpg` });
   const completeOrder = id => {
-    if (window.confirm("ยืนยันส่งสำเร็จหรือไม่? ตรวจสอบว่าได้รับเงินและมีรูปยืนยันแล้ว")) {
-      updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
-    }
+    const order = orders.find(o => o.id === id);
+    if (!order) return;
+    
+    // Update status to completed
+    updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+    
+    // Show order summary alert
+    const summaryText = `✅ ส่งสำเร็จ!\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ${order.photo ? "✅ มี" : "❌ ไม่มี"}\n\nออเดอร์ถูกลงทะเบียนในระบบแล้ว`;
+    alert(summaryText);
   };
 
   const [mapZoom, setMapZoom] = useState(1);
@@ -1262,6 +1382,9 @@ export default function App() {
           <Stat icon={UserCheck} label="รอคนขับรับ" value={`${totals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
           <Stat icon={Navigation} label="กำลังส่ง" value={`${totals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
           <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
+          {auth.role === "driver" && (
+            <Stat icon={Star} label="ส่งสำเร็จของฉัน" value={`${orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} งาน`} sub="งานของคุณทั้งหมด" tone="#22c55e" />
+          )}
         </div>
 
         {displayTab === "sales" && (
@@ -1757,10 +1880,9 @@ export default function App() {
             <section className="panel">
               <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
                 <button className="secondary" onClick={() => {
-                  const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตออเดอร์ทั้งหมด (ทั้งระบบ):\n(รหัส: 2532)");
-                  if (pwd === "2532") {
-                    const ok = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และรีเซ็ตทุกเครื่องใช่ไหม?");
-                    if (!ok) return;
+                  if (window.confirm("⚠️ ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) {
+                    const confirmDelete = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และ Local Storage ใช่ไหม?");
+                    if (!confirmDelete) return;
 
                     (async () => {
                       try {
@@ -1778,16 +1900,24 @@ export default function App() {
                           return;
                         }
 
+                        // Clear local state
                         setState(prev => ({ ...prev, orders: [] }));
+                        
+                        // Clear localStorage to prevent old data from reappearing
+                        try {
+                          localStorage.removeItem(STORE_KEY);
+                          console.log("✅ Cleared localStorage");
+                        } catch (e) {
+                          console.error("⚠️ Could not clear localStorage:", e);
+                        }
+                        
                         setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-                        alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                        alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ (Supabase + Local Storage)");
                         await refreshFromSupabase();
                       } catch (e) {
                         alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
                       }
                     })();
-                  } else if (pwd !== null) {
-                    alert("❌ รหัสไม่ถูกต้อง");
                   }
                 }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
               </div>
@@ -1909,10 +2039,15 @@ export default function App() {
                         
                         {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>📬 {order.address}</small>}
                         
-                        <button className="primary" style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px" }} onClick={() => {
-                          updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" });
-                          setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
-                        }}>✓ รับออเดอร์นี้</button>
+                        <button 
+                          className="primary" 
+                          style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                          disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                          onClick={() => {
+                            pendingOrderUpdatesRef.current.add(order.id);
+                            updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" });
+                            setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
+                          }}>✓ รับออเดอร์นี้</button>
                       </div>
                     );
                   })}
@@ -1950,48 +2085,81 @@ export default function App() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                         {order.status === "กำลังส่ง" && (
                           <>
-                            <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => {
-                              updateOrder(order.id, { status: "กำลังจัดส่ง" });
-                              setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
-                            }}>🚗 ไปถึงแล้ว</button>
-                            <button className="secondary" style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} onClick={() => {
-                              const reason = prompt("📝 เหตุผลในการยกเลิก:");
-                              if (reason) {
-                                updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
-                                setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
-                              }
-                            }}>❌ ยกเลิก</button>
+                            <button 
+                              className="primary" 
+                              style={{ padding: "8px", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              onClick={() => {
+                                pendingOrderUpdatesRef.current.add(order.id);
+                                updateOrder(order.id, { status: "กำลังจัดส่ง" });
+                                setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
+                              }}>🚗 ไปถึงแล้ว</button>
+                            <button 
+                              className="secondary" 
+                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              onClick={() => {
+                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+                                if (reason) {
+                                  pendingOrderUpdatesRef.current.add(order.id);
+                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                                  setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
+                                }
+                              }}>❌ ยกเลิก</button>
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && (
                           <>
-                            <label className="primary" style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
+                            <label 
+                              className="primary" 
+                              style={{ padding: "8px", fontSize: "12px", cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}>
                               📷 ถ่ายรูป
-                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                              <input type="file" accept="image/*" style={{ display: "none" }} disabled={pendingOrderUpdatesRef.current.has(order.id)} onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   const reader = new FileReader();
                                   reader.onload = (evt) => {
+                                    pendingOrderUpdatesRef.current.add(order.id);
                                     updateOrder(order.id, { photo: evt.target?.result });
                                   };
                                   reader.readAsDataURL(file);
                                 }
                               }} />
                             </label>
-                            <button className="secondary" style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} onClick={() => {
-                              const reason = prompt("📝 เหตุผลในการยกเลิก:");
-                              if (reason) updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
-                            }}>❌ ยกเลิก</button>
+                            <button 
+                              className="secondary" 
+                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              onClick={() => {
+                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+                                if (reason) {
+                                  pendingOrderUpdatesRef.current.add(order.id);
+                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                                }
+                              }}>❌ ยกเลิก</button>
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && order.photo && (
-                          <button className="primary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} onClick={() => {
-                            updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
-                            setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
-                          }}>✅ ส่งสำเร็จ</button>
+                          <button 
+                            className="primary" 
+                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            onClick={() => {
+                              // Add to pending updates to prevent rapid clicks
+                              pendingOrderUpdatesRef.current.add(order.id);
+                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
+                            }}>✅ ส่งสำเร็จ</button>
                         )}
                         {order.status === "ส่งสำเร็จ" && (
-                          <button className="secondary" style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1" }} onClick={() => updateOrder(order.id, { status: "กลับมา" })}>🏠 กลับมา</button>
+                          <button 
+                            className="secondary" 
+                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            onClick={() => {
+                              pendingOrderUpdatesRef.current.add(order.id);
+                              alert(`✅ ส่งสำเร็จแล้ว\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ✅ มี\n\nสามารถรับอีกงานได้`);
+                            }}>🏠 ส่งเสร็จสิ้น</button>
                         )}
                       </div>
 
@@ -2064,17 +2232,14 @@ export default function App() {
                 <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
                 <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
                 <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
-                  const pwd = prompt("🔒 กรุณาใส่รหัสเพื่อรีเซ็ตแดชบอร์ด:");
-                  if (pwd === "2532") {
+                  if (window.confirm("⚠️ ต้องการรีเซ็ตแดชบอร์ดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) {
                     setState(prev => ({
                       ...prev,
                       orders: []
                     }));
                     alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
-                  } else if (pwd !== null) {
-                    alert("❌ รหัสไม่ถูกต้อง");
                   }
-                }}>🔄 รีเซ็ตแดชบอร์ด (รหัส: 2532)</button>
+                }}>🔄 รีเซ็ตแดชบอร์ด</button>
               </section>
             )}
             
