@@ -171,6 +171,13 @@ export default function App() {
 
   useEffect(() => setState(readState()), []);
 
+  // Force initial fetch for driver role
+  useEffect(() => {
+    if (state.auth?.role !== "driver") return;
+    console.log("🚗 Driver detected - forcing initial fetch...");
+    refreshFromSupabase();
+  }, [state.auth?.role]);
+
   useEffect(() => {
     if (state.auth?.role !== "driver") return;
     if (!driverId) return;
