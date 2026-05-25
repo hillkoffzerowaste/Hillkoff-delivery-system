@@ -326,9 +326,15 @@ export default function App() {
             const order = convertToCamelCase(sbOrder);
             const idx = merged.findIndex(o => o.id === order.id);
             if (idx >= 0) {
-              // Update existing orders (user has this order locally)
-              merged[idx] = { ...merged[idx], ...order };
-              console.log(`📝 Updated order ${order.id}`);
+              // Update existing orders - but preserve local status/photo changes that haven't synced yet
+              const localOrder = merged[idx];
+              // Keep local status if it's more advanced (e.g., local "กำลังจัดส่ง" shouldn't revert to "กำลังส่ง")
+              const statusHierarchy = { "รอคนขับรับ": 0, "กำลังส่ง": 1, "กำลังจัดส่ง": 2, "ส่งสำเร็จ": 3, "ยกเลิก": 4, "กลับมา": 5 };
+              const shouldKeepLocalStatus = (statusHierarchy[localOrder.status] || -1) > (statusHierarchy[order.status] || -1);
+              const photo = localOrder.photo || order.photo; // Keep photo if either has it
+              
+              merged[idx] = { ...order, ...localOrder, status: shouldKeepLocalStatus ? localOrder.status : order.status, photo };
+              console.log(`📝 Updated order ${order.id}${shouldKeepLocalStatus ? ` (kept local status: ${localOrder.status})` : ""}`);
             } else if (prev.auth?.role === "driver" && (!order.driverId || order.driverId === "" || order.status === "รอคนขับรับ")) {
               // Driver page: ADD new orders that are waiting for a driver (available orders)
               merged.push(order);
