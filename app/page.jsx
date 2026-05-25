@@ -1338,8 +1338,8 @@ export default function App() {
                       }
                       
                       // STEP 4: Wait to ensure everything is synced and polling stays off
-                      console.log("⏳ [RESET] Waiting 5 seconds to ensure deletion is complete and synced...");
-                      await new Promise(resolve => setTimeout(resolve, 5000));
+                      console.log("⏳ [RESET] Waiting 10 seconds to ensure deletion is complete and synced...");
+                      await new Promise(resolve => setTimeout(resolve, 10000));
                       
                       // STEP 5: Double-check localStorage is still empty
                       console.log("🔍 [RESET] Final localStorage check:", { size: localStorage.length, STORE_KEY: localStorage.getItem(STORE_KEY) });
@@ -1357,6 +1357,23 @@ export default function App() {
                       
                       if (finalCheck && finalCheck.length > 0) {
                         console.warn("⚠️ [RESET] WARNING: Orders still in Supabase after delete:", finalCheck.map(o => o.id));
+                        console.log("🔄 [RESET] Attempting second delete round...");
+                        
+                        // Try delete again
+                        const remainingIds = finalCheck.map(o => o.id);
+                        const { error: deleteRetryError, count: retryCount } = await supabase
+                          .from("orders")
+                          .delete()
+                          .in("id", remainingIds);
+                        
+                        console.log("🗑️ [RESET] Second delete attempt:", { 
+                          retryCount, 
+                          retryError: deleteRetryError?.message || "none"
+                        });
+                        
+                        // Verify again
+                        const { data: finalCheck2 } = await supabase.from("orders").select("id");
+                        console.log("🔄 [RESET] After retry:", { ordersRemaining: finalCheck2?.length || 0 });
                       }
                       
                       // STEP 7: Re-enable sync again
