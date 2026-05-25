@@ -974,8 +974,15 @@ export default function App() {
           return;
         }
 
+        console.log("✅ [ACCEPT] Order accepted in Supabase, updating local state...");
+        // Update local state immediately to show change
+        const accepted = convertToCamelCase(data);
+        setState(prev => ({
+          ...prev,
+          orders: prev.orders.map(o => o.id === id ? accepted : o)
+        }));
         setSyncStatus(`✅ รับออเดอร์ "${id}" เรียบร้อย`);
-        await refreshFromSupabase();
+        // Don't refreshFromSupabase - let polling handle it to avoid race condition
         return;
       } catch (e) {
         setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}`);
