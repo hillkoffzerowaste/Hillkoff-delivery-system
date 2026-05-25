@@ -71,28 +71,8 @@ function defaultState() {
 }
 
 function readState() {
-  if (typeof window === "undefined") return defaultState();
-  try {
-    const saved = localStorage.getItem(STORE_KEY);
-    const parsed = saved ? JSON.parse(saved) : null;
-    
-    // If nothing saved, return defaults
-    if (!parsed) return defaultState();
-    
-    // Preserve saved data, only fill in missing pieces from defaults
-    // Note: drivers array is intentionally empty by design - always use initialDrivers
-    return {
-      customers: parsed.customers || [],
-      orders: parsed.orders || [],
-      drivers: [], // Always empty - drivers table is deprecated
-      auth: { ...defaultState().auth, ...(parsed.auth || {}) },
-      loginHistory: parsed.loginHistory || [],
-      onlineDrivers: parsed.onlineDrivers || {},
-      driverLocations: parsed.driverLocations || {}
-    };
-  } catch {
-    return defaultState();
-  }
+  // Always return default state - data comes from Supabase only, not localStorage
+  return defaultState();
 }
 
 function money(value) {
@@ -686,12 +666,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Skip saving to localStorage during reset
-    if (!isResettingOrdersRef.current && typeof window !== "undefined") {
-      localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    }
     // Auto-sync to Supabase on any data change (but skip during reset)
-    // Only track orders, customers, auth - not drivers (drivers change frequently from polling)
+    // Data is NOT stored in localStorage - Supabase is the only source of truth
     if (!isResettingOrdersRef.current) {
       console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
       syncToSupabase(state);
@@ -749,13 +725,6 @@ export default function App() {
 
   const loginSales = async () => {
     if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
-    if (rememberPhone) {
-      localStorage.setItem("hillkoff-last-phone", loginForm.phone.trim());
-      localStorage.setItem("hillkoff-last-sales-name", loginForm.name.trim());
-    } else {
-      localStorage.removeItem("hillkoff-last-phone");
-      localStorage.removeItem("hillkoff-last-sales-name");
-    }
     const loginEntry = {
       id: `L${Date.now()}`,
       role: "sales",
@@ -780,12 +749,6 @@ export default function App() {
   const loginDriver = async () => {
     if (!loginForm.phone.trim()) return;
     const phone = loginForm.phone.trim();
-    if (rememberPhone) {
-      localStorage.setItem("hillkoff-last-phone", phone);
-    } else {
-      localStorage.removeItem("hillkoff-last-phone");
-    }
-    localStorage.removeItem("hillkoff-last-sales-name");
     if (!supabase) supabase = initSupabase();
     
     // Look for driver in local state only (Supabase drivers table is now empty by design)
@@ -1323,38 +1286,31 @@ export default function App() {
           <>
             <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
               <button className="secondary" onClick={() => {
-                if (window.confirm("⚠️ ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) {
-                  const confirmDelete = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และรีเซ็ตทุกเครื่องใช่ไหม?");
-                  if (!confirmDelete) return;
+                const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตออเดอร์:");
+                if (pwd === null) return; // User cancelled
+                if (pwd !== "2532") {
+                  alert("❌ รหัสไม่ถูกต้อง");
+                  return;
+                }
+                if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
 
-                  (async () => {
-                    try {
-                      // Disable polling during reset to prevent race condition
-                      isResettingOrdersRef.current = true;
-                      
-                      if (!supabase) supabase = initSupabase();
-                      if (!supabase) {
-                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-                        isResettingOrdersRef.current = false;
-                        return;
-                      }
+                (async () => {
+                  try {
+                    // Disable polling during reset to prevent race condition
+                    isResettingOrdersRef.current = true;
+                    
+                    if (!supabase) supabase = initSupabase();
+                    if (!supabase) {
+                      alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                      isResettingOrdersRef.current = false;
+                      return;
+                    }
 
-                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด (ทั้ง Local + Supabase)...");
-                      console.log("🔍 [RESET] Starting complete order reset process...");
+                    setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด (Supabase)...");
+                    console.log("🔍 [RESET] Starting complete order reset process...");
                       
-                      // STEP 1: Clear ALL localStorage FIRST
-                      console.log("🧹 [RESET] Step 1: Clearing all localStorage...");
-                      try {
-                        localStorage.removeItem(STORE_KEY);
-                        localStorage.clear();
-                        console.log("✅ [RESET] localStorage completely cleared");
-                        console.log("✅ [RESET] localStorage size after clear:", localStorage.length);
-                      } catch (e) {
-                        console.error("❌ [RESET] localStorage.clear failed:", e);
-                      }
-                      
-                      // STEP 2: Clear React state
-                      console.log("🧹 [RESET] Step 2: Clearing React state (orders = [])...");
+                      // STEP 1: Clear React state
+                      console.log("🧹 [RESET] Step 1: Clearing React state (orders = [])...");
                       const emptyState = JSON.parse(JSON.stringify(state)); // Deep copy
                       emptyState.orders = [];
                       emptyState.customers = [];
@@ -1365,8 +1321,8 @@ export default function App() {
                       await new Promise(resolve => setTimeout(resolve, 200));
                       console.log("✅ [RESET] State update delay completed");
                       
-                      // STEP 3: Delete from Supabase
-                      console.log("🗑️ [RESET] Step 3: Deleting from Supabase...");
+                      // STEP 2: Delete from Supabase
+                      console.log("🗑️ [RESET] Step 2: Deleting from Supabase...");
                       
                       try {
                         // Fetch all order IDs
@@ -1439,15 +1395,12 @@ export default function App() {
                         throw e;
                       }
                       
-                      // STEP 4: Wait to ensure everything is synced and polling stays off
-                      console.log("⏳ [RESET] Waiting 10 seconds to ensure deletion is complete and synced...");
-                      await new Promise(resolve => setTimeout(resolve, 10000));
+                      // STEP 3: Wait to ensure everything is synced
+                      console.log("⏳ [RESET] Step 3: Waiting 5 seconds to ensure deletion is complete...");
+                      await new Promise(resolve => setTimeout(resolve, 5000));
                       
-                      // STEP 5: Double-check localStorage is still empty
-                      console.log("🔍 [RESET] Final localStorage check:", { size: localStorage.length, STORE_KEY: localStorage.getItem(STORE_KEY) });
-                      
-                      // STEP 6: Force fetch from Supabase one more time to ensure cache is empty
-                      console.log("🔄 [RESET] Final verification: fetching from Supabase...");
+                      // STEP 4: Final verification: fetching from Supabase
+                      console.log("🔄 [RESET] Step 4: Final verification: fetching from Supabase...");
                       const { data: finalCheck, error: finalCheckError } = await supabase
                         .from("orders")
                         .select("id");
@@ -1478,11 +1431,10 @@ export default function App() {
                         console.log("🔄 [RESET] After retry:", { ordersRemaining: finalCheck2?.length || 0 });
                       }
                       
-                      // STEP 7: Re-enable sync again
-                      console.log("🔄 [RESET] Re-enabling polling and sync...");
-                      console.log("🔄 [RESET] Setting isResettingOrders = false");
+                      // STEP 5: Re-enable sync
+                      console.log("🔄 [RESET] Step 5: Re-enabling polling and sync...");
                       setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!");
-                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมด (Local + Supabase)\n✓ ล้างข้อมูล localStorage\n✓ รีเซ็ตสถานะทั้งระบบ");
+                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมดจาก Supabase\n✓ รีเซ็ตสถานะทั้งระบบ");
                       isResettingOrdersRef.current = false;
                       
                       console.log("✅ [RESET] Process completed successfully!");
@@ -1809,43 +1761,39 @@ export default function App() {
             <section className="panel">
               <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
                 <button className="secondary" onClick={() => {
-                  if (window.confirm("⚠️ ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) {
-                    const confirmDelete = window.confirm("ยืนยันอีกครั้ง: ต้องการลบออเดอร์ทั้งหมดใน Supabase และ Local Storage ใช่ไหม?");
-                    if (!confirmDelete) return;
+                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตออเดอร์:");
+                  if (pwd === null) return; // User cancelled
+                  if (pwd !== "2532") {
+                    alert("❌ รหัสไม่ถูกต้อง");
+                    return;
+                  }
+                  if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
 
-                    (async () => {
-                      try {
-                        if (!supabase) supabase = initSupabase();
-                        if (!supabase) {
-                          alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-                          return;
-                        }
-
-                        setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
-                        const { error } = await supabase.from("orders").delete().neq("id", "__never__");
-                        if (error) {
-                          alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
-                          setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
-                          return;
-                        }
-
-                        // Clear local state
-                        setState(prev => ({ ...prev, orders: [] }));
-                        
-                        // Clear localStorage to prevent old data from reappearing
-                        try {
-                          localStorage.removeItem(STORE_KEY);
-                          console.log("✅ Cleared localStorage");
-                        } catch (e) {
-                          console.error("⚠️ Could not clear localStorage:", e);
-                        }
-                        
-                        setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-                        alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ (Supabase + Local Storage)");
-                        await refreshFromSupabase();
-                      } catch (e) {
-                        alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                  (async () => {
+                    try {
+                      if (!supabase) supabase = initSupabase();
+                      if (!supabase) {
+                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                        return;
                       }
+
+                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
+                      const { error } = await supabase.from("orders").delete().neq("id", "__never__");
+                      if (error) {
+                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                        return;
+                      }
+
+                      // Clear local state
+                      setState(prev => ({ ...prev, orders: [] }));
+                      
+                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      await refreshFromSupabase();
+                    } catch (e) {
+                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                    }
                     })();
                   }
                 }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
@@ -2161,13 +2109,32 @@ export default function App() {
                 <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
                 <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
                 <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
-                  if (window.confirm("⚠️ ต้องการรีเซ็ตแดชบอร์ดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) {
-                    setState(prev => ({
-                      ...prev,
-                      orders: []
-                    }));
-                    alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ! ทั้งหมดกลับเป็น 0");
+                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตแดชบอร์ด:");
+                  if (pwd === null) return; // User cancelled
+                  if (pwd !== "2532") {
+                    alert("❌ รหัสไม่ถูกต้อง");
+                    return;
                   }
+                  if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตแดชบอร์ดทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
+                  
+                  (async () => {
+                    try {
+                      if (!supabase) supabase = initSupabase();
+                      if (!supabase) {
+                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                        return;
+                      }
+                      const { error } = await supabase.from("orders").delete().neq("id", "__never__");
+                      if (error) {
+                        alert(`❌ ลบไม่สำเร็จ: ${error.message}`);
+                        return;
+                      }
+                      setState(prev => ({ ...prev, orders: [] }));
+                      alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
+                    } catch (e) {
+                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                    }
+                  })();
                 }}>🔄 รีเซ็ตแดชบอร์ด</button>
               </section>
             )}
