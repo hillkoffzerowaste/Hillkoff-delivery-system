@@ -1445,7 +1445,6 @@ export default function App() {
                       isResettingOrdersRef.current = false;
                     }
                   })();
-                }
               }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
             </div>
             <div className="sales-grid">
@@ -1795,7 +1794,6 @@ export default function App() {
                       alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
                     }
                     })();
-                  }
                 }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
               </div>
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
