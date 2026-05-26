@@ -180,6 +180,10 @@ export default function App() {
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
+  const lastOrdersPullRef = useRef(null);
+  const lastCustomersPullRef = useRef(null);
+  const lastDriverLocationsPullRef = useRef(null);
+  const refreshInFlightRef = useRef(false);
   
   // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
   // useState is async and causes stale closures in syncToSupabase
@@ -330,29 +334,53 @@ export default function App() {
     await refreshChat();
   };
 
-  // Polling mechanism for real-time sync
-  const refreshFromSupabase = async () => {
-    if (!supabase) {
-      console.warn("⚠️ Supabase not initialized yet");
-      return;
-    }
-    
-    // Skip refresh during reset to prevent old data from being restored
-    if (isResettingOrdersRef.current) {
-      console.log("⏸️ Skipping refreshFromSupabase during reset");
-      return;
-    }
-    
-    try {
-      // Fetch latest data from Supabase
-      const { data: supabaseOrders, error: ordersError } = await supabase.from("orders").select("*");
-      const { data: supabaseCustomers, error: customersError } = await supabase.from("customers").select("*");
-      // Note: drivers table is intentionally empty by design - no fetch needed
-      const { data: supabaseDriverLocations, error: driverLocationsError } = await supabase.from("driver_locations").select("*");
+	  // Polling mechanism for real-time sync
+	  const refreshFromSupabase = async () => {
+	    if (!supabase) {
+	      console.warn("⚠️ Supabase not initialized yet");
+	      return;
+	    }
+	    if (refreshInFlightRef.current) return;
+	    
+	    // Skip refresh during reset to prevent old data from being restored
+	    if (isResettingOrdersRef.current) {
+	      console.log("⏸️ Skipping refreshFromSupabase during reset");
+	      return;
+	    }
+	    
+	    try {
+	      refreshInFlightRef.current = true;
+	      const nowIso = new Date().toISOString();
 
-      if (ordersError) setSyncStatus?.(`⚠️ Supabase orders error: ${ordersError.message}`);
-      if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
-      if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
+	      const orderCols = "id,customerId,customerName,customerPhone,zone,address,mapUrl,window,boxes,cod,driverId,driverName,salesName,salesPhone,status,photo,checkInAt,deliveredAt,complaint,salesNote,createdAt,updatedAt";
+	      const customerCols = "id,name,contact,phone,zone,address,mapUrl,note,updatedAt";
+	      const driverLocCols = "id,driverId,driverName,plate,zone,lat,lng,timestamp,updatedAt";
+
+	      let ordersQuery = supabase.from("orders").select(orderCols);
+	      if (lastOrdersPullRef.current) ordersQuery = ordersQuery.gt("updatedAt", lastOrdersPullRef.current);
+	      if (state.auth?.role === "driver") {
+	        const did = state.auth?.driverId || driverId || "";
+	        ordersQuery = did
+	          ? ordersQuery.or(`driverId.is.null,driverId.eq.,driverId.eq.${did}`)
+	          : ordersQuery.or("driverId.is.null,driverId.eq.");
+	      }
+	      ordersQuery = ordersQuery.order("updatedAt", { ascending: true }).limit(500);
+
+	      let customersQuery = supabase.from("customers").select(customerCols);
+	      if (lastCustomersPullRef.current) customersQuery = customersQuery.gt("updatedAt", lastCustomersPullRef.current);
+	      customersQuery = customersQuery.order("updatedAt", { ascending: true }).limit(500);
+
+	      let driverLocQuery = supabase.from("driver_locations").select(driverLocCols);
+	      if (lastDriverLocationsPullRef.current) driverLocQuery = driverLocQuery.gt("updatedAt", lastDriverLocationsPullRef.current);
+	      driverLocQuery = driverLocQuery.order("updatedAt", { ascending: true }).limit(500);
+
+	      const { data: supabaseOrders, error: ordersError } = await ordersQuery;
+	      const { data: supabaseCustomers, error: customersError } = await customersQuery;
+	      const { data: supabaseDriverLocations, error: driverLocationsError } = await driverLocQuery;
+
+	      if (ordersError) setSyncStatus?.(`⚠️ Supabase orders error: ${ordersError.message}`);
+	      if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
+	      if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
       
       console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, driver_locations: supabaseDriverLocations?.length });
       
@@ -470,12 +498,18 @@ export default function App() {
           }
         }
         
-        return changed ? newState : prev;
-      });
-    } catch (error) {
-      console.log("⚠️ Polling error:", error);
-    }
-  };
+	        return changed ? newState : prev;
+	      });
+
+	      if (!ordersError) lastOrdersPullRef.current = nowIso;
+	      if (!customersError) lastCustomersPullRef.current = nowIso;
+	      if (!driverLocationsError) lastDriverLocationsPullRef.current = nowIso;
+	    } catch (error) {
+	      console.log("⚠️ Polling error:", error);
+	    } finally {
+	      refreshInFlightRef.current = false;
+	    }
+	  };
 
   useEffect(() => {
     if (!supabase) {
@@ -486,12 +520,12 @@ export default function App() {
     // When reset ends, delay first poll to ensure delete completed
     const delayFirstPoll = isResettingOrdersRef.current ? 0 : 3000;
     
-    const pollInterval = setInterval(() => {
-      // Skip polling during reset to prevent old data from being pulled back
-      if (!isResettingOrdersRef.current) {
-        refreshFromSupabase();
-      }
-    }, 2000); // Poll every 2 seconds (allow Supabase time to save)
+	    const pollInterval = setInterval(() => {
+	      // Skip polling during reset to prevent old data from being pulled back
+	      if (!isResettingOrdersRef.current) {
+	        refreshFromSupabase();
+	      }
+	    }, 8000); // Poll less often; realtime + incremental pull handles freshness
     
     // If reset just ended, add extra delay before first poll
     let timeout;
