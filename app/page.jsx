@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -103,6 +103,30 @@ function osmEmbedUrl(lat, lng, zoom = 16) {
   const bottom = Number(lat) - delta;
   const bbox = `${left},${bottom},${right},${top}`;
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
+function buildLineMessageForOrder(order) {
+  const lines = [];
+  lines.push("✅ ส่งของสำเร็จ");
+  lines.push(`ออเดอร์: ${order.id}`);
+  if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
+  if (order.customerPhone) lines.push(`โทร: ${order.customerPhone}`);
+  if (order.address) lines.push(`ที่อยู่: ${order.address}`);
+  if (order.zone) lines.push(`โซน: ${order.zone}`);
+  if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
+  if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
+  lines.push(`COD: ฿${money(order.cod || 0)}`);
+  if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
+  if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
+  if (order.photo) lines.push("POD: (แนบรูปในแชท)");
+  return lines.join("\n");
+}
+
+async function dataUrlToFile(dataUrl, fileName) {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const ext = (blob.type || "image/jpeg").split("/").pop() || "jpg";
+  return new File([blob], `${fileName}.${ext}`, { type: blob.type || "image/jpeg" });
 }
 
 function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
@@ -1038,26 +1062,54 @@ export default function App() {
     status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
   });
 
-  const uploadPod = async (order, file) => {
-    if (!file) return;
-    try {
-      setSyncStatus("กำลังเก็บรูป POD...");
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      updateOrder(order.id, { photo: dataUrl });
-      setSyncStatus("✅ บันทึกรูป POD สำเร็จ");
-    } catch (error) {
-      setSyncStatus(`❌ บันทึกรูปไม่สำเร็จ: ${error.message}`);
-    }
-  };
+	  const uploadPod = async (order, file) => {
+	  if (!file) return;
+	  try {
+	    setSyncStatus("กำลังบันทึกรูป POD ในเครื่อง...");
 
-  const acceptOrder = async (id) => {
-    // Check if driver is logged in
-    if (!driverId) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(file);
+    });
+
+    if (!dataUrl) throw new Error("read failed");
+    updateOrder(order.id, { photo: dataUrl, sharedToLine: false });
+    setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — โปรดกดแชร์ลง LINE");
+  } catch (error) {
+    setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
+	  }
+	};
+
+	  const shareOrderToLine = (order) => {
+	    const text = buildLineMessageForOrder(order);
+	    if (!order?.photo?.startsWith?.("data:")) {
+	      alert("ยังไม่มีรูป POD");
+	      return;
+	    }
+	    if (!navigator?.share) {
+	      alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
+	      return;
+	    }
+	    (async () => {
+	      try {
+	        const file = await dataUrlToFile(order.photo, `POD-${order.id}`);
+	        if (!navigator.canShare?.({ files: [file] })) {
+	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
+	          return;
+	        }
+	        await navigator.share({ text, files: [file] });
+	        updateOrder(order.id, { sharedToLine: true });
+	      } catch {
+	        // user cancelled or share failed
+	      }
+	    })();
+	  };
+
+	  const acceptOrder = async (id) => {
+	    // Check if driver is logged in
+	    if (!driverId) {
       setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
       return;
     }
@@ -2073,22 +2125,16 @@ export default function App() {
                         )}
                         {order.status === "กำลังจัดส่ง" && (
                           <>
-                            <label 
-                              className="primary" 
-                              style={{ padding: "8px", fontSize: "12px", cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}>
-                              📷 ถ่ายรูป
-                              <input type="file" accept="image/*" style={{ display: "none" }} disabled={pendingOrderUpdatesRef.current.has(order.id)} onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  const reader = new FileReader();
-                                  reader.onload = (evt) => {
-                                    pendingOrderUpdatesRef.current.add(order.id);
-                                    updateOrder(order.id, { photo: evt.target?.result });
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
-                              }} />
-                            </label>
+	                            <label 
+	                              className="primary" 
+	                              style={{ padding: "8px", fontSize: "12px", cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}>
+	                              📷 ถ่ายรูป
+	                              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={pendingOrderUpdatesRef.current.has(order.id)} onChange={(e) => {
+	                                const file = e.target.files?.[0];
+	                                if (file) uploadPod(order, file);
+	                                e.target.value = "";
+	                              }} />
+	                            </label>
                             <button 
                               className="secondary" 
                               style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
@@ -2102,12 +2148,19 @@ export default function App() {
                               }}>❌ ยกเลิก</button>
                           </>
                         )}
-                        {order.status === "กำลังจัดส่ง" && order.photo && (
-                          <button 
-                            className="primary" 
-                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                            onClick={() => {
+	                        {order.status === "กำลังจัดส่ง" && order.photo && !order.sharedToLine && (
+	                          <button
+	                            className="primary"
+	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
+	                            onClick={() => shareOrderToLine(order)}
+	                          >💬 แชร์รูป+รายละเอียด (LINE)</button>
+	                        )}
+	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
+	                          <button 
+	                            className="primary" 
+	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+	                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+	                            onClick={() => {
                               // Add to pending updates to prevent rapid clicks
                               pendingOrderUpdatesRef.current.add(order.id);
                               updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
@@ -2462,3 +2515,4 @@ export default function App() {
     </>
   );
 }
+
