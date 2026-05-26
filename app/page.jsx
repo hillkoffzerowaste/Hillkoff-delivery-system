@@ -325,7 +325,7 @@ export default function App() {
       if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
       if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
       
-      console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, drivers: supabaseDrivers?.length });
+      console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, driver_locations: supabaseDriverLocations?.length });
       
       setState(prev => {
         let changed = false;

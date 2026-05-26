@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { getSupabaseAdmin } from "../../../../lib/supabaseServer";
 
+export const runtime = "nodejs";
+
 function sha256Hex(text) {
   return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
 }

@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "../../../../lib/supabaseServer";
 
+export const runtime = "nodejs";
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const token = String(searchParams.get("token") || "").trim();
