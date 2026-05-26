@@ -175,6 +175,7 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
+  const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   
   // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
   // useState is async and causes stale closures in syncToSupabase
@@ -1049,10 +1050,10 @@ export default function App() {
       
       return updated;
     });
-    setTimeout(() => {
-      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
-    }, 2000);
-  };
+	    setTimeout(() => {
+	      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
+	    }, 250);
+	  };
   const updateCustomer = (id, patch) => {
     setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
     setEditingCustomerId(null);
@@ -2071,13 +2072,13 @@ export default function App() {
             );
             })()}
 
-            {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
-            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).length > 0 && (
-              <section className="panel">
-                <div className="panel-head"><h2>🚗 ออเดอร์ที่รับแล้ว</h2><span>{orders.filter(o => o.driverId === driverId && o.status !== "ส่งสำเร็จ").length} งาน · สำเร็จ {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length}</span></div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
-                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).map(order => (
-                    <div key={order.id} style={{ background: order.status === "ส่งสำเร็จ" ? "#f0fdf4" : "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
+	            {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
+	            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).length > 0 && (
+	              <section className="panel">
+	                <div className="panel-head"><h2>🚗 ออเดอร์ที่กำลังส่ง</h2><span>{orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).length} งาน</span></div>
+	                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+	                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).map(order => (
+	                    <div key={order.id} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div>
                         <b style={{ fontSize: "14px", display: "block", marginBottom: "4px", color: statusColor[order.status] }}>{order.id}</b>
                         <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
@@ -2194,8 +2195,50 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              </section>
-            )}
+	              </section>
+	            )}
+
+	            {/* สรุป/ประวัติออเดอร์ที่ส่งสำเร็จ (พับเก็บ) */}
+	            {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0 && (
+	              <section className="panel" style={{ background: "#f8fafc" }}>
+	                <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+	                  <h2 style={{ margin: 0 }}>✅ ส่งสำเร็จแล้ว</h2>
+	                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowDeliveredHistory(v => !v)}>
+	                    {showDeliveredHistory ? "ซ่อนรายการ" : "ดูรายการ"}
+	                  </button>
+	                </div>
+	                <div style={{ color: "#6b7280", fontSize: "12px" }}>
+	                  {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length} งาน · รวม COD ฿{money(orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").reduce((sum, o) => sum + Number(o.cod || 0), 0))}
+	                </div>
+
+	                {showDeliveredHistory && (
+	                  <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+	                    {orders
+	                      .filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ")
+	                      .slice()
+	                      .reverse()
+	                      .map(order => (
+	                        <div key={order.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: "8px" }}>
+	                          <div>
+	                            <b style={{ fontSize: "14px", display: "block" }}>{order.id}</b>
+	                            <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{order.customerName}</b>
+	                            <small style={{ color: "#6b7280" }}>📍 {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
+	                            {order.deliveredAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
+	                          </div>
+	                          {order.photo?.startsWith?.("data:") && (
+	                            <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid #e5e7eb" }}>
+	                              <img src={order.photo} alt="pod" style={{ width: "100%", height: "auto" }} />
+	                            </div>
+	                          )}
+	                          <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>
+	                            💬 แชร์รูป+รายละเอียด (LINE)
+	                          </button>
+	                        </div>
+	                      ))}
+	                  </div>
+	                )}
+	              </section>
+	            )}
 
             {driverOrders.length === 0 && (
               <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
