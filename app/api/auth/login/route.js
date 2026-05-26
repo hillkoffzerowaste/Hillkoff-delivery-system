@@ -7,10 +7,6 @@ function sha256Hex(text) {
   return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
 }
 
-function normalizePhone(raw) {
-  return String(raw || "").replace(/\D/g, "");
-}
-
 function clientMeta(request) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -37,8 +33,7 @@ export async function POST(request) {
   }
 
   const role = String(payload?.role || "").trim();
-  const phoneRaw = String(payload?.phone || "").trim();
-  const phone = normalizePhone(phoneRaw) || phoneRaw;
+  const phone = String(payload?.phone || "").trim();
   const name = String(payload?.name || "").trim();
   const pin = String(payload?.pin || "").trim();
 
@@ -61,7 +56,7 @@ export async function POST(request) {
         .eq("phone", phone)
         .maybeSingle();
       if (error) throw error;
-      if (!driver) throw new Error("เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธเธเธฑเธ");
+      if (!driver) throw new Error("ไม่พบข้อมูลคนขับ");
 
       driverId = driver.id;
       userId = driver.id;
@@ -79,15 +74,15 @@ export async function POST(request) {
       if (salesErr) throw salesErr;
 
       if (salesUser) {
-        if (!salesUser.active) throw new Error("เธเธฑเธเธเธตเธ–เธนเธเธฃเธฐเธเธฑเธเธเธฒเธฃเนเธเนเธเธฒเธ");
+        if (!salesUser.active) throw new Error("บัญชีถูกระงับการใช้งาน");
         // PIN is optional; only validate when provided
         if (pin) {
-          if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN เนเธกเนเธ–เธนเธเธ•เนเธญเธ");
+          if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN ไม่ถูกต้อง");
         }
         userId = salesUser.id;
         displayName = salesUser.name;
       } else {
-        if (!displayName) throw new Error("เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธเธทเนเธญเธเนเธฒเธขเธเธฒเธข");
+        if (!displayName) throw new Error("กรุณากรอกชื่อฝ่ายขาย");
         userId = phone;
       }
     }
@@ -107,7 +102,7 @@ export async function POST(request) {
     await supabase.from("login_events").insert({
       role,
       user_id: userId,
-      phone: phoneRaw || phone,
+      phone,
       success: true,
       error: null,
       ip,
@@ -125,7 +120,7 @@ export async function POST(request) {
       await supabase.from("login_events").insert({
         role,
         user_id: null,
-        phone: phoneRaw || phone,
+        phone,
         success: false,
         error: message,
         ip,
