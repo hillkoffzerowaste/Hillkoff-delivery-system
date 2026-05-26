@@ -517,24 +517,8 @@ export default function App() {
       return;
     }
     
-    // When reset ends, delay first poll to ensure delete completed
-    const delayFirstPoll = isResettingOrdersRef.current ? 0 : 3000;
-    
-	    const pollInterval = setInterval(() => {
-	      // Skip polling during reset to prevent old data from being pulled back
-	      if (!isResettingOrdersRef.current) {
-	        refreshFromSupabase();
-	      }
-	    }, 8000); // Poll less often; realtime + incremental pull handles freshness
-    
-    // If reset just ended, add extra delay before first poll
-    let timeout;
-    if (!isResettingOrdersRef.current && delayFirstPoll > 0) {
-      console.log("🔄 [RESET-RECOVERY] Delaying first poll by 3s to let delete complete...");
-      timeout = setTimeout(() => {
-        refreshFromSupabase();
-      }, delayFirstPoll);
-    }
+	    // No fixed polling interval. Use realtime + explicit refresh calls.
+	    refreshFromSupabase();
     
     // Set up real-time subscription for orders
     const subscription = supabase
@@ -575,17 +559,15 @@ export default function App() {
       )
       .subscribe();
     
-    return () => {
-      clearInterval(pollInterval);
-      if (timeout) clearTimeout(timeout);
-      subscription?.unsubscribe();
-    };
-  }, []);
+	    return () => {
+	      subscription?.unsubscribe();
+	    };
+	  }, []);
   
-  const upsertOrderToSupabase = async (order) => {
-    if (!supabase) return { ok: false, error: "Supabase not initialized" };
-    try {
-      const orderForDB = {
+	  const upsertOrderToSupabase = async (order) => {
+	    if (!supabase) return { ok: false, error: "Supabase not initialized" };
+	    try {
+	      const orderForDB = {
                id: order.id,
                 customerId: order.customerId || "",
                 customerName: order.customerName || "",
@@ -601,12 +583,13 @@ export default function App() {
                 salesName: order.salesName || "",
                 salesPhone: order.salesPhone || "",
         status: order.status || "รอคนขับรับ",
-        photo: order.photo || "",
-        checkInAt: order.checkInAt || "",
-        deliveredAt: order.deliveredAt || "",
-        complaint: order.complaint || "",
-        salesNote: order.salesNote || "",
-        createdAt: order.createdAt || new Date().toISOString(),
+	        // POD is stored on-device only; never persist to Supabase
+	        photo: "",
+	        checkInAt: order.checkInAt || "",
+	        deliveredAt: order.deliveredAt || "",
+	        complaint: order.complaint || "",
+	        salesNote: order.salesNote || "",
+	        createdAt: order.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
@@ -615,8 +598,30 @@ export default function App() {
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e?.message || String(e) };
-    }
-  };
+	    }
+	  };
+
+	  const upsertCustomerToSupabase = async (customer) => {
+	    if (!supabase) return { ok: false, error: "Supabase not initialized" };
+	    try {
+	      const customerForDB = {
+	        id: customer.id,
+	        name: customer.name || "",
+	        contact: customer.contact || "",
+	        phone: customer.phone || "",
+	        zone: customer.zone || "",
+	        address: customer.address || "",
+	        mapUrl: customer.mapUrl || "",
+	        note: customer.note || "",
+	        updatedAt: new Date().toISOString()
+	      };
+	      const { error } = await supabase.from("customers").upsert(customerForDB, { onConflict: "id" });
+	      if (error) return { ok: false, error: error.message };
+	      return { ok: true };
+	    } catch (e) {
+	      return { ok: false, error: e?.message || String(e) };
+	    }
+	  };
   
   const syncToSupabase = async (currentState) => {
     // CRITICAL: Don't sync during reset - prevents deleted orders from being re-created
@@ -734,21 +739,11 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    // Auto-sync to Supabase on any data change (but skip during reset)
-    // Data is NOT stored in localStorage - Supabase is the only source of truth
-    if (!isResettingOrdersRef.current) {
-      console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
-      syncToSupabase(state);
-    }
-  }, [
-    JSON.stringify(state.orders),
-    JSON.stringify(state.customers),
-    JSON.stringify(state.auth)
-  ]);
-  useEffect(() => {
-    if (state.auth?.driverId) setDriverId(state.auth.driverId);
-  }, [state.auth?.driverId]);
+	  // NOTE: Do not bulk sync state to Supabase on change.
+	  // Supabase is the source of truth; we only upsert on explicit user actions (create/update).
+	  useEffect(() => {
+	    if (state.auth?.driverId) setDriverId(state.auth.driverId);
+	  }, [state.auth?.driverId]);
 
   const customers = state.customers;
   const orders = state.orders;
@@ -779,16 +774,19 @@ export default function App() {
     return matchesQuery && matchesStatus && matchesZone;
   });
 
-  const saveCustomer = async () => {
-    if (!customerForm.name.trim()) return;
-    const id = `C${String(customers.length + 1).padStart(3, "0")}`;
-    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
-    const nextState = { ...state, customers: [nextCustomer, ...state.customers] };
-    setState(nextState);
-    setSelectedCustomerId(id);
-    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
-    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
-  };
+	  const saveCustomer = async () => {
+	    if (!customerForm.name.trim()) return;
+	    const id = `C${String(customers.length + 1).padStart(3, "0")}`;
+	    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
+	    setState(prev => ({ ...prev, customers: [nextCustomer, ...(prev.customers || [])] }));
+	    if (supabase) {
+	      const saved = await upsertCustomerToSupabase(nextCustomer);
+	      if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Supabase ไม่สำเร็จ: ${saved.error}`);
+	    }
+	    setSelectedCustomerId(id);
+	    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+	    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
+	  };
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
 
@@ -990,7 +988,7 @@ export default function App() {
     let customer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase());
     
     // If customer doesn't exist, create new one automatically
-    if (!customer) {
+	    if (!customer) {
       customer = {
         id: `C${Date.now()}`,
         name: orderForm.customerName.trim(),
@@ -1001,10 +999,14 @@ export default function App() {
         mapUrl: "",
         note: ""
       };
-      // Auto-save new customer
-      setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
-      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
-    }
+	      // Auto-save new customer
+	      setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
+	      if (supabase) {
+	        const saved = await upsertCustomerToSupabase(customer);
+	        if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Supabase ไม่สำเร็จ: ${saved.error}`);
+	      }
+	      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
+	    }
     
     const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
     const nextOrder = {
@@ -1034,31 +1036,22 @@ export default function App() {
     setShowOrderConfirm(true);
   };
 
-  const confirmOrder = async () => {
-    if (!pendingOrder) return;
+	  const confirmOrder = async () => {
+	    if (!pendingOrder) return;
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
-    setState(prev => {
-      const updated = { ...prev, orders: [pendingOrder, ...prev.orders] };
-      console.log("📤 confirmOrder: State updated - total orders:", updated.orders.length);
-      console.log("📤 confirmOrder: Orders in state:", updated.orders.map(o => o.id));
-      return updated;
-    });
+	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
+	    if (supabase) {
+	      const saved = await upsertOrderToSupabase(pendingOrder);
+	      if (!saved.ok) setSyncStatus(`⚠️ ส่งออเดอร์ไป Supabase ไม่สำเร็จ: ${saved.error}`);
+	    }
     
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
     setPendingOrder(null);
-    setSyncStatus(`⏳ กำลังส่งออเดอร์เข้าคิว...`);
-    
-    // Wait longer for Supabase to actually save before switching tabs (deprecated)
-    (async () => {
-      console.log("⏰ Waiting 2000ms complete");
-      setTab("driver");
-      setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
-      // Let polling refresh the data
-      await refreshFromSupabase();
-    })();
-  };
+	    setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
+	    setTab("driver");
+	  };
 
   const deleteOrder = (orderId) => {
     if (confirm("❌ ลบออเดอร์นี้หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้")) {
@@ -1092,10 +1085,14 @@ export default function App() {
 	      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
 	    }, 250);
 	  };
-  const updateCustomer = (id, patch) => {
-    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
-    setEditingCustomerId(null);
-  };
+	  const updateCustomer = (id, patch) => {
+	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
+	    if (supabase) {
+	      const existing = state.customers.find(c => c.id === id);
+	      if (existing) upsertCustomerToSupabase({ ...existing, ...patch });
+	    }
+	    setEditingCustomerId(null);
+	  };
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
     driverId: nextDriverId,
     status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
