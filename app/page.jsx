@@ -1282,7 +1282,6 @@ export default function App() {
     alert(summaryText);
   };
 
-  const [mapZoom, setMapZoom] = useState(1);
 
   const generateDailyReport = () => {
     const today = new Date().toLocaleDateString("th-TH");
@@ -2345,17 +2344,35 @@ export default function App() {
           </div>
         )}
 
-        {displayTab === "settings" && (
-          <div className="settings-grid">
-            {auth.email === "online_marketing@hillkoff.com" && (
-              <section className="panel">
-                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
-                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
-                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
-                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตแดชบอร์ด:");
-                  if (pwd === null) return; // User cancelled
-                  if (pwd !== "2532") {
-                    alert("❌ รหัสไม่ถูกต้อง");
+	        {displayTab === "settings" && (
+	          <div className="settings-grid">
+	            <section className="panel">
+	              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
+	              <button className="secondary wide" onClick={() => {
+	                const report = generateDailyReport();
+	                copyToClipboard(report);
+	              }}><FileText size={16} /> สร้างรายงานและคัดลอก</button>
+	              <button className="secondary wide" onClick={() => {
+	                const report = generateDailyReport();
+	                const element = document.createElement("a");
+	                element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(report));
+	                element.setAttribute("download", `Hillkoff-Report-${new Date().toLocaleDateString("th-TH")}.txt`);
+	                element.style.display = "none";
+	                document.body.appendChild(element);
+	                element.click();
+	                document.body.removeChild(element);
+	              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
+	            </section>
+
+	            {auth.email === "online_marketing@hillkoff.com" && (
+	              <section className="panel">
+	                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
+	                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
+	                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
+	                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตแดชบอร์ด:");
+	                  if (pwd === null) return; // User cancelled
+	                  if (pwd !== "2532") {
+	                    alert("❌ รหัสไม่ถูกต้อง");
                     return;
                   }
                   if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตแดชบอร์ดทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
@@ -2399,94 +2416,10 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel">
-              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Live Map - Chiang Mai</span></div>
-              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-                <button className="secondary" onClick={() => setMapZoom(Math.max(10, mapZoom - 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➖ Zoom Out</button>
-                <button className="secondary" onClick={() => setMapZoom(Math.min(18, mapZoom + 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➕ Zoom In</button>
-                <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {mapZoom}%</span>
-              </div>
-              
-              <svg viewBox="0 0 400 400" style={{ width: "100%", height: "380px", border: "1px solid #ddd", borderRadius: "8px", background: "linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)", transform: `scale(${mapZoom / 100})`, transformOrigin: "top center" }}>
-                <defs>
-                  <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <circle cx="10" cy="10" r="1" fill="#d1d5db" opacity="0.4"/>
-                  </pattern>
-                  <linearGradient id="zoneGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style={{ stopColor: "#fef9e7", stopOpacity: 1 }} />
-                    <stop offset="100%" style={{ stopColor: "#fef3c7", stopOpacity: 1 }} />
-                  </linearGradient>
-                </defs>
-                <rect width="400" height="400" fill="url(#dots)" />
-                
-                <rect x="10" y="20" width="120" height="100" fill="url(#zoneGrad1)" stroke="#d97706" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="70" y="75" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#b45309">เมืองเชียงใหม่</text>
-                
-                <rect x="200" y="50" width="100" height="80" fill="#dcfce7" stroke="#16a34a" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="250" y="100" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#166534">แม่ริม</text>
-                
-                <rect x="50" y="200" width="110" height="90" fill="#cffafe" stroke="#0891b2" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="105" y="250" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#164e63">ลำพูน</text>
-                
-                <rect x="250" y="250" width="130" height="100" fill="#f3e8ff" stroke="#a855f7" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="315" y="310" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#6b21a8">หางดง/สันป่า</text>
-                
-                {drivers.map((driver, idx) => {
-                  const location = state.driverLocations?.[driver.id];
-                  const isOnline = state.onlineDrivers?.[driver.id];
-                  let x, y;
-                  if (location && location.zone) {
-                    const zoneMap = {
-                      "เมืองเชียงใหม่": { x: 70, y: 70 },
-                      "แม่ริม": { x: 250, y: 90 },
-                      "ลำพูน": { x: 105, y: 245 },
-                      "หางดง": { x: 315, y: 300 },
-                      "สันป่าตอง": { x: 315, y: 280 }
-                    };
-                    const zonePos = zoneMap[location.zone] || { x: 70 + idx * 30, y: 70 + idx * 40 };
-                    x = zonePos.x;
-                    y = zonePos.y;
-                  } else {
-                    x = 70 + (idx % 2) * 150;
-                    y = 70 + Math.floor(idx / 2) * 80;
-                  }
-                  
-                  return (
-                    <g key={driver.id}>
-                      {isOnline && (
-                        <>
-                          <circle cx={x} cy={y} r="18" fill="#3b82f6" opacity="0.1" />
-                          <circle cx={x} cy={y} r="12" fill="#3b82f6" opacity="0.2" />
-                          <circle cx={x} cy={y} r="6" fill="#3b82f6" opacity="0.3" />
-                        </>
-                      )}
-                      <circle cx={x} cy={y} r="8" fill={isOnline ? "#10b981" : "#9ca3af"} stroke="white" strokeWidth="2" />
-                      <text x={x} y={y + 18} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#1f2937">{driver.name.slice(0, 3)}</text>
-                    </g>
-                  );
-                })}
-              </svg>
-              
-              <div className="google-box" style={{ marginTop: "16px" }}>
-                <b>👥 สถานะคนขับออนไลน์ ({Object.keys(state.onlineDrivers || {}).length})</b>
-                {drivers.length === 0 ? (
-                  <p style={{ fontSize: "12px", color: "#999" }}>ยังไม่มีคนขับ</p>
-                ) : (
-                  drivers.map(d => (
-                    <p key={d.id} style={{ fontSize: "12px", margin: "6px 0", padding: "6px", background: state.onlineDrivers?.[d.id] ? "#e8f5e9" : "#f5f5f5", borderRadius: "4px" }}>
-                      <b>{state.onlineDrivers?.[d.id] ? "🟢" : "⚫"} {d.name}</b>
-                      <br />
-                      <small>📱 {d.phone} · {d.plate} · {d.zone}</small>
-                    </p>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>📋 Login History</h2><span>{(state.loginHistory || []).length} entries</span></div>
-              <div className="report-lines" style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {(state.loginHistory || []).length === 0 ? (
+	            <section className="panel">
+	              <div className="panel-head"><h2>📋 Login History</h2><span>{(state.loginHistory || []).length} entries</span></div>
+	              <div className="report-lines" style={{ maxHeight: "400px", overflowY: "auto" }}>
+	                {(state.loginHistory || []).length === 0 ? (
                   <p className="muted">ยังไม่มีการล็อกอิน</p>
                 ) : (
                   state.loginHistory.slice(0, 20).map(entry => (
@@ -2500,35 +2433,8 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel">
-              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
-              <button className="secondary wide" onClick={() => {
-                const report = generateDailyReport();
-                copyToClipboard(report);
-              }}><FileText size={16} /> สร้างรายงานและคัดลอก</button>
-              <button className="secondary wide" onClick={() => {
-                const report = generateDailyReport();
-                const element = document.createElement("a");
-                element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(report));
-                element.setAttribute("download", `Hillkoff-Report-${new Date().toLocaleDateString("th-TH")}.txt`);
-                element.style.display = "none";
-                document.body.appendChild(element);
-                element.click();
-                document.body.removeChild(element);
-              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>🔧 System Control</h2><span>เฉพาะฉุกเฉิน</span></div>
-              <button className="primary wide" onClick={() => window.location.reload()} style={{ background: "#2563eb", color: "white", padding: "12px", fontSize: "14px", fontWeight: "bold" }}>
-                🔄 รีโหลดระบบ
-              </button>
-              <p style={{ fontSize: "12px", color: "#666", marginTop: "10px", textAlign: "center" }}>
-                กรณีไม่สามารถรับงาน หรือเชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กด ปุ่มนี้เพื่อรีโหลดระบบ
-              </p>
-            </section>
-          </div>
-        )}
+	          </div>
+	        )}
       </section>
     </main>
 
