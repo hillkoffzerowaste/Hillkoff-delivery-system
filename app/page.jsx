@@ -1144,18 +1144,13 @@ export default function App() {
 
 	    (async () => {
 	      try {
-	        // Step 1: Copy summary text so driver can paste into LINE first
+	        // Copy summary text, then immediately open share sheet (single flow)
 	        let copied = false;
-	        try {
-	          await navigator.clipboard?.writeText?.(text);
-	          copied = true;
-	        } catch {}
-
-	        // Fallback: show text for manual copy if clipboard not available
-	        const ok = copied
-	          ? confirm("คัดลอกข้อความสรุปออเดอร์แล้ว ✅\n\n1) ไปวางข้อความในไลน์ก่อน\n2) กลับมากด OK เพื่อส่งรูป POD ตามไป")
-	          : confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไปวางในไลน์ก่อน:\n\n${text}\n\nกด OK เพื่อส่งรูป POD ตามไป`);
-	        if (!ok) return;
+	        try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+	        if (!copied) {
+	          const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์รูป:\n\n${text}`);
+	          if (!ok) return;
+	        }
 
 	        // Step 1.5: Save POD image to device (best-effort)
 	        const saved = downloadFileToDevice(file, `POD-${order.id}`);
@@ -1170,6 +1165,9 @@ export default function App() {
 	        // Step 2: Share image file (LINE may ignore text when file is attached)
 	        await navigator.share({ files: [file] });
 	        updateOrder(order.id, { sharedToLine: true });
+	        if (copied) {
+	          setSyncStatus("✅ คัดลอกสรุปแล้ว + แชร์รูปแล้ว (ไปวางสรุปในไลน์ได้ทันที)");
+	        }
 	      } catch {
 	        // user cancelled or share failed
 	      }
