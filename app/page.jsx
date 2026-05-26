@@ -1129,17 +1129,12 @@ export default function App() {
 
 	    (async () => {
 	      try {
-	        // LINE บางเครื่อง/บางเวอร์ชันอาจรับได้แค่รูปแล้วไม่แนบ text ไปด้วย
-	        // เลยคัดลอกสรุปไว้ในคลิปบอร์ดให้พร้อมวางเสมอ
-	        try { await navigator.clipboard?.writeText?.(text); } catch {}
 	        if (!navigator.canShare?.({ files: [file] })) {
 	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
 	          return;
 	        }
 	        await navigator.share({ text, files: [file] });
 	        updateOrder(order.id, { sharedToLine: true });
-	        // เผื่อ LINE ไม่พา text ไปด้วย: แจ้งให้ผู้ใช้วางข้อความ
-	        setSyncStatus("✅ แชร์รูปแล้ว (สรุปออเดอร์ถูกคัดลอกไว้แล้ว ถ้าไม่ขึ้นให้วางในไลน์)");
 	      } catch {
 	        // user cancelled or share failed
 	      }
