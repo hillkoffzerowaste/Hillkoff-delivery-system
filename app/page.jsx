@@ -1126,11 +1126,25 @@ export default function App() {
 
 	    (async () => {
 	      try {
+	        // Step 1: Copy summary text so driver can paste into LINE first
+	        let copied = false;
+	        try {
+	          await navigator.clipboard?.writeText?.(text);
+	          copied = true;
+	        } catch {}
+
+	        // Fallback: show text for manual copy if clipboard not available
+	        const ok = copied
+	          ? confirm("คัดลอกข้อความสรุปออเดอร์แล้ว ✅\n\n1) ไปวางข้อความในไลน์ก่อน\n2) กลับมากด OK เพื่อส่งรูป POD ตามไป")
+	          : confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไปวางในไลน์ก่อน:\n\n${text}\n\nกด OK เพื่อส่งรูป POD ตามไป`);
+	        if (!ok) return;
+
 	        if (!navigator.canShare?.({ files: [file] })) {
 	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
 	          return;
 	        }
-	        await navigator.share({ text, files: [file] });
+	        // Step 2: Share image file (LINE may ignore text when file is attached)
+	        await navigator.share({ files: [file] });
 	        updateOrder(order.id, { sharedToLine: true });
 	      } catch {
 	        // user cancelled or share failed
