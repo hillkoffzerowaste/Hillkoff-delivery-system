@@ -61,7 +61,7 @@ export async function POST(request) {
         .eq("phone", phone)
         .maybeSingle();
       if (error) throw error;
-      if (!driver) throw new Error("ไม่พบข้อมูลคนขับ");
+      if (!driver) throw new Error("เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธเธเธฑเธ");
 
       driverId = driver.id;
       userId = driver.id;
@@ -79,15 +79,15 @@ export async function POST(request) {
       if (salesErr) throw salesErr;
 
       if (salesUser) {
-        if (!salesUser.active) throw new Error("บัญชีถูกระงับการใช้งาน");
+        if (!salesUser.active) throw new Error("เธเธฑเธเธเธตเธ–เธนเธเธฃเธฐเธเธฑเธเธเธฒเธฃเนเธเนเธเธฒเธ");
         // PIN is optional; only validate when provided
         if (pin) {
-          if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN ไม่ถูกต้อง");
+          if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN เนเธกเนเธ–เธนเธเธ•เนเธญเธ");
         }
         userId = salesUser.id;
         displayName = salesUser.name;
       } else {
-        if (!displayName) throw new Error("กรุณากรอกชื่อฝ่ายขาย");
+        if (!displayName) throw new Error("เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธเธทเนเธญเธเนเธฒเธขเธเธฒเธข");
         userId = phone;
       }
     }
