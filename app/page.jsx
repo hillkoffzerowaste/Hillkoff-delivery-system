@@ -115,6 +115,9 @@ function buildLineMessageForOrder(order) {
   if (order.zone) lines.push(`โซน: ${order.zone}`);
   if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
   if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
+  if (order.salesName) lines.push(`ฝ่ายขาย: ${order.salesName}`);
+  if (order.salesPhone) lines.push(`ฝ่ายขายโทร: ${order.salesPhone}`);
+  if (order.salesNote) lines.push(`หมายเหตุ: ${order.salesNote}`);
   lines.push(`COD: ฿${money(order.cod || 0)}`);
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
   if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
@@ -176,6 +179,7 @@ export default function App() {
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
+  const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
   
   // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
   // useState is async and causes stale closures in syncToSupabase
@@ -1063,39 +1067,34 @@ export default function App() {
     status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
   });
 
-	  const uploadPod = async (order, file) => {
-	  if (!file) return;
-	  try {
-	    setSyncStatus("กำลังบันทึกรูป POD ในเครื่อง...");
-
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("read failed"));
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.readAsDataURL(file);
-    });
-
-    if (!dataUrl) throw new Error("read failed");
-    updateOrder(order.id, { photo: dataUrl, sharedToLine: false });
-    setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — โปรดกดแชร์ลง LINE");
-  } catch (error) {
-    setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
-	  }
-	};
+  const uploadPod = async (order, file) => {
+    if (!file) return;
+    try {
+      // Keep file on-device only (no Supabase upload). Use objectURL for instant UI; keep File in ref for sharing.
+      podFilesRef.current[order.id] = file;
+      const previewUrl = URL.createObjectURL(file);
+      updateOrder(order.id, { photo: previewUrl, sharedToLine: false });
+      setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — โปรดกดแชร์ลง LINE");
+    } catch (error) {
+      setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
+    }
+  };
 
 	  const shareOrderToLine = (order) => {
 	    const text = buildLineMessageForOrder(order);
-	    if (!order?.photo?.startsWith?.("data:")) {
-	      alert("ยังไม่มีรูป POD");
+	    const file = podFilesRef.current?.[order.id];
+
+	    if (!file) {
+	      alert("ยังไม่พบไฟล์รูป POD ในเครื่อง (อาจรีเฟรชหน้า) กรุณาถ่าย/เลือกรูปใหม่อีกครั้ง");
 	      return;
 	    }
 	    if (!navigator?.share) {
 	      alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
 	      return;
 	    }
+
 	    (async () => {
 	      try {
-	        const file = await dataUrlToFile(order.photo, `POD-${order.id}`);
 	        if (!navigator.canShare?.({ files: [file] })) {
 	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
 	          return;
