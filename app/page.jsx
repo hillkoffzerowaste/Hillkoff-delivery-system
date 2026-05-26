@@ -732,16 +732,22 @@ export default function App() {
   const loginSales = async () => {
     if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        role: "sales",
-        name: loginForm.name.trim(),
-        phone: loginForm.phone.trim()
-      })
-    });
-    const json = await res.json();
+    let json;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: "sales",
+          name: loginForm.name.trim(),
+          phone: loginForm.phone.trim()
+        })
+      });
+      json = await res.json();
+    } catch (e) {
+      setSyncStatus(`❌ Login error: ${e.message || "network/server error"}`);
+      return;
+    }
     if (!json.ok) {
       setSyncStatus(`❌ ${json.error || "เข้าสู่ระบบไม่สำเร็จ"}`);
       return;
@@ -777,12 +783,18 @@ export default function App() {
     if (!loginForm.phone.trim()) return;
     const phone = loginForm.phone.trim();
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "driver", phone })
-    });
-    const json = await res.json();
+    let json;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "driver", phone })
+      });
+      json = await res.json();
+    } catch (e) {
+      setSyncStatus(`❌ Login error: ${e.message || "network/server error"}`);
+      return;
+    }
 
     if (json.ok) {
       const d = json.data || {};

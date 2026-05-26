@@ -15,7 +15,12 @@ function clientMeta(request) {
 }
 
 export async function POST(request) {
-  const supabase = getSupabaseAdmin();
+  let supabase;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (e) {
+    return Response.json({ ok: false, error: e.message || "Server misconfigured" }, { status: 500 });
+  }
   const { ip, userAgent } = clientMeta(request);
 
   let payload;

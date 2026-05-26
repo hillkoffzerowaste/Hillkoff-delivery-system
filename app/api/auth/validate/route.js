@@ -6,7 +6,12 @@ export async function GET(request) {
   const role = String(searchParams.get("role") || "").trim();
   if (!token) return Response.json({ ok: true, valid: false }, { status: 200 });
 
-  const supabase = getSupabaseAdmin();
+  let supabase;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (e) {
+    return Response.json({ ok: false, valid: false, error: e.message || "Server misconfigured" }, { status: 500 });
+  }
   const { data, error } = await supabase
     .from("auth_sessions")
     .select("role,token,expiresAt,user_id")
@@ -22,4 +27,3 @@ export async function GET(request) {
     data: valid ? { role: data.role, userId: data.user_id, expiresAt: data.expiresAt } : null
   });
 }
-
