@@ -74,6 +74,9 @@ create table if not exists public.drivers (
   "updatedAt" timestamp default now()
 );
 
+-- Ensure 1 driver per phone (prevents login ambiguity)
+create unique index if not exists drivers_phone_uidx on public.drivers(phone);
+
 -- If the table already exists (older schema), add missing columns safely
 alter table public.drivers add column if not exists "firstName" text;
 alter table public.drivers add column if not exists "lastName" text;

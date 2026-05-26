@@ -830,8 +830,9 @@ export default function App() {
 
   const registerDriver = async () => {
     if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
+    const normalizedPhone = driverForm.phone.trim().replace(/\D/g, "");
     const nextDriver = {
-      id: `D${Date.now()}`,
+      id: `DRV_${normalizedPhone || Date.now()}`,
       firstName: driverForm.firstName.trim(),
       lastName: driverForm.lastName.trim(),
       name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
@@ -860,7 +861,7 @@ export default function App() {
         lng: nextDriver.lng,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      }, { onConflict: "id" });
+      }, { onConflict: "phone" });
       if (error) throw error;
     } catch (e) {
       setSyncStatus(`❌ บันทึกข้อมูลคนขับลง Supabase ไม่สำเร็จ: ${e.message || e}`);
