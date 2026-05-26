@@ -89,6 +89,15 @@ function todayText() {
   return new Date().toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function isSameLocalDay(a, b) {
+  if (!a || !b) return false;
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 function osmPageUrl(lat, lng, zoom = 16) {
   if (lat == null || lng == null) return "";
   return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lng)}#map=${encodeURIComponent(zoom)}/${encodeURIComponent(lat)}/${encodeURIComponent(lng)}`;
@@ -2346,23 +2355,47 @@ export default function App() {
 
 	        {displayTab === "settings" && (
 	          <div className="settings-grid">
-	            <section className="panel">
-	              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
-	              <button className="secondary wide" onClick={() => {
-	                const report = generateDailyReport();
-	                copyToClipboard(report);
-	              }}><FileText size={16} /> สร้างรายงานและคัดลอก</button>
-	              <button className="secondary wide" onClick={() => {
-	                const report = generateDailyReport();
-	                const element = document.createElement("a");
-	                element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(report));
-	                element.setAttribute("download", `Hillkoff-Report-${new Date().toLocaleDateString("th-TH")}.txt`);
-	                element.style.display = "none";
-	                document.body.appendChild(element);
-	                element.click();
-	                document.body.removeChild(element);
-	              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
-	            </section>
+		            <section className="panel">
+		              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
+		              <button className="secondary wide" onClick={() => {
+		                const report = generateDailyReport();
+		                copyToClipboard(report);
+		              }}><FileText size={16} /> สร้างรายงานและคัดลอก</button>
+		              <button className="secondary wide" onClick={() => {
+		                const report = generateDailyReport();
+		                const element = document.createElement("a");
+		                element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(report));
+		                element.setAttribute("download", `Hillkoff-Report-${new Date().toLocaleDateString("th-TH")}.txt`);
+		                element.style.display = "none";
+		                document.body.appendChild(element);
+		                element.click();
+		                document.body.removeChild(element);
+		              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
+		              {(() => {
+		                const today = new Date();
+		                const todayOrders = (orders || []).filter(o => {
+		                  const created = o.createdAt ? new Date(o.createdAt) : null;
+		                  return created && isSameLocalDay(created, today);
+		                });
+		                const total = todayOrders.length;
+		                const waiting = todayOrders.filter(o => o.status === "รอคนขับรับ").length;
+		                const active = todayOrders.filter(o => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").length;
+		                const done = todayOrders.filter(o => o.status === "ส่งสำเร็จ").length;
+		                const canceled = todayOrders.filter(o => o.status === "ยกเลิก").length;
+		                const codAll = todayOrders.reduce((sum, o) => sum + Number(o.cod || 0), 0);
+		                const codDone = todayOrders.filter(o => o.status === "ส่งสำเร็จ").reduce((sum, o) => sum + Number(o.cod || 0), 0);
+		                return (
+		                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #eee" }}>
+		                    <b>ภาพรวมวันนี้ ({todayText()})</b>
+		                    <div className="report-lines" style={{ marginTop: "8px" }}>
+		                      <p>ออเดอร์วันนี้ <b>{total}</b> งาน</p>
+		                      <p>รอคนขับรับ <b>{waiting}</b> · กำลังส่ง <b>{active}</b> · ส่งสำเร็จ <b>{done}</b> · ยกเลิก <b>{canceled}</b></p>
+		                      <p>COD วันนี้รวม <b>{money(codAll)}</b> บาท · ส่งสำเร็จ <b>{money(codDone)}</b> บาท</p>
+		                    </div>
+		                  </div>
+		                );
+		              })()}
+		            </section>
 
 	            {auth.email === "online_marketing@hillkoff.com" && (
 	              <section className="panel">
