@@ -843,6 +843,46 @@ export default function App() {
       lng: 98.9853,
       createdAt: new Date().toISOString()
     };
+
+    // Persist driver to Supabase so future logins don't require re-register
+    if (!supabase) supabase = initSupabase();
+    try {
+      const { error } = await supabase.from("drivers").upsert({
+        id: nextDriver.id,
+        firstName: nextDriver.firstName,
+        lastName: nextDriver.lastName,
+        name: nextDriver.name,
+        phone: nextDriver.phone,
+        vehicle: nextDriver.vehicle,
+        plate: nextDriver.plate,
+        zone: nextDriver.zone,
+        lat: nextDriver.lat,
+        lng: nextDriver.lng,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { onConflict: "id" });
+      if (error) throw error;
+    } catch (e) {
+      setSyncStatus(`❌ บันทึกข้อมูลคนขับลง Supabase ไม่สำเร็จ: ${e.message || e}`);
+      return;
+    }
+
+    // Create session token via API (records login log)
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "driver", phone: nextDriver.phone })
+      });
+      const json = await res.json();
+      if (json?.ok) {
+        const d = json.data || {};
+        const newAuthState = { role: "driver", name: d.name || nextDriver.name, phone: nextDriver.phone, driverId: d.driverId || nextDriver.id, email: state.auth?.email || "", token: d.token || "" };
+        localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
+        setAuth(newAuthState);
+        setDriverId(newAuthState.driverId || nextDriver.id);
+      }
+    } catch {}
     const loginEntry = {
       id: `L${Date.now()}`,
       role: "driver",
@@ -856,7 +896,7 @@ export default function App() {
     setState(prev => ({
       ...prev,
       drivers: nextDrivers,
-      auth: { role: "driver", name: nextDriver.name, phone: nextDriver.phone, driverId: nextDriver.id },
+      auth: { role: "driver", name: nextDriver.name, phone: nextDriver.phone, driverId: nextDriver.id, email: prev.auth?.email || "", token: prev.auth?.token || "" },
       loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
       onlineDrivers: { ...prev.onlineDrivers, [nextDriver.id]: new Date().getTime() }
     }));
