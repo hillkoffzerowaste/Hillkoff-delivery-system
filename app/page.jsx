@@ -984,6 +984,9 @@ export default function App() {
       
       return updated;
     });
+    setTimeout(() => {
+      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
+    }, 2000);
   };
   const updateCustomer = (id, patch) => {
     setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
