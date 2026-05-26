@@ -145,6 +145,13 @@ create table if not exists public.sales_users (
   "createdAt" timestamp default now()
 );
 
+-- If the table already exists (older schema), add missing columns safely
+alter table public.sales_users add column if not exists name text;
+alter table public.sales_users add column if not exists phone text;
+alter table public.sales_users add column if not exists pin_hash text;
+alter table public.sales_users add column if not exists active boolean not null default true;
+alter table public.sales_users add column if not exists "createdAt" timestamp default now();
+
 -- Enable RLS
 alter table public.customers enable row level security;
 alter table public.orders enable row level security;
