@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -37,21 +37,21 @@ function initSupabase() {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
   if (!supabaseUrl || !supabaseKey) {
-    console.error("❌ Missing Supabase env vars:", { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
+    console.error("โ Missing Supabase env vars:", { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
     return null;
   }
   
   const { createClient } = require("@supabase/supabase-js");
   supabase = createClient(supabaseUrl, supabaseKey);
-  console.log("✅ Supabase initialized:", supabaseUrl);
+  console.log("โ… Supabase initialized:", supabaseUrl);
   return supabase;
 }
 
 const initialDrivers = [];
 
-const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
-const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
-const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
+const ZONES = ["เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน", "เนเธกเนเธฃเธดเธก", "เธชเธฑเธเธเธณเนเธเธ", "เธ”เธญเธขเธชเธฐเน€เธเนเธ”", "เธซเธฒเธเธ”เธ", "เธชเธฑเธเธเนเธฒเธ•เธญเธ", "เธฅเธณเธเธนเธ", "เธฅเธณเธเธฒเธ", "เน€เธเธตเธขเธเธฃเธฒเธข", "เธเธฐเน€เธขเธฒ"];
+const STATUS = ["เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ", "เธเธณเธฅเธฑเธเธชเนเธ", "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ", "เธชเนเธเธชเธณเน€เธฃเนเธ", "เธ•เธดเธ”เธเธฑเธเธซเธฒ", "เธขเธเน€เธฅเธดเธ"];
+const statusColor = { "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ": "#92400e", "เธเธณเธฅเธฑเธเธชเนเธ": "#1d4ed8", "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ": "#f59e0b", "เธชเนเธเธชเธณเน€เธฃเนเธ": "#166534", "เธ•เธดเธ”เธเธฑเธเธซเธฒ": "#b91c1c", "เธขเธเน€เธฅเธดเธ": "#dc2626" };
 
 const initialCustomers = [];
 
@@ -127,7 +127,7 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState(null);
-  const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน", address: "", mapUrl: "", note: "" });
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatText, setChatText] = useState("");
@@ -141,11 +141,11 @@ export default function App() {
     const savedSalesName = localStorage.getItem("hillkoff-last-sales-name");
     if (savedSalesName) setLoginForm(p => ({ ...p, name: savedSalesName }));
   }, []);
-  const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
+  const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "เธฃเธ–เธขเธเธ•เน", plate: "", zone: "เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน" });
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
-  const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
   const [syncStatus, setSyncStatus] = useState("Local mode");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
@@ -162,37 +162,58 @@ export default function App() {
 
   const buildLineMessageForOrder = (order) => {
     const lines = [];
-    lines.push(`ส่งของสำเร็จ ✅`);
-    lines.push(`ออเดอร์: ${order.id}`);
-    if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
-    if (order.customerPhone) lines.push(`โทร: ${order.customerPhone}`);
-    if (order.address) lines.push(`ที่อยู่: ${order.address}`);
-    if (order.zone) lines.push(`โซน: ${order.zone}`);
-    if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
-    if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
-    lines.push(`COD: ฿${money(order.cod || 0)}`);
-    if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
-    if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
-    if (order.photo) lines.push(`POD: ${order.photo}`);
-    return lines.join("\n");
-  };
+    lines.push(`เธชเนเธเธเธญเธเธชเธณเน€เธฃเนเธ โ…`);
+    lines.push(`เธญเธญเน€เธ”เธญเธฃเน: ${order.id}`);
+    if (order.customerName) lines.push(`เธฅเธนเธเธเนเธฒ: ${order.customerName}`);
+    if (order.customerPhone) lines.push(`เนเธ—เธฃ: ${order.customerPhone}`);
+    if (order.address) lines.push(`เธ—เธตเนเธญเธขเธนเน: ${order.address}`);
+    if (order.zone) lines.push(`เนเธเธ: ${order.zone}`);
+    if (order.window) lines.push(`เธเนเธงเธเน€เธงเธฅเธฒ: ${order.window}`);
+    if (order.boxes != null) lines.push(`เธเธณเธเธงเธ: ${order.boxes} เธเธฅเนเธญเธ`);
+    lines.push(`COD: เธฟ${money(order.cod || 0)}`);
+    if (order.deliveredAt) lines.push(`เน€เธงเธฅเธฒ: ${order.deliveredAt}`);
+    if (order.mapUrl) lines.push(`เนเธเธเธ—เธตเน: ${order.mapUrl}`);
+	    if (order.photo) lines.push(`POD: (เนเธเธเธฃเธนเธเนเธเนเธเธ—)`);
+	    return lines.join("\n");
+	  };
 
-  const shareOrderToLine = (order) => {
-    const text = buildLineMessageForOrder(order);
-    if (navigator?.share) {
-      navigator.share({ text }).catch(() => {});
-      return;
-    }
-    const url = `line://msg/text/${encodeURIComponent(text)}`;
-    try { window.location.href = url; } catch {}
-  };
+	  const dataUrlToFile = async (dataUrl, fileName) => {
+	    const res = await fetch(dataUrl);
+	    const blob = await res.blob();
+	    const ext = (blob.type || "").split("/").pop() || "jpg";
+	    return new File([blob], `${fileName}.${ext}`, { type: blob.type || "image/jpeg" });
+	  };
+
+	  const shareOrderToLine = (order) => {
+	    const text = buildLineMessageForOrder(order);
+	    if (navigator?.share && order?.photo?.startsWith?.("data:")) {
+	      (async () => {
+	        try {
+	          const file = await dataUrlToFile(order.photo, `POD-${order.id}`);
+		          if (navigator.canShare?.({ files: [file] })) {
+		            await navigator.share({ text, files: [file] });
+		            updateOrder(order.id, { sharedToLine: true });
+		            return;
+		          }
+	        } catch {}
+	        navigator.share({ text }).catch(() => {});
+	      })();
+	      return;
+	    }
+	    if (navigator?.share) {
+	      navigator.share({ text }).catch(() => {});
+	      return;
+	    }
+	    const url = `line://msg/text/${encodeURIComponent(text)}`;
+	    try { window.location.href = url; } catch {}
+	  };
 
   useEffect(() => setState(readState()), []);
 
   // Force initial fetch for driver role
   useEffect(() => {
     if (state.auth?.role !== "driver") return;
-    console.log("🚗 Driver detected - forcing initial fetch...");
+    console.log("๐— Driver detected - forcing initial fetch...");
     refreshFromSupabase();
   }, [state.auth?.role]);
 
@@ -272,9 +293,9 @@ export default function App() {
       osc.start(now);
       osc.stop(now + 0.2);
       
-      console.log("🔊 Notification sound played");
+      console.log("๐” Notification sound played");
     } catch (e) {
-      console.error("❌ Error playing notification sound:", e);
+      console.error("โ Error playing notification sound:", e);
     }
   };
 
@@ -311,7 +332,7 @@ export default function App() {
     if (!text) return;
     if (!supabase) supabase = initSupabase();
     if (!supabase) {
-      alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+      alert("โ เธขเธฑเธเน€เธเธทเนเธญเธกเธ•เนเธญ Supabase เนเธกเนเนเธ”เน");
       return;
     }
     setChatText("");
@@ -323,7 +344,7 @@ export default function App() {
     };
     const { error } = await supabase.from("chat_messages").insert(payload);
     if (error) {
-      alert(`❌ ส่งข้อความไม่สำเร็จ: ${error.message}`);
+      alert(`โ เธชเนเธเธเนเธญเธเธงเธฒเธกเนเธกเนเธชเธณเน€เธฃเนเธ: ${error.message}`);
       return;
     }
     await refreshChat();
@@ -332,13 +353,13 @@ export default function App() {
   // Polling mechanism for real-time sync
   const refreshFromSupabase = async () => {
     if (!supabase) {
-      console.warn("⚠️ Supabase not initialized yet");
+      console.warn("โ ๏ธ Supabase not initialized yet");
       return;
     }
     
     // Skip refresh during reset to prevent old data from being restored
     if (isResettingOrdersRef.current) {
-      console.log("⏸️ Skipping refreshFromSupabase during reset");
+      console.log("โธ๏ธ Skipping refreshFromSupabase during reset");
       return;
     }
     
@@ -349,11 +370,11 @@ export default function App() {
       // Note: drivers table is intentionally empty by design - no fetch needed
       const { data: supabaseDriverLocations, error: driverLocationsError } = await supabase.from("driver_locations").select("*");
 
-      if (ordersError) setSyncStatus?.(`⚠️ Supabase orders error: ${ordersError.message}`);
-      if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
-      if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
+      if (ordersError) setSyncStatus?.(`โ ๏ธ Supabase orders error: ${ordersError.message}`);
+      if (customersError) console.warn("โ ๏ธ Supabase customers pull error:", customersError.message);
+      if (driverLocationsError) console.warn("โ ๏ธ Supabase driver_locations pull error:", driverLocationsError.message);
       
-      console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, driver_locations: supabaseDriverLocations?.length });
+      console.log("๐“ฅ Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, driver_locations: supabaseDriverLocations?.length });
       
       setState(prev => {
         let changed = false;
@@ -361,13 +382,13 @@ export default function App() {
         
         // Skip all merging during reset to prevent old data from being restored
         if (isResettingOrdersRef.current) {
-          console.log("⏸️ [RESET] Skipping merge during reset - isResettingOrders = true");
+          console.log("โธ๏ธ [RESET] Skipping merge during reset - isResettingOrders = true");
           return prev;
         }
         
         // For orders: merge - keep local orders, update status/data from Supabase
         if (Array.isArray(supabaseOrders) && Array.isArray(prev.orders)) {
-          console.log(`🔄 Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
+          console.log(`๐” Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
           const merged = [...prev.orders];
           let newOrdersAdded = 0;
           const currentDriverId = prev.auth?.driverId || "";
@@ -379,39 +400,39 @@ export default function App() {
             if (idx >= 0) {
               // Update existing orders - but preserve local status/photo changes that haven't synced yet
               const localOrder = merged[idx];
-              // Keep local status if it's more advanced (e.g., local "กำลังจัดส่ง" shouldn't revert to "กำลังส่ง")
-              const statusHierarchy = { "รอคนขับรับ": 0, "กำลังส่ง": 1, "กำลังจัดส่ง": 2, "ส่งสำเร็จ": 3, "ยกเลิก": 4 };
+              // Keep local status if it's more advanced (e.g., local "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ" shouldn't revert to "เธเธณเธฅเธฑเธเธชเนเธ")
+              const statusHierarchy = { "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ": 0, "เธเธณเธฅเธฑเธเธชเนเธ": 1, "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ": 2, "เธชเนเธเธชเธณเน€เธฃเนเธ": 3, "เธขเธเน€เธฅเธดเธ": 4 };
               const shouldKeepLocalStatus = (statusHierarchy[localOrder.status] || -1) > (statusHierarchy[order.status] || -1);
               const photo = localOrder.photo || order.photo; // Keep photo if either has it
               
               merged[idx] = { ...order, ...localOrder, status: shouldKeepLocalStatus ? localOrder.status : order.status, photo };
-              console.log(`📝 Updated order ${order.id}${shouldKeepLocalStatus ? ` (kept local status: ${localOrder.status})` : ""}`);
+              console.log(`๐“ Updated order ${order.id}${shouldKeepLocalStatus ? ` (kept local status: ${localOrder.status})` : ""}`);
             } else if (prev.auth?.role === "driver") {
               // Driver page: STRICT FILTER - only add available orders OR orders already assigned to this driver
-              const isAvailable = !order.driverId || order.driverId === "" || order.status === "รอคนขับรับ";
+              const isAvailable = !order.driverId || order.driverId === "" || order.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ";
               const isMyOrder = order.driverId === currentDriverId;
               
               if (isAvailable || isMyOrder) {
                 merged.push(order);
                 if (isAvailable) newOrdersAdded++;
-                console.log(`➕ [NEW ORDER] Added order ${order.id} for driver - ${order.customerName} ${isMyOrder ? "(already assigned)" : "(available)"}`);
+                console.log(`โ• [NEW ORDER] Added order ${order.id} for driver - ${order.customerName} ${isMyOrder ? "(already assigned)" : "(available)"}`);
               } else {
-                console.log(`❌ [FILTERED] Skipping order ${order.id} (assigned to different driver: ${order.driverId})`);
+                console.log(`โ [FILTERED] Skipping order ${order.id} (assigned to different driver: ${order.driverId})`);
               }
             } else if (prev.auth?.role === "sales") {
               // Sales page: ADD all new orders from Supabase
               merged.push(order);
               newOrdersAdded++;
-              console.log(`➕ [NEW ORDER] Added new order ${order.id} for sales - ${order.customerName}`);
+              console.log(`โ• [NEW ORDER] Added new order ${order.id} for sales - ${order.customerName}`);
             } else {
               // Skip in other cases to prevent deleted orders from being pulled back
-              console.log(`⏭️ Skipping order ${order.id} from Supabase (not applicable for current role)`);
+              console.log(`โญ๏ธ Skipping order ${order.id} from Supabase (not applicable for current role)`);
             }
           }
           
           // Play sound notification if new available orders were added (not already assigned ones)
-          if (newOrdersAdded > 0 && previousOrderCountRef.current < merged.filter(o => !o.driverId || o.driverId === "" || o.status === "รอคนขับรับ").length) {
-            console.log(`🔔 ${newOrdersAdded} new available order(s) detected! Playing notification sound...`);
+          if (newOrdersAdded > 0 && previousOrderCountRef.current < merged.filter(o => !o.driverId || o.driverId === "" || o.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ").length) {
+            console.log(`๐”” ${newOrdersAdded} new available order(s) detected! Playing notification sound...`);
             playNotificationSound();
           }
           previousOrderCountRef.current = merged.length;
@@ -440,7 +461,7 @@ export default function App() {
           if (localStr !== newStr) {
             newState.customers = merged;
             changed = true;
-            console.log("👤 Customers merged from Supabase");
+            console.log("๐‘ค Customers merged from Supabase");
           }
         }
         
@@ -472,13 +493,13 @@ export default function App() {
         return changed ? newState : prev;
       });
     } catch (error) {
-      console.log("⚠️ Polling error:", error);
+      console.log("โ ๏ธ Polling error:", error);
     }
   };
 
   useEffect(() => {
     if (!supabase) {
-      console.warn("⚠️ Supabase not initialized yet");
+      console.warn("โ ๏ธ Supabase not initialized yet");
       return;
     }
     
@@ -495,7 +516,7 @@ export default function App() {
     // If reset just ended, add extra delay before first poll
     let timeout;
     if (!isResettingOrdersRef.current && delayFirstPoll > 0) {
-      console.log("🔄 [RESET-RECOVERY] Delaying first poll by 3s to let delete complete...");
+      console.log("๐” [RESET-RECOVERY] Delaying first poll by 3s to let delete complete...");
       timeout = setTimeout(() => {
         refreshFromSupabase();
       }, delayFirstPoll);
@@ -512,7 +533,7 @@ export default function App() {
           table: "orders"
         },
         (payload) => {
-          console.log("📡 Real-time orders update:", payload.eventType, payload.new?.id);
+          console.log("๐“ก Real-time orders update:", payload.eventType, payload.new?.id);
           
           // Check if an order was accepted by another driver
           if (payload.eventType === "UPDATE" && payload.new?.driverId) {
@@ -523,13 +544,13 @@ export default function App() {
             if ((!oldOrder?.driverId || oldOrder.driverId === "") && newOrder.driverId) {
               const assignedDriver = state.drivers?.find(d => d.id === newOrder.driverId);
               const driverName = assignedDriver?.name || newOrder.driverName || newOrder.driverId;
-              console.log(`🎯 Order ${newOrder.id} was accepted by ${driverName}`);
-              setSyncStatus(`📦 ${newOrder.id} ถูกรับไปโดย ${driverName}`);
+              console.log(`๐ฏ Order ${newOrder.id} was accepted by ${driverName}`);
+              setSyncStatus(`๐“ฆ ${newOrder.id} เธ–เธนเธเธฃเธฑเธเนเธเนเธ”เธข ${driverName}`);
               playNotificationSound();
               
               // Show notification to other drivers
               if (state.auth?.role === "driver" && state.auth?.driverId !== newOrder.driverId) {
-                console.log(`ℹ️ Notifying other drivers about accepted order`);
+                console.log(`โน๏ธ Notifying other drivers about accepted order`);
               }
             }
           }
@@ -565,7 +586,7 @@ export default function App() {
                 driverName: order.driverName || "",
                 salesName: order.salesName || "",
                 salesPhone: order.salesPhone || "",
-        status: order.status || "รอคนขับรับ",
+        status: order.status || "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ",
         photo: order.photo || "",
         checkInAt: order.checkInAt || "",
         deliveredAt: order.deliveredAt || "",
@@ -586,15 +607,15 @@ export default function App() {
   const syncToSupabase = async (currentState) => {
     // CRITICAL: Don't sync during reset - prevents deleted orders from being re-created
     if (isResettingOrdersRef.current) {
-      console.log("⏸️ [RESET] Skipping syncToSupabase - reset is in progress");
+      console.log("โธ๏ธ [RESET] Skipping syncToSupabase - reset is in progress");
       return;
     }
     
     if (!supabase) {
-      console.warn("❌ Supabase not initialized");
+      console.warn("โ Supabase not initialized");
       return;
     }
-    console.log("🌐 syncToSupabase called - orders count:", currentState.orders?.length);
+    console.log("๐ syncToSupabase called - orders count:", currentState.orders?.length);
     
     try {
       // Skip auth_state sync - table doesn't exist
@@ -617,16 +638,16 @@ export default function App() {
             };
             
             const { error } = await supabase.from("customers").upsert(customerForDB, { onConflict: "id" });
-            if (error) console.error("❌ Customer sync error:", error.message, customer.id);
+            if (error) console.error("โ Customer sync error:", error.message, customer.id);
           } catch (e) {
-            console.error("❌ Exception syncing customer:", customer.id, e.message);
+            console.error("โ Exception syncing customer:", customer.id, e.message);
           }
         }
-        console.log("✅ Customers synced:", currentState.customers.length);
+        console.log("โ… Customers synced:", currentState.customers.length);
       }
       
       // Sync orders (always sync, even if empty)
-      console.log("📤 Syncing orders to Supabase:", currentState.orders?.length || 0);
+      console.log("๐“ค Syncing orders to Supabase:", currentState.orders?.length || 0);
       if (currentState.orders && Array.isArray(currentState.orders)) {
         for (const order of currentState.orders) {
           try {
@@ -642,7 +663,7 @@ export default function App() {
               boxes: order.boxes || 0,
               cod: order.cod || 0,
                driverId: order.driverId || "",
-              status: order.status || "รอคนขับรับ",
+              status: order.status || "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ",
               photo: order.photo || "",
                checkInAt: order.checkInAt || "",
                deliveredAt: order.deliveredAt || "",
@@ -654,15 +675,15 @@ export default function App() {
             
             const { error, status } = await supabase.from("orders").upsert(orderForDB, { onConflict: "id" });
             if (error) {
-              console.error("❌ Order sync error:", error.message, "Order:", order.id);
+              console.error("โ Order sync error:", error.message, "Order:", order.id);
             } else {
-              console.log(`✅ Order synced: ${order.id} (status: ${status})`);
+              console.log(`โ… Order synced: ${order.id} (status: ${status})`);
             }
           } catch (e) {
-            console.error("❌ Exception syncing order:", order.id, e.message);
+            console.error("โ Exception syncing order:", order.id, e.message);
           }
         }
-        console.log("✅ All orders synced to Supabase");
+        console.log("โ… All orders synced to Supabase");
       }
       
        // Note: Drivers table is intentionally empty by design - no driver sync needed
@@ -683,9 +704,9 @@ export default function App() {
                timestamp: Number(loc.timestamp || Date.now())
              };
              const { error } = await supabase.from("driver_locations").upsert(payload, { onConflict: "driver_id" });
-             if (error) console.warn("⚠️ driver_locations sync skipped:", error.message);
+             if (error) console.warn("โ ๏ธ driver_locations sync skipped:", error.message);
            } catch (e) {
-             console.warn("⚠️ driver_locations sync exception:", e?.message || String(e));
+             console.warn("โ ๏ธ driver_locations sync exception:", e?.message || String(e));
            }
          }
        }
@@ -695,7 +716,7 @@ export default function App() {
        
        // login_history table is optional; intentionally skipped.
     } catch (error) {
-      console.error("❌ Supabase sync error:", error);
+      console.error("โ Supabase sync error:", error);
     }
   };
 
@@ -703,7 +724,7 @@ export default function App() {
     // Auto-sync to Supabase on any data change (but skip during reset)
     // Data is NOT stored in localStorage - Supabase is the only source of truth
     if (!isResettingOrdersRef.current) {
-      console.log("🔄 State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
+      console.log("๐” State changed - calling syncToSupabase with orders:", state.orders?.length || 0);
       syncToSupabase(state);
     }
   }, [
@@ -728,7 +749,7 @@ export default function App() {
   });
 
   const report = useMemo(() => {
-    const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
+    const delivered = orders.filter(order => order.status === "เธชเนเธเธชเธณเน€เธฃเนเธ");
     const complaints = orders.filter(order => order.complaint);
     const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
     // Note: driverScore is now skipped since drivers table is intentionally empty
@@ -751,8 +772,8 @@ export default function App() {
     const nextState = { ...state, customers: [nextCustomer, ...state.customers] };
     setState(nextState);
     setSelectedCustomerId(id);
-    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
-    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
+    setCustomerForm({ name: "", contact: "", phone: "", zone: "เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน", address: "", mapUrl: "", note: "" });
+    setSyncStatus(`โ… เธเธฑเธเธ—เธถเธเธฅเธนเธเธเนเธฒ "${nextCustomer.name}" เธชเธณเน€เธฃเนเธ`);
   };
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
@@ -773,11 +794,11 @@ export default function App() {
       });
       json = await res.json();
     } catch (e) {
-      setSyncStatus(`❌ Login error: ${e.message || "network/server error"}`);
+      setSyncStatus(`โ Login error: ${e.message || "network/server error"}`);
       return;
     }
     if (!json.ok) {
-      setSyncStatus(`❌ ${json.error || "เข้าสู่ระบบไม่สำเร็จ"}`);
+      setSyncStatus(`โ ${json.error || "เน€เธเนเธฒเธชเธนเนเธฃเธฐเธเธเนเธกเนเธชเธณเน€เธฃเนเธ"}`);
       return;
     }
 
@@ -820,7 +841,7 @@ export default function App() {
       });
       json = await res.json();
     } catch (e) {
-      setSyncStatus(`❌ Login error: ${e.message || "network/server error"}`);
+      setSyncStatus(`โ Login error: ${e.message || "network/server error"}`);
       return;
     }
 
@@ -846,7 +867,7 @@ export default function App() {
       }));
       // const saved = await upsertOrderToSupabase(pendingOrder);
       // if (!saved.ok) {
-      //   setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
+      //   setSyncStatus(`โ ๏ธ เธเธฑเธเธ—เธถเธเธฅเธเธเธฒเธเธเนเธญเธกเธนเธฅเนเธกเนเธชเธณเน€เธฃเนเธ (เธฃเธฐเธเธเธเธฐเธเธขเธฒเธขเธฒเธก sync เธ•เนเธญเน€เธเธทเนเธญเธ): ${saved.error}`);
       // }
 
       setTab("driver");
@@ -892,7 +913,7 @@ export default function App() {
       }, { onConflict: "id" });
       if (error) throw error;
     } catch (e) {
-      setSyncStatus(`❌ บันทึกข้อมูลคนขับลง Supabase ไม่สำเร็จ: ${e.message || e}`);
+      setSyncStatus(`โ เธเธฑเธเธ—เธถเธเธเนเธญเธกเธนเธฅเธเธเธเธฑเธเธฅเธ Supabase เนเธกเนเธชเธณเน€เธฃเนเธ: ${e.message || e}`);
       return;
     }
 
@@ -930,10 +951,10 @@ export default function App() {
       onlineDrivers: { ...prev.onlineDrivers, [nextDriver.id]: new Date().getTime() }
     }));
     setDriverId(nextDriver.id);
-    setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
+    setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "เธฃเธ–เธขเธเธ•เน", plate: "", zone: "เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน" });
     setTab("driver");
     // Driver synced automatically via syncToSupabase
-    setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" สำเร็จ`);
+    setSyncStatus(`โ… เธฅเธเธ—เธฐเน€เธเธตเธขเธเธเธเธเธฑเธ "${nextDriver.name}" เธชเธณเน€เธฃเนเธ`);
   };
 
   const logout = () => {
@@ -948,7 +969,7 @@ export default function App() {
 
   const createOrder = async () => {
     if (!orderForm.customerName.trim()) {
-      setSyncStatus("❌ กรุณากรอกชื่อลูกค้า");
+      setSyncStatus("โ เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธเธทเนเธญเธฅเธนเธเธเนเธฒ");
       return;
     }
 
@@ -968,7 +989,7 @@ export default function App() {
       };
       // Auto-save new customer
       setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
-      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
+      setSyncStatus(`โ… เธเธฑเธเธ—เธถเธเธฅเธนเธเธเนเธฒเนเธซเธกเน "${customer.name}" เธญเธฑเธ•เนเธเธกเธฑเธ•เธด`);
     }
     
     const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
@@ -987,7 +1008,7 @@ export default function App() {
       driverName: "",
       salesName: auth.name,
       salesPhone: auth.phone,
-      status: "รอคนขับรับ",
+      status: "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ",
       photo: "",
       checkInAt: "",
       deliveredAt: "",
@@ -1002,37 +1023,37 @@ export default function App() {
   const confirmOrder = async () => {
     if (!pendingOrder) return;
     
-    console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
+    console.log("๐“ค confirmOrder: Adding order to state", pendingOrder.id);
     setState(prev => {
       const updated = { ...prev, orders: [pendingOrder, ...prev.orders] };
-      console.log("📤 confirmOrder: State updated - total orders:", updated.orders.length);
-      console.log("📤 confirmOrder: Orders in state:", updated.orders.map(o => o.id));
+      console.log("๐“ค confirmOrder: State updated - total orders:", updated.orders.length);
+      console.log("๐“ค confirmOrder: Orders in state:", updated.orders.map(o => o.id));
       return updated;
     });
     
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
     setPendingOrder(null);
-    setSyncStatus(`⏳ กำลังส่งออเดอร์เข้าคิว...`);
+    setSyncStatus(`โณ เธเธณเธฅเธฑเธเธชเนเธเธญเธญเน€เธ”เธญเธฃเนเน€เธเนเธฒเธเธดเธง...`);
     
     // Wait longer for Supabase to actually save before switching tabs (deprecated)
     (async () => {
-      console.log("⏰ Waiting 2000ms complete");
+      console.log("โฐ Waiting 2000ms complete");
       setTab("driver");
-      setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
+      setSyncStatus(`โ… เธชเนเธเธญเธญเน€เธ”เธญเธฃเน "${pendingOrder.id}" เน€เธเนเธฒเธเธดเธงเธชเธณเน€เธฃเนเธ`);
       // Let polling refresh the data
       await refreshFromSupabase();
     })();
   };
 
   const deleteOrder = (orderId) => {
-    if (confirm("❌ ลบออเดอร์นี้หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้")) {
+    if (confirm("โ เธฅเธเธญเธญเน€เธ”เธญเธฃเนเธเธตเนเธซเธฃเธทเธญเนเธกเน? เธเธฒเธฃเธเธฃเธฐเธ—เธณเธเธตเนเนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธขเธเน€เธฅเธดเธเนเธ”เน")) {
       setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== orderId) }));
     }
   };
 
   const updateOrder = (id, patch) => {
-    console.log(`📝 updateOrder: ${id}`, patch);
+    console.log(`๐“ updateOrder: ${id}`, patch);
     setState(prev => {
       const updated = { ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) };
       
@@ -1043,9 +1064,9 @@ export default function App() {
           (async () => {
             const { ok, error } = await upsertOrderToSupabase(order);
             if (!ok) {
-              console.error(`❌ Failed to sync order ${id}:`, error);
+              console.error(`โ Failed to sync order ${id}:`, error);
             } else {
-              console.log(`✅ Order ${id} synced to Supabase`);
+              console.log(`โ… Order ${id} synced to Supabase`);
             }
           })();
         }
@@ -1063,62 +1084,39 @@ export default function App() {
   };
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
     driverId: nextDriverId,
-    status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
+    status: nextDriverId ? "เธเธณเธฅเธฑเธเธชเนเธ" : "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ"
   });
 
   const uploadPod = async (order, file) => {
-    if (!file) return;
-    try {
-      if (!supabase) supabase = initSupabase();
-      if (!supabase) throw new Error("Supabase not initialized");
+  if (!file) return;
+  try {
+    setSyncStatus("กำลังบันทึกรูป POD ในเครื่อง...");
 
-      setSyncStatus("กำลังอัปโหลดรูป POD...");
-	      // Show preview immediately so driver can continue without waiting for upload
-	      try {
-	        const localUrl = URL.createObjectURL(file);
-	        updateOrder(order.id, { photo: localUrl, podUploading: true });
-	      } catch {}
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(file);
+    });
 
-	      const ext = (file.name || "").split(".").pop().toLowerCase();
-      const safeExt = ["jpg", "jpeg", "png", "webp"].includes(ext) ? ext : "jpg";
-      const fileName = `${Date.now()}.${safeExt}`;
-	      const path = `pods/${order.id}/${fileName}`;
-	      const bucket = process.env.NEXT_PUBLIC_SUPABASE_POD_BUCKET || "pod-photos";
-
-	      const { error: uploadError } = await supabase.storage
-	        .from(bucket)
-	        .upload(path, file, { upsert: true, contentType: file.type || undefined });
-	      if (uploadError) {
-	        const msg = String(uploadError.message || uploadError);
-	        if (msg.toLowerCase().includes("bucket") && msg.toLowerCase().includes("not found")) {
-	          updateOrder(order.id, { podUploading: false });
-	          setSyncStatus(`⚠️ ยังอัปโหลดรูปไม่ได้ (ไม่พบบัคเก็ต Storage ชื่อ "${bucket}") แต่สามารถไปขั้นตอนถัดไปได้`);
-	          return;
-	        }
-	        throw uploadError;
-	      }
-
-	      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(path);
-      const publicUrl = publicUrlData?.publicUrl || "";
-      if (!publicUrl) throw new Error("Failed to get public URL");
-
-	      updateOrder(order.id, { photo: publicUrl, podUploading: false });
-      setSyncStatus("✅ อัปโหลดรูป POD สำเร็จ");
-    } catch (error) {
-      setSyncStatus(`❌ อัปโหลดรูป POD ไม่สำเร็จ: ${error.message || error}`);
-    }
-  };
+    if (!dataUrl) throw new Error("read failed");
+    updateOrder(order.id, { photo: dataUrl, podUploading: false, sharedToLine: false });
+    setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — โปรดกดแชร์ลง LINE");
+  } catch (error) {
+    setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
+  }
+};
 
   const acceptOrder = async (id) => {
     // Check if driver is logged in
     if (!driverId) {
-      setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
+      setSyncStatus("โ ๏ธ เธเธเธเธฑเธเธขเธฑเธเนเธกเนเนเธ”เนเน€เธฅเธทเธญเธ เธเธฃเธธเธ“เธฒเธ•เธฑเนเธเธเนเธฒเธเธฃเธฐเธเธณเธ•เธฑเธงเนเธซเนเธ–เธนเธเธ•เนเธญเธ");
       return;
     }
 
     const driver = drivers.find(d => d.id === driverId);
     if (!driver) {
-      setSyncStatus(`⚠️ ข้อมูลคนขับ "${driverId}" ไม่พบในระบบ ลองรีเฟรชหน้าดูครับ`);
+      setSyncStatus(`โ ๏ธ เธเนเธญเธกเธนเธฅเธเธเธเธฑเธ "${driverId}" เนเธกเนเธเธเนเธเธฃเธฐเธเธ เธฅเธญเธเธฃเธตเน€เธเธฃเธเธซเธเนเธฒเธ”เธนเธเธฃเธฑเธ`);
       return;
     }
 
@@ -1131,7 +1129,7 @@ export default function App() {
           .update({
             driverId: driverId,
             driverName: driverName,
-            status: "กำลังส่ง"
+            status: "เธเธณเธฅเธฑเธเธชเนเธ"
           })
           .eq("id", id)
           .or("driverId.is.null,driverId.eq.")
@@ -1139,44 +1137,44 @@ export default function App() {
           .maybeSingle();
 
         if (error) {
-          setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${error.message}`);
+          setSyncStatus(`โ เธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเนเนเธกเนเธชเธณเน€เธฃเนเธ: ${error.message}`);
           return;
         }
 
         if (!data) {
-          setSyncStatus(`⚠️ ออเดอร์ "${id}" ถูกคนอื่นรับไปแล้ว`);
+          setSyncStatus(`โ ๏ธ เธญเธญเน€เธ”เธญเธฃเน "${id}" เธ–เธนเธเธเธเธญเธทเนเธเธฃเธฑเธเนเธเนเธฅเนเธง`);
           await refreshFromSupabase();
           return;
         }
 
-        console.log("✅ [ACCEPT] Order accepted in Supabase, updating local state...");
+        console.log("โ… [ACCEPT] Order accepted in Supabase, updating local state...");
         // Update local state immediately to show change
         const accepted = convertToCamelCase(data);
         setState(prev => ({
           ...prev,
           orders: prev.orders.map(o => o.id === id ? accepted : o)
         }));
-        setSyncStatus(`✅ รับออเดอร์ "${id}" เรียบร้อย`);
+        setSyncStatus(`โ… เธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเน "${id}" เน€เธฃเธตเธขเธเธฃเนเธญเธข`);
         // Don't refreshFromSupabase - let polling handle it to avoid race condition
         return;
       } catch (e) {
-        setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}`);
+        setSyncStatus(`โ เธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเนเนเธกเนเธชเธณเน€เธฃเนเธ: ${e?.message || String(e)}`);
         return;
       }
     }
 
-    updateOrder(id, { driverId, driverName, status: "กำลังส่ง" });
+    updateOrder(id, { driverId, driverName, status: "เธเธณเธฅเธฑเธเธชเนเธ" });
   };
   const checkIn = id => {
     if (!driverId) {
-      setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
+      setSyncStatus("โ ๏ธ เธเธเธเธฑเธเธขเธฑเธเนเธกเนเนเธ”เนเน€เธฅเธทเธญเธ เธเธฃเธธเธ“เธฒเธ•เธฑเนเธเธเนเธฒเธเธฃเธฐเธเธณเธ•เธฑเธงเนเธซเนเธ–เธนเธเธ•เนเธญเธ");
       return;
     }
 
     const order = orders.find(o => o.id === id);
     const driver = drivers.find(d => d.id === driverId);
     if (!driver) {
-      setSyncStatus(`⚠️ ข้อมูลคนขับ "${driverId}" ไม่พบในระบบ ลองรีเฟรชหน้าดูครับ`);
+      setSyncStatus(`โ ๏ธ เธเนเธญเธกเธนเธฅเธเธเธเธฑเธ "${driverId}" เนเธกเนเธเธเนเธเธฃเธฐเธเธ เธฅเธญเธเธฃเธตเน€เธเธฃเธเธซเธเนเธฒเธ”เธนเธเธฃเธฑเธ`);
       return;
     }
 
@@ -1210,10 +1208,10 @@ export default function App() {
     if (!order) return;
     
     // Update status to completed
-    updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+    updateOrder(id, { status: "เธชเนเธเธชเธณเน€เธฃเนเธ", deliveredAt: new Date().toLocaleString("th-TH") });
     
     // Show order summary alert
-    const summaryText = `✅ ส่งสำเร็จ!\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ${order.photo ? "✅ มี" : "❌ ไม่มี"}\n\nออเดอร์ถูกลงทะเบียนในระบบแล้ว`;
+    const summaryText = `โ… เธชเนเธเธชเธณเน€เธฃเนเธ!\n\n๐“ฆ เธญเธญเน€เธ”เธญเธฃเน: ${order.customerName}\n๐“ ${order.zone}\n๐’ฐ COD: เธฟ${money(order.cod || 0)}\n๐“ธ POD: ${order.photo ? "โ… เธกเธต" : "โ เนเธกเนเธกเธต"}\n\nเธญเธญเน€เธ”เธญเธฃเนเธ–เธนเธเธฅเธเธ—เธฐเน€เธเธตเธขเธเนเธเธฃเธฐเธเธเนเธฅเนเธง`;
     alert(summaryText);
   };
 
@@ -1231,7 +1229,7 @@ export default function App() {
         if (!driverStats[order.driverId]) {
           const driver = (state.drivers || []).find(d => d.id === order.driverId);
           driverStats[order.driverId] = {
-            name: driver?.name || "ไม่ทราบ",
+            name: driver?.name || "เนเธกเนเธ—เธฃเธฒเธ",
             plate: driver?.plate || "-",
             zone: driver?.zone || "-",
             phone: driver?.phone || "-",
@@ -1245,7 +1243,7 @@ export default function App() {
         }
         driverStats[order.driverId].total += 1;
         driverStats[order.driverId].cod += Number(order.cod || 0);
-        driverStats[order.driverId][order.status === "ส่งสำเร็จ" ? "completed" : order.status === "กำลังส่ง" ? "active" : "failed"] += 1;
+        driverStats[order.driverId][order.status === "เธชเนเธเธชเธณเน€เธฃเนเธ" ? "completed" : order.status === "เธเธณเธฅเธฑเธเธชเนเธ" ? "active" : "failed"] += 1;
       }
     });
 
@@ -1260,70 +1258,70 @@ export default function App() {
       }
     });
 
-    let report = `\n${"═".repeat(60)}\n`;
-    report += `📋 รายงานการส่งของประจำวัน\n`;
-    report += `วันที่: ${today}\n`;
-    report += `เวลาสร้างรายงาน: ${new Date().toLocaleString("th-TH")}\n`;
-    report += `${"═".repeat(60)}\n\n`;
+    let report = `\n${"โ•".repeat(60)}\n`;
+    report += `๐“ เธฃเธฒเธขเธเธฒเธเธเธฒเธฃเธชเนเธเธเธญเธเธเธฃเธฐเธเธณเธงเธฑเธ\n`;
+    report += `เธงเธฑเธเธ—เธตเน: ${today}\n`;
+    report += `เน€เธงเธฅเธฒเธชเธฃเนเธฒเธเธฃเธฒเธขเธเธฒเธ: ${new Date().toLocaleString("th-TH")}\n`;
+    report += `${"โ•".repeat(60)}\n\n`;
     
-    report += `📊 สรุปข้อมูลรวมทั้งวัน:\n`;
-    report += `${"─".repeat(60)}\n`;
-    report += `  📦 ออเดอร์ทั้งหมด: ${todayOrders.length} งาน\n`;
-    report += `  ✅ สำเร็จ: ${todayOrders.filter(o => o.status === "ส่งสำเร็จ").length} งาน\n`;
-    report += `  🟡 กำลังส่ง: ${todayOrders.filter(o => o.status === "กำลังส่ง").length} งาน\n`;
-    report += `  ⏳ รอรับ: ${todayOrders.filter(o => o.status === "รอคนขับรับ").length} งาน\n`;
-    report += `  ❌ ติดปัญหา: ${todayOrders.filter(o => o.status === "ติดปัญหา").length} งาน\n`;
-    report += `  💰 รวม COD: ${money(totalCOD)} บาท\n\n`;
+    report += `๐“ เธชเธฃเธธเธเธเนเธญเธกเธนเธฅเธฃเธงเธกเธ—เธฑเนเธเธงเธฑเธ:\n`;
+    report += `${"โ”€".repeat(60)}\n`;
+    report += `  ๐“ฆ เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”: ${todayOrders.length} เธเธฒเธ\n`;
+    report += `  โ… เธชเธณเน€เธฃเนเธ: ${todayOrders.filter(o => o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length} เธเธฒเธ\n`;
+    report += `  ๐ก เธเธณเธฅเธฑเธเธชเนเธ: ${todayOrders.filter(o => o.status === "เธเธณเธฅเธฑเธเธชเนเธ").length} เธเธฒเธ\n`;
+    report += `  โณ เธฃเธญเธฃเธฑเธ: ${todayOrders.filter(o => o.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ").length} เธเธฒเธ\n`;
+    report += `  โ เธ•เธดเธ”เธเธฑเธเธซเธฒ: ${todayOrders.filter(o => o.status === "เธ•เธดเธ”เธเธฑเธเธซเธฒ").length} เธเธฒเธ\n`;
+    report += `  ๐’ฐ เธฃเธงเธก COD: ${money(totalCOD)} เธเธฒเธ—\n\n`;
 
-    report += `👥 ข้อมูลรายคนขับ:\n`;
-    report += `${"─".repeat(60)}\n`;
+    report += `๐‘ฅ เธเนเธญเธกเธนเธฅเธฃเธฒเธขเธเธเธเธฑเธ:\n`;
+    report += `${"โ”€".repeat(60)}\n`;
     
     Object.entries(driverStats).forEach(([driverId, stats]) => {
-      report += `\n🚗 ${stats.name}\n`;
-      report += `  📱 เบอร์โทร: ${stats.phone}\n`;
-      report += `  🏎️ เพลต: ${stats.plate}\n`;
-      report += `  📍 โซน: ${stats.zone}\n`;
-      report += `  ────────────────────────────────────────\n`;
-      report += `  📦 ออเดอร์รวม: ${stats.total} งาน\n`;
-      report += `     ✅ สำเร็จ: ${stats.completed} งาน\n`;
-      report += `     🟡 กำลังส่ง: ${stats.active} งาน\n`;
-      report += `     ❌ ไม่สำเร็จ: ${stats.failed} งาน\n`;
-      report += `  💰 COD รวม: ${money(stats.cod)} บาท\n`;
-      report += `  ⏱️ ประสิทธิภาพ: ${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}%\n`;
+      report += `\n๐— ${stats.name}\n`;
+      report += `  ๐“ฑ เน€เธเธญเธฃเนเนเธ—เธฃ: ${stats.phone}\n`;
+      report += `  ๐๏ธ เน€เธเธฅเธ•: ${stats.plate}\n`;
+      report += `  ๐“ เนเธเธ: ${stats.zone}\n`;
+      report += `  โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€\n`;
+      report += `  ๐“ฆ เธญเธญเน€เธ”เธญเธฃเนเธฃเธงเธก: ${stats.total} เธเธฒเธ\n`;
+      report += `     โ… เธชเธณเน€เธฃเนเธ: ${stats.completed} เธเธฒเธ\n`;
+      report += `     ๐ก เธเธณเธฅเธฑเธเธชเนเธ: ${stats.active} เธเธฒเธ\n`;
+      report += `     โ เนเธกเนเธชเธณเน€เธฃเนเธ: ${stats.failed} เธเธฒเธ\n`;
+      report += `  ๐’ฐ COD เธฃเธงเธก: ${money(stats.cod)} เธเธฒเธ—\n`;
+      report += `  โฑ๏ธ เธเธฃเธฐเธชเธดเธ—เธเธดเธ เธฒเธ: ${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}%\n`;
       
       if (stats.checkins.length > 0) {
-        report += `  📌 จุดเช็คอิน (${stats.checkins.length} จุด):\n`;
+        report += `  ๐“ เธเธธเธ”เน€เธเนเธเธญเธดเธ (${stats.checkins.length} เธเธธเธ”):\n`;
         stats.checkins.slice(0, 8).forEach((c, idx) => {
           report += `     ${idx + 1}. ${c.time} - ${c.customer}\n`;
-          report += `        📍 ${c.address}\n`;
+          report += `        ๐“ ${c.address}\n`;
         });
-        if (stats.checkins.length > 8) report += `     ... และอีก ${stats.checkins.length - 8} จุด\n`;
+        if (stats.checkins.length > 8) report += `     ... เนเธฅเธฐเธญเธตเธ ${stats.checkins.length - 8} เธเธธเธ”\n`;
       }
     });
 
-    report += `\n${"═".repeat(60)}\n`;
-    report += `📌 หมายเหตุ:\n`;
-    report += `  • รายงานนี้สร้างจากระบบ Hillkoff Delivery System\n`;
-    report += `  • ข้อมูลเป็นอัตเวลา ณ เวลาสร้างรายงาน\n`;
-    report += `  • ตรวจสอบเลขที่ออเดอร์และ COD ก่อนตัดสิน\n`;
-    report += `${"═".repeat(60)}\n`;
+    report += `\n${"โ•".repeat(60)}\n`;
+    report += `๐“ เธซเธกเธฒเธขเน€เธซเธ•เธธ:\n`;
+    report += `  โ€ข เธฃเธฒเธขเธเธฒเธเธเธตเนเธชเธฃเนเธฒเธเธเธฒเธเธฃเธฐเธเธ Hillkoff Delivery System\n`;
+    report += `  โ€ข เธเนเธญเธกเธนเธฅเน€เธเนเธเธญเธฑเธ•เน€เธงเธฅเธฒ เธ“ เน€เธงเธฅเธฒเธชเธฃเนเธฒเธเธฃเธฒเธขเธเธฒเธ\n`;
+    report += `  โ€ข เธ•เธฃเธงเธเธชเธญเธเน€เธฅเธเธ—เธตเนเธญเธญเน€เธ”เธญเธฃเนเนเธฅเธฐ COD เธเนเธญเธเธ•เธฑเธ”เธชเธดเธ\n`;
+    report += `${"โ•".repeat(60)}\n`;
     
     return report;
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text).then(() => {
-      alert("คัดลอกรายงานสำเร็จ!");
+      alert("เธเธฑเธ”เธฅเธญเธเธฃเธฒเธขเธเธฒเธเธชเธณเน€เธฃเนเธ!");
     }).catch(() => {
-      alert("คัดลอกไม่สำเร็จ กรุณาลองใหม่");
+      alert("เธเธฑเธ”เธฅเธญเธเนเธกเนเธชเธณเน€เธฃเนเธ เธเธฃเธธเธ“เธฒเธฅเธญเธเนเธซเธกเน");
     });
   };
 
   const totals = {
     jobs: orders.length,
-    waiting: orders.filter(order => order.status === "รอคนขับรับ").length,
-    active: orders.filter(order => order.status === "กำลังส่ง").length,
-    done: orders.filter(order => order.status === "ส่งสำเร็จ").length
+    waiting: orders.filter(order => order.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ").length,
+    active: orders.filter(order => order.status === "เธเธณเธฅเธฑเธเธชเนเธ").length,
+    done: orders.filter(order => order.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length
   };
 
   if (!auth.role || auth.role === "driver-register") {
@@ -1336,35 +1334,35 @@ export default function App() {
           </div>
           {auth.role !== "driver-register" ? (
             <>
-              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>ใช้ Supabase</span></div>
+              <div className="panel-head"><h1>เน€เธเนเธฒเธชเธนเนเธฃเธฐเธเธ</h1><span>เนเธเน Supabase</span></div>
               <div className="segmented">
-                <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
-                <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
+                <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>เธเนเธฒเธขเธเธฒเธข</button>
+                <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>เธเธเธเธฑเธ</button>
               </div>
-              {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
-              <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+              {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="เธเธทเนเธญเธเธนเนเนเธเนเธเธฒเธเธเนเธฒเธขเธเธฒเธข" />}
+              <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เน€เธเธญเธฃเนเนเธ—เธฃ" />
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
-                จดจำเบอร์โทรในครั้งต่อไป
+                เธเธ”เธเธณเน€เธเธญเธฃเนเนเธ—เธฃเนเธเธเธฃเธฑเนเธเธ•เนเธญเนเธ
               </label>
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {loginForm.role === "sales" ? "เข้าหน้าแดชบอร์ดฝ่ายขาย" : "เข้าสู่ระบบคนขับ"}
+                {loginForm.role === "sales" ? "เน€เธเนเธฒเธซเธเนเธฒเนเธ”เธเธเธญเธฃเนเธ”เธเนเธฒเธขเธเธฒเธข" : "เน€เธเนเธฒเธชเธนเนเธฃเธฐเธเธเธเธเธเธฑเธ"}
               </button>
-              <p className="login-note">ระบบจะโหลดข้อมูลลูกค้า ออเดอร์ และคนขับจาก Supabase หลังล็อกอิน</p>
+              <p className="login-note">เธฃเธฐเธเธเธเธฐเนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเธฅเธนเธเธเนเธฒ เธญเธญเน€เธ”เธญเธฃเน เนเธฅเธฐเธเธเธเธฑเธเธเธฒเธ Supabase เธซเธฅเธฑเธเธฅเนเธญเธเธญเธดเธ</p>
             </>
           ) : (
             <>
-              <div className="panel-head"><h1>ลงทะเบียนคนขับ</h1><span>ครั้งแรกเท่านั้น</span></div>
+              <div className="panel-head"><h1>เธฅเธเธ—เธฐเน€เธเธตเธขเธเธเธเธเธฑเธ</h1><span>เธเธฃเธฑเนเธเนเธฃเธเน€เธ—เนเธฒเธเธฑเนเธ</span></div>
               <div className="form-grid two">
-                <input value={driverForm.firstName} onChange={e => setDriverForm(p => ({ ...p, firstName: e.target.value }))} placeholder="ชื่อ" />
-                <input value={driverForm.lastName} onChange={e => setDriverForm(p => ({ ...p, lastName: e.target.value }))} placeholder="สกุล" />
-                <input value={driverForm.phone} onChange={e => setDriverForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
-                <input value={driverForm.vehicle} onChange={e => setDriverForm(p => ({ ...p, vehicle: e.target.value }))} placeholder="รถที่ใช้" />
-                <input value={driverForm.plate} onChange={e => setDriverForm(p => ({ ...p, plate: e.target.value }))} placeholder="ทะเบียนรถ" />
+                <input value={driverForm.firstName} onChange={e => setDriverForm(p => ({ ...p, firstName: e.target.value }))} placeholder="เธเธทเนเธญ" />
+                <input value={driverForm.lastName} onChange={e => setDriverForm(p => ({ ...p, lastName: e.target.value }))} placeholder="เธชเธเธธเธฅ" />
+                <input value={driverForm.phone} onChange={e => setDriverForm(p => ({ ...p, phone: e.target.value }))} placeholder="เน€เธเธญเธฃเนเนเธ—เธฃ" />
+                <input value={driverForm.vehicle} onChange={e => setDriverForm(p => ({ ...p, vehicle: e.target.value }))} placeholder="เธฃเธ–เธ—เธตเนเนเธเน" />
+                <input value={driverForm.plate} onChange={e => setDriverForm(p => ({ ...p, plate: e.target.value }))} placeholder="เธ—เธฐเน€เธเธตเธขเธเธฃเธ–" />
                 <select value={driverForm.zone} onChange={e => setDriverForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
               </div>
-              <button className="primary wide" onClick={registerDriver}>บันทึกและเข้าใช้งานคนขับ</button>
-              <button className="secondary wide" onClick={logout}>กลับไปหน้า Login</button>
+              <button className="primary wide" onClick={registerDriver}>เธเธฑเธเธ—เธถเธเนเธฅเธฐเน€เธเนเธฒเนเธเนเธเธฒเธเธเธเธเธฑเธ</button>
+              <button className="secondary wide" onClick={logout}>เธเธฅเธฑเธเนเธเธซเธเนเธฒ Login</button>
             </>
           )}
         </section>
@@ -1404,23 +1402,23 @@ export default function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
+            <p>เน€เธเธตเธขเธเนเธซเธกเนเนเธฅเธฐเธเธฑเธเธซเธงเธฑเธ”เนเธเธฅเนเน€เธเธตเธขเธ ยท {todayText()}</p>
             <h1>{displayTab === "sales" ? "Sales Delivery Dashboard" : displayTab === "dispatch" ? "Dispatch Work Dashboard" : displayTab === "driver" ? "Driver Realtime Orders" : displayTab === "settings" ? "System Settings" : "Daily Report & Service Quality"}</h1>
           </div>
           <div className="top-actions">
-            <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
-            <button className="secondary" onClick={logout}>ออก</button>
+            <span className="google-status">{auth.role === "driver" ? "เธเธเธเธฑเธ" : "เธเนเธฒเธขเธเธฒเธข"}: {auth.name || auth.phone}</span>
+            <button className="secondary" onClick={logout}>เธญเธญเธ</button>
           </div>
         </header>
         <div className="sync-banner">{syncStatus}</div>
 
         <div className="stats">
-          <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${totals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
-          <Stat icon={UserCheck} label="รอคนขับรับ" value={`${totals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
-          <Stat icon={Navigation} label="กำลังส่ง" value={`${totals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
-          <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
+          <Stat icon={PackagePlus} label="เธญเธญเน€เธ”เธญเธฃเนเธงเธฑเธเธเธตเน" value={`${totals.jobs} เธเธฒเธ`} sub="เธเนเธฒเธขเธเธฒเธขเน€เธเธดเธ”เธเธฒเธเธชเนเธ" />
+          <Stat icon={UserCheck} label="เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ" value={`${totals.waiting} เธเธฒเธ`} sub="เน€เธ”เนเธเน€เธเนเธฒเธซเธเนเธฒเธเธเธเธฑเธ" tone="#92400e" />
+          <Stat icon={Navigation} label="เธเธณเธฅเธฑเธเธชเนเธ" value={`${totals.active} เธเธฒเธ`} sub="เน€เธเนเธเธญเธดเธเนเธ”เนเธเธฒเธเธซเธเนเธฒเธเธฒเธ" tone="#1d4ed8" />
+          <Stat icon={CheckCircle2} label="เธชเนเธเธชเธณเน€เธฃเนเธ" value={`${totals.done} เธเธฒเธ`} sub="เธ•เนเธญเธเธกเธตเธซเธฅเธฑเธเธเธฒเธเธฃเธนเธเธ–เนเธฒเธข" tone="#166534" />
           {auth.role === "driver" && (
-            <Stat icon={Star} label="ส่งสำเร็จของฉัน" value={`${orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} งาน`} sub="งานของคุณทั้งหมด" tone="#22c55e" />
+            <Stat icon={Star} label="เธชเนเธเธชเธณเน€เธฃเนเธเธเธญเธเธเธฑเธ" value={`${orders.filter(o => o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ" && o.driverId === driverId).length} เธเธฒเธ`} sub="เธเธฒเธเธเธญเธเธเธธเธ“เธ—เธฑเนเธเธซเธกเธ”" tone="#22c55e" />
           )}
         </div>
 
@@ -1428,13 +1426,13 @@ export default function App() {
           <>
             <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
               <button className="secondary" onClick={() => {
-                const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตออเดอร์:");
+                const pwd = prompt("๐” เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธฃเธซเธฑเธชเน€เธเธทเนเธญเธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเน:");
                 if (pwd === null) return; // User cancelled
                 if (pwd !== "2532") {
-                  alert("❌ รหัสไม่ถูกต้อง");
+                  alert("โ เธฃเธซเธฑเธชเนเธกเนเธ–เธนเธเธ•เนเธญเธ");
                   return;
                 }
-                if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
+                if (!window.confirm("เธขเธทเธเธขเธฑเธเธญเธตเธเธเธฃเธฑเนเธ: เธ•เนเธญเธเธเธฒเธฃเธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธซเธฃเธทเธญเนเธกเน? (เธเนเธญเธกเธนเธฅเธ—เธฑเนเธเธซเธกเธ”เธเธฐเธ–เธนเธเธฅเธ)")) return;
 
                 (async () => {
                   try {
@@ -1443,59 +1441,59 @@ export default function App() {
                     
                     if (!supabase) supabase = initSupabase();
                     if (!supabase) {
-                      alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                      alert("โ เธขเธฑเธเน€เธเธทเนเธญเธกเธ•เนเธญ Supabase เนเธกเนเนเธ”เน");
                       isResettingOrdersRef.current = false;
                       return;
                     }
 
-                    setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด (Supabase)...");
-                    console.log("🔍 [RESET] Starting complete order reset process...");
+                    setSyncStatus("โณ เธเธณเธฅเธฑเธเธฅเธเธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ” (Supabase)...");
+                    console.log("๐” [RESET] Starting complete order reset process...");
                       
                       // STEP 1: Clear React state
-                      console.log("🧹 [RESET] Step 1: Clearing React state (orders = [])...");
+                      console.log("๐งน [RESET] Step 1: Clearing React state (orders = [])...");
                       const emptyState = JSON.parse(JSON.stringify(state)); // Deep copy
                       emptyState.orders = [];
                       emptyState.customers = [];
                       setState(emptyState);
-                      console.log("✅ [RESET] React state cleared", { orders: emptyState.orders.length, customers: emptyState.customers.length });
+                      console.log("โ… [RESET] React state cleared", { orders: emptyState.orders.length, customers: emptyState.customers.length });
                       
                       // Wait for state update
                       await new Promise(resolve => setTimeout(resolve, 200));
-                      console.log("✅ [RESET] State update delay completed");
+                      console.log("โ… [RESET] State update delay completed");
                       
                       // STEP 2: Delete from Supabase
-                      console.log("🗑️ [RESET] Step 2: Deleting from Supabase...");
+                      console.log("๐—‘๏ธ [RESET] Step 2: Deleting from Supabase...");
                       
                       try {
                         // Fetch all order IDs
-                        console.log("📋 [RESET] Fetching all order IDs...");
+                        console.log("๐“ [RESET] Fetching all order IDs...");
                         const { data: allOrders, error: fetchError } = await supabase
                           .from("orders")
                           .select("id");
                         
-                        console.log("📋 [RESET] Fetch result:", { 
+                        console.log("๐“ [RESET] Fetch result:", { 
                           ordersCount: allOrders?.length || 0, 
                           hasError: !!fetchError,
                           errorMsg: fetchError?.message || "none"
                         });
                         
                         if (fetchError) {
-                          console.error("❌ [RESET] Fetch failed:", fetchError);
+                          console.error("โ [RESET] Fetch failed:", fetchError);
                           throw new Error(`Fetch failed: ${fetchError.message}`);
                         }
                         
                         // Delete orders
                         if (allOrders && allOrders.length > 0) {
                           const orderIds = allOrders.map(o => o.id);
-                          console.log(`🗑️ [RESET] Deleting ${orderIds.length} orders...`);
-                          console.log("🗑️ [RESET] Order IDs:", orderIds);
+                          console.log(`๐—‘๏ธ [RESET] Deleting ${orderIds.length} orders...`);
+                          console.log("๐—‘๏ธ [RESET] Order IDs:", orderIds);
                           
                           const { error: deleteError, count, status } = await supabase
                             .from("orders")
                             .delete()
                             .in("id", orderIds);
                           
-                          console.log("🗑️ [RESET] Delete response:", { 
+                          console.log("๐—‘๏ธ [RESET] Delete response:", { 
                             totalRequested: orderIds.length,
                             deletedCount: count, 
                             httpStatus: status,
@@ -1504,57 +1502,57 @@ export default function App() {
                           });
                           
                           if (deleteError) {
-                            console.error("❌ [RESET] Delete query failed:", deleteError);
+                            console.error("โ [RESET] Delete query failed:", deleteError);
                             throw new Error(`Delete failed: ${deleteError.message}`);
                           }
                           
                           if (count !== orderIds.length) {
-                            console.warn(`⚠️ [RESET] WARNING: Only ${count} of ${orderIds.length} orders were deleted!`);
+                            console.warn(`โ ๏ธ [RESET] WARNING: Only ${count} of ${orderIds.length} orders were deleted!`);
                           }
                           
                           // Verify deletion
-                          console.log("✅ [RESET] Delete query completed, verifying...");
+                          console.log("โ… [RESET] Delete query completed, verifying...");
                           await new Promise(resolve => setTimeout(resolve, 1000));
                           
                           const { data: afterDelete, error: verifyError } = await supabase
                             .from("orders")
                             .select("id");
                           
-                          console.log("✅ [RESET] Verification:", { 
+                          console.log("โ… [RESET] Verification:", { 
                             ordersRemaining: afterDelete?.length || 0,
                             verifyError: verifyError?.message || "none"
                           });
                           
                           if (afterDelete && afterDelete.length > 0) {
-                            console.warn("⚠️ [RESET] WARNING: Orders still exist after delete:", afterDelete.map(o => o.id));
-                            console.warn("⚠️ [RESET] Remaining order IDs should be:", afterDelete.map(o => o.id).join(", "));
+                            console.warn("โ ๏ธ [RESET] WARNING: Orders still exist after delete:", afterDelete.map(o => o.id));
+                            console.warn("โ ๏ธ [RESET] Remaining order IDs should be:", afterDelete.map(o => o.id).join(", "));
                           }
                         } else {
-                          console.log("ℹ️ [RESET] No orders to delete");
+                          console.log("โน๏ธ [RESET] No orders to delete");
                         }
                       } catch (e) {
-                        console.error("❌ [RESET] Delete step failed:", e);
+                        console.error("โ [RESET] Delete step failed:", e);
                         throw e;
                       }
                       
                       // STEP 3: Wait to ensure everything is synced
-                      console.log("⏳ [RESET] Step 3: Waiting 5 seconds to ensure deletion is complete...");
+                      console.log("โณ [RESET] Step 3: Waiting 5 seconds to ensure deletion is complete...");
                       await new Promise(resolve => setTimeout(resolve, 5000));
                       
                       // STEP 4: Final verification: fetching from Supabase
-                      console.log("🔄 [RESET] Step 4: Final verification: fetching from Supabase...");
+                      console.log("๐” [RESET] Step 4: Final verification: fetching from Supabase...");
                       const { data: finalCheck, error: finalCheckError } = await supabase
                         .from("orders")
                         .select("id");
                       
-                      console.log("🔄 [RESET] Final Supabase check:", {
+                      console.log("๐” [RESET] Final Supabase check:", {
                         ordersRemaining: finalCheck?.length || 0,
                         error: finalCheckError?.message || "none"
                       });
                       
                       if (finalCheck && finalCheck.length > 0) {
-                        console.warn("⚠️ [RESET] WARNING: Orders still in Supabase after delete:", finalCheck.map(o => o.id));
-                        console.log("🔄 [RESET] Attempting second delete round...");
+                        console.warn("โ ๏ธ [RESET] WARNING: Orders still in Supabase after delete:", finalCheck.map(o => o.id));
+                        console.log("๐” [RESET] Attempting second delete round...");
                         
                         // Try delete again
                         const remainingIds = finalCheck.map(o => o.id);
@@ -1563,49 +1561,49 @@ export default function App() {
                           .delete()
                           .in("id", remainingIds);
                         
-                        console.log("🗑️ [RESET] Second delete attempt:", { 
+                        console.log("๐—‘๏ธ [RESET] Second delete attempt:", { 
                           retryCount, 
                           retryError: deleteRetryError?.message || "none"
                         });
                         
                         // Verify again
                         const { data: finalCheck2 } = await supabase.from("orders").select("id");
-                        console.log("🔄 [RESET] After retry:", { ordersRemaining: finalCheck2?.length || 0 });
+                        console.log("๐” [RESET] After retry:", { ordersRemaining: finalCheck2?.length || 0 });
                       }
                       
                       // STEP 5: Re-enable sync
-                      console.log("🔄 [RESET] Step 5: Re-enabling polling and sync...");
-                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!");
-                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมดจาก Supabase\n✓ รีเซ็ตสถานะทั้งระบบ");
+                      console.log("๐” [RESET] Step 5: Re-enabling polling and sync...");
+                      setSyncStatus("โ… เธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธชเธณเน€เธฃเนเธ!");
+                      alert("โ… เธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธชเธณเน€เธฃเนเธ!\n\nโ“ เธฅเธเธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธเธฒเธ Supabase\nโ“ เธฃเธตเน€เธเนเธ•เธชเธ–เธฒเธเธฐเธ—เธฑเนเธเธฃเธฐเธเธ");
                       isResettingOrdersRef.current = false;
                       
-                      console.log("✅ [RESET] Process completed successfully!");
+                      console.log("โ… [RESET] Process completed successfully!");
                     } catch (e) {
-                      console.error("❌ [RESET] Process failed:", e);
-                      setSyncStatus(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
-                      alert(`❌ รีเซ็ตไม่สำเร็จ:\n${e?.message || String(e)}\n\n(ตรวจสอบ console สำหรับรายละเอียด)`);
+                      console.error("โ [RESET] Process failed:", e);
+                      setSyncStatus(`โ เธฃเธตเน€เธเนเธ•เนเธกเนเธชเธณเน€เธฃเนเธ: ${e?.message || String(e)}`);
+                      alert(`โ เธฃเธตเน€เธเนเธ•เนเธกเนเธชเธณเน€เธฃเนเธ:\n${e?.message || String(e)}\n\n(เธ•เธฃเธงเธเธชเธญเธ console เธชเธณเธซเธฃเธฑเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”)`);
                       isResettingOrdersRef.current = false;
                     }
                   })();
-              }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
+              }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>๐” เธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเน</button>
             </div>
             <div className="sales-grid">
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
-                <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>✓ {syncStatus}</p>
+                <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>โ“ {syncStatus}</p>
               </section>
             )}
             <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
-              <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
+              <div className="panel-head"><h2>๐ข เธเธเธเธฑเธเธญเธญเธเนเธฅเธเนเธ•เธญเธเธเธตเน</h2><span>{Object.keys(state.onlineDrivers || {}).length} เธเธ</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
                 {Object.keys(state.onlineDrivers || {}).length === 0 ? (
-                  <p className="muted" style={{ gridColumn: "1 / -1" }}>ยังไม่มีคนขับออนไลน์</p>
+                  <p className="muted" style={{ gridColumn: "1 / -1" }}>เธขเธฑเธเนเธกเนเธกเธตเธเธเธเธฑเธเธญเธญเธเนเธฅเธเน</p>
                 ) : (
                   drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
                     const onlineTime = Math.floor((new Date().getTime() - (state.onlineDrivers?.[driver.id] || 0)) / 60000);
                     return (
                       <div key={driver.id} style={{ background: "white", padding: "12px", borderRadius: "6px", border: "1px solid #dcfce7", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#22c55e", marginBottom: "4px" }}>🟢 {driver.name}</div>
+                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#22c55e", marginBottom: "4px" }}>๐ข {driver.name}</div>
                         <small style={{ color: "#666" }}>{driver.plate}</small><br />
                         <small style={{ color: "#999" }}>{driver.zone}</small><br />
                         <small style={{ color: "#16a34a", marginTop: "4px", display: "block" }}>Online {onlineTime}m ago</small>
@@ -1626,9 +1624,9 @@ export default function App() {
 
                 return (
                   <>
-                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{driverIds.length} คนมีพิกัด</span></div>
+                    <div className="panel-head"><h2>๐—บ๏ธ Mini-map (OSM)</h2><span>{driverIds.length} เธเธเธกเธตเธเธดเธเธฑเธ”</span></div>
                     {driverIds.length === 0 ? (
-                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีพิกัดคนขับ (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+                      <p className="muted" style={{ margin: 0 }}>เธขเธฑเธเนเธกเนเธกเธตเธเธดเธเธฑเธ”เธเธเธเธฑเธ (เนเธซเนเธเธเธเธฑเธเธญเธเธธเธเธฒเธ• GPS เนเธฅเธฐเน€เธเธดเธ”เธซเธเนเธฒ Driver เนเธงเน)</p>
                     ) : (
                       <>
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
@@ -1637,7 +1635,7 @@ export default function App() {
                             const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
                             return (
                               <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
-                                📍 {name}
+                                ๐“ {name}
                               </button>
                             );
                           })}
@@ -1650,7 +1648,7 @@ export default function App() {
                             </div>
                             <iframe title="osm-mini-map" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
                             <a href={osmPageUrl(selected.lat, selected.lng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
-                              เปิดแผนที่เต็ม (OpenStreetMap)
+                              เน€เธเธดเธ”เนเธเธเธ—เธตเนเน€เธ•เนเธก (OpenStreetMap)
                             </a>
                           </div>
                         )}
@@ -1663,7 +1661,7 @@ export default function App() {
 
             <section className="panel" style={{ gridColumn: "1 / -1" }}>
               {(() => {
-                const inProgress = orders.filter(o => o.driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง"));
+                const inProgress = orders.filter(o => o.driverId && (o.status === "เธเธณเธฅเธฑเธเธชเนเธ" || o.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ"));
                 const byDriver = {};
                 inProgress.forEach(o => {
                   byDriver[o.driverId] = byDriver[o.driverId] || [];
@@ -1672,9 +1670,9 @@ export default function App() {
 
                 return (
                   <>
-                    <div className="panel-head"><h2>🚚 งานที่คนขับกำลังส่ง</h2><span>{inProgress.length} งาน</span></div>
+                    <div className="panel-head"><h2>๐ เธเธฒเธเธ—เธตเนเธเธเธเธฑเธเธเธณเธฅเธฑเธเธชเนเธ</h2><span>{inProgress.length} เธเธฒเธ</span></div>
                     {inProgress.length === 0 ? (
-                      <p className="muted" style={{ textAlign: "center", padding: "8px 0" }}>ยังไม่มีงานที่กำลังส่ง</p>
+                      <p className="muted" style={{ textAlign: "center", padding: "8px 0" }}>เธขเธฑเธเนเธกเนเธกเธตเธเธฒเธเธ—เธตเนเธเธณเธฅเธฑเธเธชเนเธ</p>
                     ) : (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
                         {Object.keys(byDriver).map(did => {
@@ -1683,7 +1681,7 @@ export default function App() {
                           return (
                             <div key={did} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
-                                <b>{driver?.name || items[0]?.driverName || "ไม่ทราบชื่อคนขับ"}</b>
+                                <b>{driver?.name || items[0]?.driverName || "เนเธกเนเธ—เธฃเธฒเธเธเธทเนเธญเธเธเธเธฑเธ"}</b>
                                 <small style={{ color: "#6b7280" }}>{driver?.plate || "-"}</small>
                               </div>
                               <small style={{ color: "#6b7280" }}>{driver?.zone || "-"}</small>
@@ -1694,10 +1692,10 @@ export default function App() {
                                       <b style={{ color: statusColor[o.status] || "#111827" }}>{o.id}</b>
                                       <small style={{ color: statusColor[o.status] || "#111827" }}>{o.status}</small>
                                     </div>
-                                    <small style={{ color: "#374151" }}>{o.customerName} · {o.zone}</small>
+                                    <small style={{ color: "#374151" }}>{o.customerName} ยท {o.zone}</small>
                                   </div>
                                 ))}
-                                {items.length > 5 && <small style={{ color: "#6b7280" }}>+ อีก {items.length - 5} งาน</small>}
+                                {items.length > 5 && <small style={{ color: "#6b7280" }}>+ เธญเธตเธ {items.length - 5} เธเธฒเธ</small>}
                               </div>
                             </div>
                           );
@@ -1710,18 +1708,18 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
+              <div className="panel-head"><h2>เธเนเธญเธกเธนเธฅเธฅเธนเธเธเนเธฒเน€เธเนเธฒ</h2><span>{customers.length} เธฃเนเธฒเธ</span></div>
               {customers.length === 0 ? (
-                <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
+                <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>๐“ญ เธขเธฑเธเนเธกเนเธกเธตเธฅเธนเธเธเนเธฒ เธเธ”เน€เธเธดเนเธกเธฅเธนเธเธเนเธฒเนเธซเธกเนเธ”เนเธฒเธเธฅเนเธฒเธ</p>
               ) : (
                 <>
-                  <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
+                  <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="เธเนเธเธซเธฒเธเธทเนเธญเธฅเธนเธเธเนเธฒ เน€เธเธญเธฃเนเนเธ—เธฃ เธเธทเนเธเธ—เธตเน" /></label>
                   <div className="customer-list">
                     {filteredCustomers.map(customer => (
                       <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
                         <strong>{customer.name}</strong>
-                        <span>{customer.contact} · {customer.phone}</span>
-                        <span>{customer.zone} · {customer.address}</span>
+                        <span>{customer.contact} ยท {customer.phone}</span>
+                        <span>{customer.zone} ยท {customer.address}</span>
                       </button>
                     ))}
                   </div>
@@ -1733,48 +1731,48 @@ export default function App() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
                     <div>
                       <b style={{ fontSize: "14px", display: "block" }}>{selectedCustomer.name}</b>
-                      <small style={{ color: "#666" }}>📞 {selectedCustomer.phone}</small><br/>
-                      <small style={{ color: "#666" }}>👤 {selectedCustomer.contact}</small><br/>
-                      <small style={{ color: "#666" }}>📍 {selectedCustomer.zone}</small><br/>
+                      <small style={{ color: "#666" }}>๐“ {selectedCustomer.phone}</small><br/>
+                      <small style={{ color: "#666" }}>๐‘ค {selectedCustomer.contact}</small><br/>
+                      <small style={{ color: "#666" }}>๐“ {selectedCustomer.zone}</small><br/>
                       <small style={{ color: "#666" }}>{selectedCustomer.address}</small>
                     </div>
                   </div>
                   <button className="secondary" style={{ width: "100%", padding: "8px", fontSize: "12px" }} onClick={() => {
                     setEditingCustomerId(selectedCustomer.id);
                     setEditCustomerForm(selectedCustomer);
-                  }}>✏️ แก้ไขข้อมูล</button>
+                  }}>โ๏ธ เนเธเนเนเธเธเนเธญเธกเธนเธฅ</button>
                 </div>
               )}
             </section>
 
             {editingCustomerId && (
               <section className="panel" style={{ background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
-                <div className="panel-head"><h2>✏️ แก้ไขข้อมูลลูกค้า</h2><span>หมายเลข: {editingCustomerId}</span></div>
+                <div className="panel-head"><h2>โ๏ธ เนเธเนเนเธเธเนเธญเธกเธนเธฅเธฅเธนเธเธเนเธฒ</h2><span>เธซเธกเธฒเธขเน€เธฅเธ: {editingCustomerId}</span></div>
                 <div className="form-grid">
-                  <input value={editCustomerForm.name} onChange={e => setEditCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อร้าน/ลูกค้า" />
-                  <input value={editCustomerForm.contact} onChange={e => setEditCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
-                  <input value={editCustomerForm.phone} onChange={e => setEditCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+                  <input value={editCustomerForm.name} onChange={e => setEditCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เธเธทเนเธญเธฃเนเธฒเธ/เธฅเธนเธเธเนเธฒ" />
+                  <input value={editCustomerForm.contact} onChange={e => setEditCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="เธเธนเนเธ•เธดเธ”เธ•เนเธญ" />
+                  <input value={editCustomerForm.phone} onChange={e => setEditCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เน€เธเธญเธฃเนเนเธ—เธฃ" />
                   <select value={editCustomerForm.zone} onChange={e => setEditCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
                 </div>
-                <input value={editCustomerForm.address} onChange={e => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
+                <input value={editCustomerForm.address} onChange={e => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="เธ—เธตเนเธญเธขเธนเน/เธขเนเธฒเธ" />
                 <input value={editCustomerForm.mapUrl} onChange={e => setEditCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
-                <textarea value={editCustomerForm.note} onChange={e => setEditCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
+                <textarea value={editCustomerForm.note} onChange={e => setEditCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="เธซเธกเธฒเธขเน€เธซเธ•เธธเธเธฃเธฐเธเธณเธฅเธนเธเธเนเธฒ" rows={3} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  <button className="secondary" onClick={() => setEditingCustomerId(null)}>ยกเลิก</button>
-                  <button className="primary" onClick={() => updateCustomer(editingCustomerId, editCustomerForm)}>💾 บันทึก</button>
+                  <button className="secondary" onClick={() => setEditingCustomerId(null)}>เธขเธเน€เธฅเธดเธ</button>
+                  <button className="primary" onClick={() => updateCustomer(editingCustomerId, editCustomerForm)}>๐’พ เธเธฑเธเธ—เธถเธ</button>
                 </div>
               </section>
             )}
 
             <section className="panel">
-              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>พิมพ์ชื่อลูกค้าหรือเลือกจากรายชื่อ</span></div>
-              <label className="search"><Search size={16} /><input value={orderForm.customerName} onChange={e => setOrderForm(p => ({ ...p, customerName: e.target.value }))} placeholder="พิมพ์ชื่อลูกค้า (autocomplete)" /></label>
+              <div className="panel-head"><h2>เน€เธเธดเธ”เธญเธญเน€เธ”เธญเธฃเนเธชเนเธเธเธญเธ</h2><span>เธเธดเธกเธเนเธเธทเนเธญเธฅเธนเธเธเนเธฒเธซเธฃเธทเธญเน€เธฅเธทเธญเธเธเธฒเธเธฃเธฒเธขเธเธทเนเธญ</span></div>
+              <label className="search"><Search size={16} /><input value={orderForm.customerName} onChange={e => setOrderForm(p => ({ ...p, customerName: e.target.value }))} placeholder="เธเธดเธกเธเนเธเธทเนเธญเธฅเธนเธเธเนเธฒ (autocomplete)" /></label>
               {orderForm.customerName && (
                 <div className="customer-list">
                   {customers.filter(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())).slice(0, 5).map(c => (
                     <button key={c.id} className="customer-card" onClick={() => { setOrderForm(p => ({ ...p, customerName: c.name })); setSelectedCustomerId(c.id); }}>
                       <strong>{c.name}</strong>
-                      <span>{c.phone} · {c.zone}</span>
+                      <span>{c.phone} ยท {c.zone}</span>
                     </button>
                   ))}
                 </div>
@@ -1783,57 +1781,57 @@ export default function App() {
                 const foundCustomer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase()) || selectedCustomer;
                 return foundCustomer ? (
                   <div className="customer-detail">
-                    <div><b>{foundCustomer.name}</b><p>{foundCustomer.contact} · {foundCustomer.phone}</p><p>{foundCustomer.address}</p></div>
-                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิดแผนที่</a>
+                    <div><b>{foundCustomer.name}</b><p>{foundCustomer.contact} ยท {foundCustomer.phone}</p><p>{foundCustomer.address}</p></div>
+                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เน€เธเธดเธ”เนเธเธเธ—เธตเน</a>
                   </div>
                 ) : null;
               })()}
               <div className="form-grid">
-                <input value={orderForm.window} onChange={e => setOrderForm(p => ({ ...p, window: e.target.value }))} placeholder="ช่วงเวลาส่ง" />
-                <input value={orderForm.boxes} onChange={e => setOrderForm(p => ({ ...p, boxes: e.target.value }))} type="number" placeholder="จำนวนกล่อง" />
+                <input value={orderForm.window} onChange={e => setOrderForm(p => ({ ...p, window: e.target.value }))} placeholder="เธเนเธงเธเน€เธงเธฅเธฒเธชเนเธ" />
+                <input value={orderForm.boxes} onChange={e => setOrderForm(p => ({ ...p, boxes: e.target.value }))} type="number" placeholder="เธเธณเธเธงเธเธเธฅเนเธญเธ" />
                 <input value={orderForm.cod} onChange={e => setOrderForm(p => ({ ...p, cod: e.target.value }))} type="number" placeholder="COD" />
               </div>
-              <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
-              <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
+              <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธชเธดเธเธเนเธฒ / เธซเธกเธฒเธขเน€เธซเธ•เธธเธเนเธฒเธขเธเธฒเธข" rows={3} />
+              <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> เธชเนเธเธญเธญเน€เธ”เธญเธฃเนเน€เธเนเธฒเธเธดเธงเธเธเธเธฑเธ</button>
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>เพิ่มลูกค้าใหม่</h2><span>บันทึกไว้ใช้ครั้งถัดไป</span></div>
+              <div className="panel-head"><h2>เน€เธเธดเนเธกเธฅเธนเธเธเนเธฒเนเธซเธกเน</h2><span>เธเธฑเธเธ—เธถเธเนเธงเนเนเธเนเธเธฃเธฑเนเธเธ–เธฑเธ”เนเธ</span></div>
               <div className="form-grid two">
-                <input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อร้าน/ลูกค้า" />
-                <input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
-                <input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+                <input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เธเธทเนเธญเธฃเนเธฒเธ/เธฅเธนเธเธเนเธฒ" />
+                <input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="เธเธนเนเธ•เธดเธ”เธ•เนเธญ" />
+                <input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เน€เธเธญเธฃเนเนเธ—เธฃ" />
                 <select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
               </div>
-              <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
+              <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="เธ—เธตเนเธญเธขเธนเน/เธขเนเธฒเธ" />
               <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
-              <textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
-              <button className="secondary wide" onClick={saveCustomer}>บันทึกลูกค้า</button>
+              <textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="เธซเธกเธฒเธขเน€เธซเธ•เธธเธเธฃเธฐเธเธณเธฅเธนเธเธเนเธฒ" rows={3} />
+              <button className="secondary wide" onClick={saveCustomer}>เธเธฑเธเธ—เธถเธเธฅเธนเธเธเนเธฒ</button>
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📍 ตำแหน่งคนขับล่าสุด</h2><span>{Object.keys(state.driverLocations || {}).length} คนเช็คอินแล้ว</span></div>
+              <div className="panel-head"><h2>๐“ เธ•เธณเนเธซเธเนเธเธเธเธเธฑเธเธฅเนเธฒเธชเธธเธ”</h2><span>{Object.keys(state.driverLocations || {}).length} เธเธเน€เธเนเธเธญเธดเธเนเธฅเนเธง</span></div>
               {Object.keys(state.driverLocations || {}).length === 0 ? (
-                <p className="muted">ยังไม่มีคนขับเช็คอิน</p>
+                <p className="muted">เธขเธฑเธเนเธกเนเธกเธตเธเธเธเธฑเธเน€เธเนเธเธญเธดเธ</p>
               ) : (
                 Object.values(state.driverLocations || {})
                   .sort((a, b) => b.timestamp - a.timestamp)
                   .map(location => {
-                    const currentOrder = orders.find(o => o.driverId === location.driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง"));
+                    const currentOrder = orders.find(o => o.driverId === location.driverId && (o.status === "เธเธณเธฅเธฑเธเธชเนเธ" || o.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ"));
                     const customer = currentOrder ? customers.find(c => c.name === currentOrder.customerName) : null;
                     return (
                       <div key={location.driverId} style={{ padding: "12px", borderBottom: "1px solid #eee", marginBottom: "8px", background: "#f0f9ff", borderRadius: "6px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
                           <div>
-                            <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
-                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone} · {location.plate}</p>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>🏪 {location.customerName}</p>
-                            {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>👤 ติดต่อ: {customer.contact}</p>}
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address}</p>
-                            {currentOrder && <p style={{ margin: "4px 0", fontSize: "11px", color: "#7c2d12", background: "#fed7aa", padding: "2px 6px", borderRadius: "3px", display: "inline-block" }}>📦 สถานะ: {currentOrder.status}</p>}
-                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
+                            <b style={{ fontSize: "14px", color: "#1a5490" }}>๐— {location.driverName}</b>
+                            <p style={{ margin: "4px 0", fontSize: "12px" }}>๐“ฑ {location.driverPhone} ยท {location.plate}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>๐ช {location.customerName}</p>
+                            {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>๐‘ค เธ•เธดเธ”เธ•เนเธญ: {customer.contact}</p>}
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>๐“ {location.address}</p>
+                            {currentOrder && <p style={{ margin: "4px 0", fontSize: "11px", color: "#7c2d12", background: "#fed7aa", padding: "2px 6px", borderRadius: "3px", display: "inline-block" }}>๐“ฆ เธชเธ–เธฒเธเธฐ: {currentOrder.status}</p>}
+                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>โฐ เน€เธเนเธเธญเธดเธ: {location.checkInTime}</p>
                           </div>
-                          <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                          <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>๐ข Online</span>
                         </div>
                       </div>
                     );
@@ -1842,18 +1840,18 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📝 ออเดอร์ใหม่</h2><span>รอคนขับรับ {orders.filter(o => o.status === "รอคนขับรับ").length}</span></div>
-              {orders.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
-                <p className="muted">ไม่มีออเดอร์ใหม่</p>
+              <div className="panel-head"><h2>๐“ เธญเธญเน€เธ”เธญเธฃเนเนเธซเธกเน</h2><span>เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ {orders.filter(o => o.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ").length}</span></div>
+              {orders.filter(o => o.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ").length === 0 ? (
+                <p className="muted">เนเธกเนเธกเธตเธญเธญเน€เธ”เธญเธฃเนเนเธซเธกเน</p>
               ) : (
                 <div style={{ display: "grid", gap: "8px" }}>
-                  {orders.filter(o => o.status === "รอคนขับรับ").map(order => (
+                  {orders.filter(o => o.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ").map(order => (
                     <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ flex: 1 }}>
-                        <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
-                        <small style={{ color: "#666" }}>{order.zone} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                        <b style={{ display: "block", fontSize: "13px" }}>{order.id} ยท {order.customerName}</b>
+                        <small style={{ color: "#666" }}>{order.zone} ยท {order.boxes} เธเธฅเนเธญเธ ยท เธฟ{money(order.cod)}</small>
                       </div>
-                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px", marginLeft: "8px" }} onClick={() => deleteOrder(order.id)}>🗑️ ลบ</button>
+                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px", marginLeft: "8px" }} onClick={() => deleteOrder(order.id)}>๐—‘๏ธ เธฅเธ</button>
                     </div>
                   ))}
                 </div>
@@ -1861,32 +1859,32 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📦 สรุปการส่งของ</h2><span>กำลังส่ง {orders.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {orders.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
+              <div className="panel-head"><h2>๐“ฆ เธชเธฃเธธเธเธเธฒเธฃเธชเนเธเธเธญเธ</h2><span>เธเธณเธฅเธฑเธเธชเนเธ {orders.filter(o => o.status === "เธเธณเธฅเธฑเธเธชเนเธ").length} + เธชเธณเน€เธฃเนเธ {orders.filter(o => o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length}</span></div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
                 <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
-                  <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{orders.filter(o => o.status === "กำลังส่ง").length}</b>
+                  <small style={{ color: "#92400e" }}>โณ เธเธณเธฅเธฑเธเธชเนเธ</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{orders.filter(o => o.status === "เธเธณเธฅเธฑเธเธชเนเธ").length}</b>
                 </div>
                 <div style={{ flex: 1, background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
-                  <small style={{ color: "#166534" }}>✓ สำเร็จ</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{orders.filter(o => o.status === "ส่งสำเร็จ").length}</b>
+                  <small style={{ color: "#166534" }}>โ“ เธชเธณเน€เธฃเนเธ</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{orders.filter(o => o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length}</b>
                 </div>
               </div>
               <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 ? (
-                  <p className="muted">ยังไม่มีการส่ง</p>
+                {orders.filter(o => o.status === "เธเธณเธฅเธฑเธเธชเนเธ" || o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length === 0 ? (
+                  <p className="muted">เธขเธฑเธเนเธกเนเธกเธตเธเธฒเธฃเธชเนเธ</p>
                 ) : (
-                  orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
+                  orders.filter(o => o.status === "เธเธณเธฅเธฑเธเธชเนเธ" || o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").sort((a, b) => (a.status === "เธเธณเธฅเธฑเธเธชเนเธ" ? -1 : 1)).map(order => {
                     const driver = drivers.find(d => d.id === order.driverId);
                     return (
                       <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
-                          <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
-                          <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdf4", color: order.status === "กำลังส่ง" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                          <b style={{ color: order.status === "เธเธณเธฅเธฑเธเธชเนเธ" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
+                          <span style={{ background: order.status === "เธเธณเธฅเธฑเธเธชเนเธ" ? "#fef3c7" : "#f0fdf4", color: order.status === "เธเธณเธฅเธฑเธเธชเนเธ" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "เธเธณเธฅเธฑเธเธชเนเธ" ? "โณ เธชเนเธเนเธ" : "โ“ เน€เธชเธฃเนเธ"}</span>
                         </div>
                         <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
                         <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
-                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driver?.name || "ยังไม่มอบหมาย"}</p>
+                        <p style={{ margin: "2px 0", color: "#999" }}>๐— {driver?.name || "เธขเธฑเธเนเธกเนเธกเธญเธเธซเธกเธฒเธข"}</p>
                       </div>
                     );
                   })
@@ -1902,59 +1900,59 @@ export default function App() {
             <section className="panel">
               <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
                 <button className="secondary" onClick={() => {
-                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตออเดอร์:");
+                  const pwd = prompt("๐” เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธฃเธซเธฑเธชเน€เธเธทเนเธญเธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเน:");
                   if (pwd === null) return; // User cancelled
                   if (pwd !== "2532") {
-                    alert("❌ รหัสไม่ถูกต้อง");
+                    alert("โ เธฃเธซเธฑเธชเนเธกเนเธ–เธนเธเธ•เนเธญเธ");
                     return;
                   }
-                  if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
+                  if (!window.confirm("เธขเธทเธเธขเธฑเธเธญเธตเธเธเธฃเธฑเนเธ: เธ•เนเธญเธเธเธฒเธฃเธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธซเธฃเธทเธญเนเธกเน? (เธเนเธญเธกเธนเธฅเธ—เธฑเนเธเธซเธกเธ”เธเธฐเธ–เธนเธเธฅเธ)")) return;
 
                   (async () => {
                     try {
                       if (!supabase) supabase = initSupabase();
                       if (!supabase) {
-                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                        alert("โ เธขเธฑเธเน€เธเธทเนเธญเธกเธ•เนเธญ Supabase เนเธกเนเนเธ”เน");
                         return;
                       }
 
-                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
+                      setSyncStatus("โณ เธเธณเธฅเธฑเธเธฅเธเธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เนเธ Supabase...");
                       const { error } = await supabase.from("orders").delete().neq("id", "__never__");
                       if (error) {
-                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
-                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
+                        alert(`โ เธฅเธเธญเธญเน€เธ”เธญเธฃเนเนเธกเนเธชเธณเน€เธฃเนเธ: ${error.message}`);
+                        setSyncStatus(`โ เธฅเธเธญเธญเน€เธ”เธญเธฃเนเนเธกเนเธชเธณเน€เธฃเนเธ: ${error.message}`);
                         return;
                       }
 
                       // Clear local state
                       setState(prev => ({ ...prev, orders: [] }));
                       
-                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+                      setSyncStatus("โ… เธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธชเธณเน€เธฃเนเธ");
+                      alert("โ… เธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ”เธชเธณเน€เธฃเนเธ");
                       await refreshFromSupabase();
                     } catch (e) {
-                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                      alert(`โ เธฃเธตเน€เธเนเธ•เนเธกเนเธชเธณเน€เธฃเนเธ: ${e?.message || String(e)}`);
                     }
                     })();
-                }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
+                }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>๐” เธฃเธตเน€เธเนเธ•เธญเธญเน€เธ”เธญเธฃเน</button>
               </div>
-              <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
+              <div className="panel-head"><h2>เธเธดเธงเธเธฒเธเธชเนเธเธเธญเธ</h2><span>{filteredOrders.length} เธเธฒเธ</span></div>
               <div className="filters dispatch-filters">
-                <label className="search"><Search size={16} /><input value={orderQuery} onChange={e => setOrderQuery(e.target.value)} placeholder="ค้นหาเลขงาน ลูกค้า พื้นที่ หมายเหตุ" /></label>
+                <label className="search"><Search size={16} /><input value={orderQuery} onChange={e => setOrderQuery(e.target.value)} placeholder="เธเนเธเธซเธฒเน€เธฅเธเธเธฒเธ เธฅเธนเธเธเนเธฒ เธเธทเนเธเธ—เธตเน เธซเธกเธฒเธขเน€เธซเธ•เธธ" /></label>
                 <select value={orderStatusFilter} onChange={e => setOrderStatusFilter(e.target.value)}>
-                  <option value="all">ทุกสถานะ</option>
+                  <option value="all">เธ—เธธเธเธชเธ–เธฒเธเธฐ</option>
                   {STATUS.map(status => <option key={status} value={status}>{status}</option>)}
                 </select>
                 <select value={orderZoneFilter} onChange={e => setOrderZoneFilter(e.target.value)}>
-                  <option value="all">ทุกพื้นที่</option>
+                  <option value="all">เธ—เธธเธเธเธทเนเธเธ—เธตเน</option>
                   {ZONES.map(zone => <option key={zone} value={zone}>{zone}</option>)}
                 </select>
               </div>
               <div className="dispatch-table">
                 <div className="dispatch-head">
-                  <span>งาน</span>
-                  <span>ลูกค้า/พื้นที่</span>
-                  <span>สถานะ</span>
+                  <span>เธเธฒเธ</span>
+                  <span>เธฅเธนเธเธเนเธฒ/เธเธทเนเธเธ—เธตเน</span>
+                  <span>เธชเธ–เธฒเธเธฐ</span>
                   <span>COD</span>
                   <span></span>
                 </div>
@@ -1962,14 +1960,14 @@ export default function App() {
                   const assignedDriver = drivers.find(driver => driver.id === order.driverId);
                   return (
                     <article key={order.id} className="dispatch-row">
-                      <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
-                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
+                      <div><b>{order.id}</b><span>{order.window} ยท {order.boxes} เธเธฅเนเธญเธ</span></div>
+                      <div><b>{order.customerName}</b><span>{order.zone} ยท {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>โ ๏ธ {order.complaint}</span>}</div>
                       <div className="status-stack">
                         <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
-                        <small>{assignedDriver ? assignedDriver.name : "รอคนขับรับ"}</small>
+                        <small>{assignedDriver ? assignedDriver.name : "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ"}</small>
                       </div>
-                      <strong>{money(order.cod)} บาท</strong>
-                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️</button>
+                      <strong>{money(order.cod)} เธเธฒเธ—</strong>
+                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>๐—‘๏ธ</button>
                     </article>
                   );
                 })}
@@ -1977,23 +1975,23 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>โหลดงานคนขับ</h2><span>วันนี้</span></div>
+              <div className="panel-head"><h2>เนเธซเธฅเธ”เธเธฒเธเธเธเธเธฑเธ</h2><span>เธงเธฑเธเธเธตเน</span></div>
               {report.driverScore.map(driver => {
-                const driverJobs = orders.filter(order => order.driverId === driver.id && order.status !== "ส่งสำเร็จ");
+                const driverJobs = orders.filter(order => order.driverId === driver.id && order.status !== "เธชเนเธเธชเธณเน€เธฃเนเธ");
                 return (
                   <div key={driver.id} className="driver-load-row">
                     <div>
                       <b>{driver.name}</b>
-                      <span>{driver.plate} · {driver.zone}</span>
+                      <span>{driver.plate} ยท {driver.zone}</span>
                     </div>
-                    <strong>{driverJobs.length} งาน</strong>
+                    <strong>{driverJobs.length} เธเธฒเธ</strong>
                   </div>
                 );
               })}
               <div className="google-box">
-                <b>วิธีใช้งานเร็ว</b>
-                <p>ฝ่ายขายสร้างออเดอร์จากหน้า Sales แล้วงานจะเข้าคิวนี้ทันที</p>
-                <p>แอดมินเลือกคนขับจากคอลัมน์คนขับ หรือปล่อยให้คนขับกดรับเองจากหน้า Driver</p>
+                <b>เธงเธดเธเธตเนเธเนเธเธฒเธเน€เธฃเนเธง</b>
+                <p>เธเนเธฒเธขเธเธฒเธขเธชเธฃเนเธฒเธเธญเธญเน€เธ”เธญเธฃเนเธเธฒเธเธซเธเนเธฒ Sales เนเธฅเนเธงเธเธฒเธเธเธฐเน€เธเนเธฒเธเธดเธงเธเธตเนเธ—เธฑเธเธ—เธต</p>
+                <p>เนเธญเธ”เธกเธดเธเน€เธฅเธทเธญเธเธเธเธเธฑเธเธเธฒเธเธเธญเธฅเธฑเธกเธเนเธเธเธเธฑเธ เธซเธฃเธทเธญเธเธฅเนเธญเธขเนเธซเนเธเธเธเธฑเธเธเธ”เธฃเธฑเธเน€เธญเธเธเธฒเธเธซเธเนเธฒ Driver</p>
               </div>
             </section>
           </div>
@@ -2001,60 +1999,60 @@ export default function App() {
 
         {auth.role === "driver" && displayTab === "driver" && (
           <div style={{ display: "grid", gap: "16px" }}>
-            {/* ส่วนข้อมูลคนขับ */}
+            {/* เธชเนเธงเธเธเนเธญเธกเธนเธฅเธเธเธเธฑเธ */}
             <section className="panel" style={{ background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
                 <div>
                   {drivers.filter(driver => driver.id === driverId).map(driver => (
                     <div key={driver.id}>
-                      <b style={{ fontSize: "16px", display: "block" }}>👤 {driver.name}</b>
-                      <small style={{ color: "#666" }}>🚗 {driver.plate} · 📍 {driver.zone}</small>
+                      <b style={{ fontSize: "16px", display: "block" }}>๐‘ค {driver.name}</b>
+                      <small style={{ color: "#666" }}>๐— {driver.plate} ยท ๐“ {driver.zone}</small>
                     </div>
                   ))}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <b style={{ fontSize: "20px", color: "#22c55e", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
-                  <small style={{ color: "#666" }}>งานที่ยังเหลือ</small>
+                  <b style={{ fontSize: "20px", color: "#22c55e", display: "block" }}>{driverOrders.filter(o => o.status !== "เธชเนเธเธชเธณเน€เธฃเนเธ" && o.driverId === driverId).length}</b>
+                  <small style={{ color: "#666" }}>เธเธฒเธเธ—เธตเนเธขเธฑเธเน€เธซเธฅเธทเธญ</small>
                 </div>
               </div>
             </section>
 
-            {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
+            {/* เธชเนเธงเธเธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเน (Pending Orders Grid) */}
             {(() => {
-              const pending = orders.filter(o => o.status === "รอคนขับรับ");
-              console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
+              const pending = orders.filter(o => o.status === "เธฃเธญเธเธเธเธฑเธเธฃเธฑเธ");
+              console.log("๐“ Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
               return (
                 <section className="panel">
-                  <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
+                  <div className="panel-head"><h2>๐“ฆ เธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเนเนเธซเธกเน</h2><span>{pending.length} เธเธฒเธ</span></div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
                     {pending.map(order => {
-                      const salesName = order.salesName || "ไม่มี";
+                      const salesName = order.salesName || "เนเธกเนเธกเธต";
                       const salesPhone = order.salesPhone || "-";
                       return (
                         <div key={order.id} style={{ background: "#fef9e7", padding: "12px", borderRadius: "8px", border: "2px solid #f59e0b", display: "flex", flexDirection: "column", gap: "10px" }}>
                         <div>
                           <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.id}</b>
                           <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
-                          <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
-                          <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
-                          <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                          <small style={{ color: "#666" }}>๐“ {order.zone}</small><br/>
+                          <small style={{ color: "#666" }}>โฐ {order.window}</small><br/>
+                          <small style={{ color: "#666" }}>๐“ฆ {order.boxes} เธเธฅเนเธญเธ ยท เธฟ{money(order.cod)}</small>
                         </div>
                         
                         <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #fcd34d" }}>
-                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 ลูกค้า: {order.customerPhone}</small>
+                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>๐“ เธฅเธนเธเธเนเธฒ: {order.customerPhone}</small>
                           <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
-                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>🗺️ แผนที่</a>}
+                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>๐“ฑ เนเธ—เธฃ</a>
+                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>๐—บ๏ธ เนเธเธเธ—เธตเน</a>}
                           </div>
                         </div>
                         
                         <div style={{ background: "#f3e8ff", padding: "8px", borderRadius: "6px", border: "1px solid #d8b4fe" }}>
-                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>ฝ่ายขาย: {salesName}</small>
+                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>เธเนเธฒเธขเธเธฒเธข: {salesName}</small>
                           <small style={{ color: "#666", display: "block" }}>{salesPhone}</small>
-                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "6px", fontSize: "11px", marginTop: "4px", display: "block", textAlign: "center", textDecoration: "none" }}>📞 โทรหาฝ่ายขาย</a>
+                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "6px", fontSize: "11px", marginTop: "4px", display: "block", textAlign: "center", textDecoration: "none" }}>๐“ เนเธ—เธฃเธซเธฒเธเนเธฒเธขเธเธฒเธข</a>
                         </div>
                         
-                        {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>📬 {order.address}</small>}
+                        {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>๐“ฌ {order.address}</small>}
                         
                         <button 
                           className="primary" 
@@ -2062,9 +2060,9 @@ export default function App() {
                           disabled={false}
                           onClick={() => {
                             // allow immediate next actions; no UI lock
-                            updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" });
-                            setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
-                          }}>✓ รับออเดอร์นี้</button>
+                            updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "เธเธณเธฅเธฑเธเธชเนเธ" });
+                            setSyncStatus(`โ… เธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเน "${order.id}" เน€เธฃเธตเธขเธเธฃเนเธญเธข`);
+                          }}>โ“ เธฃเธฑเธเธญเธญเน€เธ”เธญเธฃเนเธเธตเน</button>
                       </div>
                     );
                   })}
@@ -2073,34 +2071,34 @@ export default function App() {
             );
             })()}
 
-            {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
-	            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).length > 0 && (
+            {/* เธชเนเธงเธเธญเธญเน€เธ”เธญเธฃเนเธ—เธตเนเธฃเธฑเธเนเธฅเนเธง (In-Progress Orders) */}
+	            {orders.filter(o => o.driverId === driverId && (o.status === "เธเธณเธฅเธฑเธเธชเนเธ" || o.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ")).length > 0 && (
 	              <section className="panel">
-                <div className="panel-head"><h2>🚗 ออเดอร์ที่รับแล้ว</h2><span>{orders.filter(o => o.driverId === driverId && o.status !== "ส่งสำเร็จ").length} งาน · สำเร็จ {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length}</span></div>
+                <div className="panel-head"><h2>๐— เธญเธญเน€เธ”เธญเธฃเนเธ—เธตเนเธฃเธฑเธเนเธฅเนเธง</h2><span>{orders.filter(o => o.driverId === driverId && o.status !== "เธชเนเธเธชเธณเน€เธฃเนเธ").length} เธเธฒเธ ยท เธชเธณเน€เธฃเนเธ {orders.filter(o => o.driverId === driverId && o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length}</span></div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
-                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).map(order => (
-                    <div key={order.id} style={{ background: order.status === "ส่งสำเร็จ" ? "#f0fdf4" : "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {orders.filter(o => o.driverId === driverId && (o.status === "เธเธณเธฅเธฑเธเธชเนเธ" || o.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ")).map(order => (
+                    <div key={order.id} style={{ background: order.status === "เธชเนเธเธชเธณเน€เธฃเนเธ" ? "#f0fdf4" : "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div>
                         <b style={{ fontSize: "14px", display: "block", marginBottom: "4px", color: statusColor[order.status] }}>{order.id}</b>
                         <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
-                        <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
-                        <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
-                        <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                        <small style={{ color: "#666" }}>๐“ {order.zone}</small><br/>
+                        <small style={{ color: "#666" }}>โฐ {order.window}</small><br/>
+                        <small style={{ color: "#666" }}>๐“ฆ {order.boxes} เธเธฅเนเธญเธ ยท เธฟ{money(order.cod)}</small>
                       </div>
                       
                       <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #ddd" }}>
-                        <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 {order.customerPhone}</small>
+                        <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>๐“ {order.customerPhone}</small>
                         <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                          <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
-                          {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>🗺️ แผนที่</a>}
+                          <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>๐“ฑ เนเธ—เธฃ</a>
+                          {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>๐—บ๏ธ เนเธเธเธ—เธตเน</a>}
                         </div>
                       </div>
                       
-                      {order.address && <small style={{ color: "#999", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "8px" }}>📬 {order.address}</small>}
+                      {order.address && <small style={{ color: "#999", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "8px" }}>๐“ฌ {order.address}</small>}
                       
                       {/* Status Actions */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                        {order.status === "กำลังส่ง" && (
+                        {order.status === "เธเธณเธฅเธฑเธเธชเนเธ" && (
                           <>
                             <button 
                               className="primary" 
@@ -2108,30 +2106,30 @@ export default function App() {
                               disabled={false}
                               onClick={() => {
                                 // no UI lock; allow immediate next action
-                                updateOrder(order.id, { status: "กำลังจัดส่ง" });
-                                setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
-                              }}>🚗 ไปถึงแล้ว</button>
+                                updateOrder(order.id, { status: "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ" });
+                                setSyncStatus(`โ… เธ–เธถเธเธเธธเธ”เธซเธกเธฒเธขเนเธฅเนเธง เธญเธญเน€เธ”เธญเธฃเน "${order.id}"`);
+                              }}>๐— เนเธเธ–เธถเธเนเธฅเนเธง</button>
                             <button 
                               className="secondary" 
                               style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
                               disabled={false}
                               onClick={() => {
-                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+                                const reason = prompt("๐“ เน€เธซเธ•เธธเธเธฅเนเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ:");
                                 if (reason) {
                                   // no UI lock; allow immediate next action
-                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
-                                  setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
+                                  updateOrder(order.id, { status: "เธขเธเน€เธฅเธดเธ", complaint: reason });
+                                  setSyncStatus(`โ เธขเธเน€เธฅเธดเธเธญเธญเน€เธ”เธญเธฃเน "${order.id}"`);
                                 }
-                              }}>❌ ยกเลิก</button>
+                              }}>โ เธขเธเน€เธฅเธดเธ</button>
                           </>
                         )}
-                        {order.status === "กำลังจัดส่ง" && (
+                        {order.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ" && (
                           <>
                             <label 
                               className="primary" 
                               onClick={() => { const el = document.getElementById(`pod-file-${order.id}`); try { el?.click(); } catch {} }}
                               style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
-                              📷 ถ่ายรูป
+                              ๐“ท เธ–เนเธฒเธขเธฃเธนเธ
                               <input id={`pod-file-${order.id}`} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
@@ -2146,15 +2144,22 @@ export default function App() {
                               style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
                               disabled={false}
                               onClick={() => {
-                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+                                const reason = prompt("๐“ เน€เธซเธ•เธธเธเธฅเนเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ:");
                                 if (reason) {
                                   // no UI lock; allow immediate next action
-                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+                                  updateOrder(order.id, { status: "เธขเธเน€เธฅเธดเธ", complaint: reason });
                                 }
-                              }}>❌ ยกเลิก</button>
+                              }}>โ เธขเธเน€เธฅเธดเธ</button>
                           </>
                         )}
-                        {order.status === "กำลังจัดส่ง" && order.photo && (
+                        {order.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ" && order.photo && !order.sharedToLine && (
+                          <button
+                            className="primary"
+                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
+                            onClick={() => shareOrderToLine(order)}
+                          >💬 แชร์รูป+รายละเอียด (LINE)</button>
+                        )}
+                        {order.status === "เธเธณเธฅเธฑเธเธเธฑเธ”เธชเนเธ" && order.photo && order.sharedToLine && (
                           <button 
                             className="primary" 
                             style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
@@ -2162,19 +2167,19 @@ export default function App() {
                             onClick={() => {
                               // Add to pending updates to prevent rapid clicks
                               // no UI lock; allow immediate next action
-                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
-                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
-                            }}>✅ ส่งสำเร็จ</button>
+                              updateOrder(order.id, { status: "เธชเนเธเธชเธณเน€เธฃเนเธ", deliveredAt: new Date().toLocaleString("th-TH") });
+                              setSyncStatus(`โ… เธชเนเธเธญเธญเน€เธ”เธญเธฃเน "${order.id}" เธชเธณเน€เธฃเนเธเนเธฅเนเธง`);
+                            }}>โ… เธชเนเธเธชเธณเน€เธฃเนเธ</button>
                         )}
-                        {order.status === "ส่งสำเร็จ" && (
+                        {order.status === "เธชเนเธเธชเธณเน€เธฃเนเธ" && (
                           <button 
                             className="secondary" 
                             style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
                             disabled={false}
                             onClick={() => {
                               // no UI lock; allow immediate next action
-                              alert(`✅ ส่งสำเร็จแล้ว\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ✅ มี\n\nสามารถรับอีกงานได้`);
-                            }}>🏠 ส่งเสร็จสิ้น</button>
+                              alert(`โ… เธชเนเธเธชเธณเน€เธฃเนเธเนเธฅเนเธง\n\n๐“ฆ เธญเธญเน€เธ”เธญเธฃเน: ${order.customerName}\n๐“ ${order.zone}\n๐’ฐ COD: เธฟ${money(order.cod || 0)}\n๐“ธ POD: โ… เธกเธต\n\nเธชเธฒเธกเธฒเธฃเธ–เธฃเธฑเธเธญเธตเธเธเธฒเธเนเธ”เน`);
+                            }}>๐  เธชเนเธเน€เธชเธฃเนเธเธชเธดเนเธ</button>
                         )}
                       </div>
 
@@ -2185,9 +2190,9 @@ export default function App() {
                         </div>
                       )}
                       
-                      {order.status === "ส่งสำเร็จ" && (
+                      {order.status === "เธชเนเธเธชเธณเน€เธฃเนเธ" && (
                         <div style={{ background: "#f0fdf4", padding: "6px", borderRadius: "4px", fontSize: "11px", color: "#166534", fontWeight: "bold", textAlign: "center" }}>
-                          ✅ {order.deliveredAt}
+                          โ… {order.deliveredAt}
                         </div>
                       )}
                     </div>
@@ -2196,15 +2201,15 @@ export default function App() {
 	              </section>
 	            )}
 
-	            {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0 && (
+	            {orders.filter(o => o.driverId === driverId && o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length > 0 && (
 	              <section className="panel" style={{ background: "#f8fafc" }}>
 	                <div className="panel-head">
-	                  <h2>📚 ประวัติส่งสำเร็จ</h2>
-	                  <span>{orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length} งาน</span>
+	                  <h2>๐“ เธเธฃเธฐเธงเธฑเธ•เธดเธชเนเธเธชเธณเน€เธฃเนเธ</h2>
+	                  <span>{orders.filter(o => o.driverId === driverId && o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ").length} เธเธฒเธ</span>
 	                </div>
 	                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
 	                  {orders
-	                    .filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ")
+	                    .filter(o => o.driverId === driverId && o.status === "เธชเนเธเธชเธณเน€เธฃเนเธ")
 	                    .slice()
 	                    .sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || ""))
 	                    .map(order => (
@@ -2212,12 +2217,12 @@ export default function App() {
 	                        <div>
 	                          <b style={{ fontSize: "14px", display: "block" }}>{order.id}</b>
 	                          <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{order.customerName}</b>
-	                          <small style={{ color: "#6b7280" }}>📍 {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
-	                          {order.deliveredAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
+	                          <small style={{ color: "#6b7280" }}>๐“ {order.zone} ยท ๐’ฐ เธฟ{money(order.cod || 0)}</small><br/>
+	                          {order.deliveredAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>โ… {order.deliveredAt}</small>}
 	                        </div>
 	                        <div style={{ display: "flex", gap: "8px" }}>
-	                          <button className="primary" style={{ flex: 1, padding: "8px", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>💬 แชร์ LINE</button>
-	                          {order.photo && <a className="secondary" style={{ flex: 1, padding: "8px", fontSize: "12px", textAlign: "center", textDecoration: "none" }} href={order.photo} target="_blank" rel="noreferrer">📸 เปิดรูป</a>}
+	                          <button className="primary" style={{ flex: 1, padding: "8px", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>๐’ฌ เนเธเธฃเน LINE</button>
+	                          {order.photo && <a className="secondary" style={{ flex: 1, padding: "8px", fontSize: "12px", textAlign: "center", textDecoration: "none" }} href={order.photo} target="_blank" rel="noreferrer">๐“ธ เน€เธเธดเธ”เธฃเธนเธ</a>}
 	                        </div>
 	                      </div>
 	                    ))}
@@ -2227,8 +2232,8 @@ export default function App() {
 
 	            {driverOrders.length === 0 && (
 	              <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
-                <p style={{ fontSize: "32px", margin: "0" }}>😴</p>
-                <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
+                <p style={{ fontSize: "32px", margin: "0" }}>๐ด</p>
+                <p style={{ color: "#666", margin: "8px 0 0" }}>เธขเธฑเธเนเธกเนเธกเธตเธญเธญเน€เธ”เธญเธฃเน เธฅเธญเธเธฃเธตเน€เธเธฃเธ</p>
               </section>
             )}
           </div>
@@ -2237,28 +2242,28 @@ export default function App() {
         {displayTab === "reports" && (
           <div className="report-grid">
             <section className="panel">
-              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>ข้อมูล Supabase</span></div>
+              <div className="panel-head"><h2>เธฃเธฒเธขเธเธฒเธเธเธฃเธฐเธเธณเธงเธฑเธ</h2><span>เธเนเธญเธกเธนเธฅ Supabase</span></div>
               <div className="report-lines">
-                <p>ออเดอร์ทั้งหมด <b>{orders.length}</b> งาน</p>
-                <p>ส่งสำเร็จ <b>{report.delivered}</b> งาน</p>
-                <p>COD รวม <b>{money(report.cod)}</b> บาท</p>
-                <p>ร้องเรียน/ปัญหา <b>{report.complaints.length}</b> รายการ</p>
+                <p>เธญเธญเน€เธ”เธญเธฃเนเธ—เธฑเนเธเธซเธกเธ” <b>{orders.length}</b> เธเธฒเธ</p>
+                <p>เธชเนเธเธชเธณเน€เธฃเนเธ <b>{report.delivered}</b> เธเธฒเธ</p>
+                <p>COD เธฃเธงเธก <b>{money(report.cod)}</b> เธเธฒเธ—</p>
+                <p>เธฃเนเธญเธเน€เธฃเธตเธขเธ/เธเธฑเธเธซเธฒ <b>{report.complaints.length}</b> เธฃเธฒเธขเธเธฒเธฃ</p>
               </div>
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>คะแนนคนขับ</h2><span>จากงานสำเร็จ รูปยืนยัน และปัญหา</span></div>
+              <div className="panel-head"><h2>เธเธฐเนเธเธเธเธเธเธฑเธ</h2><span>เธเธฒเธเธเธฒเธเธชเธณเน€เธฃเนเธ เธฃเธนเธเธขเธทเธเธขเธฑเธ เนเธฅเธฐเธเธฑเธเธซเธฒ</span></div>
               {report.driverScore.map(driver => (
                 <div key={driver.id} className="score-row">
-                  <div><b>{driver.name}</b><span>{driver.jobs} งาน · สำเร็จ {driver.done} · ปัญหา {driver.issues}</span></div>
+                  <div><b>{driver.name}</b><span>{driver.jobs} เธเธฒเธ ยท เธชเธณเน€เธฃเนเธ {driver.done} ยท เธเธฑเธเธซเธฒ {driver.issues}</span></div>
                   <strong><Star size={16} /> {driver.score}</strong>
                 </div>
               ))}
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>การร้องเรียน</h2><span>{report.complaints.length} รายการ</span></div>
-              {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
+              <div className="panel-head"><h2>เธเธฒเธฃเธฃเนเธญเธเน€เธฃเธตเธขเธ</h2><span>{report.complaints.length} เธฃเธฒเธขเธเธฒเธฃ</span></div>
+              {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> เธขเธฑเธเนเธกเนเธกเธตเธฃเธฒเธขเธเธฒเธฃเธฃเนเธญเธเน€เธฃเธตเธขเธ</div> : report.complaints.map(order => (
                 <div key={order.id} className="complaint-card">
                   <b>{order.customerName}</b>
                   <p>{order.complaint}</p>
@@ -2273,50 +2278,50 @@ export default function App() {
           <div className="settings-grid">
             {auth.email === "online_marketing@hillkoff.com" && (
               <section className="panel">
-                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
-                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
+                <div className="panel-head"><h2>โ๏ธ Admin Control</h2><span>เน€เธเธเธฒเธฐเนเธญเธ”เธกเธดเธ</span></div>
+                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>เธ—เนเธฒเธเน€เธเนเธฒเธชเธดเธ—เธเธดเนเนเธญเธ”เธกเธดเธเน€เธ•เนเธก</p>
                 <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
-                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตแดชบอร์ด:");
+                  const pwd = prompt("๐” เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธฃเธซเธฑเธชเน€เธเธทเนเธญเธฃเธตเน€เธเนเธ•เนเธ”เธเธเธญเธฃเนเธ”:");
                   if (pwd === null) return; // User cancelled
                   if (pwd !== "2532") {
-                    alert("❌ รหัสไม่ถูกต้อง");
+                    alert("โ เธฃเธซเธฑเธชเนเธกเนเธ–เธนเธเธ•เนเธญเธ");
                     return;
                   }
-                  if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตแดชบอร์ดทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
+                  if (!window.confirm("เธขเธทเธเธขเธฑเธเธญเธตเธเธเธฃเธฑเนเธ: เธ•เนเธญเธเธเธฒเธฃเธฃเธตเน€เธเนเธ•เนเธ”เธเธเธญเธฃเนเธ”เธ—เธฑเนเธเธซเธกเธ”เธซเธฃเธทเธญเนเธกเน? (เธเนเธญเธกเธนเธฅเธ—เธฑเนเธเธซเธกเธ”เธเธฐเธ–เธนเธเธฅเธ)")) return;
                   
                   (async () => {
                     try {
                       if (!supabase) supabase = initSupabase();
                       if (!supabase) {
-                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
+                        alert("โ เธขเธฑเธเน€เธเธทเนเธญเธกเธ•เนเธญ Supabase เนเธกเนเนเธ”เน");
                         return;
                       }
                       const { error } = await supabase.from("orders").delete().neq("id", "__never__");
                       if (error) {
-                        alert(`❌ ลบไม่สำเร็จ: ${error.message}`);
+                        alert(`โ เธฅเธเนเธกเนเธชเธณเน€เธฃเนเธ: ${error.message}`);
                         return;
                       }
                       setState(prev => ({ ...prev, orders: [] }));
-                      alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
+                      alert("โ… เธฃเธตเน€เธเนเธ•เนเธ”เธเธเธญเธฃเนเธ”เธชเธณเน€เธฃเนเธ!");
                     } catch (e) {
-                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+                      alert(`โ เธฃเธตเน€เธเนเธ•เนเธกเนเธชเธณเน€เธฃเนเธ: ${e?.message || String(e)}`);
                     }
                   })();
-                }}>🔄 รีเซ็ตแดชบอร์ด</button>
+                }}>๐” เธฃเธตเน€เธเนเธ•เนเธ”เธเธเธญเธฃเนเธ”</button>
               </section>
             )}
             
             <section className="panel">
-              <div className="panel-head"><h2>🟢 Online Status</h2><span>{Object.keys(state.onlineDrivers || {}).length} online</span></div>
+              <div className="panel-head"><h2>๐ข Online Status</h2><span>{Object.keys(state.onlineDrivers || {}).length} online</span></div>
               <div className="report-lines">
                 {Object.keys(state.onlineDrivers || {}).length === 0 ? (
-                  <p className="muted">ไม่มีคนขับออนไลน์</p>
+                  <p className="muted">เนเธกเนเธกเธตเธเธเธเธฑเธเธญเธญเธเนเธฅเธเน</p>
                 ) : (
                   drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
                     const lastSeen = state.onlineDrivers?.[driver.id];
                     const timeDiff = Math.floor((new Date().getTime() - lastSeen) / 60000);
                     return (
-                      <p key={driver.id}><b>🟢 {driver.name}</b><br/><small>{driver.plate} ({driver.zone}) - {timeDiff}m ago</small></p>
+                      <p key={driver.id}><b>๐ข {driver.name}</b><br/><small>{driver.plate} ({driver.zone}) - {timeDiff}m ago</small></p>
                     );
                   })
                 )}
@@ -2324,10 +2329,10 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📍 Driver Locations</h2><span>Live Map - Chiang Mai</span></div>
+              <div className="panel-head"><h2>๐“ Driver Locations</h2><span>Live Map - Chiang Mai</span></div>
               <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-                <button className="secondary" onClick={() => setMapZoom(Math.max(10, mapZoom - 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➖ Zoom Out</button>
-                <button className="secondary" onClick={() => setMapZoom(Math.min(18, mapZoom + 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>➕ Zoom In</button>
+                <button className="secondary" onClick={() => setMapZoom(Math.max(10, mapZoom - 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>โ– Zoom Out</button>
+                <button className="secondary" onClick={() => setMapZoom(Math.min(18, mapZoom + 1))} style={{ padding: "6px 12px", fontSize: "14px" }}>โ• Zoom In</button>
                 <span style={{ flex: 1, textAlign: "right", lineHeight: "32px", fontSize: "12px", color: "#666" }}>Zoom: {mapZoom}%</span>
               </div>
               
@@ -2344,16 +2349,16 @@ export default function App() {
                 <rect width="400" height="400" fill="url(#dots)" />
                 
                 <rect x="10" y="20" width="120" height="100" fill="url(#zoneGrad1)" stroke="#d97706" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="70" y="75" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#b45309">เมืองเชียงใหม่</text>
+                <text x="70" y="75" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#b45309">เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน</text>
                 
                 <rect x="200" y="50" width="100" height="80" fill="#dcfce7" stroke="#16a34a" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="250" y="100" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#166534">แม่ริม</text>
+                <text x="250" y="100" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#166534">เนเธกเนเธฃเธดเธก</text>
                 
                 <rect x="50" y="200" width="110" height="90" fill="#cffafe" stroke="#0891b2" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="105" y="250" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#164e63">ลำพูน</text>
+                <text x="105" y="250" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#164e63">เธฅเธณเธเธนเธ</text>
                 
                 <rect x="250" y="250" width="130" height="100" fill="#f3e8ff" stroke="#a855f7" strokeWidth="2" rx="6" opacity="0.9" />
-                <text x="315" y="310" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#6b21a8">หางดง/สันป่า</text>
+                <text x="315" y="310" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#6b21a8">เธซเธฒเธเธ”เธ/เธชเธฑเธเธเนเธฒ</text>
                 
                 {drivers.map((driver, idx) => {
                   const location = state.driverLocations?.[driver.id];
@@ -2361,11 +2366,11 @@ export default function App() {
                   let x, y;
                   if (location && location.zone) {
                     const zoneMap = {
-                      "เมืองเชียงใหม่": { x: 70, y: 70 },
-                      "แม่ริม": { x: 250, y: 90 },
-                      "ลำพูน": { x: 105, y: 245 },
-                      "หางดง": { x: 315, y: 300 },
-                      "สันป่าตอง": { x: 315, y: 280 }
+                      "เน€เธกเธทเธญเธเน€เธเธตเธขเธเนเธซเธกเน": { x: 70, y: 70 },
+                      "เนเธกเนเธฃเธดเธก": { x: 250, y: 90 },
+                      "เธฅเธณเธเธนเธ": { x: 105, y: 245 },
+                      "เธซเธฒเธเธ”เธ": { x: 315, y: 300 },
+                      "เธชเธฑเธเธเนเธฒเธ•เธญเธ": { x: 315, y: 280 }
                     };
                     const zonePos = zoneMap[location.zone] || { x: 70 + idx * 30, y: 70 + idx * 40 };
                     x = zonePos.x;
@@ -2392,15 +2397,15 @@ export default function App() {
               </svg>
               
               <div className="google-box" style={{ marginTop: "16px" }}>
-                <b>👥 สถานะคนขับออนไลน์ ({Object.keys(state.onlineDrivers || {}).length})</b>
+                <b>๐‘ฅ เธชเธ–เธฒเธเธฐเธเธเธเธฑเธเธญเธญเธเนเธฅเธเน ({Object.keys(state.onlineDrivers || {}).length})</b>
                 {drivers.length === 0 ? (
-                  <p style={{ fontSize: "12px", color: "#999" }}>ยังไม่มีคนขับ</p>
+                  <p style={{ fontSize: "12px", color: "#999" }}>เธขเธฑเธเนเธกเนเธกเธตเธเธเธเธฑเธ</p>
                 ) : (
                   drivers.map(d => (
                     <p key={d.id} style={{ fontSize: "12px", margin: "6px 0", padding: "6px", background: state.onlineDrivers?.[d.id] ? "#e8f5e9" : "#f5f5f5", borderRadius: "4px" }}>
-                      <b>{state.onlineDrivers?.[d.id] ? "🟢" : "⚫"} {d.name}</b>
+                      <b>{state.onlineDrivers?.[d.id] ? "๐ข" : "โซ"} {d.name}</b>
                       <br />
-                      <small>📱 {d.phone} · {d.plate} · {d.zone}</small>
+                      <small>๐“ฑ {d.phone} ยท {d.plate} ยท {d.zone}</small>
                     </p>
                   ))
                 )}
@@ -2408,16 +2413,16 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📋 Login History</h2><span>{(state.loginHistory || []).length} entries</span></div>
+              <div className="panel-head"><h2>๐“ Login History</h2><span>{(state.loginHistory || []).length} entries</span></div>
               <div className="report-lines" style={{ maxHeight: "400px", overflowY: "auto" }}>
                 {(state.loginHistory || []).length === 0 ? (
-                  <p className="muted">ยังไม่มีการล็อกอิน</p>
+                  <p className="muted">เธขเธฑเธเนเธกเนเธกเธตเธเธฒเธฃเธฅเนเธญเธเธญเธดเธ</p>
                 ) : (
                   state.loginHistory.slice(0, 20).map(entry => (
                     <p key={entry.id} style={{ fontSize: "13px", paddingBottom: "8px", borderBottom: "1px solid #eee" }}>
-                      <b>{entry.name}</b> ({entry.role === "driver" ? "🚗 Driver" : "📦 Sales"}) <br/>
-                      <small>📱 {entry.phone}</small> <br/>
-                      <small>⏰ {entry.loginAt}</small>
+                      <b>{entry.name}</b> ({entry.role === "driver" ? "๐— Driver" : "๐“ฆ Sales"}) <br/>
+                      <small>๐“ฑ {entry.phone}</small> <br/>
+                      <small>โฐ {entry.loginAt}</small>
                     </p>
                   ))
                 )}
@@ -2425,11 +2430,11 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
+              <div className="panel-head"><h2>๐“ เธฃเธฒเธขเธเธฒเธเธเธฃเธฐเธเธณเธงเธฑเธ</h2><span>เธชเธฃเธธเธเธเนเธญเธกเธนเธฅเธเธฒเธฃเธชเนเธเธเธญเธเธ—เธฑเนเธเธงเธฑเธ</span></div>
               <button className="secondary wide" onClick={() => {
                 const report = generateDailyReport();
                 copyToClipboard(report);
-              }}><FileText size={16} /> สร้างรายงานและคัดลอก</button>
+              }}><FileText size={16} /> เธชเธฃเนเธฒเธเธฃเธฒเธขเธเธฒเธเนเธฅเธฐเธเธฑเธ”เธฅเธญเธ</button>
               <button className="secondary wide" onClick={() => {
                 const report = generateDailyReport();
                 const element = document.createElement("a");
@@ -2439,16 +2444,16 @@ export default function App() {
                 document.body.appendChild(element);
                 element.click();
                 document.body.removeChild(element);
-              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
+              }}><Download size={16} /> เธ”เธฒเธงเธเนเนเธซเธฅเธ”เน€เธเนเธเนเธเธฅเน</button>
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>🔧 System Control</h2><span>เฉพาะฉุกเฉิน</span></div>
+              <div className="panel-head"><h2>๐”ง System Control</h2><span>เน€เธเธเธฒเธฐเธเธธเธเน€เธเธดเธ</span></div>
               <button className="primary wide" onClick={() => window.location.reload()} style={{ background: "#2563eb", color: "white", padding: "12px", fontSize: "14px", fontWeight: "bold" }}>
-                🔄 รีโหลดระบบ
+                ๐” เธฃเธตเนเธซเธฅเธ”เธฃเธฐเธเธ
               </button>
               <p style={{ fontSize: "12px", color: "#666", marginTop: "10px", textAlign: "center" }}>
-                กรณีไม่สามารถรับงาน หรือเชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กด ปุ่มนี้เพื่อรีโหลดระบบ
+                เธเธฃเธ“เธตเนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธฃเธฑเธเธเธฒเธ เธซเธฃเธทเธญเน€เธเธทเนเธญเธกเธ•เนเธญเน€เธเธดเธฃเนเธเน€เธงเธญเธฃเนเนเธกเนเนเธ”เน เธเธ” เธเธธเนเธกเธเธตเนเน€เธเธทเนเธญเธฃเธตเนเธซเธฅเธ”เธฃเธฐเธเธ
               </p>
             </section>
           </div>
@@ -2470,37 +2475,37 @@ export default function App() {
         placeItems: "center",
         zIndex: 1200
       }}
-      title="แชท"
+      title="เนเธเธ—"
     >
-      💬
+      ๐’ฌ
     </button>
 
     {chatOpen && (
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 1300, display: "grid", placeItems: "end center", padding: "16px" }}>
         <div style={{ width: "min(520px, 100%)", background: "white", borderRadius: "12px", boxShadow: "0 12px 30px rgba(0,0,0,0.25)", overflow: "hidden" }}>
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-            <b>💬 แชททีม</b>
-            <button className="secondary" onClick={() => setChatOpen(false)} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
+            <b>๐’ฌ เนเธเธ—เธ—เธตเธก</b>
+            <button className="secondary" onClick={() => setChatOpen(false)} style={{ padding: "6px 10px", fontSize: "12px" }}>เธเธดเธ”</button>
           </div>
           <div style={{ padding: "12px 14px", maxHeight: "280px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "8px" }}>
             {chatMessages.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อความ</p>
+              <p className="muted" style={{ margin: 0 }}>เธขเธฑเธเนเธกเนเธกเธตเธเนเธญเธเธงเธฒเธก</p>
             ) : (
               chatMessages.map(m => (
                 <div key={m.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", padding: "10px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
-                    <b style={{ fontSize: "12px" }}>{m.sender_name || "ไม่ระบุ"} {m.sender_role ? `(${m.sender_role})` : ""}</b>
+                    <b style={{ fontSize: "12px" }}>{m.sender_name || "เนเธกเนเธฃเธฐเธเธธ"} {m.sender_role ? `(${m.sender_role})` : ""}</b>
                     <small style={{ color: "#6b7280" }}>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString("th-TH") : ""}</small>
                   </div>
                   <div style={{ fontSize: "13px", whiteSpace: "pre-wrap" }}>{m.message}</div>
-                  {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "none" }}>📞 {m.sender_phone}</a>}
+                  {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "none" }}>๐“ {m.sender_phone}</a>}
                 </div>
               ))
             )}
           </div>
           <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
-            <input value={chatText} onChange={e => setChatText(e.target.value)} placeholder="พิมพ์ข้อความ..." style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }} />
-            <button className="primary" onClick={sendChat} style={{ padding: "10px 14px" }}>ส่ง</button>
+            <input value={chatText} onChange={e => setChatText(e.target.value)} placeholder="เธเธดเธกเธเนเธเนเธญเธเธงเธฒเธก..." style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }} />
+            <button className="primary" onClick={sendChat} style={{ padding: "10px 14px" }}>เธชเนเธ</button>
           </div>
         </div>
       </div>
@@ -2524,18 +2529,18 @@ export default function App() {
           maxWidth: "500px",
           width: "90%"
         }}>
-          <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
+          <h2 style={{ marginTop: 0, color: "#1f2937" }}>๐“ฆ เธขเธทเธเธขเธฑเธเธชเนเธเธญเธญเน€เธ”เธญเธฃเน</h2>
           <div style={{ background: "#f3f4f6", padding: "12px", borderRadius: "6px", margin: "12px 0" }}>
-            <p><b>ลูกค้า:</b> {pendingOrder.customerName}</p>
-            <p><b>พื้นที่:</b> {pendingOrder.zone}</p>
-            <p><b>หน้าต่างเวลา:</b> {pendingOrder.window}</p>
-            <p><b>จำนวนกล่อง:</b> {pendingOrder.boxes} กล่อง</p>
-            <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
-            {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
+            <p><b>เธฅเธนเธเธเนเธฒ:</b> {pendingOrder.customerName}</p>
+            <p><b>เธเธทเนเธเธ—เธตเน:</b> {pendingOrder.zone}</p>
+            <p><b>เธซเธเนเธฒเธ•เนเธฒเธเน€เธงเธฅเธฒ:</b> {pendingOrder.window}</p>
+            <p><b>เธเธณเธเธงเธเธเธฅเนเธญเธ:</b> {pendingOrder.boxes} เธเธฅเนเธญเธ</p>
+            <p><b>COD:</b> เธฟ{money(pendingOrder.cod)}</p>
+            {pendingOrder.salesNote && <p><b>เธซเธกเธฒเธขเน€เธซเธ•เธธ:</b> {pendingOrder.salesNote}</p>}
           </div>
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
-            <button className="secondary" style={{ flex: 1 }} onClick={() => setShowOrderConfirm(false)}>❌ ยกเลิก</button>
-            <button className="primary" style={{ flex: 1 }} onClick={confirmOrder}>✅ ยืนยันส่ง</button>
+            <button className="secondary" style={{ flex: 1 }} onClick={() => setShowOrderConfirm(false)}>โ เธขเธเน€เธฅเธดเธ</button>
+            <button className="primary" style={{ flex: 1 }} onClick={confirmOrder}>โ… เธขเธทเธเธขเธฑเธเธชเนเธ</button>
           </div>
         </div>
       </div>
@@ -2543,3 +2548,5 @@ export default function App() {
     </>
   );
 }
+
+
