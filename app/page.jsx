@@ -124,7 +124,7 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
-  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "" });
+  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -738,8 +738,7 @@ export default function App() {
       body: JSON.stringify({
         role: "sales",
         name: loginForm.name.trim(),
-        phone: loginForm.phone.trim(),
-        pin: loginForm.pin.trim()
+        phone: loginForm.phone.trim()
       })
     });
     const json = await res.json();
@@ -1232,12 +1231,7 @@ export default function App() {
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
               </div>
-              {loginForm.role === "sales" && (
-                <>
-                  <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />
-                  <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder="PIN (ถ้ามีในระบบ)" type="password" />
-                </>
-              )}
+              {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />

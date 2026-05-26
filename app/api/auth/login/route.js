@@ -68,8 +68,10 @@ export async function POST(request) {
 
       if (salesUser) {
         if (!salesUser.active) throw new Error("บัญชีถูกระงับการใช้งาน");
-        if (!pin) throw new Error("กรุณากรอก PIN");
-        if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN ไม่ถูกต้อง");
+        // PIN is optional; only validate when provided
+        if (pin) {
+          if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN ไม่ถูกต้อง");
+        }
         userId = salesUser.id;
         displayName = salesUser.name;
       } else {
@@ -123,4 +125,3 @@ export async function POST(request) {
     return Response.json({ ok: false, error: message }, { status: 401 });
   }
 }
-
