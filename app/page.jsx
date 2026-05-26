@@ -1073,21 +1073,36 @@ export default function App() {
       if (!supabase) throw new Error("Supabase not initialized");
 
       setSyncStatus("กำลังอัปโหลดรูป POD...");
-      const ext = (file.name || "").split(".").pop().toLowerCase();
+	      // Show preview immediately so driver can continue without waiting for upload
+	      try {
+	        const localUrl = URL.createObjectURL(file);
+	        updateOrder(order.id, { photo: localUrl, podUploading: true });
+	      } catch {}
+
+	      const ext = (file.name || "").split(".").pop().toLowerCase();
       const safeExt = ["jpg", "jpeg", "png", "webp"].includes(ext) ? ext : "jpg";
       const fileName = `${Date.now()}.${safeExt}`;
-      const path = `pods/${order.id}/${fileName}`;
+	      const path = `pods/${order.id}/${fileName}`;
+	      const bucket = process.env.NEXT_PUBLIC_SUPABASE_POD_BUCKET || "pod-photos";
 
-      const { error: uploadError } = await supabase.storage
-        .from("pod-photos")
-        .upload(path, file, { upsert: true, contentType: file.type || undefined });
-      if (uploadError) throw uploadError;
+	      const { error: uploadError } = await supabase.storage
+	        .from(bucket)
+	        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+	      if (uploadError) {
+	        const msg = String(uploadError.message || uploadError);
+	        if (msg.toLowerCase().includes("bucket") && msg.toLowerCase().includes("not found")) {
+	          updateOrder(order.id, { podUploading: false });
+	          setSyncStatus(`⚠️ ยังอัปโหลดรูปไม่ได้ (ไม่พบบัคเก็ต Storage ชื่อ "${bucket}") แต่สามารถไปขั้นตอนถัดไปได้`);
+	          return;
+	        }
+	        throw uploadError;
+	      }
 
-      const { data: publicUrlData } = supabase.storage.from("pod-photos").getPublicUrl(path);
+	      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(path);
       const publicUrl = publicUrlData?.publicUrl || "";
       if (!publicUrl) throw new Error("Failed to get public URL");
 
-      updateOrder(order.id, { photo: publicUrl });
+	      updateOrder(order.id, { photo: publicUrl, podUploading: false });
       setSyncStatus("✅ อัปโหลดรูป POD สำเร็จ");
     } catch (error) {
       setSyncStatus(`❌ อัปโหลดรูป POD ไม่สำเร็จ: ${error.message || error}`);
