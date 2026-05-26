@@ -156,8 +156,36 @@ export default function App() {
   // useState is async and causes stale closures in syncToSupabase
   const isResettingOrdersRef = useRef(false);
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
+  const [showDriverHistory, setShowDriverHistory] = useState(false);
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
+
+  const buildLineMessageForOrder = (order) => {
+    const lines = [];
+    lines.push(`ส่งของสำเร็จ ✅`);
+    lines.push(`ออเดอร์: ${order.id}`);
+    if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
+    if (order.customerPhone) lines.push(`โทร: ${order.customerPhone}`);
+    if (order.address) lines.push(`ที่อยู่: ${order.address}`);
+    if (order.zone) lines.push(`โซน: ${order.zone}`);
+    if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
+    if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
+    lines.push(`COD: ฿${money(order.cod || 0)}`);
+    if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
+    if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
+    if (order.photo) lines.push(`POD: ${order.photo}`);
+    return lines.join("\n");
+  };
+
+  const shareOrderToLine = (order) => {
+    const text = buildLineMessageForOrder(order);
+    if (navigator?.share) {
+      navigator.share({ text }).catch(() => {});
+      return;
+    }
+    const url = `line://msg/text/${encodeURIComponent(text)}`;
+    try { window.location.href = url; } catch {}
+  };
 
   useEffect(() => setState(readState()), []);
 
@@ -781,7 +809,7 @@ export default function App() {
 
   const loginDriver = async () => {
     if (!loginForm.phone.trim()) return;
-    const phone = loginForm.phone.trim();
+    const phone = loginForm.phone.trim().replace(/\D/g, "");
 
     let json;
     try {
@@ -836,7 +864,7 @@ export default function App() {
       firstName: driverForm.firstName.trim(),
       lastName: driverForm.lastName.trim(),
       name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
-      phone: driverForm.phone.trim(),
+      phone: normalizedPhone || driverForm.phone.trim(),
       vehicle: driverForm.vehicle.trim(),
       plate: driverForm.plate.trim(),
       zone: driverForm.zone,
@@ -861,7 +889,7 @@ export default function App() {
         lng: nextDriver.lng,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      }, { onConflict: "phone" });
+      }, { onConflict: "id" });
       if (error) throw error;
     } catch (e) {
       setSyncStatus(`❌ บันทึกข้อมูลคนขับลง Supabase ไม่สำเร็จ: ${e.message || e}`);
@@ -1041,17 +1069,28 @@ export default function App() {
   const uploadPod = async (order, file) => {
     if (!file) return;
     try {
-      setSyncStatus("กำลังเก็บรูป POD...");
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      updateOrder(order.id, { photo: dataUrl });
-      setSyncStatus("✅ บันทึกรูป POD สำเร็จ");
+      if (!supabase) supabase = initSupabase();
+      if (!supabase) throw new Error("Supabase not initialized");
+
+      setSyncStatus("กำลังอัปโหลดรูป POD...");
+      const ext = (file.name || "").split(".").pop().toLowerCase();
+      const safeExt = ["jpg", "jpeg", "png", "webp"].includes(ext) ? ext : "jpg";
+      const fileName = `${Date.now()}.${safeExt}`;
+      const path = `pods/${order.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("pod-photos")
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from("pod-photos").getPublicUrl(path);
+      const publicUrl = publicUrlData?.publicUrl || "";
+      if (!publicUrl) throw new Error("Failed to get public URL");
+
+      updateOrder(order.id, { photo: publicUrl });
+      setSyncStatus("✅ อัปโหลดรูป POD สำเร็จ");
     } catch (error) {
-      setSyncStatus(`❌ บันทึกรูปไม่สำเร็จ: ${error.message}`);
+      setSyncStatus(`❌ อัปโหลดรูป POD ไม่สำเร็จ: ${error.message || error}`);
     }
   };
 
@@ -2004,10 +2043,10 @@ export default function App() {
                         
                         <button 
                           className="primary" 
-                          style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                          disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                          style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px" }} 
+                          disabled={false}
                           onClick={() => {
-                            pendingOrderUpdatesRef.current.add(order.id);
+                            // allow immediate next actions; no UI lock
                             updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" });
                             setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
                           }}>✓ รับออเดอร์นี้</button>
@@ -2020,11 +2059,11 @@ export default function App() {
             })()}
 
             {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
-            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).length > 0 && (
-              <section className="panel">
+	            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).length > 0 && (
+	              <section className="panel">
                 <div className="panel-head"><h2>🚗 ออเดอร์ที่รับแล้ว</h2><span>{orders.filter(o => o.driverId === driverId && o.status !== "ส่งสำเร็จ").length} งาน · สำเร็จ {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length}</span></div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
-                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง" || o.status === "ส่งสำเร็จ")).map(order => (
+                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).map(order => (
                     <div key={order.id} style={{ background: order.status === "ส่งสำเร็จ" ? "#f0fdf4" : "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div>
                         <b style={{ fontSize: "14px", display: "block", marginBottom: "4px", color: statusColor[order.status] }}>{order.id}</b>
@@ -2051,20 +2090,20 @@ export default function App() {
                             <button 
                               className="primary" 
                               style={{ padding: "8px", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              disabled={false}
                               onClick={() => {
-                                pendingOrderUpdatesRef.current.add(order.id);
+                                // no UI lock; allow immediate next action
                                 updateOrder(order.id, { status: "กำลังจัดส่ง" });
                                 setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
                               }}>🚗 ไปถึงแล้ว</button>
                             <button 
                               className="secondary" 
                               style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              disabled={false}
                               onClick={() => {
                                 const reason = prompt("📝 เหตุผลในการยกเลิก:");
                                 if (reason) {
-                                  pendingOrderUpdatesRef.current.add(order.id);
+                                  // no UI lock; allow immediate next action
                                   updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
                                   setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
                                 }
@@ -2075,28 +2114,26 @@ export default function App() {
                           <>
                             <label 
                               className="primary" 
-                              style={{ padding: "8px", fontSize: "12px", cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}>
+                              onClick={() => { const el = document.getElementById(`pod-file-${order.id}`); try { el?.click(); } catch {} }}
+                              style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
                               📷 ถ่ายรูป
-                              <input type="file" accept="image/*" style={{ display: "none" }} disabled={pendingOrderUpdatesRef.current.has(order.id)} onChange={(e) => {
+                              <input id={`pod-file-${order.id}`} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  const reader = new FileReader();
-                                  reader.onload = (evt) => {
-                                    pendingOrderUpdatesRef.current.add(order.id);
-                                    updateOrder(order.id, { photo: evt.target?.result });
-                                  };
-                                  reader.readAsDataURL(file);
+                                  // no UI lock; allow immediate next action
+                                  uploadPod(order, file);
                                 }
+                                e.target.value = "";
                               }} />
                             </label>
                             <button 
                               className="secondary" 
                               style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              disabled={false}
                               onClick={() => {
                                 const reason = prompt("📝 เหตุผลในการยกเลิก:");
                                 if (reason) {
-                                  pendingOrderUpdatesRef.current.add(order.id);
+                                  // no UI lock; allow immediate next action
                                   updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
                                 }
                               }}>❌ ยกเลิก</button>
@@ -2106,10 +2143,10 @@ export default function App() {
                           <button 
                             className="primary" 
                             style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            disabled={false}
                             onClick={() => {
                               // Add to pending updates to prevent rapid clicks
-                              pendingOrderUpdatesRef.current.add(order.id);
+                              // no UI lock; allow immediate next action
                               updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
                               setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
                             }}>✅ ส่งสำเร็จ</button>
@@ -2118,9 +2155,9 @@ export default function App() {
                           <button 
                             className="secondary" 
                             style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            disabled={false}
                             onClick={() => {
-                              pendingOrderUpdatesRef.current.add(order.id);
+                              // no UI lock; allow immediate next action
                               alert(`✅ ส่งสำเร็จแล้ว\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ✅ มี\n\nสามารถรับอีกงานได้`);
                             }}>🏠 ส่งเสร็จสิ้น</button>
                         )}
@@ -2141,11 +2178,40 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              </section>
-            )}
+	              </section>
+	            )}
 
-            {driverOrders.length === 0 && (
-              <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
+	            {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0 && (
+	              <section className="panel" style={{ background: "#f8fafc" }}>
+	                <div className="panel-head">
+	                  <h2>📚 ประวัติส่งสำเร็จ</h2>
+	                  <span>{orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length} งาน</span>
+	                </div>
+	                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+	                  {orders
+	                    .filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ")
+	                    .slice()
+	                    .sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || ""))
+	                    .map(order => (
+	                      <div key={order.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: "8px" }}>
+	                        <div>
+	                          <b style={{ fontSize: "14px", display: "block" }}>{order.id}</b>
+	                          <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{order.customerName}</b>
+	                          <small style={{ color: "#6b7280" }}>📍 {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
+	                          {order.deliveredAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
+	                        </div>
+	                        <div style={{ display: "flex", gap: "8px" }}>
+	                          <button className="primary" style={{ flex: 1, padding: "8px", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>💬 แชร์ LINE</button>
+	                          {order.photo && <a className="secondary" style={{ flex: 1, padding: "8px", fontSize: "12px", textAlign: "center", textDecoration: "none" }} href={order.photo} target="_blank" rel="noreferrer">📸 เปิดรูป</a>}
+	                        </div>
+	                      </div>
+	                    ))}
+	                </div>
+	              </section>
+	            )}
+
+	            {driverOrders.length === 0 && (
+	              <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
                 <p style={{ fontSize: "32px", margin: "0" }}>😴</p>
                 <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
               </section>

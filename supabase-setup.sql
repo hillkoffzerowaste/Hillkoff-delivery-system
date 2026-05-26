@@ -180,6 +180,19 @@ create policy "Allow public access to orders" on public.orders for all using (tr
 create policy "Allow public access to drivers" on public.drivers for all using (true) with check (true);
 create policy "Allow public access to driver_locations" on public.driver_locations for all using (true) with check (true);
 create policy "Allow public access to chat_messages" on public.chat_messages for all using (true) with check (true);
+
+-- Storage bucket for POD photos
+insert into storage.buckets (id, name, public)
+values ('pod-photos', 'pod-photos', true)
+on conflict (id) do nothing;
+
+-- Public read/write policies for this bucket (adjust later for production security)
+drop policy if exists "Public access to pod-photos" on storage.objects;
+create policy "Public access to pod-photos"
+on storage.objects
+for all
+using (bucket_id = 'pod-photos')
+with check (bucket_id = 'pod-photos');
 create policy "Allow public access to auth_sessions" on public.auth_sessions for all using (true) with check (true);
 create policy "Allow public access to login_events" on public.login_events for all using (true) with check (true);
 create policy "Allow public access to sales_users" on public.sales_users for all using (true) with check (true);

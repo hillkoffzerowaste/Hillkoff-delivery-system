@@ -7,6 +7,10 @@ function sha256Hex(text) {
   return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
 }
 
+function normalizePhone(raw) {
+  return String(raw || "").replace(/\D/g, "");
+}
+
 function clientMeta(request) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -33,7 +37,8 @@ export async function POST(request) {
   }
 
   const role = String(payload?.role || "").trim();
-  const phone = String(payload?.phone || "").trim();
+  const phoneRaw = String(payload?.phone || "").trim();
+  const phone = normalizePhone(phoneRaw) || phoneRaw;
   const name = String(payload?.name || "").trim();
   const pin = String(payload?.pin || "").trim();
 
@@ -102,7 +107,7 @@ export async function POST(request) {
     await supabase.from("login_events").insert({
       role,
       user_id: userId,
-      phone,
+      phone: phoneRaw || phone,
       success: true,
       error: null,
       ip,
@@ -120,7 +125,7 @@ export async function POST(request) {
       await supabase.from("login_events").insert({
         role,
         user_id: null,
-        phone,
+        phone: phoneRaw || phone,
         success: false,
         error: message,
         ip,
