@@ -190,11 +190,12 @@ export default function App() {
 	      (async () => {
 	        try {
 	          const file = await dataUrlToFile(order.photo, `POD-${order.id}`);
-		          if (navigator.canShare?.({ files: [file] })) {
-		            await navigator.share({ text, files: [file] });
-		            updateOrder(order.id, { sharedToLine: true });
-		            return;
-		          }
+	          if (navigator.canShare?.({ files: [file] })) {
+	            await navigator.share({ text, files: [file] });
+	            updateOrder(order.id, { sharedToLine: true });
+	            return;
+	          }
+	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบไฟล์อัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง หรือแนบรูปเองใน LINE");
 	        } catch {}
 	        navigator.share({ text }).catch(() => {});
 	      })();
