@@ -1095,12 +1095,17 @@ export default function App() {
 
 	    (async () => {
 	      try {
+	        // LINE บางเครื่อง/บางเวอร์ชันอาจรับได้แค่รูปแล้วไม่แนบ text ไปด้วย
+	        // เลยคัดลอกสรุปไว้ในคลิปบอร์ดให้พร้อมวางเสมอ
+	        try { await navigator.clipboard?.writeText?.(text); } catch {}
 	        if (!navigator.canShare?.({ files: [file] })) {
 	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
 	          return;
 	        }
 	        await navigator.share({ text, files: [file] });
 	        updateOrder(order.id, { sharedToLine: true });
+	        // เผื่อ LINE ไม่พา text ไปด้วย: แจ้งให้ผู้ใช้วางข้อความ
+	        setSyncStatus("✅ แชร์รูปแล้ว (สรุปออเดอร์ถูกคัดลอกไว้แล้ว ถ้าไม่ขึ้นให้วางในไลน์)");
 	      } catch {
 	        // user cancelled or share failed
 	      }
@@ -2100,52 +2105,49 @@ export default function App() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                         {order.status === "กำลังส่ง" && (
                           <>
-                            <button 
-                              className="primary" 
-                              style={{ padding: "8px", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                              onClick={() => {
-                                pendingOrderUpdatesRef.current.add(order.id);
-                                updateOrder(order.id, { status: "กำลังจัดส่ง" });
-                                setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
-                              }}>🚗 ไปถึงแล้ว</button>
-                            <button 
-                              className="secondary" 
-                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                              onClick={() => {
-                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
-                                if (reason) {
-                                  pendingOrderUpdatesRef.current.add(order.id);
-                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
-                                  setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
-                                }
-                              }}>❌ ยกเลิก</button>
+	                            <button 
+	                              className="primary" 
+	                              style={{ padding: "8px", fontSize: "12px" }} 
+	                              disabled={false}
+	                              onClick={() => {
+	                                updateOrder(order.id, { status: "กำลังจัดส่ง" });
+	                                setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
+	                              }}>🚗 ไปถึงแล้ว</button>
+	                            <button 
+	                              className="secondary" 
+	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
+	                              disabled={false}
+	                              onClick={() => {
+	                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+	                                if (reason) {
+	                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+	                                  setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
+	                                }
+	                              }}>❌ ยกเลิก</button>
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && (
                           <>
 	                            <label 
 	                              className="primary" 
-	                              style={{ padding: "8px", fontSize: "12px", cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}>
+	                              style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
 	                              📷 ถ่ายรูป
-	                              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={pendingOrderUpdatesRef.current.has(order.id)} onChange={(e) => {
+	                              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={false} onChange={(e) => {
 	                                const file = e.target.files?.[0];
 	                                if (file) uploadPod(order, file);
 	                                e.target.value = "";
 	                              }} />
 	                            </label>
-                            <button 
-                              className="secondary" 
-                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                              onClick={() => {
-                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
-                                if (reason) {
-                                  pendingOrderUpdatesRef.current.add(order.id);
-                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
-                                }
-                              }}>❌ ยกเลิก</button>
+	                            <button 
+	                              className="secondary" 
+	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
+	                              disabled={false}
+	                              onClick={() => {
+	                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+	                                if (reason) {
+	                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+	                                }
+	                              }}>❌ ยกเลิก</button>
                           </>
                         )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && !order.sharedToLine && (
@@ -2158,15 +2160,13 @@ export default function App() {
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button 
 	                            className="primary" 
-	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-	                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} 
+	                            disabled={false}
 	                            onClick={() => {
-                              // Add to pending updates to prevent rapid clicks
-                              pendingOrderUpdatesRef.current.add(order.id);
-                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
-                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
-                            }}>✅ ส่งสำเร็จ</button>
-                        )}
+	                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
+	                            }}>✅ ส่งสำเร็จ</button>
+	                        )}
                         {order.status === "ส่งสำเร็จ" && (
                           <button 
                             className="secondary" 
