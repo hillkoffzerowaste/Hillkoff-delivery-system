@@ -2397,8 +2397,53 @@ export default function App() {
 		              })()}
 		            </section>
 
-	            {auth.email === "online_marketing@hillkoff.com" && (
-	              <section className="panel">
+		            <section className="panel">
+		              {(() => {
+		                const locs = state.driverLocations || {};
+		                const driverIds = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
+		                const effectiveId = selectedMapDriverId || driverIds[0] || "";
+		                const selected = effectiveId ? locs[effectiveId] : null;
+		                const embed = selected ? osmEmbedUrl(selected.lat, selected.lng, 15) : "";
+
+		                return (
+		                  <>
+		                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{driverIds.length} คนมีพิกัด</span></div>
+		                    {driverIds.length === 0 ? (
+		                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีพิกัดคนขับ (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+		                    ) : (
+		                      <>
+		                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+		                          {driverIds.map(did => {
+		                            const d = locs[did];
+		                            const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
+		                            return (
+		                              <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
+		                                📍 {name}
+		                              </button>
+		                            );
+		                          })}
+		                        </div>
+		                        {selected && (
+		                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
+		                            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
+		                              <b>{selected.driverName || effectiveId}</b>
+		                              <small style={{ color: "#6b7280" }}>{selected.zone || "-"}</small>
+		                            </div>
+		                            <iframe title="osm-mini-map-settings" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
+		                            <a href={osmPageUrl(selected.lat, selected.lng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
+		                              เปิดแผนที่เต็ม (OpenStreetMap)
+		                            </a>
+		                          </div>
+		                        )}
+		                      </>
+		                    )}
+		                  </>
+		                );
+		              })()}
+		            </section>
+
+		            {auth.email === "online_marketing@hillkoff.com" && (
+		              <section className="panel">
 	                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
 	                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
 	                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
