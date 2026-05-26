@@ -132,6 +132,24 @@ async function dataUrlToFile(dataUrl, fileName) {
   return new File([blob], `${fileName}.${ext}`, { type: blob.type || "image/jpeg" });
 }
 
+function downloadFileToDevice(file, fileName) {
+  try {
+    const blobUrl = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName || file.name || "pod.jpg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => {
+      try { URL.revokeObjectURL(blobUrl); } catch {}
+    }, 2000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
   return (
     <div className="card stat-card">
@@ -1138,6 +1156,12 @@ export default function App() {
 	          ? confirm("คัดลอกข้อความสรุปออเดอร์แล้ว ✅\n\n1) ไปวางข้อความในไลน์ก่อน\n2) กลับมากด OK เพื่อส่งรูป POD ตามไป")
 	          : confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไปวางในไลน์ก่อน:\n\n${text}\n\nกด OK เพื่อส่งรูป POD ตามไป`);
 	        if (!ok) return;
+
+	        // Step 1.5: Save POD image to device (best-effort)
+	        const saved = downloadFileToDevice(file, `POD-${order.id}`);
+	        if (!saved) {
+	          // continue anyway
+	        }
 
 	        if (!navigator.canShare?.({ files: [file] })) {
 	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
