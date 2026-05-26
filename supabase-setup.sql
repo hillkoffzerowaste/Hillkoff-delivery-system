@@ -106,12 +106,54 @@ create table if not exists public.chat_messages (
   message text not null
 );
 
+-- Auth sessions + login audit (Sales/Driver)
+create extension if not exists pgcrypto;
+
+create table if not exists public.auth_sessions (
+  id bigint generated always as identity primary key,
+  role text not null check (role in ('driver','sales')),
+  user_id text not null,
+  token uuid not null unique,
+  "createdAt" timestamp default now(),
+  "expiresAt" timestamp not null
+);
+
+create index if not exists auth_sessions_token_idx on public.auth_sessions(token);
+create index if not exists auth_sessions_role_user_idx on public.auth_sessions(role, user_id);
+
+create table if not exists public.login_events (
+  id bigint generated always as identity primary key,
+  role text not null check (role in ('driver','sales')),
+  user_id text,
+  phone text,
+  success boolean not null,
+  error text,
+  ip text,
+  user_agent text,
+  "createdAt" timestamp default now()
+);
+
+create index if not exists login_events_created_at_idx on public.login_events("createdAt" desc);
+create index if not exists login_events_role_user_idx on public.login_events(role, user_id);
+
+create table if not exists public.sales_users (
+  id text primary key,
+  name text not null,
+  phone text unique,
+  pin_hash text not null,
+  active boolean not null default true,
+  "createdAt" timestamp default now()
+);
+
 -- Enable RLS
 alter table public.customers enable row level security;
 alter table public.orders enable row level security;
 alter table public.drivers enable row level security;
 alter table public.driver_locations enable row level security;
 alter table public.chat_messages enable row level security;
+alter table public.auth_sessions enable row level security;
+alter table public.login_events enable row level security;
+alter table public.sales_users enable row level security;
 
 -- Create policies (allow all for now - adjust for production)
 drop policy if exists "Allow public access to customers" on public.customers;
@@ -119,9 +161,15 @@ drop policy if exists "Allow public access to orders" on public.orders;
 drop policy if exists "Allow public access to drivers" on public.drivers;
 drop policy if exists "Allow public access to driver_locations" on public.driver_locations;
 drop policy if exists "Allow public access to chat_messages" on public.chat_messages;
+drop policy if exists "Allow public access to auth_sessions" on public.auth_sessions;
+drop policy if exists "Allow public access to login_events" on public.login_events;
+drop policy if exists "Allow public access to sales_users" on public.sales_users;
 
 create policy "Allow public access to customers" on public.customers for all using (true) with check (true);
 create policy "Allow public access to orders" on public.orders for all using (true) with check (true);
 create policy "Allow public access to drivers" on public.drivers for all using (true) with check (true);
 create policy "Allow public access to driver_locations" on public.driver_locations for all using (true) with check (true);
 create policy "Allow public access to chat_messages" on public.chat_messages for all using (true) with check (true);
+create policy "Allow public access to auth_sessions" on public.auth_sessions for all using (true) with check (true);
+create policy "Allow public access to login_events" on public.login_events for all using (true) with check (true);
+create policy "Allow public access to sales_users" on public.sales_users for all using (true) with check (true);

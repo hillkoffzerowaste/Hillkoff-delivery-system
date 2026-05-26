@@ -62,7 +62,7 @@ function defaultState() {
     customers: initialCustomers,
     orders: initialOrders,
     drivers: initialDrivers,
-    auth: { role: "", name: "", phone: "", driverId: "", email: "" },
+    auth: { role: "", name: "", phone: "", driverId: "", email: "", token: "" },
     loginHistory: [],
     onlineDrivers: {},
     driverLocations: {},
@@ -71,8 +71,14 @@ function defaultState() {
 }
 
 function readState() {
-  // Always return default state - data comes from Supabase only, not localStorage
-  return defaultState();
+  try {
+    const raw = localStorage.getItem("hillkoff_auth");
+    if (!raw) return defaultState();
+    const savedAuth = JSON.parse(raw);
+    return { ...defaultState(), auth: { ...defaultState().auth, ...(savedAuth || {}) } };
+  } catch {
+    return defaultState();
+  }
 }
 
 function money(value) {
@@ -118,7 +124,7 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
-  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
+  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -725,64 +731,90 @@ export default function App() {
 
   const loginSales = async () => {
     if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
+
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role: "sales",
+        name: loginForm.name.trim(),
+        phone: loginForm.phone.trim(),
+        pin: loginForm.pin.trim()
+      })
+    });
+    const json = await res.json();
+    if (!json.ok) {
+      setSyncStatus(`❌ ${json.error || "เข้าสู่ระบบไม่สำเร็จ"}`);
+      return;
+    }
+
+    const d = json.data || {};
     const loginEntry = {
       id: `L${Date.now()}`,
       role: "sales",
-      name: loginForm.name.trim(),
+      name: d.name || loginForm.name.trim(),
       phone: loginForm.phone.trim(),
       loginAt: new Date().toLocaleString("th-TH"),
       loginTime: new Date().getTime()
     };
-    const newAuthState = { role: "sales", name: loginForm.name.trim(), phone: loginForm.phone.trim(), driverId: "" };
-    setAuth(newAuthState);
-    if (!supabase) supabase = initSupabase();
-    const updatedState = {
-      ...state,
-      auth: newAuthState,
-      loginHistory: [loginEntry, ...(state.loginHistory || [])].slice(0, 100)
+    const newAuthState = {
+      role: "sales",
+      name: d.name || loginForm.name.trim(),
+      phone: loginForm.phone.trim(),
+      driverId: "",
+      email: state.auth?.email || "",
+      token: d.token || ""
     };
-    setState(updatedState);
-    // Auth state synced automatically via syncToSupabase
+    localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
+    setState(prev => ({
+      ...prev,
+      auth: newAuthState,
+      loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100)
+    }));
     setTab("sales");
   };
 
   const loginDriver = async () => {
     if (!loginForm.phone.trim()) return;
     const phone = loginForm.phone.trim();
-    if (!supabase) supabase = initSupabase();
-    
-    // Look for driver in local state only (Supabase drivers table is now empty by design)
-    const found = state.drivers?.find(driver => String(driver.phone).trim() === phone);
-    if (found) {
+
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "driver", phone })
+    });
+    const json = await res.json();
+
+    if (json.ok) {
+      const d = json.data || {};
       const loginEntry = {
         id: `L${Date.now()}`,
         role: "driver",
-        name: found.name,
+        name: d.name || phone,
         phone,
-        driverId: found.id,
+        driverId: d.driverId || "",
         loginAt: new Date().toLocaleString("th-TH"),
         loginTime: new Date().getTime()
       };
-      setDriverId(found.id);
-      const newAuthState = { role: "driver", name: found.name, phone, driverId: found.id };
-      setAuth(newAuthState);
-      const updatedState = {
-        ...state,
+      setDriverId(d.driverId || "");
+      const newAuthState = { role: "driver", name: d.name || phone, phone, driverId: d.driverId || "", email: state.auth?.email || "", token: d.token || "" };
+      localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
+      setState(prev => ({
+        ...prev,
         auth: newAuthState,
-        loginHistory: [loginEntry, ...(state.loginHistory || [])].slice(0, 100),
-        onlineDrivers: { ...state.onlineDrivers, [found.id]: new Date().getTime() }
-      };
-      setState(updatedState);
-      const saved = await upsertOrderToSupabase(pendingOrder);
-      if (!saved.ok) {
-        setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
-      }
+        loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
+        onlineDrivers: d.driverId ? { ...prev.onlineDrivers, [d.driverId]: new Date().getTime() } : prev.onlineDrivers
+      }));
+      // const saved = await upsertOrderToSupabase(pendingOrder);
+      // if (!saved.ok) {
+      //   setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
+      // }
 
       setTab("driver");
       return;
     }
     setDriverForm(prev => ({ ...prev, phone }));
-    setAuth({ role: "driver-register", name: "", phone, driverId: "" });
+    setAuth({ role: "driver-register", name: "", phone, driverId: "", email: state.auth?.email || "", token: "" });
   };
 
   const registerDriver = async () => {
@@ -830,7 +862,8 @@ export default function App() {
       if (auth.driverId) delete updated[auth.driverId];
       return { ...prev, onlineDrivers: updated };
     });
-    setAuth({ role: "", name: "", phone: "", driverId: "" });
+    localStorage.removeItem("hillkoff_auth");
+    setAuth({ role: "", name: "", phone: "", driverId: "", email: state.auth?.email || "", token: "" });
   };
 
   const createOrder = async () => {
@@ -1199,7 +1232,12 @@ export default function App() {
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
               </div>
-              {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
+              {loginForm.role === "sales" && (
+                <>
+                  <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />
+                  <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder="PIN (ถ้ามีในระบบ)" type="password" />
+                </>
+              )}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
