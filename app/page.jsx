@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getFirebaseAuth, getFirestoreDb, fb, startPhoneSignInE164, fbLogout } from "../lib/firebaseClient";
+import { getFirebaseAuth, getFirestoreDb, fb, startPhoneSignInE164, fbLogout, onFirebaseAuthStateChanged } from "../lib/firebaseClient";
 import {
   AlertTriangle,
   Camera,
@@ -169,6 +169,7 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatText, setChatText] = useState("");
+  const [fbAuthReady, setFbAuthReady] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
@@ -205,9 +206,20 @@ export default function App() {
 
 	  useEffect(() => setState(readState()), []);
 
+	  // Wait for Firebase Auth session to be ready (so Firestore rules see request.auth)
+	  useEffect(() => {
+	    const unsub = onFirebaseAuthStateChanged(() => setFbAuthReady(true));
+	    return () => { try { unsub?.(); } catch {} };
+	  }, []);
+
 	  // Firestore realtime sync (orders/customers/driver_locations/chat)
 	  useEffect(() => {
 	    if (typeof window === "undefined") return;
+	    if (!fbAuthReady) return;
+	    if (!state.auth?.token) {
+	      setSyncStatus("Please login");
+	      return;
+	    }
 	    const db = getFirestoreDb();
 	    const unsubs = [];
 
@@ -290,14 +302,9 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [state.auth?.role, state.auth?.driverId, driverId]);
+	  }, [state.auth?.token, state.auth?.role, state.auth?.driverId, driverId]);
 
-  // Force initial fetch for driver role
-  useEffect(() => {
-    if (state.auth?.role !== "driver") return;
-    console.log("🚗 Driver detected - forcing initial fetch...");
-    refreshFromSupabase();
-  }, [state.auth?.role]);
+  // (Supabase removed) no forced polling needed
 
   useEffect(() => {
     if (state.auth?.role !== "driver") return;
