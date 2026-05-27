@@ -162,6 +162,7 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
+  const [otpState, setOtpState] = useState({ stage: "idle", code: "", confirmation: null }); // idle | code
   const [rememberPhone, setRememberPhone] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -518,15 +519,13 @@ export default function App() {
     return matchesQuery && matchesStatus && matchesZone;
   });
 
-	  const saveCustomer = async () => {
+  const saveCustomer = async () => {
 	    if (!customerForm.name.trim()) return;
 	    const id = `C${String(customers.length + 1).padStart(3, "0")}`;
 	    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
 	    setState(prev => ({ ...prev, customers: [nextCustomer, ...(prev.customers || [])] }));
-	    if (supabase) {
-	      const saved = await upsertCustomerToFirestore(nextCustomer);
-	      if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Supabase ไม่สำเร็จ: ${saved.error}`);
-	    }
+    const saved = await upsertCustomerToFirestore(nextCustomer);
+    if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
 	    setSelectedCustomerId(id);
 	    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
 	    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
@@ -534,150 +533,116 @@ export default function App() {
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
 
-  const loginSales = async () => {
-    if (!loginForm.name.trim() || !loginForm.phone.trim()) return;
+  const normalizePhoneToE164 = (raw) => {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (!digits) return "";
+    // Thailand default: allow 0xxxxxxxxx -> +66xxxxxxxxx
+    if (digits.startsWith("0")) return `+66${digits.slice(1)}`;
+    if (digits.startsWith("66")) return `+${digits}`;
+    if (digits.startsWith("+")) return digits;
+    // fallback: assume already national without 0
+    return `+66${digits}`;
+  };
 
-    let json;
+  const startOtp = async () => {
+    if (!loginForm.phone.trim()) return;
     try {
+      setSyncStatus("⏳ กำลังส่งรหัส OTP...");
+      const e164 = normalizePhoneToE164(loginForm.phone.trim());
+      const confirmation = await startPhoneSignInE164(e164);
+      setOtpState({ stage: "code", code: "", confirmation });
+      setSyncStatus("✅ ส่ง OTP แล้ว กรุณากรอกรหัส");
+    } catch (e) {
+      setSyncStatus(`❌ ส่ง OTP ไม่สำเร็จ: ${e?.message || e}`);
+    }
+  };
+
+  const verifyOtpAndLogin = async () => {
+    if (otpState.stage !== "code" || !otpState.confirmation) return;
+    const code = String(otpState.code || "").trim();
+    if (!code) return;
+    try {
+      setSyncStatus("⏳ กำลังยืนยัน OTP...");
+      const cred = await otpState.confirmation.confirm(code);
+      const user = cred?.user;
+      if (!user) throw new Error("No user");
+      const idToken = await user.getIdToken(true);
+
+      const role = loginForm.role;
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          role: "sales",
+          idToken,
+          role,
           name: loginForm.name.trim(),
           phone: loginForm.phone.trim()
         })
       });
-      json = await res.json();
-    } catch (e) {
-      setSyncStatus(`❌ Login error: ${e.message || "network/server error"}`);
-      return;
-    }
-    if (!json.ok) {
-      setSyncStatus(`❌ ${json.error || "เข้าสู่ระบบไม่สำเร็จ"}`);
-      return;
-    }
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || "Login failed");
 
-    const d = json.data || {};
-    const loginEntry = {
-      id: `L${Date.now()}`,
-      role: "sales",
-      name: d.name || loginForm.name.trim(),
-      phone: loginForm.phone.trim(),
-      loginAt: new Date().toLocaleString("th-TH"),
-      loginTime: new Date().getTime()
-    };
-    const newAuthState = {
-      role: "sales",
-      name: d.name || loginForm.name.trim(),
-      phone: loginForm.phone.trim(),
-      driverId: "",
-      email: state.auth?.email || "",
-      token: d.token || ""
-    };
-    localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
-    setState(prev => ({
-      ...prev,
-      auth: newAuthState,
-      loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100)
-    }));
-    setTab("sales");
+      const d = json.data || {};
+      const newAuthState = {
+        role: d.role || role,
+        name: d.name || loginForm.name.trim() || "",
+        phone: d.phone || loginForm.phone.trim(),
+        driverId: d.driverId || "",
+        email: "",
+        token: idToken
+      };
+      localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
+      setState(prev => ({ ...prev, auth: newAuthState }));
+      if (newAuthState.driverId) setDriverId(newAuthState.driverId);
+      setOtpState({ stage: "idle", code: "", confirmation: null });
+      setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
+      setTab(newAuthState.role === "driver" ? "driver" : "sales");
+    } catch (e) {
+      setSyncStatus(`❌ ยืนยัน OTP ไม่สำเร็จ: ${e?.message || e}`);
+    }
+  };
+
+  const loginSales = async () => {
+    // Firebase OTP flow
+    if (otpState.stage === "code") return verifyOtpAndLogin();
+    return startOtp();
   };
 
   const loginDriver = async () => {
-    if (!loginForm.phone.trim()) return;
-    const phone = loginForm.phone.trim();
-
-    let json;
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: "driver", phone })
-      });
-      json = await res.json();
-    } catch (e) {
-      setSyncStatus(`❌ Login error: ${e.message || "network/server error"}`);
-      return;
-    }
-
-    if (json.ok) {
-      const d = json.data || {};
-      const loginEntry = {
-        id: `L${Date.now()}`,
-        role: "driver",
-        name: d.name || phone,
-        phone,
-        driverId: d.driverId || "",
-        loginAt: new Date().toLocaleString("th-TH"),
-        loginTime: new Date().getTime()
-      };
-      setDriverId(d.driverId || "");
-      const newAuthState = { role: "driver", name: d.name || phone, phone, driverId: d.driverId || "", email: state.auth?.email || "", token: d.token || "" };
-      localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
-      setState(prev => ({
-        ...prev,
-        auth: newAuthState,
-        loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
-        onlineDrivers: d.driverId ? { ...prev.onlineDrivers, [d.driverId]: new Date().getTime() } : prev.onlineDrivers
-      }));
-      // legacy: order upsert now uses Firestore
-      // if (!saved.ok) {
-      //   setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
-      // }
-
-      setTab("driver");
-      return;
-    }
-    setDriverForm(prev => ({ ...prev, phone }));
-    setAuth({ role: "driver-register", name: "", phone, driverId: "", email: state.auth?.email || "", token: "" });
+    // Firebase OTP flow
+    if (otpState.stage === "code") return verifyOtpAndLogin();
+    return startOtp();
   };
 
 	  const registerDriver = async () => {
 	    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
-	    const normalizedPhone = driverForm.phone.trim().replace(/\D/g, "");
-    const nextDriver = {
-      id: `DRV_${normalizedPhone || Date.now()}`,
-      firstName: driverForm.firstName.trim(),
-      lastName: driverForm.lastName.trim(),
-      name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
-      phone: driverForm.phone.trim(),
-      vehicle: driverForm.vehicle.trim(),
-      plate: driverForm.plate.trim(),
-      zone: driverForm.zone,
-      lat: 18.7883,
-      lng: 98.9853,
-      createdAt: new Date().toISOString()
-	    };
-
-	    // With Firebase Auth, driver registration happens after OTP login.
-	    // Here we only keep a local profile draft; the server will store profile in Firestore users/{uid}.
-	    setSyncStatus("⚠️ โปรดเข้าสู่ระบบด้วย OTP ก่อน แล้วค่อยกรอกข้อมูลคนขับเพื่อบันทึกเข้าระบบ");
-	    setDriverForm(prev => ({ ...prev, phone: normalizedPhone || prev.phone }));
-	    return;
-    const loginEntry = {
-      id: `L${Date.now()}`,
-      role: "driver",
-      name: nextDriver.name,
-      phone: nextDriver.phone,
-      driverId: nextDriver.id,
-      loginAt: new Date().toLocaleString("th-TH"),
-      loginTime: new Date().getTime()
-    };
-    const nextDrivers = [nextDriver, ...(state.drivers || [])];
-    setState(prev => ({
-      ...prev,
-      drivers: nextDrivers,
-      auth: { role: "driver", name: nextDriver.name, phone: nextDriver.phone, driverId: nextDriver.id, email: prev.auth?.email || "", token: prev.auth?.token || "" },
-      loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
-      onlineDrivers: { ...prev.onlineDrivers, [nextDriver.id]: new Date().getTime() }
-    }));
-    setDriverId(nextDriver.id);
-    setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
-    setTab("driver");
-    // Driver is stored in Firestore via auth/users profile
-    setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" สำเร็จ`);
-  };
+	    if (state.auth?.role !== "driver" || !state.auth?.token) {
+	      setSyncStatus("⚠️ กรุณาเข้าสู่ระบบคนขับด้วย OTP ก่อน");
+	      return;
+	    }
+	    try {
+	      const res = await fetch("/api/auth/login", {
+	        method: "POST",
+	        headers: { "Content-Type": "application/json" },
+	        body: JSON.stringify({
+	          idToken: state.auth.token,
+	          role: "driver",
+	          name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
+	          phone: driverForm.phone.trim()
+	        })
+	      });
+	      const json = await res.json();
+	      if (!json?.ok) throw new Error(json?.error || "save failed");
+	      const d = json.data || {};
+	      const newAuthState = { ...state.auth, role: "driver", name: d.name || state.auth.name, driverId: d.driverId || state.auth.driverId || "" };
+	      localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
+	      setState(prev => ({ ...prev, auth: newAuthState }));
+	      if (newAuthState.driverId) setDriverId(newAuthState.driverId);
+	      setSyncStatus("✅ บันทึกข้อมูลคนขับแล้ว");
+	    } catch (e) {
+	      setSyncStatus(`❌ บันทึกข้อมูลคนขับไม่สำเร็จ: ${e?.message || e}`);
+	    }
+	  };
 
   const logout = () => {
     setState(prev => {
@@ -685,6 +650,7 @@ export default function App() {
       if (auth.driverId) delete updated[auth.driverId];
       return { ...prev, onlineDrivers: updated };
     });
+    try { fbLogout(); } catch {}
     localStorage.removeItem("hillkoff_auth");
     setAuth({ role: "", name: "", phone: "", driverId: "", email: state.auth?.email || "", token: "" });
   };
@@ -1103,10 +1069,17 @@ export default function App() {
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
                 จดจำเบอร์โทรในครั้งต่อไป
               </label>
+              <div id="recaptcha-container" />
+              {otpState.stage === "code" && (
+                <input value={otpState.code} onChange={e => setOtpState(p => ({ ...p, code: e.target.value }))} placeholder="กรอกรหัส OTP" inputMode="numeric" />
+              )}
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {loginForm.role === "sales" ? "เข้าหน้าแดชบอร์ดฝ่ายขาย" : "เข้าสู่ระบบคนขับ"}
+                {otpState.stage === "code" ? "ยืนยัน OTP" : (loginForm.role === "sales" ? "ส่ง OTP เพื่อเข้าใช้งานฝ่ายขาย" : "ส่ง OTP เพื่อเข้าใช้งานคนขับ")}
               </button>
-              <p className="login-note">ระบบจะโหลดข้อมูลลูกค้า ออเดอร์ และคนขับจาก Supabase หลังล็อกอิน</p>
+              {otpState.stage === "code" && (
+                <button className="secondary wide" onClick={() => setOtpState({ stage: "idle", code: "", confirmation: null })}>เปลี่ยนเบอร์</button>
+              )}
+              <p className="login-note">เข้าสู่ระบบด้วย OTP (Firebase Auth) และซิงก์ข้อมูลผ่าน Firestore</p>
             </>
           ) : (
             <>
