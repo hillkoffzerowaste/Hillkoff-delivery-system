@@ -221,14 +221,23 @@ export default function App() {
 
 	  // Wait for Firebase Auth session to be ready (so Firestore rules see request.auth)
 	  useEffect(() => {
-	    const unsub = onFirebaseAuthStateChanged(() => setFbAuthReady(true));
+	    // onAuthStateChanged should fire immediately (even with null user).
+	    // As a safety net, mark ready after 2s to avoid a stuck "connecting" UI.
+	    const t = setTimeout(() => setFbAuthReady(true), 2000);
+	    const unsub = onFirebaseAuthStateChanged(() => {
+	      clearTimeout(t);
+	      setFbAuthReady(true);
+	    });
 	    return () => { try { unsub?.(); } catch {} };
 	  }, []);
 
 	  // Firestore realtime sync (orders/customers/driver_locations/chat)
 	  useEffect(() => {
 	    if (typeof window === "undefined") return;
-	    if (!fbAuthReady) return;
+	    if (!fbAuthReady) {
+	      setSyncStatus("⏳ Waiting for Firebase Auth...");
+	      return;
+	    }
 	    if (!state.auth?.token) {
 	      setSyncStatus("Please login");
 	      return;
