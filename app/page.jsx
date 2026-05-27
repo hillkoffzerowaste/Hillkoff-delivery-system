@@ -277,7 +277,18 @@ export default function App() {
 	          ordersQ,
 	          (snap) => {
 	            const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-	            setState((prev) => ({ ...prev, orders: rows }));
+	            setState((prev) => {
+	              const prevById = {};
+	              (prev.orders || []).forEach((o) => { prevById[o.id] = o; });
+	              const merged = rows.map((r) => {
+	                const p = prevById[r.id];
+	                const keepLocalPhoto = p?.photo && (String(p.photo).startsWith("blob:") || String(p.photo).startsWith("data:"));
+	                const photo = keepLocalPhoto ? p.photo : (r.photo || "");
+	                const sharedToLine = p?.sharedToLine != null ? p.sharedToLine : Boolean(r.sharedToLine);
+	                return { ...r, photo, sharedToLine };
+	              });
+	              return { ...prev, orders: merged };
+	            });
 	            markConnected();
 	          },
 	          (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`)
@@ -487,8 +498,8 @@ export default function App() {
 	        salesName: order.salesName || "",
 	        salesPhone: order.salesPhone || "",
 	        status: order.status || "รอคนขับรับ",
-	        // POD is stored on-device only; never persist to Firestore
-	        photo: "",
+	        // POD is stored on-device only; never persist photo/blob URLs to Firestore
+	        sharedToLine: Boolean(order.sharedToLine),
 	        checkInAt: order.checkInAt || "",
 	        deliveredAt: order.deliveredAt || "",
 	        complaint: order.complaint || "",
