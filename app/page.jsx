@@ -613,6 +613,7 @@ export default function App() {
       }
 
       const d = json.data || {};
+      const dp = d.driverProfile || null;
       const newAuthState = {
         role: d.role || role,
         name: d.name || loginForm.name.trim() || "",
@@ -630,7 +631,31 @@ export default function App() {
       if (rememberPhone) {
         try { localStorage.setItem("hillkoff-last-phone", loginForm.phone.trim()); } catch {}
       }
-      setTab(newAuthState.role === "driver" ? "driver" : "sales");
+      if (newAuthState.role === "driver") {
+        const missing = !dp?.firstName || !dp?.plate || !dp?.vehicle;
+        if (dp) {
+          setDriverForm(p => ({
+            ...p,
+            firstName: dp.firstName || p.firstName,
+            lastName: dp.lastName || p.lastName,
+            phone: newAuthState.phone || p.phone,
+            vehicle: dp.vehicle || p.vehicle,
+            plate: dp.plate || p.plate,
+            zone: dp.zone || p.zone
+          }));
+        } else {
+          setDriverForm(p => ({ ...p, phone: newAuthState.phone || p.phone }));
+        }
+        if (missing) {
+          setAuth({ role: "driver-register" });
+          setTab("driver");
+          setSyncStatus("⚠️ กรุณากรอกข้อมูลคนขับครั้งแรก");
+          return;
+        }
+        setTab("driver");
+      } else {
+        setTab("sales");
+      }
     } catch (e) {
       setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`);
     }
@@ -663,7 +688,15 @@ export default function App() {
 	          role: "driver",
 	          name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
 	          phone: driverForm.phone.trim(),
-	          pin: loginForm.pin.trim()
+	          pin: loginForm.pin.trim(),
+	          driverProfile: {
+	            firstName: driverForm.firstName.trim(),
+	            lastName: driverForm.lastName.trim(),
+	            phone: driverForm.phone.trim(),
+	            vehicle: driverForm.vehicle,
+	            plate: driverForm.plate.trim(),
+	            zone: driverForm.zone
+	          }
 	        })
 	      });
 	      const json = await res.json();
@@ -674,6 +707,7 @@ export default function App() {
 	      setState(prev => ({ ...prev, auth: newAuthState }));
 	      if (newAuthState.driverId) setDriverId(newAuthState.driverId);
 	      setSyncStatus("✅ บันทึกข้อมูลคนขับแล้ว");
+	      setAuth({ role: "driver" });
 	    } catch (e) {
 	      setSyncStatus(`❌ บันทึกข้อมูลคนขับไม่สำเร็จ: ${e?.message || e}`);
 	    }

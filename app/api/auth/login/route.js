@@ -28,6 +28,7 @@ export async function POST(request) {
   const setPin = Boolean(payload?.setPin);
   const deviceId = String(payload?.deviceId || "").trim();
   const rememberDevice = Boolean(payload?.rememberDevice);
+  const driverProfile = payload?.driverProfile && typeof payload.driverProfile === "object" ? payload.driverProfile : null;
 
   if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
@@ -81,6 +82,15 @@ export async function POST(request) {
       pinSalt: nextPinSalt,
       pinHash: nextPinHash,
       trustedDevices: Array.from(nextTrusted),
+      driverProfile: role === "driver"
+        ? {
+            firstName: String(driverProfile?.firstName || existing?.driverProfile?.firstName || ""),
+            lastName: String(driverProfile?.lastName || existing?.driverProfile?.lastName || ""),
+            vehicle: String(driverProfile?.vehicle || existing?.driverProfile?.vehicle || ""),
+            plate: String(driverProfile?.plate || existing?.driverProfile?.plate || ""),
+            zone: String(driverProfile?.zone || existing?.driverProfile?.zone || "")
+          }
+        : null,
       updatedAt: new Date().toISOString(),
       createdAt: existing?.createdAt || new Date().toISOString()
     };
@@ -97,7 +107,7 @@ export async function POST(request) {
 
     return Response.json({
       ok: true,
-      data: { uid, role, phone: next.phone, name: next.name, driverId: next.driverId }
+      data: { uid, role, phone: next.phone, name: next.name, driverId: next.driverId, driverProfile: next.driverProfile || null }
     });
   } catch (e) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
