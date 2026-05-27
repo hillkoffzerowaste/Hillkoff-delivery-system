@@ -86,7 +86,7 @@ function osmPageUrl(lat, lng, zoom = 16) {
   return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lng)}#map=${encodeURIComponent(zoom)}/${encodeURIComponent(lat)}/${encodeURIComponent(lng)}`;
 }
 
-function osmEmbedUrl(lat, lng, zoom = 16) {
+function osmEmbedUrl(lat, lng, zoom = 16, marker = true) {
   if (lat == null || lng == null) return "";
   const delta = 0.01;
   const left = Number(lng) - delta;
@@ -94,7 +94,9 @@ function osmEmbedUrl(lat, lng, zoom = 16) {
   const top = Number(lat) + delta;
   const bottom = Number(lat) - delta;
   const bbox = `${left},${bottom},${right},${top}`;
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lng}`)}`;
+  const base = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik`;
+  if (!marker) return base;
+  return `${base}&marker=${encodeURIComponent(`${lat},${lng}`)}`;
 }
 
 function buildLineMessageForOrder(order) {
@@ -1429,43 +1431,44 @@ export default function App() {
             <section className="panel" style={{ gridColumn: "1 / -1" }}>
               {(() => {
                 const locs = state.driverLocations || {};
-                const driverIds = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
-                const effectiveId = selectedMapDriverId || driverIds[0] || "";
+                const online = state.onlineDrivers || {};
+                const onlineIds = Object.keys(locs).filter(did => online[did] && locs[did]?.lat && locs[did]?.lng);
+                const defaultCenter = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
+                const effectiveId = selectedMapDriverId || onlineIds[0] || "";
                 const selected = effectiveId ? locs[effectiveId] : null;
-                const embed = selected ? osmEmbedUrl(selected.lat, selected.lng, 15) : "";
+                const centerLat = selected?.lat ?? defaultCenter.lat;
+                const centerLng = selected?.lng ?? defaultCenter.lng;
+                const embed = osmEmbedUrl(centerLat, centerLng, 15, Boolean(selected));
 
                 return (
                   <>
-                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{driverIds.length} คนมีพิกัด</span></div>
-                    {driverIds.length === 0 ? (
-                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีพิกัดคนขับ (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{onlineIds.length} คนออนไลน์มีพิกัด</span></div>
+                    {onlineIds.length === 0 ? (
+                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับออนไลน์ที่ส่งพิกัด (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
                     ) : (
-                      <>
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-                          {driverIds.map(did => {
-                            const d = locs[did];
-                            const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
-                            return (
-                              <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
-                                📍 {name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {selected && (
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
-                              <b>{selected.driverName || effectiveId}</b>
-                              <small style={{ color: "#6b7280" }}>{selected.zone || "-"}</small>
-                            </div>
-                            <iframe title="osm-mini-map" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
-                            <a href={osmPageUrl(selected.lat, selected.lng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
-                              เปิดแผนที่เต็ม (OpenStreetMap)
-                            </a>
-                          </div>
-                        )}
-                      </>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                        {onlineIds.map(did => {
+                          const d = locs[did];
+                          const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
+                          return (
+                            <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
+                              📍 {name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
+                        <b>{selected?.driverName ? `📍 ${selected.driverName}` : "แผนที่ภาพรวม"}</b>
+                        <small style={{ color: "#6b7280" }}>{selected?.zone || "เชียงใหม่"}</small>
+                      </div>
+                      <iframe title="osm-mini-map" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
+                      <a href={osmPageUrl(centerLat, centerLng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
+                        เปิดแผนที่เต็ม (OpenStreetMap)
+                      </a>
+                    </div>
                   </>
                 );
               })()}
@@ -2138,43 +2141,44 @@ export default function App() {
 		            <section className="panel">
 		              {(() => {
 		                const locs = state.driverLocations || {};
-		                const driverIds = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
-		                const effectiveId = selectedMapDriverId || driverIds[0] || "";
+		                const online = state.onlineDrivers || {};
+		                const onlineIds = Object.keys(locs).filter(did => online[did] && locs[did]?.lat && locs[did]?.lng);
+		                const defaultCenter = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
+		                const effectiveId = selectedMapDriverId || onlineIds[0] || "";
 		                const selected = effectiveId ? locs[effectiveId] : null;
-		                const embed = selected ? osmEmbedUrl(selected.lat, selected.lng, 15) : "";
+		                const centerLat = selected?.lat ?? defaultCenter.lat;
+		                const centerLng = selected?.lng ?? defaultCenter.lng;
+		                const embed = osmEmbedUrl(centerLat, centerLng, 15, Boolean(selected));
 
 		                return (
 		                  <>
-		                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{driverIds.length} คนมีพิกัด</span></div>
-		                    {driverIds.length === 0 ? (
-		                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีพิกัดคนขับ (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+		                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{onlineIds.length} คนออนไลน์มีพิกัด</span></div>
+		                    {onlineIds.length === 0 ? (
+		                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับออนไลน์ที่ส่งพิกัด (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
 		                    ) : (
-		                      <>
-		                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-		                          {driverIds.map(did => {
-		                            const d = locs[did];
-		                            const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
-		                            return (
-		                              <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
-		                                📍 {name}
-		                              </button>
-		                            );
-		                          })}
-		                        </div>
-		                        {selected && (
-		                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
-		                            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
-		                              <b>{selected.driverName || effectiveId}</b>
-		                              <small style={{ color: "#6b7280" }}>{selected.zone || "-"}</small>
-		                            </div>
-		                            <iframe title="osm-mini-map-settings" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
-		                            <a href={osmPageUrl(selected.lat, selected.lng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
-		                              เปิดแผนที่เต็ม (OpenStreetMap)
-		                            </a>
-		                          </div>
-		                        )}
-		                      </>
+		                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+		                        {onlineIds.map(did => {
+		                          const d = locs[did];
+		                          const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
+		                          return (
+		                            <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
+		                              📍 {name}
+		                            </button>
+		                          );
+		                        })}
+		                      </div>
 		                    )}
+
+		                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
+		                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
+		                        <b>{selected?.driverName ? `📍 ${selected.driverName}` : "แผนที่ภาพรวม"}</b>
+		                        <small style={{ color: "#6b7280" }}>{selected?.zone || "เชียงใหม่"}</small>
+		                      </div>
+		                      <iframe title="osm-mini-map-settings" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
+		                      <a href={osmPageUrl(centerLat, centerLng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
+		                        เปิดแผนที่เต็ม (OpenStreetMap)
+		                      </a>
+		                    </div>
 		                  </>
 		                );
 		              })()}
