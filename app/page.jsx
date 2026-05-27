@@ -671,8 +671,8 @@ export default function App() {
 
 	  const registerDriver = async () => {
 	    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
-	    if (state.auth?.role !== "driver" || !state.auth?.token) {
-	      setSyncStatus("⚠️ กรุณาเข้าสู่ระบบคนขับก่อน");
+	    if (!state.auth?.token) {
+	      setSyncStatus("⚠️ กรุณาเข้าสู่ระบบก่อน");
 	      return;
 	    }
       if (!loginForm.pin.trim()) {
@@ -708,6 +708,7 @@ export default function App() {
 	      if (newAuthState.driverId) setDriverId(newAuthState.driverId);
 	      setSyncStatus("✅ บันทึกข้อมูลคนขับแล้ว");
 	      setAuth({ role: "driver" });
+	      setTab("driver");
 	    } catch (e) {
 	      setSyncStatus(`❌ บันทึกข้อมูลคนขับไม่สำเร็จ: ${e?.message || e}`);
 	    }
