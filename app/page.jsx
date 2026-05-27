@@ -334,7 +334,7 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [state.auth?.token, state.auth?.role, state.auth?.driverId, driverId]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId]);
 
   // (Supabase removed) no forced polling needed
 
