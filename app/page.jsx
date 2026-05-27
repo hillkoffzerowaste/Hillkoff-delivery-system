@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getFirebaseAuth, getFirestoreDb, fb, startPhoneSignInE164, fbLogout, onFirebaseAuthStateChanged } from "../lib/firebaseClient";
+import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, signInAnon } from "../lib/firebaseClient";
 import {
   AlertTriangle,
   Camera,
@@ -161,8 +161,7 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
-  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "" });
-  const [otpState, setOtpState] = useState({ stage: "idle", code: "", confirmation: null }); // idle | code
+  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -540,37 +539,12 @@ export default function App() {
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
 
-  const normalizePhoneToE164 = (raw) => {
-    const digits = String(raw || "").replace(/\D/g, "");
-    if (!digits) return "";
-    // Thailand default: allow 0xxxxxxxxx -> +66xxxxxxxxx
-    if (digits.startsWith("0")) return `+66${digits.slice(1)}`;
-    if (digits.startsWith("66")) return `+${digits}`;
-    if (digits.startsWith("+")) return digits;
-    // fallback: assume already national without 0
-    return `+66${digits}`;
-  };
-
-  const startOtp = async () => {
+  const pinLogin = async () => {
     if (!loginForm.phone.trim()) return;
+    if (!loginForm.pin.trim()) return;
     try {
-      setSyncStatus("⏳ กำลังส่งรหัส OTP...");
-      const e164 = normalizePhoneToE164(loginForm.phone.trim());
-      const confirmation = await startPhoneSignInE164(e164);
-      setOtpState({ stage: "code", code: "", confirmation });
-      setSyncStatus("✅ ส่ง OTP แล้ว กรุณากรอกรหัส");
-    } catch (e) {
-      setSyncStatus(`❌ ส่ง OTP ไม่สำเร็จ: ${e?.message || e}`);
-    }
-  };
-
-  const verifyOtpAndLogin = async () => {
-    if (otpState.stage !== "code" || !otpState.confirmation) return;
-    const code = String(otpState.code || "").trim();
-    if (!code) return;
-    try {
-      setSyncStatus("⏳ กำลังยืนยัน OTP...");
-      const cred = await otpState.confirmation.confirm(code);
+      setSyncStatus("⏳ กำลังเข้าสู่ระบบ...");
+      const cred = await signInAnon();
       const user = cred?.user;
       if (!user) throw new Error("No user");
       const idToken = await user.getIdToken(true);
@@ -583,7 +557,8 @@ export default function App() {
           idToken,
           role,
           name: loginForm.name.trim(),
-          phone: loginForm.phone.trim()
+          phone: loginForm.phone.trim(),
+          pin: loginForm.pin.trim()
         })
       });
       const json = await res.json();
@@ -601,32 +576,31 @@ export default function App() {
       localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
       setState(prev => ({ ...prev, auth: newAuthState }));
       if (newAuthState.driverId) setDriverId(newAuthState.driverId);
-      setOtpState({ stage: "idle", code: "", confirmation: null });
       setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
       setTab(newAuthState.role === "driver" ? "driver" : "sales");
     } catch (e) {
-      setSyncStatus(`❌ ยืนยัน OTP ไม่สำเร็จ: ${e?.message || e}`);
+      setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`);
     }
   };
 
   const loginSales = async () => {
-    // Firebase OTP flow
-    if (otpState.stage === "code") return verifyOtpAndLogin();
-    return startOtp();
+    return pinLogin();
   };
 
   const loginDriver = async () => {
-    // Firebase OTP flow
-    if (otpState.stage === "code") return verifyOtpAndLogin();
-    return startOtp();
+    return pinLogin();
   };
 
 	  const registerDriver = async () => {
 	    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
 	    if (state.auth?.role !== "driver" || !state.auth?.token) {
-	      setSyncStatus("⚠️ กรุณาเข้าสู่ระบบคนขับด้วย OTP ก่อน");
+	      setSyncStatus("⚠️ กรุณาเข้าสู่ระบบคนขับก่อน");
 	      return;
 	    }
+      if (!loginForm.pin.trim()) {
+        setSyncStatus("⚠️ กรุณากรอก PIN");
+        return;
+      }
 	    try {
 	      const res = await fetch("/api/auth/login", {
 	        method: "POST",
@@ -635,7 +609,8 @@ export default function App() {
 	          idToken: state.auth.token,
 	          role: "driver",
 	          name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
-	          phone: driverForm.phone.trim()
+	          phone: driverForm.phone.trim(),
+	          pin: loginForm.pin.trim()
 	        })
 	      });
 	      const json = await res.json();
@@ -1065,28 +1040,22 @@ export default function App() {
           </div>
           {auth.role !== "driver-register" ? (
             <>
-              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>ใช้ Supabase</span></div>
+              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>Phone + PIN</span></div>
               <div className="segmented">
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
               </div>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+              <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder="PIN" inputMode="numeric" />
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
                 จดจำเบอร์โทรในครั้งต่อไป
               </label>
-              <div id="recaptcha-container" />
-              {otpState.stage === "code" && (
-                <input value={otpState.code} onChange={e => setOtpState(p => ({ ...p, code: e.target.value }))} placeholder="กรอกรหัส OTP" inputMode="numeric" />
-              )}
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {otpState.stage === "code" ? "ยืนยัน OTP" : (loginForm.role === "sales" ? "ส่ง OTP เพื่อเข้าใช้งานฝ่ายขาย" : "ส่ง OTP เพื่อเข้าใช้งานคนขับ")}
+                {loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขาย" : "เข้าใช้งานคนขับ"}
               </button>
-              {otpState.stage === "code" && (
-                <button className="secondary wide" onClick={() => setOtpState({ stage: "idle", code: "", confirmation: null })}>เปลี่ยนเบอร์</button>
-              )}
-              <p className="login-note">เข้าสู่ระบบด้วย OTP (Firebase Auth) และซิงก์ข้อมูลผ่าน Firestore</p>
+              <p className="login-note">ล็อกอินด้วยเบอร์โทร + PIN (ใช้ Firebase Auth แบบ Anonymous เพื่อผ่าน Firestore Rules)</p>
             </>
           ) : (
             <>

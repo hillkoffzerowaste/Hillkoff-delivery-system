@@ -6,6 +6,14 @@ function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
 
+function getExpectedPinForRole(role) {
+  const anyPin = process.env.APP_LOGIN_PIN;
+  if (anyPin) return String(anyPin).trim();
+  if (role === "sales") return String(process.env.APP_LOGIN_PIN_SALES || "").trim();
+  if (role === "driver") return String(process.env.APP_LOGIN_PIN_DRIVER || "").trim();
+  return "";
+}
+
 export async function POST(request) {
   let payload;
   try {
@@ -19,9 +27,14 @@ export async function POST(request) {
   const name = String(payload?.name || "").trim();
   const phoneRaw = String(payload?.phone || "").trim();
   const phone = normalizePhoneDigits(phoneRaw);
+  const pin = String(payload?.pin || "").trim();
 
   if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
+  if (!pin) return Response.json({ ok: false, error: "Missing pin" }, { status: 400 });
+  const expectedPin = getExpectedPinForRole(role);
+  if (!expectedPin) return Response.json({ ok: false, error: "Server pin not configured" }, { status: 500 });
+  if (pin !== expectedPin) return Response.json({ ok: false, error: "Invalid pin" }, { status: 401 });
 
   try {
     const adminAuth = getAdminAuth();
@@ -31,9 +44,6 @@ export async function POST(request) {
     const uid = decoded.uid;
     const tokenPhone = decoded.phone_number || "";
     const tokenDigits = normalizePhoneDigits(tokenPhone);
-    if (phone && tokenDigits && phone !== tokenDigits) {
-      return Response.json({ ok: false, error: "Phone mismatch" }, { status: 401 });
-    }
 
     const userRef = db.collection("users").doc(uid);
     const existingSnap = await userRef.get();
@@ -42,8 +52,8 @@ export async function POST(request) {
     const next = {
       uid,
       role,
-      phone: tokenPhone || phoneRaw || null,
-      phoneDigits: tokenDigits || phone || null,
+      phone: tokenPhone || phoneRaw || existing?.phone || null,
+      phoneDigits: tokenDigits || phone || existing?.phoneDigits || null,
       name: name || existing?.name || null,
       driverId: role === "driver" ? (existing?.driverId || uid) : null,
       updatedAt: new Date().toISOString(),
@@ -68,4 +78,3 @@ export async function POST(request) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
   }
 }
-
