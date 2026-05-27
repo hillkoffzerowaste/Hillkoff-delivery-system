@@ -1,31 +1,37 @@
-import { getSupabaseAdmin } from "../../../../lib/supabaseServer";
+import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const token = String(searchParams.get("token") || "").trim();
-  const role = String(searchParams.get("role") || "").trim();
-  if (!token) return Response.json({ ok: true, valid: false }, { status: 200 });
-
-  let supabase;
+export async function POST(request) {
+  let payload;
   try {
-    supabase = getSupabaseAdmin();
-  } catch (e) {
-    return Response.json({ ok: false, valid: false, error: e.message || "Server misconfigured" }, { status: 500 });
+    payload = await request.json();
+  } catch {
+    return Response.json({ ok: false, valid: false, error: "Invalid JSON" }, { status: 400 });
   }
-  const { data, error } = await supabase
-    .from("auth_sessions")
-    .select("role,token,expiresAt,user_id")
-    .eq("token", token)
-    .maybeSingle();
 
-  if (error || !data) return Response.json({ ok: true, valid: false }, { status: 200 });
-  if (role && data.role !== role) return Response.json({ ok: true, valid: false }, { status: 200 });
-  const valid = new Date(data.expiresAt).getTime() > Date.now();
-  return Response.json({
-    ok: true,
-    valid,
-    data: valid ? { role: data.role, userId: data.user_id, expiresAt: data.expiresAt } : null
-  });
+  const idToken = String(payload?.idToken || "").trim();
+  if (!idToken) return Response.json({ ok: true, valid: false }, { status: 200 });
+
+  try {
+    const adminAuth = getAdminAuth();
+    const decoded = await adminAuth.verifyIdToken(idToken, true);
+    const db = getAdminDb();
+    const snap = await db.collection("users").doc(decoded.uid).get();
+    const profile = snap.exists ? snap.data() : null;
+    return Response.json({
+      ok: true,
+      valid: true,
+      data: {
+        uid: decoded.uid,
+        phone: decoded.phone_number || null,
+        role: profile?.role || null,
+        name: profile?.name || null,
+        driverId: profile?.driverId || null
+      }
+    });
+  } catch (e) {
+    return Response.json({ ok: true, valid: false, error: e?.message || String(e) }, { status: 200 });
+  }
 }
+

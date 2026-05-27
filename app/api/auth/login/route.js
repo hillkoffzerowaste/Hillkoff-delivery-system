@@ -1,30 +1,12 @@
-import crypto from "node:crypto";
-import { getSupabaseAdmin } from "../../../../lib/supabaseServer";
+import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
-function sha256Hex(text) {
-  return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
-}
-
-function clientMeta(request) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    null;
-  const userAgent = request.headers.get("user-agent") || null;
-  return { ip, userAgent };
+function normalizePhoneDigits(raw) {
+  return String(raw || "").replace(/\D/g, "");
 }
 
 export async function POST(request) {
-  let supabase;
-  try {
-    supabase = getSupabaseAdmin();
-  } catch (e) {
-    return Response.json({ ok: false, error: e.message || "Server misconfigured" }, { status: 500 });
-  }
-  const { ip, userAgent } = clientMeta(request);
-
   let payload;
   try {
     payload = await request.json();
@@ -32,103 +14,58 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const role = String(payload?.role || "").trim();
-  const phone = String(payload?.phone || "").trim();
+  const idToken = String(payload?.idToken || "").trim();
+  const role = String(payload?.role || "").trim(); // driver | sales
   const name = String(payload?.name || "").trim();
-  const pin = String(payload?.pin || "").trim();
+  const phoneRaw = String(payload?.phone || "").trim();
+  const phone = normalizePhoneDigits(phoneRaw);
 
-  if (!["driver", "sales"].includes(role)) {
-    return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
-  }
-  if (!phone) {
-    return Response.json({ ok: false, error: "Missing phone" }, { status: 400 });
-  }
+  if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
+  if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
 
   try {
-    let userId = null;
-    let displayName = name || "";
-    let driverId = null;
+    const adminAuth = getAdminAuth();
+    const decoded = await adminAuth.verifyIdToken(idToken, true);
+    const db = getAdminDb();
 
-    if (role === "driver") {
-      const { data: driver, error } = await supabase
-        .from("drivers")
-        .select("id,name,phone,firstName,lastName")
-        .eq("phone", phone)
-        .maybeSingle();
-      if (error) throw error;
-      if (!driver) throw new Error("ไม่พบข้อมูลคนขับ");
-
-      driverId = driver.id;
-      userId = driver.id;
-      displayName =
-        driver.name ||
-        [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim() ||
-        phone;
-    } else {
-      const { data: salesUser, error: salesErr } = await supabase
-        .from("sales_users")
-        .select("id,name,phone,active,pin_hash")
-        .eq("phone", phone)
-        .maybeSingle();
-
-      if (salesErr) throw salesErr;
-
-      if (salesUser) {
-        if (!salesUser.active) throw new Error("บัญชีถูกระงับการใช้งาน");
-        // PIN is optional; only validate when provided
-        if (pin) {
-          if (sha256Hex(pin) !== String(salesUser.pin_hash || "")) throw new Error("PIN ไม่ถูกต้อง");
-        }
-        userId = salesUser.id;
-        displayName = salesUser.name;
-      } else {
-        if (!displayName) throw new Error("กรุณากรอกชื่อฝ่ายขาย");
-        userId = phone;
-      }
+    const uid = decoded.uid;
+    const tokenPhone = decoded.phone_number || "";
+    const tokenDigits = normalizePhoneDigits(tokenPhone);
+    if (phone && tokenDigits && phone !== tokenDigits) {
+      return Response.json({ ok: false, error: "Phone mismatch" }, { status: 401 });
     }
 
-    const token = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + (role === "driver" ? 30 : 7) * 24 * 60 * 60 * 1000);
+    const userRef = db.collection("users").doc(uid);
+    const existingSnap = await userRef.get();
+    const existing = existingSnap.exists ? existingSnap.data() : null;
 
-    const { error: sessErr } = await supabase.from("auth_sessions").insert({
+    const next = {
+      uid,
       role,
-      user_id: userId,
-      token,
-      expiresAt: expiresAt.toISOString(),
-      createdAt: new Date().toISOString()
-    });
-    if (sessErr) throw sessErr;
+      phone: tokenPhone || phoneRaw || null,
+      phoneDigits: tokenDigits || phone || null,
+      name: name || existing?.name || null,
+      driverId: role === "driver" ? (existing?.driverId || uid) : null,
+      updatedAt: new Date().toISOString(),
+      createdAt: existing?.createdAt || new Date().toISOString()
+    };
 
-    await supabase.from("login_events").insert({
+    await userRef.set(next, { merge: true });
+
+    await db.collection("login_events").add({
+      uid,
       role,
-      user_id: userId,
-      phone,
+      phone: next.phone,
       success: true,
-      error: null,
-      ip,
-      user_agent: userAgent,
       createdAt: new Date().toISOString()
     });
 
     return Response.json({
       ok: true,
-      data: { token, role, userId, name: displayName, driverId, expiresAt: expiresAt.toISOString() }
+      data: { uid, role, phone: next.phone, name: next.name, driverId: next.driverId }
     });
-  } catch (err) {
-    const message = err?.message || "Login failed";
-    try {
-      await supabase.from("login_events").insert({
-        role,
-        user_id: null,
-        phone,
-        success: false,
-        error: message,
-        ip,
-        user_agent: userAgent,
-        createdAt: new Date().toISOString()
-      });
-    } catch {}
-
-    return Response.json({ ok: false, error: message }, { status: 401 });
+  } catch (e) {
+    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
   }
 }
+

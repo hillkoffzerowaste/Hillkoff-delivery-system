@@ -27,26 +27,9 @@ import {
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
 
-// Initialize Supabase client - will be set in useEffect
+// Supabase removed: Firebase (Auth+Firestore) is used instead
 let supabase = null;
-
-function initSupabase() {
-  if (typeof window === "undefined") return null;
-  if (supabase) return supabase;
-  
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  
-  if (!supabaseUrl || !supabaseKey) {
-    console.error("❌ Missing Supabase env vars:", { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
-    return null;
-  }
-  
-  const { createClient } = require("@supabase/supabase-js");
-  supabase = createClient(supabaseUrl, supabaseKey);
-  console.log("✅ Supabase initialized:", supabaseUrl);
-  return supabase;
-}
+function initSupabase() { return null; }
 
 const initialDrivers = [];
 
@@ -220,7 +203,94 @@ export default function App() {
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
 
-  useEffect(() => setState(readState()), []);
+	  useEffect(() => setState(readState()), []);
+
+	  // Firestore realtime sync (orders/customers/driver_locations/chat)
+	  useEffect(() => {
+	    if (typeof window === "undefined") return;
+	    const db = getFirestoreDb();
+	    const unsubs = [];
+
+	    // Orders
+	    try {
+	      let ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(500));
+	      if (state.auth?.role === "driver") {
+	        const did = state.auth?.driverId || driverId || "";
+	        if (did) {
+	          ordersQ = fb.query(
+	            fb.collection(db, "orders"),
+	            fb.where("driverId", "in", ["", null, did]),
+	            fb.orderBy("updatedAt", "desc"),
+	            fb.limit(500)
+	          );
+	        } else {
+	          ordersQ = fb.query(
+	            fb.collection(db, "orders"),
+	            fb.where("driverId", "in", ["", null]),
+	            fb.orderBy("updatedAt", "desc"),
+	            fb.limit(500)
+	          );
+	        }
+	      }
+	      unsubs.push(
+	        fb.onSnapshot(
+	          ordersQ,
+	          (snap) => {
+	            const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	            setState((prev) => ({ ...prev, orders: rows }));
+	          },
+	          (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`)
+	        )
+	      );
+	    } catch (e) {
+	      console.warn("orders onSnapshot error", e);
+	    }
+
+	    // Customers
+	    try {
+	      const custQ = fb.query(fb.collection(db, "customers"), fb.orderBy("updatedAt", "desc"), fb.limit(500));
+	      unsubs.push(
+	        fb.onSnapshot(custQ, (snap) => {
+	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	          setState((prev) => ({ ...prev, customers: rows }));
+	        })
+	      );
+	    } catch {}
+
+	    // Driver locations
+	    try {
+	      const locQ = fb.query(fb.collection(db, "driver_locations"), fb.orderBy("updatedAt", "desc"), fb.limit(200));
+	      unsubs.push(
+	        fb.onSnapshot(locQ, (snap) => {
+	          const next = {};
+	          snap.docs.forEach((d) => {
+	            const v = d.data() || {};
+	            const did = v.driverId || d.id;
+	            next[did] = { driverId: did, ...(v || {}) };
+	          });
+	          setState((prev) => ({ ...prev, driverLocations: next }));
+	        })
+	      );
+	    } catch {}
+
+	    // Chat messages (last 50)
+	    try {
+	      const chatQ = fb.query(fb.collection(db, "chat_messages"), fb.orderBy("createdAt", "desc"), fb.limit(50));
+	      unsubs.push(
+	        fb.onSnapshot(chatQ, (snap) => {
+	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	          setChatMessages(rows.reverse());
+	        })
+	      );
+	    } catch {}
+
+	    return () => {
+	      unsubs.forEach((u) => {
+	        try { u(); } catch {}
+	      });
+	    };
+	    // eslint-disable-next-line react-hooks/exhaustive-deps
+	  }, [state.auth?.role, state.auth?.driverId, driverId]);
 
   // Force initial fetch for driver role
   useEffect(() => {
@@ -333,264 +403,32 @@ export default function App() {
 
   useEffect(() => {
     if (!chatOpen) return;
-    if (!supabase) supabase = initSupabase();
-    refreshChat();
-    const t = setInterval(refreshChat, 3000);
-    return () => clearInterval(t);
+    // Firestore chat is realtime via onSnapshot; no polling needed
   }, [chatOpen]);
 
   const sendChat = async () => {
     const text = (chatText || "").trim();
     if (!text) return;
-    if (!supabase) supabase = initSupabase();
-    if (!supabase) {
-      alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-      return;
-    }
     setChatText("");
-    const payload = {
-      sender_role: state.auth?.role || "",
-      sender_name: state.auth?.name || "",
-      sender_phone: state.auth?.phone || "",
-      message: text
-    };
-    const { error } = await supabase.from("chat_messages").insert(payload);
-    if (error) {
-      alert(`❌ ส่งข้อความไม่สำเร็จ: ${error.message}`);
-      return;
+    try {
+      const db = getFirestoreDb();
+      await fb.addDoc(fb.collection(db, "chat_messages"), {
+        sender_role: state.auth?.role || "",
+        sender_name: state.auth?.name || "",
+        sender_phone: state.auth?.phone || "",
+        message: text,
+        createdAt: fb.serverTimestamp(),
+        updatedAt: fb.serverTimestamp()
+      });
+    } catch (e) {
+      alert(`❌ ส่งข้อความไม่สำเร็จ: ${e?.message || e}`);
     }
-    await refreshChat();
   };
 
-	  // Polling mechanism for real-time sync
-	  const refreshFromSupabase = async () => {
-	    if (!supabase) {
-	      console.warn("⚠️ Supabase not initialized yet");
-	      return;
-	    }
-	    if (refreshInFlightRef.current) return;
-	    
-	    // Skip refresh during reset to prevent old data from being restored
-	    if (isResettingOrdersRef.current) {
-	      console.log("⏸️ Skipping refreshFromSupabase during reset");
-	      return;
-	    }
-	    
-	    try {
-	      refreshInFlightRef.current = true;
-	      const nowIso = new Date().toISOString();
+		  // Legacy Supabase refresh (disabled). Firestore onSnapshot is used instead.
+		  const refreshFromSupabase = async () => {};
 
-	      const orderCols = "id,customerId,customerName,customerPhone,zone,address,mapUrl,window,boxes,cod,driverId,driverName,salesName,salesPhone,status,photo,checkInAt,deliveredAt,complaint,salesNote,createdAt,updatedAt";
-	      const customerCols = "id,name,contact,phone,zone,address,mapUrl,note,updatedAt";
-	      const driverLocCols = "id,driverId,driverName,plate,zone,lat,lng,timestamp,updatedAt";
-
-	      let ordersQuery = supabase.from("orders").select(orderCols);
-	      if (lastOrdersPullRef.current) ordersQuery = ordersQuery.gt("updatedAt", lastOrdersPullRef.current);
-	      if (state.auth?.role === "driver") {
-	        const did = state.auth?.driverId || driverId || "";
-	        ordersQuery = did
-	          ? ordersQuery.or(`driverId.is.null,driverId.eq.,driverId.eq.${did}`)
-	          : ordersQuery.or("driverId.is.null,driverId.eq.");
-	      }
-	      ordersQuery = ordersQuery.order("updatedAt", { ascending: true }).limit(500);
-
-	      let customersQuery = supabase.from("customers").select(customerCols);
-	      if (lastCustomersPullRef.current) customersQuery = customersQuery.gt("updatedAt", lastCustomersPullRef.current);
-	      customersQuery = customersQuery.order("updatedAt", { ascending: true }).limit(500);
-
-	      let driverLocQuery = supabase.from("driver_locations").select(driverLocCols);
-	      if (lastDriverLocationsPullRef.current) driverLocQuery = driverLocQuery.gt("updatedAt", lastDriverLocationsPullRef.current);
-	      driverLocQuery = driverLocQuery.order("updatedAt", { ascending: true }).limit(500);
-
-	      const { data: supabaseOrders, error: ordersError } = await ordersQuery;
-	      const { data: supabaseCustomers, error: customersError } = await customersQuery;
-	      const { data: supabaseDriverLocations, error: driverLocationsError } = await driverLocQuery;
-
-	      if (ordersError) setSyncStatus?.(`⚠️ Supabase orders error: ${ordersError.message}`);
-	      if (customersError) console.warn("⚠️ Supabase customers pull error:", customersError.message);
-	      if (driverLocationsError) console.warn("⚠️ Supabase driver_locations pull error:", driverLocationsError.message);
-      
-      console.log("📥 Pulled from Supabase:", { orders: supabaseOrders?.length, customers: supabaseCustomers?.length, driver_locations: supabaseDriverLocations?.length });
-      
-      setState(prev => {
-        let changed = false;
-        const newState = { ...prev };
-        
-        // Skip all merging during reset to prevent old data from being restored
-        if (isResettingOrdersRef.current) {
-          console.log("⏸️ [RESET] Skipping merge during reset - isResettingOrders = true");
-          return prev;
-        }
-        
-        // For orders: merge - keep local orders, update status/data from Supabase
-        if (Array.isArray(supabaseOrders) && Array.isArray(prev.orders)) {
-          console.log(`🔄 Merging orders: ${prev.orders.length} local + ${supabaseOrders.length} from Supabase`);
-          const merged = [...prev.orders];
-          let newOrdersAdded = 0;
-          const currentDriverId = prev.auth?.driverId || "";
-          
-          for (const sbOrder of supabaseOrders) {
-            // Convert snake_case to camelCase
-            const order = convertToCamelCase(sbOrder);
-            const idx = merged.findIndex(o => o.id === order.id);
-            if (idx >= 0) {
-              // Update existing orders - but preserve local status/photo changes that haven't synced yet
-              const localOrder = merged[idx];
-              // Keep local status if it's more advanced (e.g., local "กำลังจัดส่ง" shouldn't revert to "กำลังส่ง")
-              const statusHierarchy = { "รอคนขับรับ": 0, "กำลังส่ง": 1, "กำลังจัดส่ง": 2, "ส่งสำเร็จ": 3, "ยกเลิก": 4 };
-              const shouldKeepLocalStatus = (statusHierarchy[localOrder.status] || -1) > (statusHierarchy[order.status] || -1);
-              const photo = localOrder.photo || order.photo; // Keep photo if either has it
-              
-              merged[idx] = { ...order, ...localOrder, status: shouldKeepLocalStatus ? localOrder.status : order.status, photo };
-              console.log(`📝 Updated order ${order.id}${shouldKeepLocalStatus ? ` (kept local status: ${localOrder.status})` : ""}`);
-            } else if (prev.auth?.role === "driver") {
-              // Driver page: STRICT FILTER - only add available orders OR orders already assigned to this driver
-              const isAvailable = !order.driverId || order.driverId === "" || order.status === "รอคนขับรับ";
-              const isMyOrder = order.driverId === currentDriverId;
-              
-              if (isAvailable || isMyOrder) {
-                merged.push(order);
-                if (isAvailable) newOrdersAdded++;
-                console.log(`➕ [NEW ORDER] Added order ${order.id} for driver - ${order.customerName} ${isMyOrder ? "(already assigned)" : "(available)"}`);
-              } else {
-                console.log(`❌ [FILTERED] Skipping order ${order.id} (assigned to different driver: ${order.driverId})`);
-              }
-            } else if (prev.auth?.role === "sales") {
-              // Sales page: ADD all new orders from Supabase
-              merged.push(order);
-              newOrdersAdded++;
-              console.log(`➕ [NEW ORDER] Added new order ${order.id} for sales - ${order.customerName}`);
-            } else {
-              // Skip in other cases to prevent deleted orders from being pulled back
-              console.log(`⏭️ Skipping order ${order.id} from Supabase (not applicable for current role)`);
-            }
-          }
-          
-          // Play sound notification if new available orders were added (not already assigned ones)
-          if (newOrdersAdded > 0 && previousOrderCountRef.current < merged.filter(o => !o.driverId || o.driverId === "" || o.status === "รอคนขับรับ").length) {
-            console.log(`🔔 ${newOrdersAdded} new available order(s) detected! Playing notification sound...`);
-            playNotificationSound();
-          }
-          previousOrderCountRef.current = merged.length;
-          
-          if (JSON.stringify(prev.orders) !== JSON.stringify(merged)) {
-            newState.orders = merged;
-            changed = true;
-          }
-        }
-        
-        // For customers: merge similarly
-        if (supabaseCustomers && prev.customers) {
-          const merged = [...prev.customers];
-          for (const sbCustomer of supabaseCustomers) {
-            // Convert snake_case to camelCase
-            const customer = convertToCamelCase(sbCustomer);
-            const idx = merged.findIndex(c => c.id === customer.id);
-            if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...customer };
-            } else {
-              merged.push(customer);
-            }
-          }
-          const localStr = JSON.stringify(prev.customers);
-          const newStr = JSON.stringify(merged);
-          if (localStr !== newStr) {
-            newState.customers = merged;
-            changed = true;
-            console.log("👤 Customers merged from Supabase");
-          }
-        }
-        
-        // Note: Drivers merge intentionally skipped - drivers table is empty by design
-
-        // For driver locations: replace (DB is source of truth when available)
-        if (Array.isArray(supabaseDriverLocations) && supabaseDriverLocations.length) {
-          const next = { ...(prev.driverLocations || {}) };
-          for (const row of supabaseDriverLocations) {
-            next[row.driver_id] = {
-              ...(next[row.driver_id] || {}),
-              driverId: row.driver_id,
-              driverName: row.driver_name || "",
-              plate: row.plate || "",
-              zone: row.zone || "",
-              lat: row.lat,
-              lng: row.lng,
-              timestamp: row.timestamp
-            };
-          }
-          const localStr = JSON.stringify(prev.driverLocations || {});
-          const newStr = JSON.stringify(next);
-          if (localStr !== newStr) {
-            newState.driverLocations = next;
-            changed = true;
-          }
-        }
-        
-	        return changed ? newState : prev;
-	      });
-
-	      if (!ordersError) lastOrdersPullRef.current = nowIso;
-	      if (!customersError) lastCustomersPullRef.current = nowIso;
-	      if (!driverLocationsError) lastDriverLocationsPullRef.current = nowIso;
-	    } catch (error) {
-	      console.log("⚠️ Polling error:", error);
-	    } finally {
-	      refreshInFlightRef.current = false;
-	    }
-	  };
-
-  useEffect(() => {
-    if (!supabase) {
-      console.warn("⚠️ Supabase not initialized yet");
-      return;
-    }
-    
-	    // No fixed polling interval. Use realtime + explicit refresh calls.
-	    refreshFromSupabase();
-    
-    // Set up real-time subscription for orders
-    const subscription = supabase
-      .channel("orders-updates")
-      .on(
-        "postgres_changes",
-        {
-          event: "*", // Listen for INSERT, UPDATE, DELETE
-          schema: "public",
-          table: "orders"
-        },
-        (payload) => {
-          console.log("📡 Real-time orders update:", payload.eventType, payload.new?.id);
-          
-          // Check if an order was accepted by another driver
-          if (payload.eventType === "UPDATE" && payload.new?.driverId) {
-            const oldOrder = payload.old;
-            const newOrder = payload.new;
-            
-            // If driverId changed from empty to assigned (someone accepted the order)
-            if ((!oldOrder?.driverId || oldOrder.driverId === "") && newOrder.driverId) {
-              const assignedDriver = state.drivers?.find(d => d.id === newOrder.driverId);
-              const driverName = assignedDriver?.name || newOrder.driverName || newOrder.driverId;
-              console.log(`🎯 Order ${newOrder.id} was accepted by ${driverName}`);
-              setSyncStatus(`📦 ${newOrder.id} ถูกรับไปโดย ${driverName}`);
-              playNotificationSound();
-              
-              // Show notification to other drivers
-              if (state.auth?.role === "driver" && state.auth?.driverId !== newOrder.driverId) {
-                console.log(`ℹ️ Notifying other drivers about accepted order`);
-              }
-            }
-          }
-          
-          // Refresh data to keep everyone in sync
-          refreshFromSupabase();
-        }
-      )
-      .subscribe();
-    
-	    return () => {
-	      subscription?.unsubscribe();
-	    };
-	  }, []);
+  // Supabase realtime subscription removed (Firestore handles realtime).
   
 	  const upsertOrderToSupabase = async (order) => {
 	    if (!supabase) return { ok: false, error: "Supabase not initialized" };
