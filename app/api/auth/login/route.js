@@ -1,4 +1,5 @@
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
+import crypto from "node:crypto";
 
 export const runtime = "nodejs";
 
@@ -6,12 +7,8 @@ function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
 
-function getExpectedPinForRole(role) {
-  const anyPin = process.env.APP_LOGIN_PIN;
-  if (anyPin) return String(anyPin).trim();
-  if (role === "sales") return String(process.env.APP_LOGIN_PIN_SALES || "").trim();
-  if (role === "driver") return String(process.env.APP_LOGIN_PIN_DRIVER || "").trim();
-  return "";
+function sha256Hex(s) {
+  return crypto.createHash("sha256").update(String(s || ""), "utf8").digest("hex");
 }
 
 export async function POST(request) {
@@ -28,13 +25,13 @@ export async function POST(request) {
   const phoneRaw = String(payload?.phone || "").trim();
   const phone = normalizePhoneDigits(phoneRaw);
   const pin = String(payload?.pin || "").trim();
+  const setPin = Boolean(payload?.setPin);
+  const deviceId = String(payload?.deviceId || "").trim();
+  const rememberDevice = Boolean(payload?.rememberDevice);
 
   if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
-  if (!pin) return Response.json({ ok: false, error: "Missing pin" }, { status: 400 });
-  const expectedPin = getExpectedPinForRole(role);
-  if (!expectedPin) return Response.json({ ok: false, error: "Server pin not configured" }, { status: 500 });
-  if (pin !== expectedPin) return Response.json({ ok: false, error: "Invalid pin" }, { status: 401 });
+  if (!phone) return Response.json({ ok: false, error: "Missing phone" }, { status: 400 });
 
   try {
     const adminAuth = getAdminAuth();
@@ -42,20 +39,48 @@ export async function POST(request) {
     const db = getAdminDb();
 
     const uid = decoded.uid;
-    const tokenPhone = decoded.phone_number || "";
-    const tokenDigits = normalizePhoneDigits(tokenPhone);
 
-    const userRef = db.collection("users").doc(uid);
+    const userRef = db.collection("users_by_phone").doc(phone);
     const existingSnap = await userRef.get();
     const existing = existingSnap.exists ? existingSnap.data() : null;
 
+    const trusted = Array.isArray(existing?.trustedDevices) ? existing.trustedDevices : [];
+    const isDeviceTrusted = !!deviceId && trusted.includes(deviceId);
+    const hasPin = !!existing?.pinHash && !!existing?.pinSalt;
+
+    if (!existing && !setPin) {
+      return Response.json({ ok: false, error: "PIN_NOT_SET" }, { status: 401 });
+    }
+    if (existing && !hasPin && !setPin) {
+      return Response.json({ ok: false, error: "PIN_NOT_SET" }, { status: 401 });
+    }
+
+    if (!isDeviceTrusted) {
+      if (!pin) return Response.json({ ok: false, error: "PIN_REQUIRED" }, { status: 401 });
+      if (!setPin && existing?.pinSalt) {
+        const expectedHash = sha256Hex(`${existing.pinSalt}:${pin}`);
+        if (expectedHash !== existing.pinHash) {
+          return Response.json({ ok: false, error: "INVALID_PIN" }, { status: 401 });
+        }
+      }
+    }
+
+    const nextTrusted = new Set(trusted);
+    if (rememberDevice && deviceId) nextTrusted.add(deviceId);
+
+    const nextPinSalt = existing?.pinSalt || crypto.randomBytes(16).toString("hex");
+    const nextPinHash = setPin ? sha256Hex(`${nextPinSalt}:${pin}`) : existing?.pinHash || null;
+
     const next = {
-      uid,
+      uidLast: uid,
       role,
-      phone: tokenPhone || phoneRaw || existing?.phone || null,
-      phoneDigits: tokenDigits || phone || existing?.phoneDigits || null,
+      phone: phoneRaw || existing?.phone || null,
+      phoneDigits: phone,
       name: name || existing?.name || null,
-      driverId: role === "driver" ? (existing?.driverId || uid) : null,
+      driverId: role === "driver" ? (existing?.driverId || `driver_${phone}`) : null,
+      pinSalt: nextPinSalt,
+      pinHash: nextPinHash,
+      trustedDevices: Array.from(nextTrusted),
       updatedAt: new Date().toISOString(),
       createdAt: existing?.createdAt || new Date().toISOString()
     };

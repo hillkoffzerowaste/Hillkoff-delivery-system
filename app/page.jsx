@@ -163,6 +163,8 @@ export default function App() {
   const [driverId, setDriverId] = useState("D1");
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
+  const [loginStage, setLoginStage] = useState("login"); // login | set_pin
+  const [pinConfirm, setPinConfirm] = useState("");
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [chatOpen, setChatOpen] = useState(false);
@@ -179,6 +181,18 @@ export default function App() {
     const savedSalesName = localStorage.getItem("hillkoff-last-sales-name");
     if (savedSalesName) setLoginForm(p => ({ ...p, name: savedSalesName }));
   }, []);
+
+  const getOrCreateDeviceId = () => {
+    try {
+      const existing = localStorage.getItem("hillkoff-device-id");
+      if (existing) return existing;
+      const id = `dev_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+      localStorage.setItem("hillkoff-device-id", id);
+      return id;
+    } catch {
+      return `dev_${Date.now()}`;
+    }
+  };
   const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -541,7 +555,21 @@ export default function App() {
 
   const pinLogin = async () => {
     if (!loginForm.phone.trim()) return;
-    if (!loginForm.pin.trim()) return;
+    const deviceId = getOrCreateDeviceId();
+
+    if (loginStage === "set_pin") {
+      if (!loginForm.pin.trim()) return;
+      if (loginForm.pin.trim().length < 4) {
+        setSyncStatus("⚠️ PIN อย่างน้อย 4 ตัว");
+        return;
+      }
+      if (loginForm.pin.trim() !== String(pinConfirm || "").trim()) {
+        setSyncStatus("⚠️ PIN ไม่ตรงกัน");
+        return;
+      }
+    } else {
+      if (!loginForm.pin.trim()) return;
+    }
     try {
       setSyncStatus("⏳ กำลังเข้าสู่ระบบ...");
       const cred = await signInAnon();
@@ -558,11 +586,31 @@ export default function App() {
           role,
           name: loginForm.name.trim(),
           phone: loginForm.phone.trim(),
-          pin: loginForm.pin.trim()
+          pin: loginForm.pin.trim(),
+          setPin: loginStage === "set_pin",
+          deviceId,
+          rememberDevice: rememberPhone
         })
       });
       const json = await res.json();
-      if (!json?.ok) throw new Error(json?.error || "Login failed");
+      if (!json?.ok) {
+        if (json?.error === "PIN_NOT_SET") {
+          setLoginStage("set_pin");
+          setSyncStatus("⚠️ ยังไม่ตั้ง PIN: กรุณาตั้ง PIN ครั้งแรก");
+          return;
+        }
+        if (json?.error === "PIN_REQUIRED") {
+          setLoginStage("login");
+          setSyncStatus("⚠️ กรุณากรอก PIN");
+          return;
+        }
+        if (json?.error === "INVALID_PIN") {
+          setLoginStage("login");
+          setSyncStatus("❌ PIN ไม่ถูกต้อง");
+          return;
+        }
+        throw new Error(json?.error || "Login failed");
+      }
 
       const d = json.data || {};
       const newAuthState = {
@@ -577,6 +625,11 @@ export default function App() {
       setState(prev => ({ ...prev, auth: newAuthState }));
       if (newAuthState.driverId) setDriverId(newAuthState.driverId);
       setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
+      setLoginStage("login");
+      setPinConfirm("");
+      if (rememberPhone) {
+        try { localStorage.setItem("hillkoff-last-phone", loginForm.phone.trim()); } catch {}
+      }
       setTab(newAuthState.role === "driver" ? "driver" : "sales");
     } catch (e) {
       setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`);
@@ -1047,13 +1100,16 @@ export default function App() {
               </div>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
-              <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder="PIN" inputMode="numeric" />
+              <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder={loginStage === "set_pin" ? "ตั้ง PIN (อย่างน้อย 4 ตัว)" : "PIN"} inputMode="numeric" />
+              {loginStage === "set_pin" && (
+                <input value={pinConfirm} onChange={e => setPinConfirm(e.target.value)} placeholder="ยืนยัน PIN" inputMode="numeric" />
+              )}
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
                 จดจำเบอร์โทรในครั้งต่อไป
               </label>
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขาย" : "เข้าใช้งานคนขับ"}
+                {loginStage === "set_pin" ? "ตั้ง PIN และเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขาย" : "เข้าใช้งานคนขับ")}
               </button>
               <p className="login-note">ล็อกอินด้วยเบอร์โทร + PIN (ใช้ Firebase Auth แบบ Anonymous เพื่อผ่าน Firestore Rules)</p>
             </>
