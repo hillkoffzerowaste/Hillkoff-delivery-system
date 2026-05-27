@@ -352,44 +352,7 @@ export default function App() {
 
   // (Supabase removed) no forced polling needed
 
-  useEffect(() => {
-    if (state.auth?.role !== "driver") return;
-    if (!driverId) return;
-    if (typeof window === "undefined") return;
-    if (!navigator?.geolocation) return;
-
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const driver = (state.drivers || []).find(d => d.id === driverId);
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const timestamp = new Date().getTime();
-
-        setState(prev => ({
-          ...prev,
-          driverLocations: {
-            ...(prev.driverLocations || {}),
-            [driverId]: {
-              ...(prev.driverLocations?.[driverId] || {}),
-              driverId,
-              driverName: driver?.name || prev.driverLocations?.[driverId]?.driverName || "",
-              plate: driver?.plate || prev.driverLocations?.[driverId]?.plate || "",
-              zone: driver?.zone || prev.driverLocations?.[driverId]?.zone || "",
-              lat,
-              lng,
-              timestamp
-            }
-          }
-        }));
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 10_000 }
-    );
-
-    return () => {
-      try { navigator.geolocation.clearWatch(watchId); } catch {}
-    };
-  }, [state.auth?.role, driverId, state.drivers]);
+  // Driver location: record only on "check-in" events (no continuous tracking)
   
   // Helper function to convert snake_case from Supabase to camelCase
   const convertToCamelCase = (obj) => {
@@ -514,6 +477,62 @@ export default function App() {
 	      return { ok: true };
 	    } catch (e) {
 	      return { ok: false, error: e?.message || String(e) };
+		    }
+		  };
+
+		  const upsertDriverLocationToFirestore = async (payload) => {
+		    try {
+		      const db = getFirestoreDb();
+		      const driverIdDoc = String(payload?.driverId || driverId || "").trim();
+		      if (!driverIdDoc) return { ok: false, error: "Missing driverId" };
+		      await fb.setDoc(fb.doc(db, "driver_locations", driverIdDoc), {
+		        ...payload,
+		        driverId: driverIdDoc,
+		        updatedAt: new Date().toISOString()
+		      }, { merge: true });
+		      return { ok: true };
+		    } catch (e) {
+		      return { ok: false, error: e?.message || String(e) };
+		    }
+		  };
+
+		  const getCurrentLocationOnce = () => new Promise((resolve, reject) => {
+		    if (typeof window === "undefined") return reject(new Error("no window"));
+		    if (!navigator?.geolocation) return reject(new Error("geolocation not supported"));
+		    navigator.geolocation.getCurrentPosition(
+		      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+		      (err) => reject(err),
+		      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 }
+		    );
+		  });
+
+		  const recordDriverCheckInLocation = async (order) => {
+		    try {
+		      if (state.auth?.role !== "driver") return;
+		      const did = state.auth?.driverId || driverId || "";
+		      if (!did) return;
+		      const d = (state.drivers || []).find(x => x.id === did) || {};
+		      const loc = await getCurrentLocationOnce();
+		      const payload = {
+		        driverId: did,
+		        driverName: order?.driverName || d?.name || state.auth?.name || "",
+		        plate: d?.plate || "",
+		        zone: order?.zone || d?.zone || "",
+		        lat: loc.lat,
+		        lng: loc.lng,
+		        lastOrderId: order?.id || "",
+		        lastCustomerName: order?.customerName || "",
+		        checkInAt: new Date().toISOString()
+		      };
+		      // Best-effort: local UI + Firestore
+		      setState(prev => ({
+		        ...prev,
+		        driverLocations: { ...(prev.driverLocations || {}), [did]: { ...(prev.driverLocations?.[did] || {}), ...payload } }
+		      }));
+		      const saved = await upsertDriverLocationToFirestore(payload);
+		      if (!saved.ok) setSyncStatus(`⚠️ บันทึกพิกัดเช็คอินไม่สำเร็จ: ${saved.error}`);
+		    } catch (e) {
+		      // ignore (permissions/timeout)
 		    }
 		  };
 
@@ -1921,7 +1940,8 @@ export default function App() {
 	                              style={{ padding: "8px", fontSize: "12px" }} 
 	                              disabled={false}
 	                              onClick={() => {
-	                                updateOrder(order.id, { status: "กำลังจัดส่ง" });
+	                                updateOrder(order.id, { status: "กำลังจัดส่ง", checkInAt: new Date().toLocaleString("th-TH") });
+	                                recordDriverCheckInLocation(order);
 	                                setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
 	                              }}>🚗 ไปถึงแล้ว</button>
 	                            <button 
