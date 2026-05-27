@@ -219,14 +219,14 @@ export default function App() {
 	        if (did) {
 	          ordersQ = fb.query(
 	            fb.collection(db, "orders"),
-	            fb.where("driverId", "in", ["", null, did]),
+	            fb.where("driverId", "in", ["", did]),
 	            fb.orderBy("updatedAt", "desc"),
 	            fb.limit(500)
 	          );
 	        } else {
 	          ordersQ = fb.query(
 	            fb.collection(db, "orders"),
-	            fb.where("driverId", "in", ["", null]),
+	            fb.where("driverId", "==", ""),
 	            fb.orderBy("updatedAt", "desc"),
 	            fb.limit(500)
 	          );
