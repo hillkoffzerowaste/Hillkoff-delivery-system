@@ -747,10 +747,8 @@ export default function App() {
       };
 	      // Auto-save new customer
 	      setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
-	      if (supabase) {
 	      const saved = await upsertCustomerToFirestore(customer);
-	        if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Supabase ไม่สำเร็จ: ${saved.error}`);
-	      }
+	        if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
 	      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
 	    }
     
@@ -787,10 +785,8 @@ export default function App() {
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
-	    if (supabase) {
-	      const saved = await upsertOrderToFirestore(pendingOrder);
-	      if (!saved.ok) setSyncStatus(`⚠️ ส่งออเดอร์ไป Supabase ไม่สำเร็จ: ${saved.error}`);
-	    }
+	    const saved = await upsertOrderToFirestore(pendingOrder);
+	    if (!saved.ok) setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${saved.error}`);
     
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
@@ -811,18 +807,16 @@ export default function App() {
       const updated = { ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) };
       
       // Auto-sync to Supabase immediately
-      if (supabase) {
-        const order = updated.orders.find(o => o.id === id);
-        if (order) {
-          (async () => {
-            const { ok, error } = await upsertOrderToFirestore(order);
-            if (!ok) {
-              console.error(`❌ Failed to sync order ${id}:`, error);
-            } else {
-              console.log(`✅ Order ${id} synced to Supabase`);
-            }
-          })();
-        }
+      const order = updated.orders.find(o => o.id === id);
+      if (order) {
+        (async () => {
+          const { ok, error } = await upsertOrderToFirestore(order);
+          if (!ok) {
+            console.error(`❌ Failed to sync order ${id}:`, error);
+          } else {
+            console.log(`✅ Order ${id} synced to Firestore`);
+          }
+        })();
       }
       
       return updated;
