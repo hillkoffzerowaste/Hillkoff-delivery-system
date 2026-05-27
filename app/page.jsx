@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { getFirebaseAuth, getFirestoreDb, fb, startPhoneSignInE164, fbLogout } from "../lib/firebaseClient";
 import {
   AlertTriangle,
@@ -197,7 +196,7 @@ export default function App() {
   const refreshInFlightRef = useRef(false);
   
   // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
-  // useState is async and causes stale closures in syncToSupabase
+  // useState is async and causes stale closures in sync logic
   const isResettingOrdersRef = useRef(false);
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
@@ -430,180 +429,59 @@ export default function App() {
 
   // Supabase realtime subscription removed (Firestore handles realtime).
   
-	  const upsertOrderToSupabase = async (order) => {
-	    if (!supabase) return { ok: false, error: "Supabase not initialized" };
+	  const upsertOrderToFirestore = async (order) => {
 	    try {
+	      const db = getFirestoreDb();
 	      const orderForDB = {
-               id: order.id,
-                customerId: order.customerId || "",
-                customerName: order.customerName || "",
-                customerPhone: order.customerPhone || "",
-        zone: order.zone || "",
-        address: order.address || "",
-        mapUrl: order.mapUrl || "",
-        window: order.window || "",
-        boxes: Number(order.boxes || 0),
-        cod: Number(order.cod || 0),
-                driverId: order.driverId || "",
-                driverName: order.driverName || "",
-                salesName: order.salesName || "",
-                salesPhone: order.salesPhone || "",
-        status: order.status || "รอคนขับรับ",
-	        // POD is stored on-device only; never persist to Supabase
+	        customerId: order.customerId || "",
+	        customerName: order.customerName || "",
+	        customerPhone: order.customerPhone || "",
+	        zone: order.zone || "",
+	        address: order.address || "",
+	        mapUrl: order.mapUrl || "",
+	        window: order.window || "",
+	        boxes: Number(order.boxes || 0),
+	        cod: Number(order.cod || 0),
+	        driverId: order.driverId || "",
+	        driverName: order.driverName || "",
+	        salesName: order.salesName || "",
+	        salesPhone: order.salesPhone || "",
+	        status: order.status || "รอคนขับรับ",
+	        // POD is stored on-device only; never persist to Firestore
 	        photo: "",
 	        checkInAt: order.checkInAt || "",
 	        deliveredAt: order.deliveredAt || "",
 	        complaint: order.complaint || "",
 	        salesNote: order.salesNote || "",
 	        createdAt: order.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      const { error } = await supabase.from("orders").upsert(orderForDB, { onConflict: "id" });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e?.message || String(e) };
-	    }
-	  };
-
-	  const upsertCustomerToSupabase = async (customer) => {
-	    if (!supabase) return { ok: false, error: "Supabase not initialized" };
-	    try {
-	      const customerForDB = {
-	        id: customer.id,
-	        name: customer.name || "",
-	        contact: customer.contact || "",
-	        phone: customer.phone || "",
-	        zone: customer.zone || "",
-	        address: customer.address || "",
-	        mapUrl: customer.mapUrl || "",
-	        note: customer.note || "",
 	        updatedAt: new Date().toISOString()
 	      };
-	      const { error } = await supabase.from("customers").upsert(customerForDB, { onConflict: "id" });
-	      if (error) return { ok: false, error: error.message };
+	      await fb.setDoc(fb.doc(db, "orders", String(order.id)), orderForDB, { merge: true });
 	      return { ok: true };
 	    } catch (e) {
 	      return { ok: false, error: e?.message || String(e) };
-	    }
-	  };
-  
-  const syncToSupabase = async (currentState) => {
-    // CRITICAL: Don't sync during reset - prevents deleted orders from being re-created
-    if (isResettingOrdersRef.current) {
-      console.log("⏸️ [RESET] Skipping syncToSupabase - reset is in progress");
-      return;
-    }
-    
-    if (!supabase) {
-      console.warn("❌ Supabase not initialized");
-      return;
-    }
-    console.log("🌐 syncToSupabase called - orders count:", currentState.orders?.length);
-    
-    try {
-      // Skip auth_state sync - table doesn't exist
-      // if (currentState.auth?.phone && currentState.auth?.role) { ... }
-      
-      // Sync customers
-      if (currentState.customers?.length) {
-        for (const customer of currentState.customers) {
-          try {
-            // Convert camelCase to snake_case for Supabase
-            const customerForDB = {
-              id: customer.id,
-              name: customer.name || "",
-              contact: customer.contact || "",
-              phone: customer.phone || "",
-              zone: customer.zone || "",
-              address: customer.address || "",
-              mapUrl: customer.mapUrl || "",
-              note: customer.note || ""
-            };
-            
-            const { error } = await supabase.from("customers").upsert(customerForDB, { onConflict: "id" });
-            if (error) console.error("❌ Customer sync error:", error.message, customer.id);
-          } catch (e) {
-            console.error("❌ Exception syncing customer:", customer.id, e.message);
-          }
-        }
-        console.log("✅ Customers synced:", currentState.customers.length);
-      }
-      
-      // Sync orders (always sync, even if empty)
-      console.log("📤 Syncing orders to Supabase:", currentState.orders?.length || 0);
-      if (currentState.orders && Array.isArray(currentState.orders)) {
-        for (const order of currentState.orders) {
-          try {
-            // Convert camelCase to snake_case for Supabase
-            const orderForDB = {
-              id: order.id,
-               customerId: order.customerId || "",
-               customerName: order.customerName || "",
-              zone: order.zone || "",
-              address: order.address || "",
-               mapUrl: order.mapUrl || "",
-              window: order.window || "",
-              boxes: order.boxes || 0,
-              cod: order.cod || 0,
-               driverId: order.driverId || "",
-              status: order.status || "รอคนขับรับ",
-              photo: order.photo || "",
-               checkInAt: order.checkInAt || "",
-               deliveredAt: order.deliveredAt || "",
-              complaint: order.complaint || "",
-               salesNote: order.salesNote || "",
-               createdAt: order.createdAt || new Date().toISOString(),
-               updatedAt: new Date().toISOString()
-             };
-            
-            const { error, status } = await supabase.from("orders").upsert(orderForDB, { onConflict: "id" });
-            if (error) {
-              console.error("❌ Order sync error:", error.message, "Order:", order.id);
-            } else {
-              console.log(`✅ Order synced: ${order.id} (status: ${status})`);
-            }
-          } catch (e) {
-            console.error("❌ Exception syncing order:", order.id, e.message);
-          }
-        }
-        console.log("✅ All orders synced to Supabase");
-      }
-      
-       // Note: Drivers table is intentionally empty by design - no driver sync needed
+		    }
+		  };
 
-       // Sync driver locations (optional table)
-       if (currentState.driverLocations && Object.keys(currentState.driverLocations).length) {
-         for (const did of Object.keys(currentState.driverLocations)) {
-           const loc = currentState.driverLocations[did];
-           if (!loc?.lat || !loc?.lng) continue;
-           try {
-             const payload = {
-               driver_id: did,
-               driver_name: loc.driverName || "",
-               plate: loc.plate || "",
-               zone: loc.zone || "",
-               lat: Number(loc.lat),
-               lng: Number(loc.lng),
-               timestamp: Number(loc.timestamp || Date.now())
-             };
-             const { error } = await supabase.from("driver_locations").upsert(payload, { onConflict: "driver_id" });
-             if (error) console.warn("⚠️ driver_locations sync skipped:", error.message);
-           } catch (e) {
-             console.warn("⚠️ driver_locations sync exception:", e?.message || String(e));
-           }
-         }
-       }
-       
-       // Clear pending order updates after successful sync
-       pendingOrderUpdatesRef.current.clear();
-       
-       // login_history table is optional; intentionally skipped.
-    } catch (error) {
-      console.error("❌ Supabase sync error:", error);
-    }
-  };
+		  const upsertCustomerToFirestore = async (customer) => {
+		    try {
+		      const db = getFirestoreDb();
+		      const customerForDB = {
+		        name: customer.name || "",
+		        contact: customer.contact || "",
+		        phone: customer.phone || "",
+		        zone: customer.zone || "",
+		        address: customer.address || "",
+		        mapUrl: customer.mapUrl || "",
+		        note: customer.note || "",
+		        updatedAt: new Date().toISOString()
+		      };
+		      await fb.setDoc(fb.doc(db, "customers", String(customer.id)), customerForDB, { merge: true });
+		      return { ok: true };
+		    } catch (e) {
+		      return { ok: false, error: e?.message || String(e) };
+		    }
+		  };
 
 	  // NOTE: Do not bulk sync state to Supabase on change.
 	  // Supabase is the source of truth; we only upsert on explicit user actions (create/update).
@@ -646,7 +524,7 @@ export default function App() {
 	    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
 	    setState(prev => ({ ...prev, customers: [nextCustomer, ...(prev.customers || [])] }));
 	    if (supabase) {
-	      const saved = await upsertCustomerToSupabase(nextCustomer);
+	      const saved = await upsertCustomerToFirestore(nextCustomer);
 	      if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Supabase ไม่สำเร็จ: ${saved.error}`);
 	    }
 	    setSelectedCustomerId(id);
@@ -743,7 +621,7 @@ export default function App() {
         loginHistory: [loginEntry, ...(prev.loginHistory || [])].slice(0, 100),
         onlineDrivers: d.driverId ? { ...prev.onlineDrivers, [d.driverId]: new Date().getTime() } : prev.onlineDrivers
       }));
-      // const saved = await upsertOrderToSupabase(pendingOrder);
+      // legacy: order upsert now uses Firestore
       // if (!saved.ok) {
       //   setSyncStatus(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ (ระบบจะพยายาม sync ต่อเนื่อง): ${saved.error}`);
       // }
@@ -755,9 +633,9 @@ export default function App() {
     setAuth({ role: "driver-register", name: "", phone, driverId: "", email: state.auth?.email || "", token: "" });
   };
 
-  const registerDriver = async () => {
-    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
-    const normalizedPhone = driverForm.phone.trim().replace(/\D/g, "");
+	  const registerDriver = async () => {
+	    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
+	    const normalizedPhone = driverForm.phone.trim().replace(/\D/g, "");
     const nextDriver = {
       id: `DRV_${normalizedPhone || Date.now()}`,
       firstName: driverForm.firstName.trim(),
@@ -770,47 +648,13 @@ export default function App() {
       lat: 18.7883,
       lng: 98.9853,
       createdAt: new Date().toISOString()
-    };
+	    };
 
-    // Persist driver to Supabase so future logins don't require re-register
-    if (!supabase) supabase = initSupabase();
-    try {
-      const { error } = await supabase.from("drivers").upsert({
-        id: nextDriver.id,
-        firstName: nextDriver.firstName,
-        lastName: nextDriver.lastName,
-        name: nextDriver.name,
-        phone: nextDriver.phone,
-        vehicle: nextDriver.vehicle,
-        plate: nextDriver.plate,
-        zone: nextDriver.zone,
-        lat: nextDriver.lat,
-        lng: nextDriver.lng,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }, { onConflict: "phone" });
-      if (error) throw error;
-    } catch (e) {
-      setSyncStatus(`❌ บันทึกข้อมูลคนขับลง Supabase ไม่สำเร็จ: ${e.message || e}`);
-      return;
-    }
-
-    // Create session token via API (records login log)
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: "driver", phone: nextDriver.phone })
-      });
-      const json = await res.json();
-      if (json?.ok) {
-        const d = json.data || {};
-        const newAuthState = { role: "driver", name: d.name || nextDriver.name, phone: nextDriver.phone, driverId: d.driverId || nextDriver.id, email: state.auth?.email || "", token: d.token || "" };
-        localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
-        setAuth(newAuthState);
-        setDriverId(newAuthState.driverId || nextDriver.id);
-      }
-    } catch {}
+	    // With Firebase Auth, driver registration happens after OTP login.
+	    // Here we only keep a local profile draft; the server will store profile in Firestore users/{uid}.
+	    setSyncStatus("⚠️ โปรดเข้าสู่ระบบด้วย OTP ก่อน แล้วค่อยกรอกข้อมูลคนขับเพื่อบันทึกเข้าระบบ");
+	    setDriverForm(prev => ({ ...prev, phone: normalizedPhone || prev.phone }));
+	    return;
     const loginEntry = {
       id: `L${Date.now()}`,
       role: "driver",
@@ -831,7 +675,7 @@ export default function App() {
     setDriverId(nextDriver.id);
     setDriverForm({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
     setTab("driver");
-    // Driver synced automatically via syncToSupabase
+    // Driver is stored in Firestore via auth/users profile
     setSyncStatus(`✅ ลงทะเบียนคนขับ "${nextDriver.name}" สำเร็จ`);
   };
 
@@ -868,7 +712,7 @@ export default function App() {
 	      // Auto-save new customer
 	      setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
 	      if (supabase) {
-	        const saved = await upsertCustomerToSupabase(customer);
+	      const saved = await upsertCustomerToFirestore(customer);
 	        if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Supabase ไม่สำเร็จ: ${saved.error}`);
 	      }
 	      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
@@ -908,7 +752,7 @@ export default function App() {
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
 	    if (supabase) {
-	      const saved = await upsertOrderToSupabase(pendingOrder);
+	      const saved = await upsertOrderToFirestore(pendingOrder);
 	      if (!saved.ok) setSyncStatus(`⚠️ ส่งออเดอร์ไป Supabase ไม่สำเร็จ: ${saved.error}`);
 	    }
     
@@ -935,7 +779,7 @@ export default function App() {
         const order = updated.orders.find(o => o.id === id);
         if (order) {
           (async () => {
-            const { ok, error } = await upsertOrderToSupabase(order);
+            const { ok, error } = await upsertOrderToFirestore(order);
             if (!ok) {
               console.error(`❌ Failed to sync order ${id}:`, error);
             } else {
@@ -955,7 +799,7 @@ export default function App() {
 	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
 	    if (supabase) {
 	      const existing = state.customers.find(c => c.id === id);
-	      if (existing) upsertCustomerToSupabase({ ...existing, ...patch });
+	      if (existing) upsertCustomerToFirestore({ ...existing, ...patch });
 	    }
 	    setEditingCustomerId(null);
 	  };
@@ -1481,8 +1325,7 @@ export default function App() {
                         });
                         
                         // Verify again
-                        const { data: finalCheck2 } = await supabase.from("orders").select("id");
-                        console.log("🔄 [RESET] After retry:", { ordersRemaining: finalCheck2?.length || 0 });
+                        console.log("🔄 [RESET] After retry");
                       }
                       
                       // STEP 5: Re-enable sync
@@ -1822,32 +1665,30 @@ export default function App() {
                   }
                   if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
 
-                  (async () => {
-                    try {
-                      if (!supabase) supabase = initSupabase();
-                      if (!supabase) {
-                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-                        return;
-                      }
+	                  (async () => {
+	                    try {
+	                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด...");
+	                      const res = await fetch("/api/admin/reset-orders", {
+	                        method: "POST",
+	                        headers: { "Content-Type": "application/json" },
+	                        body: JSON.stringify({ password: pwd })
+	                      });
+	                      const json = await res.json();
+	                      if (!json?.ok) {
+	                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${json?.error || "unknown error"}`);
+	                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${json?.error || "unknown error"}`);
+	                        return;
+	                      }
 
-                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมดใน Supabase...");
-                      const { error } = await supabase.from("orders").delete().neq("id", "__never__");
-                      if (error) {
-                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
-                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error.message}`);
-                        return;
-                      }
-
-                      // Clear local state
-                      setState(prev => ({ ...prev, orders: [] }));
-                      
-                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-                      await refreshFromSupabase();
-                    } catch (e) {
-                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
-                    }
-                    })();
+	                      // Clear local state
+	                      setState(prev => ({ ...prev, orders: [] }));
+	                      
+	                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+	                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+	                    } catch (e) {
+	                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+	                    }
+	                    })();
                 }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
               </div>
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
@@ -2294,24 +2135,24 @@ export default function App() {
                   }
                   if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตแดชบอร์ดทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
                   
-                  (async () => {
-                    try {
-                      if (!supabase) supabase = initSupabase();
-                      if (!supabase) {
-                        alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-                        return;
-                      }
-                      const { error } = await supabase.from("orders").delete().neq("id", "__never__");
-                      if (error) {
-                        alert(`❌ ลบไม่สำเร็จ: ${error.message}`);
-                        return;
-                      }
-                      setState(prev => ({ ...prev, orders: [] }));
-                      alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
-                    } catch (e) {
-                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
-                    }
-                  })();
+	                  (async () => {
+	                    try {
+	                      const res = await fetch("/api/admin/reset-orders", {
+	                        method: "POST",
+	                        headers: { "Content-Type": "application/json" },
+	                        body: JSON.stringify({ password: pwd })
+	                      });
+	                      const json = await res.json();
+	                      if (!json?.ok) {
+	                        alert(`❌ ลบไม่สำเร็จ: ${json?.error || "unknown error"}`);
+	                        return;
+	                      }
+	                      setState(prev => ({ ...prev, orders: [] }));
+	                      alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
+	                    } catch (e) {
+	                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
+	                    }
+	                  })();
                 }}>🔄 รีเซ็ตแดชบอร์ด</button>
               </section>
             )}
