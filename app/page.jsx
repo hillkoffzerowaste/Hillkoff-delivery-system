@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { getFirebaseAuth, getFirestoreDb, fb, startPhoneSignInE164, fbLogout } from "../lib/firebaseClient";
 import {
   AlertTriangle,
   Camera,
