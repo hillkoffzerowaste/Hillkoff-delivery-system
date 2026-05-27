@@ -805,12 +805,15 @@ export default function App() {
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
 	    const saved = await upsertOrderToFirestore(pendingOrder);
-	    if (!saved.ok) setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${saved.error}`);
+	    if (!saved.ok) {
+	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${saved.error}`);
+	      return;
+	    }
     
     setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setShowOrderConfirm(false);
     setPendingOrder(null);
-	    setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ`);
+	    setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ (Firestore)`);
 	    setTab("driver");
 	  };
 
