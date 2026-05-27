@@ -199,7 +199,7 @@ export default function App() {
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
-  const [syncStatus, setSyncStatus] = useState("Local mode");
+  const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
@@ -235,6 +235,12 @@ export default function App() {
 	    }
 	    const db = getFirestoreDb();
 	    const unsubs = [];
+	    let gotAnySnapshot = false;
+	    const markConnected = () => {
+	      if (gotAnySnapshot) return;
+	      gotAnySnapshot = true;
+	      setSyncStatus("🟢 Firestore realtime connected");
+	    };
 
 	    // Orders
 	    try {
@@ -263,6 +269,7 @@ export default function App() {
 	          (snap) => {
 	            const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 	            setState((prev) => ({ ...prev, orders: rows }));
+	            markConnected();
 	          },
 	          (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`)
 	        )
@@ -278,6 +285,7 @@ export default function App() {
 	        fb.onSnapshot(custQ, (snap) => {
 	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 	          setState((prev) => ({ ...prev, customers: rows }));
+	          markConnected();
 	        })
 	      );
 	    } catch {}
@@ -294,6 +302,7 @@ export default function App() {
 	            next[did] = { driverId: did, ...(v || {}) };
 	          });
 	          setState((prev) => ({ ...prev, driverLocations: next }));
+	          markConnected();
 	        })
 	      );
 	    } catch {}
@@ -305,6 +314,7 @@ export default function App() {
 	        fb.onSnapshot(chatQ, (snap) => {
 	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 	          setChatMessages(rows.reverse());
+	          markConnected();
 	        })
 	      );
 	    } catch {}
