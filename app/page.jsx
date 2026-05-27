@@ -198,7 +198,8 @@ export default function App() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
-  const [orderForm, setOrderForm] = useState({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+  const [orderForm, setOrderForm] = useState({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+  const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
@@ -756,31 +757,16 @@ export default function App() {
   };
 
   const createOrder = async () => {
-    if (!orderForm.customerName.trim()) {
-      setSyncStatus("❌ กรุณากรอกชื่อลูกค้า");
+    if (!selectedCustomerId) {
+      setSyncStatus("❌ กรุณาเลือกลูกค้าจากรายชื่อ");
       return;
     }
 
-    let customer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase());
-    
-    // If customer doesn't exist, create new one automatically
-	    if (!customer) {
-      customer = {
-        id: `C${Date.now()}`,
-        name: orderForm.customerName.trim(),
-        contact: "",
-        phone: "",
-        zone: ZONES[0],
-        address: "",
-        mapUrl: "",
-        note: ""
-      };
-	      // Auto-save new customer
-	      setState(prev => ({ ...prev, customers: [customer, ...prev.customers] }));
-	      const saved = await upsertCustomerToFirestore(customer);
-	        if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
-	      setSyncStatus(`✅ บันทึกลูกค้าใหม่ "${customer.name}" อัตโนมัติ`);
-	    }
+    const customer = customers.find(c => c.id === selectedCustomerId);
+    if (!customer) {
+      setSyncStatus("❌ ไม่พบลูกค้าที่เลือก กรุณาเลือกใหม่");
+      return;
+    }
     
     const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
     const nextOrder = {
@@ -821,7 +807,9 @@ export default function App() {
 	      return;
 	    }
     
-    setOrderForm({ customerName: "", window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setSelectedCustomerId("");
+    setOrderCustomerSearch("");
     setShowOrderConfirm(false);
     setPendingOrder(null);
 	    setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ (Firestore)`);
@@ -1589,24 +1577,27 @@ export default function App() {
             )}
 
             <section className="panel">
-              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>พิมพ์ชื่อลูกค้าหรือเลือกจากรายชื่อ</span></div>
-              <label className="search"><Search size={16} /><input value={orderForm.customerName} onChange={e => setOrderForm(p => ({ ...p, customerName: e.target.value }))} placeholder="พิมพ์ชื่อลูกค้า (autocomplete)" /></label>
-              {orderForm.customerName && (
-                <div className="customer-list">
-                  {customers.filter(c => c.name.toLowerCase().includes(orderForm.customerName.toLowerCase())).slice(0, 5).map(c => (
-                    <button key={c.id} className="customer-card" onClick={() => { setOrderForm(p => ({ ...p, customerName: c.name })); setSelectedCustomerId(c.id); }}>
-                      <strong>{c.name}</strong>
-                      <span>{c.phone} · {c.zone}</span>
-                    </button>
+              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>เลือกลูกค้าจากรายชื่อ</span></div>
+              <label className="search"><Search size={16} /><input value={orderCustomerSearch} onChange={e => setOrderCustomerSearch(e.target.value)} placeholder="ค้นหาชื่อลูกค้า" /></label>
+              <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+                <option value="">-- เลือกลูกค้า --</option>
+                {customers
+                  .filter(c => !orderCustomerSearch.trim() || c.name.toLowerCase().includes(orderCustomerSearch.toLowerCase()))
+                  .slice(0, 200)
+                  .map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
-                </div>
-              )}
+              </select>
               {(() => {
-                const foundCustomer = customers.find(c => c.name.toLowerCase() === orderForm.customerName.toLowerCase()) || selectedCustomer;
+                const foundCustomer = customers.find(c => c.id === selectedCustomerId) || null;
                 return foundCustomer ? (
                   <div className="customer-detail">
                     <div><b>{foundCustomer.name}</b><p>{foundCustomer.contact} · {foundCustomer.phone}</p><p>{foundCustomer.address}</p></div>
-                    <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิดแผนที่</a>
+                    {foundCustomer.mapUrl ? (
+                      <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิดแผนที่</a>
+                    ) : (
+                      <span style={{ color: "#6b7280" }}>ไม่มีลิงก์แผนที่</span>
+                    )}
                   </div>
                 ) : null;
               })()}
