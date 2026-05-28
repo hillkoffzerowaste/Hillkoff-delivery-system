@@ -1506,10 +1506,11 @@ export default function App() {
             <section className="panel" style={{ gridColumn: "1 / -1" }}>
               {(() => {
                 const locs = state.driverLocations || {};
-                const online = state.onlineDrivers || {};
-                const onlineIds = Object.keys(locs).filter(did => online[did] && locs[did]?.lat && locs[did]?.lng);
+                // Show markers based on last check-in location (not "online" heartbeat),
+                // because check-in location is persisted while online state is best-effort/local.
+                const idsWithLocation = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
                 const defaultCenter = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
-                const effectiveId = selectedMapDriverId || onlineIds[0] || "";
+                const effectiveId = selectedMapDriverId || idsWithLocation[0] || "";
                 const selected = effectiveId ? locs[effectiveId] : null;
                 const centerLat = selected?.lat ?? defaultCenter.lat;
                 const centerLng = selected?.lng ?? defaultCenter.lng;
@@ -1517,12 +1518,12 @@ export default function App() {
 
                 return (
                   <>
-                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{onlineIds.length} คนออนไลน์มีพิกัด</span></div>
-                    {onlineIds.length === 0 ? (
-                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับออนไลน์ที่ส่งพิกัด (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{idsWithLocation.length} จุดเช็คอิน</span></div>
+                    {idsWithLocation.length === 0 ? (
+                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับเช็คอินพิกัด (ให้คนขับกด “ไปถึงแล้ว” ที่หน้างาน และอนุญาต GPS)</p>
                     ) : (
                       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-                        {onlineIds.map(did => {
+                        {idsWithLocation.map(did => {
                           const d = locs[did];
                           const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
                           return (
@@ -2240,10 +2241,9 @@ export default function App() {
 		            <section className="panel">
 		              {(() => {
 		                const locs = state.driverLocations || {};
-		                const online = state.onlineDrivers || {};
-		                const onlineIds = Object.keys(locs).filter(did => online[did] && locs[did]?.lat && locs[did]?.lng);
+		                const idsWithLocation = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
 		                const defaultCenter = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
-		                const effectiveId = selectedMapDriverId || onlineIds[0] || "";
+		                const effectiveId = selectedMapDriverId || idsWithLocation[0] || "";
 		                const selected = effectiveId ? locs[effectiveId] : null;
 		                const centerLat = selected?.lat ?? defaultCenter.lat;
 		                const centerLng = selected?.lng ?? defaultCenter.lng;
@@ -2251,12 +2251,12 @@ export default function App() {
 
 		                return (
 		                  <>
-		                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{onlineIds.length} คนออนไลน์มีพิกัด</span></div>
-		                    {onlineIds.length === 0 ? (
-		                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับออนไลน์ที่ส่งพิกัด (ให้คนขับอนุญาต GPS และเปิดหน้า Driver ไว้)</p>
+		                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{idsWithLocation.length} จุดเช็คอิน</span></div>
+		                    {idsWithLocation.length === 0 ? (
+		                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับเช็คอินพิกัด (ให้คนขับกด “ไปถึงแล้ว” ที่หน้างาน และอนุญาต GPS)</p>
 		                    ) : (
 		                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-		                        {onlineIds.map(did => {
+		                        {idsWithLocation.map(did => {
 		                          const d = locs[did];
 		                          const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
 		                          return (
