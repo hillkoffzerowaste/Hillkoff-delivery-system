@@ -99,6 +99,16 @@ function osmEmbedUrl(lat, lng, zoom = 16, marker = true) {
   return `${base}&marker=${encodeURIComponent(`${lat},${lng}`)}`;
 }
 
+function toServiceDateKey(dateLike) {
+  const date = dateLike ? new Date(dateLike) : new Date();
+  // YYYY-MM-DD in Asia/Bangkok
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value || "1970";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+  const d = parts.find((p) => p.type === "day")?.value || "01";
+  return `${y}-${m}-${d}`;
+}
+
 function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
@@ -218,6 +228,11 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
+
+  const todayServiceDate = toServiceDateKey(new Date());
+  const getOrderServiceDate = (o) => String(o?.serviceDate || toServiceDateKey(o?.createdAt || o?.updatedAt || new Date()));
+  const isTodayOrder = (o) => getOrderServiceDate(o) === todayServiceDate;
+  const isUndelivered = (o) => o?.status !== "ส่งสำเร็จ";
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
@@ -642,6 +657,8 @@ export default function App() {
 
   const customers = state.customers;
   const orders = state.orders;
+  const todayOrdersOnly = (orders || []).filter(isTodayOrder);
+  const backlogUndelivered = (orders || []).filter((o) => !isTodayOrder(o) && isUndelivered(o));
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
   const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || customers[0];
@@ -874,8 +891,10 @@ export default function App() {
     }
     
     const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
+    const serviceDate = toServiceDateKey(new Date());
     const nextOrder = {
       id,
+      serviceDate,
       customerId: customer.id,
       customerName: customer.name,
       customerPhone: customer.phone || "",
@@ -1091,7 +1110,7 @@ export default function App() {
 
   const generateDailyReport = () => {
     const today = new Date().toLocaleDateString("th-TH");
-    const todayOrders = orders.filter(o => new Date(o.createdAt || o.assignedAt).toLocaleDateString("th-TH") === today);
+    const todayOrders = todayOrdersOnly;
     const driverStats = {};
     let totalCOD = 0;
 
@@ -1762,12 +1781,12 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📝 ออเดอร์ใหม่</h2><span>รอคนขับรับ {orders.filter(o => o.status === "รอคนขับรับ").length}</span></div>
-              {orders.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
+              <div className="panel-head"><h2>📝 ออเดอร์ใหม่ (วันนี้)</h2><span>รอคนขับรับ {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length}</span></div>
+              {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
                 <p className="muted">ไม่มีออเดอร์ใหม่</p>
               ) : (
                 <div style={{ display: "grid", gap: "8px" }}>
-                  {orders.filter(o => o.status === "รอคนขับรับ").map(order => (
+                  {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").map(order => (
                     <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ flex: 1 }}>
                         <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
@@ -1781,25 +1800,25 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📦 สรุปการส่งของ</h2><span>กำลังส่ง {orders.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {orders.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
+              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
                 <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
                   <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{orders.filter(o => o.status === "กำลังส่ง").length}</b>
+                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length}</b>
                 </div>
                 <div style={{ flex: 1, background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
                   <small style={{ color: "#166534" }}>✓ สำเร็จ</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{orders.filter(o => o.status === "ส่งสำเร็จ").length}</b>
+                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length}</b>
                 </div>
               </div>
               <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 ? (
+                {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 ? (
                   <p className="muted">ยังไม่มีการส่ง</p>
                 ) : (
-                  orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
+                  todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
                     const driver = drivers.find(d => d.id === order.driverId);
                     const driverName = order.driverName || driver?.name || (order.driverId ? order.driverId : "");
-                     return (
+                    return (
                       <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
                           <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
@@ -1813,6 +1832,12 @@ export default function App() {
                   })
                 )}
               </div>
+              {backlogUndelivered.length > 0 && (
+                <div style={{ marginTop: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "10px", borderRadius: "8px", fontSize: "12px" }}>
+                  <b style={{ color: "#1d4ed8" }}>📌 งานค้างส่งจากวันก่อน: {backlogUndelivered.length} งาน</b>
+                  <div className="muted" style={{ marginTop: "4px" }}>งานค้างส่งจะยังแสดงต่อในวันถัดไปจนกว่าจะ “ส่งสำเร็จ”</div>
+                </div>
+              )}
             </section>
           </div>
             </>
@@ -2123,9 +2148,17 @@ export default function App() {
 	                    {showDeliveredHistory ? "ซ่อนรายการ" : "ดูรายการ"}
 	                  </button>
 	                </div>
-	                <div style={{ color: "#6b7280", fontSize: "12px" }}>
-	                  {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length} งาน · รวม COD ฿{money(orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").reduce((sum, o) => sum + Number(o.cod || 0), 0))}
-	                </div>
+	                {(() => {
+	                  const deliveredAll = orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ");
+	                  const deliveredToday = deliveredAll.filter(isTodayOrder);
+	                  const deliveredHistory = deliveredAll.filter(o => !isTodayOrder(o));
+	                  const codAll = deliveredAll.reduce((sum, o) => sum + Number(o.cod || 0), 0);
+	                  return (
+	                    <div style={{ color: "#6b7280", fontSize: "12px" }}>
+	                      วันนี้ {deliveredToday.length} งาน · ย้อนหลัง {deliveredHistory.length} งาน · รวม COD ฿{money(codAll)}
+	                    </div>
+	                  );
+	                })()}
 
 	                {showDeliveredHistory && (
 	                  <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
@@ -2219,11 +2252,7 @@ export default function App() {
 		                document.body.removeChild(element);
 		              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
 		              {(() => {
-		                const today = new Date();
-		                const todayOrders = (orders || []).filter(o => {
-		                  const created = o.createdAt ? new Date(o.createdAt) : null;
-		                  return created && isSameLocalDay(created, today);
-		                });
+		                const todayOrders = todayOrdersOnly;
 		                const total = todayOrders.length;
 		                const waiting = todayOrders.filter(o => o.status === "รอคนขับรับ").length;
 		                const active = todayOrders.filter(o => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").length;
@@ -2238,6 +2267,9 @@ export default function App() {
 		                      <p>ออเดอร์วันนี้ <b>{total}</b> งาน</p>
 		                      <p>รอคนขับรับ <b>{waiting}</b> · กำลังส่ง <b>{active}</b> · ส่งสำเร็จ <b>{done}</b> · ยกเลิก <b>{canceled}</b></p>
 		                      <p>COD วันนี้รวม <b>{money(codAll)}</b> บาท · ส่งสำเร็จ <b>{money(codDone)}</b> บาท</p>
+		                      {backlogUndelivered.length > 0 && (
+		                        <p>งานค้างส่งจากวันก่อน <b>{backlogUndelivered.length}</b> งาน (จะยังแสดงจนกว่าจะส่งสำเร็จ)</p>
+		                      )}
 		                    </div>
 		                  </div>
 		                );

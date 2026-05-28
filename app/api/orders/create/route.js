@@ -6,6 +6,16 @@ function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
 
+function toServiceDateKey(dateLike) {
+  const date = dateLike ? new Date(dateLike) : new Date();
+  // YYYY-MM-DD in Asia/Bangkok
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value || "1970";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+  const d = parts.find((p) => p.type === "day")?.value || "01";
+  return `${y}-${m}-${d}`;
+}
+
 export async function POST(request) {
   let payload;
   try {
@@ -45,6 +55,8 @@ export async function POST(request) {
       deliveredAt: String(order.deliveredAt || ""),
       complaint: String(order.complaint || ""),
       salesNote: String(order.salesNote || ""),
+      // Used for day-based separation (today vs history)
+      serviceDate: String(order.serviceDate || toServiceDateKey(order.createdAt)),
       createdAt: String(order.createdAt || new Date().toISOString()),
       updatedAt: new Date().toISOString(),
       createdByUid: decoded.uid,
