@@ -184,6 +184,18 @@ export default function App() {
     if (savedSalesName) setLoginForm(p => ({ ...p, name: savedSalesName }));
   }, []);
 
+  // Keep driver "online" in local state for UI filtering (no server writes)
+  useEffect(() => {
+    if (state.auth?.role !== "driver") return;
+    const did = state.auth?.driverId || driverId || "";
+    if (!did) return;
+    setState(prev => ({ ...prev, onlineDrivers: { ...(prev.onlineDrivers || {}), [did]: Date.now() } }));
+    const t = setInterval(() => {
+      setState(prev => ({ ...prev, onlineDrivers: { ...(prev.onlineDrivers || {}), [did]: Date.now() } }));
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [state.auth?.role, state.auth?.driverId, driverId]);
+
   const getOrCreateDeviceId = () => {
     try {
       const existing = localStorage.getItem("hillkoff-device-id");
@@ -207,6 +219,7 @@ export default function App() {
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
+  const [showAllCustomers, setShowAllCustomers] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
   const lastOrdersPullRef = useRef(null);
   const lastCustomersPullRef = useRef(null);
@@ -219,6 +232,25 @@ export default function App() {
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
+
+  const setAppBadgeSafe = async (count) => {
+    try {
+      if (navigator?.setAppBadge) await navigator.setAppBadge(count);
+      else if (navigator?.clearAppBadge && (!count || count <= 0)) await navigator.clearAppBadge();
+    } catch {}
+  };
+
+  const requestNotifyPermission = async () => {
+    try {
+      if (typeof Notification === "undefined") return false;
+      if (Notification.permission === "granted") return true;
+      if (Notification.permission === "denied") return false;
+      const res = await Notification.requestPermission();
+      return res === "granted";
+    } catch {
+      return false;
+    }
+  };
 
 	  useEffect(() => setState(readState()), []);
 
@@ -440,6 +472,32 @@ export default function App() {
       alert(`❌ ส่งข้อความไม่สำเร็จ: ${e?.message || e}`);
     }
   };
+
+  // Driver notifications: show badge + optional notification when new orders arrive.
+  useEffect(() => {
+    if (state.auth?.role !== "driver") return;
+    const did = state.auth?.driverId || driverId || "";
+    if (!did) return;
+    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did) && o.status === "รอคนขับรับ");
+    const count = pending.length;
+    setAppBadgeSafe(count);
+    if (typeof document === "undefined") return;
+    if (document.visibilityState !== "hidden") return;
+
+    if (count > (previousOrderCountRef.current || 0)) {
+      playNotificationSound();
+      requestNotifyPermission().then((ok) => {
+        if (!ok) return;
+        try {
+          const first = pending[0];
+          new Notification("📦 มีออเดอร์ใหม่", {
+            body: first ? `${first.customerName || ""} · ${first.zone || ""}` : "มีออเดอร์ใหม่เข้ามา",
+          });
+        } catch {}
+      });
+    }
+    previousOrderCountRef.current = count;
+  }, [state.auth?.role, state.auth?.driverId, driverId, state.orders]);
 
 		  // Legacy Supabase refresh (disabled). Firestore onSnapshot is used instead.
 		  const refreshFromSupabase = async () => {};
@@ -927,7 +985,7 @@ export default function App() {
 	          return;
 	        }
 	        // Step 2: Share image file (LINE may ignore text when file is attached)
-	        await navigator.share({ files: [file] });
+	        await navigator.share({ files: [file], text });
 	        updateOrder(order.id, { sharedToLine: true });
 	        if (copied) {
 	          setSyncStatus("✅ คัดลอกสรุปแล้ว + แชร์รูปแล้ว (ไปวางสรุปในไลน์ได้ทันที)");
@@ -945,55 +1003,7 @@ export default function App() {
       return;
     }
 
-    const driver = drivers.find(d => d.id === driverId);
-    if (!driver) {
-      setSyncStatus(`⚠️ ข้อมูลคนขับ "${driverId}" ไม่พบในระบบ ลองรีเฟรชหน้าดูครับ`);
-      return;
-    }
-
-    const driverName = driver.name || "";
-
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from("orders")
-          .update({
-            driverId: driverId,
-            driverName: driverName,
-            status: "กำลังส่ง"
-          })
-          .eq("id", id)
-          .or("driverId.is.null,driverId.eq.")
-          .select("*")
-          .maybeSingle();
-
-        if (error) {
-          setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${error.message}`);
-          return;
-        }
-
-        if (!data) {
-          setSyncStatus(`⚠️ ออเดอร์ "${id}" ถูกคนอื่นรับไปแล้ว`);
-          await refreshFromSupabase();
-          return;
-        }
-
-        console.log("✅ [ACCEPT] Order accepted in Supabase, updating local state...");
-        // Update local state immediately to show change
-        const accepted = convertToCamelCase(data);
-        setState(prev => ({
-          ...prev,
-          orders: prev.orders.map(o => o.id === id ? accepted : o)
-        }));
-        setSyncStatus(`✅ รับออเดอร์ "${id}" เรียบร้อย`);
-        // Don't refreshFromSupabase - let polling handle it to avoid race condition
-        return;
-      } catch (e) {
-        setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${e?.message || String(e)}`);
-        return;
-      }
-    }
-
+    const driverName = state.auth?.name || "";
     updateOrder(id, { driverId, driverName, status: "กำลังส่ง" });
   };
   const checkIn = id => {
@@ -1059,7 +1069,7 @@ export default function App() {
         if (!driverStats[order.driverId]) {
           const driver = (state.drivers || []).find(d => d.id === order.driverId);
           driverStats[order.driverId] = {
-            name: driver?.name || "ไม่ทราบ",
+            name: order.driverName || driver?.name || "ไม่ทราบ",
             plate: driver?.plate || "-",
             zone: driver?.zone || "-",
             phone: driver?.phone || "-",
@@ -1068,12 +1078,22 @@ export default function App() {
             active: 0,
             failed: 0,
             cod: 0,
-            checkins: []
+            checkins: [],
+            customerSet: new Set(),
+            orders: []
           };
         }
         driverStats[order.driverId].total += 1;
         driverStats[order.driverId].cod += Number(order.cod || 0);
         driverStats[order.driverId][order.status === "ส่งสำเร็จ" ? "completed" : order.status === "กำลังส่ง" ? "active" : "failed"] += 1;
+        driverStats[order.driverId].customerSet.add(order.customerId || order.customerName || order.id);
+        driverStats[order.driverId].orders.push({
+          id: order.id,
+          customer: order.customerName,
+          zone: order.zone,
+          status: order.status,
+          cod: Number(order.cod || 0)
+        });
       }
     });
 
@@ -1113,11 +1133,20 @@ export default function App() {
       report += `  📍 โซน: ${stats.zone}\n`;
       report += `  ────────────────────────────────────────\n`;
       report += `  📦 ออเดอร์รวม: ${stats.total} งาน\n`;
+      report += `  🏪 จำนวนร้าน: ${stats.customerSet.size} ร้าน\n`;
       report += `     ✅ สำเร็จ: ${stats.completed} งาน\n`;
       report += `     🟡 กำลังส่ง: ${stats.active} งาน\n`;
       report += `     ❌ ไม่สำเร็จ: ${stats.failed} งาน\n`;
       report += `  💰 COD รวม: ${money(stats.cod)} บาท\n`;
       report += `  ⏱️ ประสิทธิภาพ: ${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}%\n`;
+
+      if (stats.orders.length) {
+        report += `  📄 รายการออเดอร์:\n`;
+        stats.orders.slice(0, 20).forEach((o) => {
+          report += `     • ${o.id} (${o.status}) - ${o.customer} · ${o.zone} · COD ฿${money(o.cod)}\n`;
+        });
+        if (stats.orders.length > 20) report += `     ... และอีก ${stats.orders.length - 20} งาน\n`;
+      }
       
       if (stats.checkins.length > 0) {
         report += `  📌 จุดเช็คอิน (${stats.checkins.length} จุด):\n`;
@@ -1547,16 +1576,39 @@ export default function App() {
                 <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
               ) : (
                 <>
-                  <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
-                  <div className="customer-list">
-                    {filteredCustomers.map(customer => (
-                      <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
-                        <strong>{customer.name}</strong>
-                        <span>{customer.contact} · {customer.phone}</span>
-                        <span>{customer.zone} · {customer.address}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center" }}>
+                    <small style={{ color: "#6b7280" }}>แสดง {showAllCustomers ? "ทั้งหมด" : "ล่าสุด 1 ราย"}</small>
+                    {customers.length > 1 && (
+                      <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowAllCustomers(v => !v)}>
+                        {showAllCustomers ? "ย่อรายการ" : `ดูเพิ่มอีก ${customers.length - 1} ราย`}
                       </button>
-                    ))}
+                    )}
                   </div>
+
+                  {showAllCustomers ? (
+                    <>
+                      <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
+                      <div className="customer-list">
+                        {filteredCustomers.map(customer => (
+                          <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
+                            <strong>{customer.name}</strong>
+                            <span>{customer.contact} · {customer.phone}</span>
+                            <span>{customer.zone} · {customer.address}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="customer-list">
+                      {(customers[0] ? [customers[0]] : []).map(customer => (
+                        <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
+                          <strong>{customer.name}</strong>
+                          <span>{customer.contact} · {customer.phone}</span>
+                          <span>{customer.zone} · {customer.address}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1949,10 +2001,10 @@ export default function App() {
 	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
 	                              disabled={false}
 	                              onClick={() => {
-	                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+	                                const reason = prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:");
 	                                if (reason) {
-	                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
-	                                  setSyncStatus(`❌ ยกเลิกออเดอร์ "${order.id}"`);
+	                                  updateOrder(order.id, { status: "รอคนขับรับ", driverId: "", driverName: "", complaint: reason, sharedToLine: false });
+	                                  setSyncStatus(`⏳ ส่งออเดอร์ "${order.id}" กลับเข้าคิวอีกครั้ง`);
 	                                }
 	                              }}>❌ ยกเลิก</button>
                           </>
@@ -1974,9 +2026,9 @@ export default function App() {
 	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
 	                              disabled={false}
 	                              onClick={() => {
-	                                const reason = prompt("📝 เหตุผลในการยกเลิก:");
+	                                const reason = prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:");
 	                                if (reason) {
-	                                  updateOrder(order.id, { status: "ยกเลิก", complaint: reason });
+	                                  updateOrder(order.id, { status: "รอคนขับรับ", driverId: "", driverName: "", complaint: reason, photo: "", sharedToLine: false });
 	                                }
 	                              }}>❌ ยกเลิก</button>
                           </>
