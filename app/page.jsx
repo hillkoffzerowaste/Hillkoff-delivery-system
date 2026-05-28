@@ -1704,11 +1704,61 @@ export default function App() {
 
             <section className="panel">
               <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>เลือกลูกค้าจากรายชื่อ</span></div>
-              <label className="search"><Search size={16} /><input value={orderCustomerSearch} onChange={e => setOrderCustomerSearch(e.target.value)} placeholder="ค้นหาชื่อลูกค้า" /></label>
+              {(() => {
+                const q = (orderCustomerSearch || "").trim().toLowerCase();
+                const matches = customers
+                  .filter(c => {
+                    if (!q) return true;
+                    const name = String(c?.name || "").toLowerCase();
+                    const phone = String(c?.phone || "").toLowerCase();
+                    const zone = String(c?.zone || "").toLowerCase();
+                    return name.includes(q) || phone.includes(q) || zone.includes(q);
+                  })
+                  .slice(0, 12);
+
+                return (
+                  <div style={{ position: "relative" }}>
+                    <label className="search">
+                      <Search size={16} />
+                      <input
+                        value={orderCustomerSearch}
+                        onChange={e => setOrderCustomerSearch(e.target.value)}
+                        placeholder="ค้นหาชื่อลูกค้า / เบอร์ / พื้นที่ แล้วเลือกจากรายการ"
+                      />
+                    </label>
+                    {q && matches.length > 0 && !selectedCustomerId && (
+                      <div style={{ position: "absolute", top: "44px", left: 0, right: 0, zIndex: 20, background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                        {matches.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomerId(c.id);
+                              setOrderCustomerSearch("");
+                            }}
+                            style={{ width: "100%", textAlign: "left", padding: "10px 12px", border: "none", background: "white", cursor: "pointer" }}
+                            className="customer-suggest"
+                          >
+                            <div style={{ fontWeight: 700, fontSize: "13px" }}>{c.name}</div>
+                            <div style={{ fontSize: "11px", color: "#6b7280" }}>{[c.phone, c.zone].filter(Boolean).join(" · ")}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
                 <option value="">-- เลือกลูกค้า --</option>
                 {customers
-                  .filter(c => !orderCustomerSearch.trim() || c.name.toLowerCase().includes(orderCustomerSearch.toLowerCase()))
+                  .filter(c => {
+                    const q = (orderCustomerSearch || "").trim().toLowerCase();
+                    if (!q) return true;
+                    const name = String(c?.name || "").toLowerCase();
+                    const phone = String(c?.phone || "").toLowerCase();
+                    const zone = String(c?.zone || "").toLowerCase();
+                    return name.includes(q) || phone.includes(q) || zone.includes(q);
+                  })
                   .slice(0, 200)
                   .map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
