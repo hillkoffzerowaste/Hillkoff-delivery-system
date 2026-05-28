@@ -744,9 +744,14 @@ export default function App() {
 
       const d = json.data || {};
       const dp = d.driverProfile || null;
+      const profileName =
+        dp && (dp.firstName || dp.lastName)
+          ? `${String(dp.firstName || "").trim()} ${String(dp.lastName || "").trim()}`.trim()
+          : "";
       const newAuthState = {
         role: d.role || role,
-        name: d.name || loginForm.name.trim() || "",
+        // Prefer driver's registered profile name over whatever was typed on the PIN screen (often phone)
+        name: (d.role || role) === "driver" ? (profileName || d.name || loginForm.name.trim() || "") : (d.name || loginForm.name.trim() || ""),
         phone: d.phone || loginForm.phone.trim(),
         driverId: d.driverId || "",
         email: "",
