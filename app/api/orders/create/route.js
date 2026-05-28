@@ -1,4 +1,4 @@
-import { getAdminDb, getAdminAuth } from "../../../../../lib/firebaseAdmin";
+import { getAdminDb, getAdminAuth } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -79,4 +79,3 @@ export async function POST(request) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
   }
 }
-

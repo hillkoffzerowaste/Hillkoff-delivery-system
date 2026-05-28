@@ -1,4 +1,4 @@
-import { getAdminDb } from "../../../../../lib/firebaseAdmin";
+import { getAdminDb } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -32,4 +32,3 @@ export async function POST(request) {
 
   return Response.json({ ok: true });
 }
-
