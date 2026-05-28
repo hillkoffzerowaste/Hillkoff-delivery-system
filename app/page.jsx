@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, signInAnon } from "../lib/firebaseClient";
+import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, signInAnon, getFcmToken } from "../lib/firebaseClient";
 import {
   AlertTriangle,
   Camera,
@@ -250,6 +250,26 @@ export default function App() {
     } catch {
       return false;
     }
+  };
+
+  const ensureWebPushForDriver = async (authState) => {
+    try {
+      if (typeof window === "undefined") return;
+      if (!authState?.token) return;
+      if (authState.role !== "driver") return;
+      if (!("serviceWorker" in navigator)) return;
+      await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      const ok = await requestNotifyPermission();
+      if (!ok) return;
+      const tokenRes = await getFcmToken();
+      if (!tokenRes.ok) return;
+      const phoneDigits = String(authState.phone || "").replace(/\D/g, "");
+      await fetch("/api/push/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenRes.token, role: "driver", phoneDigits }),
+      });
+    } catch {}
   };
 
 	  useEffect(() => setState(readState()), []);
@@ -735,6 +755,7 @@ export default function App() {
       localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
       setState(prev => ({ ...prev, auth: newAuthState }));
       if (newAuthState.driverId) setDriverId(newAuthState.driverId);
+      ensureWebPushForDriver(newAuthState);
       setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
       setLoginStage("login");
       setPinConfirm("");
@@ -880,9 +901,15 @@ export default function App() {
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
-	    const saved = await upsertOrderToFirestore(pendingOrder);
-	    if (!saved.ok) {
-	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${saved.error}`);
+	    // Create via server so it can trigger Web Push notifications (FCM)
+	    const res = await fetch("/api/orders/create", {
+	      method: "POST",
+	      headers: { "Content-Type": "application/json" },
+	      body: JSON.stringify({ idToken: state.auth?.token, order: pendingOrder })
+	    });
+	    const json = await res.json();
+	    if (!json?.ok) {
+	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
 	      return;
 	    }
     
