@@ -1793,7 +1793,8 @@ export default function App() {
                 ) : (
                   orders.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
                     const driver = drivers.find(d => d.id === order.driverId);
-                    return (
+                    const driverName = order.driverName || driver?.name || (order.driverId ? order.driverId : "");
+                     return (
                       <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
                           <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
@@ -1801,7 +1802,7 @@ export default function App() {
                         </div>
                         <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
                         <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
-                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driver?.name || "ยังไม่มอบหมาย"}</p>
+                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driverName || "ยังไม่มอบหมาย"}</p>
                       </div>
                     );
                   })
