@@ -3,6 +3,8 @@ import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
 function toServiceDateKeyBangkok(dateLike) {
   const date = dateLike ? new Date(dateLike) : new Date();
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -89,6 +91,7 @@ export async function POST(request) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return Response.json({ ok: false, error: "Missing GEMINI_API_KEY" }, { status: 500 });
+  const geminiModel = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -148,7 +151,7 @@ export async function POST(request) {
 
         const client = new GoogleGenerativeAI(apiKey);
         const model = client.getGenerativeModel({
-          model: "gemini-1.5-flash",
+          model: geminiModel,
           systemInstruction,
         });
 
