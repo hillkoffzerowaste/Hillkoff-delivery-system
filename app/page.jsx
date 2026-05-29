@@ -214,6 +214,12 @@ export default function App() {
     try { return localStorage.getItem("hillkoff_last_emergency_id") || ""; } catch { return ""; }
   }, []);
   const typingDebounceRef = useRef(null);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const chatLastReadKey = useMemo(() => {
+    const phone = String(state.auth?.phone || "").trim();
+    const role = String(state.auth?.role || "").trim();
+    return `hillkoff_chat_last_read_${role || "anon"}_${phone || "unknown"}`;
+  }, [state.auth?.phone, state.auth?.role]);
   const [fbAuthReady, setFbAuthReady] = useState(false);
 
   useEffect(() => {
@@ -669,6 +675,48 @@ export default function App() {
     scrollChatToBottom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatOpen]);
+
+  const getLastReadChatMs = () => {
+    try {
+      const v = localStorage.getItem(chatLastReadKey);
+      const n = Number(v || 0);
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const markChatReadUpToLatest = () => {
+    try {
+      if (!chatMessages?.length) return;
+      const latest = chatMessages[chatMessages.length - 1];
+      const t = parseChatTime(latest?.createdAt);
+      const ms = t ? t.getTime() : Date.now();
+      localStorage.setItem(chatLastReadKey, String(ms));
+      setUnreadChatCount(0);
+    } catch {}
+  };
+
+  useEffect(() => {
+    // Update unread badge while chat is closed
+    if (!chatMessages?.length) {
+      setUnreadChatCount(0);
+      return;
+    }
+    if (chatOpen) {
+      markChatReadUpToLatest();
+      return;
+    }
+    const lastRead = getLastReadChatMs();
+    let count = 0;
+    for (const m of chatMessages) {
+      const t = parseChatTime(m?.createdAt);
+      const ms = t ? t.getTime() : 0;
+      if (ms && ms > lastRead) count += 1;
+    }
+    setUnreadChatCount(count);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatMessages, chatOpen, chatLastReadKey]);
 
   useEffect(() => {
     if (!chatOpen) return;
@@ -2808,7 +2856,30 @@ export default function App() {
       }}
       title="แชท"
     >
-      💬
+      <span style={{ position: "relative", display: "inline-block" }}>
+        💬
+        {unreadChatCount > 0 && !chatOpen && (
+          <span style={{
+            position: "absolute",
+            top: "-8px",
+            right: "-10px",
+            minWidth: "18px",
+            height: "18px",
+            padding: "0 5px",
+            borderRadius: "999px",
+            background: "#dc2626",
+            color: "white",
+            fontSize: "11px",
+            fontWeight: 900,
+            display: "grid",
+            placeItems: "center",
+            border: "2px solid #ffffff",
+            lineHeight: 1
+          }}>
+            {unreadChatCount > 99 ? "99+" : unreadChatCount}
+          </span>
+        )}
+      </span>
     </button>
 
     {chatOpen && (
@@ -2816,7 +2887,7 @@ export default function App() {
         <div style={{ width: "min(520px, 100%)", background: "white", borderRadius: "12px", boxShadow: "0 12px 30px rgba(0,0,0,0.25)", overflow: "hidden" }}>
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
             <b>💬 แชททีม</b>
-            <button className="secondary" onClick={() => setChatOpen(false)} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
+            <button className="secondary" onClick={() => { markChatReadUpToLatest(); setChatOpen(false); }} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
           </div>
           {chatOpen && typingUsers.filter(u => u.phone !== state.auth?.phone).length > 0 && (
             <div style={{ padding: "8px 14px", borderBottom: "1px solid #e5e7eb", background: "#ecfeff", color: "#0e7490", fontSize: "12px" }}>
