@@ -123,6 +123,16 @@ function formatWithCommas(rawDigits) {
   }
 }
 
+function parseServiceDateKey(key) {
+  const m = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!y || !mo || !d) return null;
+  return new Date(Date.UTC(y, mo - 1, d, 0, 0, 0));
+}
+
 function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
@@ -254,6 +264,7 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
+  const [openReportDate, setOpenReportDate] = useState("");
 
   const todayServiceDate = toServiceDateKey(new Date());
   const getOrderServiceDate = (o) => String(o?.serviceDate || toServiceDateKey(o?.createdAt || o?.updatedAt || new Date()));
@@ -1366,6 +1377,24 @@ export default function App() {
     done: todayOrdersOnly.filter(order => order.status === "ส่งสำเร็จ").length
   };
 
+  const ordersByServiceDate = useMemo(() => {
+    const groups = {};
+    (orders || []).forEach((o) => {
+      const k = String(o?.serviceDate || "");
+      if (!k) return;
+      groups[k] = groups[k] || [];
+      groups[k].push(o);
+    });
+    const keys = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1)); // desc
+    return { keys, groups };
+  }, [orders]);
+
+  useEffect(() => {
+    if (openReportDate) return;
+    const first = ordersByServiceDate.keys[0] || "";
+    if (first) setOpenReportDate(first);
+  }, [openReportDate, ordersByServiceDate.keys]);
+
   if (!auth.role || auth.role === "driver-register") {
     return (
       <main className="login-page">
@@ -2447,13 +2476,48 @@ export default function App() {
         {displayTab === "reports" && (
           <div className="report-grid">
             <section className="panel">
-              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>ข้อมูล Supabase</span></div>
-              <div className="report-lines">
-                <p>ออเดอร์ทั้งหมด <b>{orders.length}</b> งาน</p>
-                <p>ส่งสำเร็จ <b>{report.delivered}</b> งาน</p>
-                <p>COD รวม <b>{money(report.cod)}</b> บาท</p>
-                <p>ร้องเรียน/ปัญหา <b>{report.complaints.length}</b> รายการ</p>
-              </div>
+              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>แยกตามวัน</span></div>
+              {ordersByServiceDate.keys.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงาน</p>
+              ) : (
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {ordersByServiceDate.keys.map((k) => {
+                    const list = ordersByServiceDate.groups[k] || [];
+                    const done = list.filter((o) => o.status === "ส่งสำเร็จ").length;
+                    const active = list.filter((o) => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").length;
+                    const waiting = list.filter((o) => o.status === "รอคนขับรับ").length;
+                    const cod = list.reduce((sum, o) => sum + Number(o.cod || 0), 0);
+                    const isOpen = openReportDate === k;
+                    const dt = parseServiceDateKey(k);
+                    const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : k;
+
+                    return (
+                      <div key={k} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setOpenReportDate((cur) => (cur === k ? "" : k))}
+                          style={{ width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderBottom: isOpen ? "1px solid #e5e7eb" : "none", background: "#f8fafc", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center" }}
+                        >
+                          <div>
+                            <b>{title}</b>
+                            <div style={{ fontSize: "12px", color: "#6b7280" }}>ทั้งหมด {list.length} · รอรับ {waiting} · กำลังส่ง {active} · สำเร็จ {done}</div>
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#111827", fontWeight: 800 }}>COD ฿{money(cod)}</div>
+                        </button>
+
+                        {isOpen && (
+                          <div className="report-lines" style={{ padding: "10px 12px" }}>
+                            <p>ออเดอร์ทั้งหมด <b>{list.length}</b> งาน</p>
+                            <p>รอคนขับรับ <b>{waiting}</b> · กำลังส่ง <b>{active}</b> · ส่งสำเร็จ <b>{done}</b></p>
+                            <p>COD รวม <b>{money(cod)}</b> บาท</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             <section className="panel">
@@ -2506,6 +2570,36 @@ export default function App() {
 		                const canceled = todayOrders.filter(o => o.status === "ยกเลิก").length;
 		                const codAll = todayOrders.reduce((sum, o) => sum + Number(o.cod || 0), 0);
 		                const codDone = todayOrders.filter(o => o.status === "ส่งสำเร็จ").reduce((sum, o) => sum + Number(o.cod || 0), 0);
+		                const now = new Date();
+		                const weekStart = new Date(now);
+		                weekStart.setHours(0, 0, 0, 0);
+		                // Monday start (local)
+		                const day = weekStart.getDay(); // 0..6 (Sun..Sat)
+		                const diffToMon = (day + 6) % 7;
+		                weekStart.setDate(weekStart.getDate() - diffToMon);
+		                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+		                const yearStart = new Date(now.getFullYear(), 0, 1);
+
+		                const isOnOrAfter = (d, start) => d && d.getTime() >= start.getTime();
+		                const byRange = (start) => (orders || []).filter((o) => {
+		                  const key = String(o?.serviceDate || "");
+		                  const d = parseServiceDateKey(key);
+		                  if (!d) return false;
+		                  // compare in local by converting UTC date to local midnight-ish
+		                  const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+		                  return isOnOrAfter(local, start);
+		                });
+		                const weekOrders = byRange(weekStart);
+		                const monthOrders = byRange(monthStart);
+		                const yearOrders = byRange(yearStart);
+		                const sumBlock = (list) => ({
+		                  total: list.length,
+		                  done: list.filter((o) => o.status === "ส่งสำเร็จ").length,
+		                  cod: list.reduce((sum, o) => sum + Number(o.cod || 0), 0),
+		                });
+		                const weekSum = sumBlock(weekOrders);
+		                const monthSum = sumBlock(monthOrders);
+		                const yearSum = sumBlock(yearOrders);
 		                return (
 		                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #eee" }}>
 		                    <b>ภาพรวมวันนี้ ({todayText()})</b>
@@ -2516,6 +2610,14 @@ export default function App() {
 		                      {backlogUndelivered.length > 0 && (
 		                        <p>งานค้างส่งจากวันก่อน <b>{backlogUndelivered.length}</b> งาน (จะยังแสดงจนกว่าจะส่งสำเร็จ)</p>
 		                      )}
+		                    </div>
+		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
+		                      <b>สรุปช่วงเวลา</b>
+		                      <div className="report-lines" style={{ marginTop: "8px" }}>
+		                        <p>สัปดาห์นี้ (จ.-วันนี้) <b>{weekSum.total}</b> งาน · ส่งสำเร็จ <b>{weekSum.done}</b> · COD ฿<b>{money(weekSum.cod)}</b></p>
+		                        <p>เดือนนี้ <b>{monthSum.total}</b> งาน · ส่งสำเร็จ <b>{monthSum.done}</b> · COD ฿<b>{money(monthSum.cod)}</b></p>
+		                        <p>ปีนี้ <b>{yearSum.total}</b> งาน · ส่งสำเร็จ <b>{yearSum.done}</b> · COD ฿<b>{money(yearSum.cod)}</b></p>
+		                      </div>
 		                    </div>
 		                  </div>
 		                );
