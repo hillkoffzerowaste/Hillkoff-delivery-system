@@ -18,6 +18,7 @@ import {
   Search,
   Star,
   Store,
+  Sparkles,
   Truck,
   UserCheck,
   Users,
@@ -221,6 +222,13 @@ export default function App() {
     return `hillkoff_chat_last_read_${role || "anon"}_${phone || "unknown"}`;
   }, [state.auth?.phone, state.auth?.role]);
   const [fbAuthReady, setFbAuthReady] = useState(false);
+
+  // Sales-only Gemini AI sidebar
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInput, setAiInput] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMessages, setAiMessages] = useState([]); // [{role:'user'|'model', text:string}]
+  const aiListRef = useRef(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
@@ -676,6 +684,86 @@ export default function App() {
       if (!el) return;
       el.scrollTop = el.scrollHeight;
     } catch {}
+  };
+
+  const scrollAiToBottom = () => {
+    try {
+      const el = aiListRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!aiOpen) return;
+    setTimeout(scrollAiToBottom, 0);
+  }, [aiOpen, aiMessages]);
+
+  const sendToGemini = async (text) => {
+    const q = String(text || "").trim();
+    if (!q) return;
+    if (state.auth?.role !== "sales") return;
+    if (!state.auth?.token) return;
+
+    setAiBusy(true);
+    setAiInput("");
+    setAiMessages((prev) => [...prev, { role: "user", text: q }, { role: "model", text: "" }]);
+
+    const phoneDigits = String(state.auth?.phone || "").replace(/\D/g, "");
+    const history = [...aiMessages, { role: "user", text: q }].slice(-20);
+
+    try {
+      const res = await fetch("/api/chat/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: state.auth.token, phoneDigits, messages: history }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No stream");
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+        for (const p of parts) {
+          const line = p.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          const jsonText = line.slice(6);
+          let evt;
+          try { evt = JSON.parse(jsonText); } catch { continue; }
+          if (evt.type === "delta") {
+            setAiMessages((prev) => {
+              const next = prev.slice();
+              for (let i = next.length - 1; i >= 0; i--) {
+                if (next[i].role === "model") {
+                  next[i] = { ...next[i], text: String(next[i].text || "") + String(evt.text || "") };
+                  break;
+                }
+              }
+              return next;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      setAiMessages((prev) => {
+        const next = prev.slice();
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === "model") {
+            next[i] = { ...next[i], text: `❌ ขออภัย ผู้ช่วย AI ใช้งานไม่ได้: ${e?.message || String(e)}` };
+            break;
+          }
+        }
+        return next;
+      });
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const parseChatTime = (v) => {
@@ -1581,12 +1669,15 @@ export default function App() {
           {auth.role === "driver" && (
             <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
           )}
-          {auth.role !== "driver" && (
-            <>
-              <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
-              <button className={displayTab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> การตั้งค่า</button>
-            </>
-          )}
+           {auth.role !== "driver" && (
+             <>
+               <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
+               <button className={displayTab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> การตั้งค่า</button>
+               {auth.role === "sales" && (
+                 <button className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> 🤖 ผู้ช่วย AI (Gemini)</button>
+               )}
+             </>
+           )}
         </nav>
       </aside>
 
@@ -1602,6 +1693,78 @@ export default function App() {
           </div>
         </header>
         <div className="sync-banner">{syncStatus}</div>
+
+        {auth.role === "sales" && aiOpen && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 2000 }} onClick={() => setAiOpen(false)}>
+            <aside
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                height: "100%",
+                width: "min(420px, 92vw)",
+                background: "white",
+                boxShadow: "-12px 0 30px rgba(0,0,0,0.2)",
+                display: "grid",
+                gridTemplateRows: "auto auto 1fr auto",
+              }}
+            >
+              <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+                <b>✨ ผู้ช่วย AI (Gemini)</b>
+                <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setAiOpen(false)}>✕</button>
+              </div>
+
+              <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {[
+                  "สรุปงานส่งภาพรวมและยอด COD วันนี้",
+                  "พื้นที่หรือโซนไหนที่มีปริมาณงานหนาแน่นที่สุด",
+                  "สรุปสถานะการเช็คอินและงานของคนขับแต่ละคน",
+                  "ตรวจสอบออเดอร์ที่มีปัญหาหรือตกค้าง",
+                ].map((t) => (
+                  <button key={t} className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={aiBusy} onClick={() => sendToGemini(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              <div ref={aiListRef} style={{ padding: "12px 14px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "10px" }}>
+                {aiMessages.length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>พิมพ์คำถาม หรือกดเลือกคำถามสำเร็จรูปด้านบน</p>
+                ) : (
+                  aiMessages.map((m, idx) => (
+                    <div key={idx} style={{ justifySelf: m.role === "user" ? "end" : "start", maxWidth: "100%" }}>
+                      <div style={{ background: m.role === "user" ? "#166534" : "white", color: m.role === "user" ? "white" : "#111827", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "10px 12px", whiteSpace: "pre-wrap", fontSize: "13px" }}>
+                        {m.text}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {aiBusy && (
+                  <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "10px 12px", color: "#6b7280", fontSize: "12px" }}>
+                    กำลังวิเคราะห์...
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
+                <input
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  placeholder="ถามผู้ช่วย AI..."
+                  style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") sendToGemini(aiInput);
+                  }}
+                  disabled={aiBusy}
+                />
+                <button className="primary" onClick={() => sendToGemini(aiInput)} disabled={aiBusy} style={{ padding: "10px 14px" }}>
+                  ส่ง
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
 
         <div className="stats">
           <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${totals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />

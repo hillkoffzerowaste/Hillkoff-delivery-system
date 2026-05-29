@@ -9,6 +9,7 @@
     "backup:export-csv": "node lib/backup/cli.js export-csv"
   },
   "dependencies": {
+    "@google/genai": "^1.5.0",
     "@supabase/supabase-js": "^2.106.1",
     "firebase": "^12.13.0",
     "firebase-admin": "^13.10.0",
