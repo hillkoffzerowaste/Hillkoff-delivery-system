@@ -1629,6 +1629,7 @@ export default function App() {
                                       <small style={{ color: statusColor[o.status] || "#111827" }}>{o.status}</small>
                                     </div>
                                     <small style={{ color: "#374151" }}>{o.customerName} · {o.zone}</small>
+                                    <div style={{ marginTop: "4px", color: "#6b7280", fontSize: "11px" }}>👤 คนขับ: {driver?.name || items[0]?.driverName || did} {driver?.phone ? `· ${driver.phone}` : ""}</div>
                                   </div>
                                 ))}
                                 {items.length > 5 && <small style={{ color: "#6b7280" }}>+ อีก {items.length - 5} งาน</small>}
@@ -1866,14 +1867,22 @@ export default function App() {
                           <div>
                             <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
                             <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone} · {location.plate}</p>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>🏪 {location.customerName}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>🏪 {location.customerName || location.lastCustomerName || "-"}</p>
                             {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>👤 ติดต่อ: {customer.contact}</p>}
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address || currentOrder?.address || "-"}</p>
+                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#6b7280" }}>📍 โซน: {location.zone || currentOrder?.zone || "-"}</p>
                             {currentOrder && <p style={{ margin: "4px 0", fontSize: "11px", color: "#7c2d12", background: "#fed7aa", padding: "2px 6px", borderRadius: "3px", display: "inline-block" }}>📦 สถานะ: {currentOrder.status}</p>}
                             <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
                           </div>
                           <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
                         </div>
+                        {location.lat && location.lng && (
+                          <div style={{ marginTop: "8px" }}>
+                            <a className="secondary" style={{ display: "inline-block", padding: "6px 10px", fontSize: "11px", textDecoration: "none" }} target="_blank" rel="noreferrer" href={osmPageUrl(location.lat, location.lng, 17)}>
+                              🗺️ เปิดจุดเช็คอินบนแผนที่
+                            </a>
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -2083,6 +2092,13 @@ export default function App() {
                           <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
                           <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
                         </div>
+
+                        {order.salesNote && (
+                          <div style={{ background: "#fff7ed", padding: "8px", borderRadius: "6px", border: "1px solid #fdba74" }}>
+                            <small style={{ color: "#9a3412", display: "block", fontWeight: "bold" }}>📝 หมายเหตุจากฝ่ายขาย</small>
+                            <small style={{ color: "#7c2d12", display: "block", whiteSpace: "pre-wrap" }}>{order.salesNote}</small>
+                          </div>
+                        )}
                         
                         <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #fcd34d" }}>
                           <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 ลูกค้า: {order.customerPhone}</small>
