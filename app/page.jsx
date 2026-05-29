@@ -1865,6 +1865,12 @@ export default function App() {
                   .map(location => {
                     const currentOrder = orders.find(o => o.driverId === location.driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง"));
                     const customer = currentOrder ? customers.find(c => c.name === currentOrder.customerName) : null;
+                    const lastSeenAt =
+                      location.updatedAt ? new Date(location.updatedAt) :
+                      location.checkInAt ? new Date(location.checkInAt) :
+                      null;
+                    const minutesAgo = lastSeenAt ? Math.floor((Date.now() - lastSeenAt.getTime()) / 60000) : null;
+                    const isOffline = minutesAgo == null ? true : minutesAgo > 120;
                     return (
                       <div key={location.driverId} style={{ padding: "12px", borderBottom: "1px solid #eee", marginBottom: "8px", background: "#f0f9ff", borderRadius: "6px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
@@ -1878,7 +1884,14 @@ export default function App() {
                             {currentOrder && <p style={{ margin: "4px 0", fontSize: "11px", color: "#7c2d12", background: "#fed7aa", padding: "2px 6px", borderRadius: "3px", display: "inline-block" }}>📦 สถานะ: {currentOrder.status}</p>}
                             <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
                           </div>
-                          <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                          {isOffline ? (
+                            <span style={{ background: "#991b1b", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>⚫ Offline</span>
+                          ) : (
+                            <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                          )}
+                        </div>
+                        <div style={{ marginTop: "6px", color: "#6b7280", fontSize: "11px" }}>
+                          ล่าสุด {minutesAgo == null ? "-" : `${minutesAgo} นาทีที่แล้ว`}
                         </div>
                         {location.lat && location.lng && (
                           <div style={{ marginTop: "8px" }}>
