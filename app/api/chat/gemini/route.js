@@ -22,6 +22,14 @@ function logGeminiAuth(label, data) {
   } catch {}
 }
 
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.toDate === "function") return value.toDate().getTime();
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 export async function POST(request) {
   let payload;
   try {
@@ -96,11 +104,12 @@ export async function POST(request) {
         const ordersSnap = await db
           .collection("orders")
           .where("serviceDate", "==", todayKey)
-          .orderBy("updatedAt", "desc")
-          .limit(limit)
           .get();
 
-        const orders = ordersSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+        const orders = ordersSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+          .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt))
+          .slice(0, limit);
         const queue = orders.map((o) => ({
           id: String(o.id || ""),
           customer: String(o.customerName || ""),
