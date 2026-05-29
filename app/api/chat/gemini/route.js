@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
@@ -93,8 +93,6 @@ export async function POST(request) {
         const systemInstruction =
           "คุณคือผู้ช่วย AI วิเคราะห์ข้อมูลโลจิสติกส์ระดับสูงของระบบ Hillkoff Delivery System หน้าที่ของคุณคือการวิเคราะห์คิวงาน สถานะออเดอร์ และยอดจัดเก็บเงินปลายทาง (COD) คอยให้คำแนะนำเชิงลึก สรุปผล และช่วยฝ่ายขายตรวจจับปัญหาคอขวดในระบบ จงตอบกลับด้วยภาษาไทยที่เป็นทางการ กระชับ เข้าใจง่าย และใช้ Markdown Format (เช่น ตาราง หรือ Bullet points) ในการสรุปข้อมูลตัวเลขเสมอ";
 
-        const ai = new GoogleGenAI({ apiKey });
-
         const contextText =
           "บริบทข้อมูลระบบ (วันนี้):\n" +
           JSON.stringify({ summary, queue }, null, 2);
@@ -109,18 +107,21 @@ export async function POST(request) {
 
         sse(writer, JSON.stringify({ type: "meta", summary }));
 
-        const result = await ai.models.generateContentStream({
+        const client = new GoogleGenerativeAI(apiKey);
+        const model = client.getGenerativeModel({
           model: "gemini-1.5-flash",
+          systemInstruction,
+        });
+
+        const result = await model.generateContentStream({
           contents: promptMessages,
-          config: {
+          generationConfig: {
             temperature: 0.4,
-            systemInstruction,
           },
         });
 
-        for await (const chunk of result) {
-          const maybe = typeof chunk?.text === "function" ? chunk.text() : chunk?.text;
-          const text = maybe == null ? "" : String(maybe);
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
           if (!text) continue;
           sse(writer, JSON.stringify({ type: "delta", text }));
         }
