@@ -2669,7 +2669,7 @@ export default function App() {
                   {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "none" }}>📞 {m.sender_phone}</a>}
                 </div>
               );
-              })}
+              })
             )}
           </div>
           <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
