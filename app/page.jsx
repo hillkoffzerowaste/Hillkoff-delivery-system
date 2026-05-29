@@ -225,7 +225,6 @@ export default function App() {
   const [orderForm, setOrderForm] = useState({
     pickupWindow: "09:00-12:00",
     qty: "4",
-    qtyUnit: "กล่อง",
     paymentType: "COD",
     codAmount: "",
     salesNote: ""
@@ -910,7 +909,6 @@ export default function App() {
       mapUrl: customer.mapUrl,
       window: orderForm.pickupWindow,
       boxes: Number(orderForm.qty || 0),
-      qtyUnit: orderForm.qtyUnit || "กล่อง",
       paymentType: orderForm.paymentType || "COD",
       cod: (orderForm.paymentType || "COD") === "COD" ? Number(orderForm.codAmount || 0) : 0,
       driverId: "",
@@ -1787,19 +1785,13 @@ export default function App() {
                 ) : null;
               })()}
               <div className="form-grid">
-                <input value={orderForm.pickupWindow} onChange={e => setOrderForm(p => ({ ...p, pickupWindow: e.target.value }))} placeholder="ช่อง 1: เวลารอรับสินค้า (เช่น 09:00-12:00)" />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "8px" }}>
-                  <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="ช่อง 2: จำนวน" />
-                  <select value={orderForm.qtyUnit} onChange={e => setOrderForm(p => ({ ...p, qtyUnit: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
-                    <option value="กล่อง">กล่อง</option>
-                    <option value="ถุง">ถุง</option>
-                  </select>
-                </div>
+                <input value={orderForm.pickupWindow} onChange={e => setOrderForm(p => ({ ...p, pickupWindow: e.target.value }))} placeholder="1) เวลารอรับสินค้า (เช่น 09:00-12:00)" />
+                <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="2) จำนวนชิ้น" />
                 <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
-                  <option value="COD">ช่อง 3: COD</option>
-                  <option value="PAID">ช่อง 3: PAID</option>
+                  <option value="COD">3) COD</option>
+                  <option value="PAID">3) PAID</option>
                 </select>
-                <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="ช่อง 4: จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
+                <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="4) จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
               </div>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
