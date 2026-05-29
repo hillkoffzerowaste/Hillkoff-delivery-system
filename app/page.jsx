@@ -223,7 +223,7 @@ export default function App() {
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({
-    pickupWindow: "09:00-12:00",
+    pickupWaitMinutes: "5",
     qty: "4",
     paymentType: "COD",
     codAmount: "",
@@ -907,7 +907,7 @@ export default function App() {
       zone: customer.zone,
       address: customer.address,
       mapUrl: customer.mapUrl,
-      window: orderForm.pickupWindow,
+      window: `รอรับ ${Number(orderForm.pickupWaitMinutes || 0) || 0} นาที`,
       boxes: Number(orderForm.qty || 0),
       paymentType: orderForm.paymentType || "COD",
       cod: (orderForm.paymentType || "COD") === "COD" ? Number(orderForm.codAmount || 0) : 0,
@@ -1785,8 +1785,14 @@ export default function App() {
                 ) : null;
               })()}
               <div className="form-grid">
-                <input value={orderForm.pickupWindow} onChange={e => setOrderForm(p => ({ ...p, pickupWindow: e.target.value }))} placeholder="1) เวลารอรับสินค้า (เช่น 09:00-12:00)" />
-                <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="2) จำนวนชิ้น" />
+                <select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+                  <option value="5">เวลารอรับสินค้า: 5 นาที</option>
+                  <option value="10">เวลารอรับสินค้า: 10 นาที</option>
+                  <option value="15">เวลารอรับสินค้า: 15 นาที</option>
+                  <option value="20">เวลารอรับสินค้า: 20 นาที</option>
+                  <option value="30">เวลารอรับสินค้า: 30 นาที</option>
+                </select>
+                <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="จำนวนของที่ส่ง" />
                 <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
                   <option value="COD">3) COD</option>
                   <option value="PAID">3) PAID</option>
