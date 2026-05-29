@@ -206,12 +206,14 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatText, setChatText] = useState("");
+  const [typingUsers, setTypingUsers] = useState([]); // [{uid,name,phone,updatedAtMs}]
   const chatListRef = useRef(null);
   const lastChatIdRef = useRef("");
   const lastEmergencyIdRef = useRef("");
   const lastEmergencySeenIdFromStorage = useMemo(() => {
     try { return localStorage.getItem("hillkoff_last_emergency_id") || ""; } catch { return ""; }
   }, []);
+  const typingDebounceRef = useRef(null);
   const [fbAuthReady, setFbAuthReady] = useState(false);
 
   useEffect(() => {
@@ -446,6 +448,27 @@ export default function App() {
 	      );
 	    } catch {}
 
+	    // Chat typing indicators (best-effort)
+	    try {
+	      const typingQ = fb.query(fb.collection(db, "chat_typing"), fb.orderBy("updatedAt", "desc"), fb.limit(50));
+	      unsubs.push(
+	        fb.onSnapshot(typingQ, (snap) => {
+	          const now = Date.now();
+	          const rows = snap.docs.map((d) => ({ uid: d.id, ...(d.data() || {}) }));
+	          const list = rows
+	            .map((r) => {
+	              const t = r.updatedAt?.toDate?.() ? r.updatedAt.toDate() : (r.updatedAt ? new Date(r.updatedAt) : null);
+	              const ms = t && !Number.isNaN(t.getTime()) ? t.getTime() : 0;
+	              return { uid: r.uid, name: r.name || r.sender_name || "", phone: r.phone || r.sender_phone || "", typing: Boolean(r.typing), updatedAtMs: ms };
+	            })
+	            .filter((r) => r.typing && r.updatedAtMs && (now - r.updatedAtMs) <= 15_000) // active within 15s
+	            .slice(0, 5);
+	          setTypingUsers(list);
+	          markConnected();
+	        })
+	      );
+	    } catch {}
+
 	    return () => {
 	      unsubs.forEach((u) => {
 	        try { u(); } catch {}
@@ -541,9 +564,35 @@ export default function App() {
         createdAt: fb.serverTimestamp(),
         updatedAt: fb.serverTimestamp()
       });
+      // Clear my typing flag
+      try {
+        const authUser = getFirebaseAuth()?.currentUser;
+        if (authUser?.uid) {
+          await fb.setDoc(fb.doc(db, "chat_typing", authUser.uid), {
+            typing: false,
+            name: state.auth?.name || "",
+            phone: state.auth?.phone || "",
+            updatedAt: fb.serverTimestamp()
+          }, { merge: true });
+        }
+      } catch {}
     } catch (e) {
       alert(`❌ ส่งข้อความไม่สำเร็จ: ${e?.message || e}`);
     }
+  };
+
+  const updateTyping = (isTyping) => {
+    try {
+      const db = getFirestoreDb();
+      const authUser = getFirebaseAuth()?.currentUser;
+      if (!authUser?.uid) return;
+      fb.setDoc(fb.doc(db, "chat_typing", authUser.uid), {
+        typing: Boolean(isTyping),
+        name: state.auth?.name || "",
+        phone: state.auth?.phone || "",
+        updatedAt: fb.serverTimestamp()
+      }, { merge: true }).catch(() => {});
+    } catch {}
   };
 
   const sendEmergency = async () => {
@@ -2769,6 +2818,11 @@ export default function App() {
             <b>💬 แชททีม</b>
             <button className="secondary" onClick={() => setChatOpen(false)} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
           </div>
+          {chatOpen && typingUsers.filter(u => u.phone !== state.auth?.phone).length > 0 && (
+            <div style={{ padding: "8px 14px", borderBottom: "1px solid #e5e7eb", background: "#ecfeff", color: "#0e7490", fontSize: "12px" }}>
+              ✍️ กำลังพิมพ์: {typingUsers.filter(u => u.phone !== state.auth?.phone).map(u => u.name || u.phone || "ไม่ระบุ").join(", ")}
+            </div>
+          )}
           <div ref={chatListRef} style={{ padding: "12px 14px", maxHeight: "280px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "8px" }}>
             {chatMessages.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อความ</p>
@@ -2793,7 +2847,21 @@ export default function App() {
             )}
           </div>
           <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
-            <input value={chatText} onChange={e => setChatText(e.target.value)} placeholder="พิมพ์ข้อความ..." style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }} />
+            <input
+              value={chatText}
+              onChange={e => {
+                const v = e.target.value;
+                setChatText(v);
+                if (typingDebounceRef.current) clearTimeout(typingDebounceRef.current);
+                updateTyping(Boolean(String(v || "").trim()));
+                typingDebounceRef.current = setTimeout(() => {
+                  updateTyping(Boolean(String(v || "").trim()));
+                }, 1200);
+              }}
+              onBlur={() => updateTyping(false)}
+              placeholder="พิมพ์ข้อความ..."
+              style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }}
+            />
             <button className="secondary" onClick={sendEmergency} style={{ padding: "10px 12px", background: "#fee2e2", borderColor: "#fecaca", color: "#991b1b", fontWeight: 900 }} title="ขอความช่วยเหลือฉุกเฉิน">
               🚨
             </button>
