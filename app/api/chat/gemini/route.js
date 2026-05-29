@@ -4,6 +4,7 @@ import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 export const runtime = "nodejs";
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_CONTEXT_DAYS = 7;
 
 function toServiceDateKeyBangkok(dateLike) {
   const date = dateLike ? new Date(dateLike) : new Date();
@@ -30,6 +31,25 @@ function toMillis(value) {
   if (typeof value?.toDate === "function") return value.toDate().getTime();
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : 0;
+}
+
+function readPositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function summarizeOrders(orders) {
+  const statusCounts = {};
+  for (const order of orders) {
+    const status = String(order.status || "ไม่ระบุ");
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  }
+
+  return {
+    total: orders.length,
+    statusCounts,
+    cod_total: orders.reduce((sum, o) => sum + Number(o.cod || 0), 0),
+  };
 }
 
 export async function POST(request) {
@@ -92,6 +112,7 @@ export async function POST(request) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return Response.json({ ok: false, error: "Missing GEMINI_API_KEY" }, { status: 500 });
   const geminiModel = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+  const contextDays = Math.min(readPositiveInt(process.env.GEMINI_CONTEXT_DAYS, DEFAULT_CONTEXT_DAYS), 31);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -101,20 +122,34 @@ export async function POST(request) {
       };
 
       try {
-        // Gather Firestore context (today only) - keep payload small.
+        // Gather Firestore context for recent service dates in Bangkok time.
         const todayKey = toServiceDateKeyBangkok(new Date());
+        const startKey = toServiceDateKeyBangkok(new Date(Date.now() - (contextDays - 1) * 24 * 60 * 60 * 1000));
         const limit = 200;
         const ordersSnap = await db
           .collection("orders")
-          .where("serviceDate", "==", todayKey)
+          .where("serviceDate", ">=", startKey)
+          .where("serviceDate", "<=", todayKey)
           .get();
 
         const orders = ordersSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() || {}) }))
           .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt))
           .slice(0, limit);
+        const ordersByDate = orders.reduce((acc, order) => {
+          const key = String(order.serviceDate || "ไม่ระบุวันที่");
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(order);
+          return acc;
+        }, {});
+        const dailySummaries = Object.fromEntries(
+          Object.entries(ordersByDate)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([date, list]) => [date, summarizeOrders(list)])
+        );
         const queue = orders.map((o) => ({
           id: String(o.id || ""),
+          serviceDate: String(o.serviceDate || ""),
           customer: String(o.customerName || ""),
           zone: String(o.zone || ""),
           status: String(o.status || ""),
@@ -123,8 +158,9 @@ export async function POST(request) {
         }));
 
         const summary = {
-          serviceDate: todayKey,
+          dateRange: { start: startKey, end: todayKey, timezone: "Asia/Bangkok", contextDays },
           total: orders.length,
+          byDate: dailySummaries,
           waiting: orders.filter((o) => o.status === "รอคนขับรับ").length,
           shipping: orders.filter((o) => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").length,
           done: orders.filter((o) => o.status === "ส่งสำเร็จ").length,
@@ -136,7 +172,8 @@ export async function POST(request) {
           "คุณคือผู้ช่วย AI วิเคราะห์ข้อมูลโลจิสติกส์ระดับสูงของระบบ Hillkoff Delivery System หน้าที่ของคุณคือการวิเคราะห์คิวงาน สถานะออเดอร์ และยอดจัดเก็บเงินปลายทาง (COD) คอยให้คำแนะนำเชิงลึก สรุปผล และช่วยฝ่ายขายตรวจจับปัญหาคอขวดในระบบ จงตอบกลับด้วยภาษาไทยที่เป็นทางการ กระชับ เข้าใจง่าย และใช้ Markdown Format (เช่น ตาราง หรือ Bullet points) ในการสรุปข้อมูลตัวเลขเสมอ";
 
         const contextText =
-          "บริบทข้อมูลระบบ (วันนี้):\n" +
+          "System delivery context for the recent Bangkok service-date range. Use dateRange and byDate when answering about yesterday, today, or this week.\n" +
+          "บริบทข้อมูลระบบ (ช่วงวันที่ล่าสุด):\n" +
           JSON.stringify({ summary, queue }, null, 2);
 
         const promptMessages = [
