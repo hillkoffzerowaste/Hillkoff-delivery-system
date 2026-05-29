@@ -73,6 +73,7 @@ export async function POST(request) {
     const nextPinHash = setPin ? sha256Hex(`${nextPinSalt}:${pin}`) : existing?.pinHash || null;
 
     const next = {
+      uid,
       uidLast: uid,
       role,
       phone: phoneRaw || existing?.phone || null,

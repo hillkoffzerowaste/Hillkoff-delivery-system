@@ -43,7 +43,7 @@ export async function POST(request) {
   const userSnap = await db.collection("users_by_phone").doc(phoneDigits).get();
   const user = userSnap.exists ? userSnap.data() : null;
   const role = String(user?.role || "");
-  const uid = String(user?.uid || "");
+  const uid = String(user?.uid || user?.uidLast || "");
 
   if (!user || role !== "sales" || !uid || uid !== decoded.uid) {
     return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
