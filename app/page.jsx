@@ -109,6 +109,20 @@ function toServiceDateKey(dateLike) {
   return `${y}-${m}-${d}`;
 }
 
+function digitsOnly(raw) {
+  return String(raw || "").replace(/[^\d]/g, "");
+}
+
+function formatWithCommas(rawDigits) {
+  const d = digitsOnly(rawDigits);
+  if (!d) return "";
+  try {
+    return new Intl.NumberFormat("en-US").format(Number(d));
+  } catch {
+    return d;
+  }
+}
+
 function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
@@ -910,7 +924,7 @@ export default function App() {
       window: `รอรับ ${Number(orderForm.pickupWaitMinutes || 0) || 0} นาที`,
       boxes: Number(orderForm.qty || 0),
       paymentType: orderForm.paymentType || "COD",
-      cod: (orderForm.paymentType || "COD") === "COD" ? Number(orderForm.codAmount || 0) : 0,
+      cod: (orderForm.paymentType || "COD") === "COD" ? Number(digitsOnly(orderForm.codAmount) || 0) : 0,
       driverId: "",
       driverName: "",
       salesName: auth.name,
@@ -1792,12 +1806,31 @@ export default function App() {
                   <option value="20">เวลารอรับสินค้า: 20 นาที</option>
                   <option value="30">เวลารอรับสินค้า: 30 นาที</option>
                 </select>
-                <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="จำนวนของที่ส่ง/ชิ้น" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 56px", gap: "8px", alignItems: "center" }}>
+                  <input
+                    value={orderForm.qty}
+                    onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))}
+                    inputMode="numeric"
+                    type="text"
+                    placeholder="จำนวนของที่ส่ง"
+                  />
+                  <div style={{ color: "#6b7280", fontSize: "12px", textAlign: "center" }}>ชิ้น</div>
+                </div>
                 <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
                   <option value="COD">COD</option>
                   <option value="PAID">PAID</option>
                 </select>
-                <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 56px", gap: "8px", alignItems: "center" }}>
+                  <input
+                    value={formatWithCommas(orderForm.codAmount)}
+                    onChange={e => setOrderForm(p => ({ ...p, codAmount: digitsOnly(e.target.value) }))}
+                    inputMode="numeric"
+                    type="text"
+                    placeholder="จำนวนเงิน (กรณี COD)"
+                    disabled={orderForm.paymentType !== "COD"}
+                  />
+                  <div style={{ color: "#6b7280", fontSize: "12px", textAlign: "center" }}>บาท</div>
+                </div>
               </div>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
