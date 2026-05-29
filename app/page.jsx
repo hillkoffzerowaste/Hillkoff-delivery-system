@@ -1250,10 +1250,10 @@ export default function App() {
   };
 
   const totals = {
-    jobs: orders.length,
-    waiting: orders.filter(order => order.status === "รอคนขับรับ").length,
-    active: orders.filter(order => order.status === "กำลังส่ง").length,
-    done: orders.filter(order => order.status === "ส่งสำเร็จ").length
+    jobs: todayOrdersOnly.length,
+    waiting: todayOrdersOnly.filter(order => order.status === "รอคนขับรับ").length,
+    active: todayOrdersOnly.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
+    done: todayOrdersOnly.filter(order => order.status === "ส่งสำเร็จ").length
   };
 
   if (!auth.role || auth.role === "driver-register") {
