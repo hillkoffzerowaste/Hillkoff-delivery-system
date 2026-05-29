@@ -765,6 +765,8 @@ export default function App() {
               }
               return next;
             });
+          } else if (evt.type === "error") {
+            throw new Error(evt.error || "Gemini stream failed");
           }
         }
       }

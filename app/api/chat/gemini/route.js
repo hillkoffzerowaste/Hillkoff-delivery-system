@@ -16,6 +16,12 @@ function sse(writer, text) {
   writer.enqueue(`data: ${text}\n\n`);
 }
 
+function logGeminiAuth(label, data) {
+  try {
+    console.log(`[Gemini chat] ${label}`, data);
+  } catch {}
+}
+
 export async function POST(request) {
   let payload;
   try {
@@ -33,20 +39,44 @@ export async function POST(request) {
 
   // Server-side RBAC: only sales can use this endpoint.
   let decoded;
+  let db;
+  let user = null;
   try {
     decoded = await getAdminAuth().verifyIdToken(idToken, true);
+    db = getAdminDb();
+
+    const userSnap = await db.collection("users_by_phone").doc(phoneDigits).get();
+    user = userSnap.exists ? userSnap.data() : null;
+
+    console.log(user);
+    logGeminiAuth("auth context", {
+      phoneDigits,
+      decodedUid: decoded?.uid || null,
+      userDocExists: userSnap.exists,
+      user,
+    });
+
+    const role = String(user?.role || "");
+    const uid = String(user?.uid || user?.uidLast || "");
+
+    if (!user || role !== "sales" || !uid || uid !== decoded.uid) {
+      logGeminiAuth("forbidden", {
+        phoneDigits,
+        decodedUid: decoded?.uid || null,
+        userRole: role || null,
+        userUid: uid || null,
+        hasUser: Boolean(user),
+      });
+
+      return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
+    }
   } catch (e) {
+    logGeminiAuth("authorization error", {
+      phoneDigits,
+      error: e?.message || String(e),
+      stack: e?.stack || null,
+    });
     return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const db = getAdminDb();
-  const userSnap = await db.collection("users_by_phone").doc(phoneDigits).get();
-  const user = userSnap.exists ? userSnap.data() : null;
-  const role = String(user?.role || "");
-  const uid = String(user?.uid || user?.uidLast || "");
-
-  if (!user || role !== "sales" || !uid || uid !== decoded.uid) {
-    return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
