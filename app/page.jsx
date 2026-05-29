@@ -273,6 +273,13 @@ export default function App() {
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [openReportDate, setOpenReportDate] = useState("");
+  const [ordersLimit, setOrdersLimit] = useState(20);
+  const [customersLimit, setCustomersLimit] = useState(20);
+  const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
+  const [chatLimit, setChatLimit] = useState(20);
+
+  // Determine active screen early (used for data subscriptions)
+  const displayTab = state.auth?.role === "driver" ? "driver" : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(new Date());
   const getOrderServiceDate = (o) => String(o?.serviceDate || toServiceDateKey(o?.createdAt || o?.updatedAt || new Date()));
@@ -346,7 +353,7 @@ export default function App() {
 	    return () => { try { unsub?.(); } catch {} };
 	  }, []);
 
-	  // Firestore realtime sync (orders/customers/driver_locations/chat)
+	  // Firestore sync (minimize reads): subscribe only where realtime is needed.
 	  useEffect(() => {
 	    if (typeof window === "undefined") return;
 	    if (!fbAuthReady) {
@@ -366,70 +373,81 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-	    // Orders
-	    try {
-	      let ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(500));
-	      if (state.auth?.role === "driver") {
-	        const did = state.auth?.driverId || driverId || "";
-	        if (did) {
-	          ordersQ = fb.query(
-	            fb.collection(db, "orders"),
-	            fb.where("driverId", "in", ["", did]),
-	            fb.orderBy("updatedAt", "desc"),
-	            fb.limit(500)
-	          );
-	        } else {
-	          ordersQ = fb.query(
-	            fb.collection(db, "orders"),
-	            fb.where("driverId", "==", ""),
-	            fb.orderBy("updatedAt", "desc"),
-	            fb.limit(500)
-	          );
+	    const needsOrdersRealtime = ["sales", "dispatch", "driver"].includes(String(displayTab || ""));
+	    const needsCustomers = String(displayTab || "") === "sales";
+	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
+	    const needsChat = Boolean(chatOpen);
+
+	    // Orders: keep realtime (core UX), but limit results.
+	    if (needsOrdersRealtime) {
+	      try {
+	        let ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(ordersLimit));
+	        if (state.auth?.role === "driver") {
+	          const did = state.auth?.driverId || driverId || "";
+	          if (did) {
+	            ordersQ = fb.query(
+	              fb.collection(db, "orders"),
+	              fb.where("driverId", "in", ["", did]),
+	              fb.orderBy("updatedAt", "desc"),
+	              fb.limit(ordersLimit)
+	            );
+	          } else {
+	            ordersQ = fb.query(
+	              fb.collection(db, "orders"),
+	              fb.where("driverId", "==", ""),
+	              fb.orderBy("updatedAt", "desc"),
+	              fb.limit(ordersLimit)
+	            );
+	          }
 	        }
-	      }
-	      unsubs.push(
-	        fb.onSnapshot(
-	          ordersQ,
-	          (snap) => {
-	            const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-	            setState((prev) => {
-	              const prevById = {};
-	              (prev.orders || []).forEach((o) => { prevById[o.id] = o; });
-	              const merged = rows.map((r) => {
-	                const p = prevById[r.id];
-	                const keepLocalPhoto = p?.photo && (String(p.photo).startsWith("blob:") || String(p.photo).startsWith("data:"));
-	                const photo = keepLocalPhoto ? p.photo : (r.photo || "");
-	                const sharedToLine = p?.sharedToLine != null ? p.sharedToLine : Boolean(r.sharedToLine);
-	                return { ...r, photo, sharedToLine };
+	        unsubs.push(
+	          fb.onSnapshot(
+	            ordersQ,
+	            (snap) => {
+	              const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	              setState((prev) => {
+	                const prevById = {};
+	                (prev.orders || []).forEach((o) => { prevById[o.id] = o; });
+	                const merged = rows.map((r) => {
+	                  const p = prevById[r.id];
+	                  const keepLocalPhoto = p?.photo && (String(p.photo).startsWith("blob:") || String(p.photo).startsWith("data:"));
+	                  const photo = keepLocalPhoto ? p.photo : (r.photo || "");
+	                  const sharedToLine = p?.sharedToLine != null ? p.sharedToLine : Boolean(r.sharedToLine);
+	                  return { ...r, photo, sharedToLine };
+	                });
+	                return { ...prev, orders: merged };
 	              });
-	              return { ...prev, orders: merged };
-	            });
-	            markConnected();
-	          },
-	          (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`)
-	        )
-	      );
-	    } catch (e) {
-	      console.warn("orders onSnapshot error", e);
+	              markConnected();
+	            },
+	            (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`)
+	          )
+	        );
+	      } catch (e) {
+	        console.warn("orders onSnapshot error", e);
+	      }
 	    }
 
-	    // Customers
-	    try {
-	      const custQ = fb.query(fb.collection(db, "customers"), fb.orderBy("updatedAt", "desc"), fb.limit(500));
-	      unsubs.push(
-	        fb.onSnapshot(custQ, (snap) => {
+	    // Customers: one-time fetch (no realtime needed).
+	    if (needsCustomers) {
+	      (async () => {
+	        try {
+	          const custQ = fb.query(fb.collection(db, "customers"), fb.orderBy("updatedAt", "desc"), fb.limit(customersLimit));
+	          const snap = await fb.getDocs(custQ);
 	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 	          setState((prev) => ({ ...prev, customers: rows }));
 	          markConnected();
-	        })
-	      );
-	    } catch {}
+	        } catch (e) {
+	          // ignore
+	        }
+	      })();
+	    }
 
-	    // Driver locations
-	    try {
-	      const locQ = fb.query(fb.collection(db, "driver_locations"), fb.orderBy("updatedAt", "desc"), fb.limit(200));
-	      unsubs.push(
-	        fb.onSnapshot(locQ, (snap) => {
+	    // Driver locations: one-time fetch (check-in based; no constant realtime needed).
+	    if (needsDriverLocations) {
+	      (async () => {
+	        try {
+	          const locQ = fb.query(fb.collection(db, "driver_locations"), fb.orderBy("updatedAt", "desc"), fb.limit(driverLocationsLimit));
+	          const snap = await fb.getDocs(locQ);
 	          const next = {};
 	          snap.docs.forEach((d) => {
 	            const v = d.data() || {};
@@ -438,42 +456,43 @@ export default function App() {
 	          });
 	          setState((prev) => ({ ...prev, driverLocations: next }));
 	          markConnected();
-	        })
-	      );
-	    } catch {}
+	        } catch {}
+	      })();
+	    }
 
-	    // Chat messages (last 50)
-	    try {
-	      const chatQ = fb.query(fb.collection(db, "chat_messages"), fb.orderBy("createdAt", "desc"), fb.limit(50));
-	      unsubs.push(
-	        fb.onSnapshot(chatQ, (snap) => {
-	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-	          setChatMessages(rows.reverse());
-	          markConnected();
-	        })
-	      );
-	    } catch {}
+	    // Chat: realtime only while chat UI is open.
+	    if (needsChat) {
+	      try {
+	        const chatQ = fb.query(fb.collection(db, "chat_messages"), fb.orderBy("createdAt", "desc"), fb.limit(chatLimit));
+	        unsubs.push(
+	          fb.onSnapshot(chatQ, (snap) => {
+	            const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	            setChatMessages(rows.reverse());
+	            markConnected();
+	          })
+	        );
+	      } catch {}
 
-	    // Chat typing indicators (best-effort)
-	    try {
-	      const typingQ = fb.query(fb.collection(db, "chat_typing"), fb.orderBy("updatedAt", "desc"), fb.limit(50));
-	      unsubs.push(
-	        fb.onSnapshot(typingQ, (snap) => {
-	          const now = Date.now();
-	          const rows = snap.docs.map((d) => ({ uid: d.id, ...(d.data() || {}) }));
-	          const list = rows
-	            .map((r) => {
-	              const t = r.updatedAt?.toDate?.() ? r.updatedAt.toDate() : (r.updatedAt ? new Date(r.updatedAt) : null);
-	              const ms = t && !Number.isNaN(t.getTime()) ? t.getTime() : 0;
-	              return { uid: r.uid, name: r.name || r.sender_name || "", phone: r.phone || r.sender_phone || "", typing: Boolean(r.typing), updatedAtMs: ms };
-	            })
-	            .filter((r) => r.typing && r.updatedAtMs && (now - r.updatedAtMs) <= 15_000) // active within 15s
-	            .slice(0, 5);
-	          setTypingUsers(list);
-	          markConnected();
-	        })
-	      );
-	    } catch {}
+	      try {
+	        const typingQ = fb.query(fb.collection(db, "chat_typing"), fb.orderBy("updatedAt", "desc"), fb.limit(20));
+	        unsubs.push(
+	          fb.onSnapshot(typingQ, (snap) => {
+	            const now = Date.now();
+	            const rows = snap.docs.map((d) => ({ uid: d.id, ...(d.data() || {}) }));
+	            const list = rows
+	              .map((r) => {
+	                const t = r.updatedAt?.toDate?.() ? r.updatedAt.toDate() : (r.updatedAt ? new Date(r.updatedAt) : null);
+	                const ms = t && !Number.isNaN(t.getTime()) ? t.getTime() : 0;
+	                return { uid: r.uid, name: r.name || r.sender_name || "", phone: r.phone || r.sender_phone || "", typing: Boolean(r.typing), updatedAtMs: ms };
+	              })
+	              .filter((r) => r.typing && r.updatedAtMs && (now - r.updatedAtMs) <= 15_000)
+	              .slice(0, 5);
+	            setTypingUsers(list);
+	            markConnected();
+	          })
+	        );
+	      } catch {}
+	    }
 
 	    return () => {
 	      unsubs.forEach((u) => {
@@ -481,7 +500,7 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit]);
 
   // (Supabase removed) no forced polling needed
 
@@ -1476,7 +1495,7 @@ export default function App() {
 
   const ordersByServiceDate = useMemo(() => {
     const groups = {};
-    (orders || []).forEach((o) => {
+    (state.orders || []).forEach((o) => {
       const k = String(o?.serviceDate || "");
       if (!k) return;
       groups[k] = groups[k] || [];
@@ -1484,7 +1503,7 @@ export default function App() {
     });
     const keys = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1)); // desc
     return { keys, groups };
-  }, [orders]);
+  }, [state.orders]);
 
   useEffect(() => {
     if (openReportDate) return;
@@ -1542,7 +1561,7 @@ export default function App() {
     );
   }
 
-  const displayTab = auth.role === "driver" ? "driver" : (tab === "driver" ? "sales" : tab);
+  // (displayTab is defined near the top for subscription logic)
 
   return (
     <>
@@ -1886,6 +1905,13 @@ export default function App() {
 
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
+              {displayTab === "sales" && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "10px" }}>
+                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setCustomersLimit((n) => n + 20)}>
+                    โหลดเพิ่ม (+20)
+                  </button>
+                </div>
+              )}
               {customers.length === 0 ? (
                 <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
               ) : (
@@ -2245,6 +2271,11 @@ export default function App() {
                 }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
               </div>
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "10px" }}>
+                <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setOrdersLimit((n) => n + 20)}>
+                  โหลดเพิ่ม (+20)
+                </button>
+              </div>
               <div className="filters dispatch-filters">
                 <label className="search"><Search size={16} /><input value={orderQuery} onChange={e => setOrderQuery(e.target.value)} placeholder="ค้นหาเลขงาน ลูกค้า พื้นที่ หมายเหตุ" /></label>
                 <select value={orderStatusFilter} onChange={e => setOrderStatusFilter(e.target.value)}>
