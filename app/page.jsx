@@ -699,6 +699,20 @@ export default function App() {
     setTimeout(scrollAiToBottom, 0);
   }, [aiOpen, aiMessages]);
 
+  const refreshAuthToken = async () => {
+    const authClient = getFirebaseAuth();
+    const user = authClient.currentUser;
+    if (!user) {
+      throw new Error("กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่");
+    }
+
+    const token = await user.getIdToken(true);
+    const nextAuth = { ...(state.auth || {}), token };
+    localStorage.setItem("hillkoff_auth", JSON.stringify(nextAuth));
+    setState((prev) => ({ ...prev, auth: { ...(prev.auth || {}), token } }));
+    return token;
+  };
+
   const sendToGemini = async (text) => {
     const q = String(text || "").trim();
     if (!q) return;
@@ -713,12 +727,16 @@ export default function App() {
     const history = [...aiMessages, { role: "user", text: q }].slice(-20);
 
     try {
+      const idToken = await refreshAuthToken();
       const res = await fetch("/api/chat/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: state.auth.token, phoneDigits, messages: history }),
+        body: JSON.stringify({ idToken, phoneDigits, messages: history }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errorPayload = await res.json().catch(() => null);
+        throw new Error(errorPayload?.error || `HTTP ${res.status}`);
+      }
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No stream");
       const decoder = new TextDecoder();
