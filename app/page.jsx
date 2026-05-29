@@ -1803,7 +1803,7 @@ export default function App() {
                   </div>
                 ) : null;
               })()}
-              <div className="form-grid">
+              <div className="form-grid order-create-grid">
                 <select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
                   <option value="5">เวลารอรับสินค้า: 5 นาที</option>
                   <option value="10">เวลารอรับสินค้า: 10 นาที</option>

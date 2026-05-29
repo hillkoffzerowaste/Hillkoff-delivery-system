@@ -523,6 +523,11 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.form-grid.order-create-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .dispatch-table {
   display: grid;
   gap: 6px;
