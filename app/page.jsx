@@ -1615,13 +1615,16 @@ export default function App() {
                         {Object.keys(byDriver).map(did => {
                           const driver = drivers.find(d => d.id === did);
                           const items = byDriver[did] || [];
+                          const loc = (state.driverLocations || {})[did] || null;
+                          const resolvedName = driver?.name || items[0]?.driverName || loc?.driverName || "";
+                          const resolvedPhone = driver?.phone || loc?.driverPhone || "";
                           return (
                             <div key={did} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
-                                <b>{driver?.name || items[0]?.driverName || "ไม่ทราบชื่อคนขับ"}</b>
+                                <b>{resolvedName || "ไม่ทราบชื่อคนขับ"}</b>
                                 <small style={{ color: "#6b7280" }}>{driver?.plate || "-"}</small>
                               </div>
-                              <small style={{ color: "#6b7280" }}>{driver?.zone || "-"}</small>
+                              <small style={{ color: "#6b7280" }}>{driver?.zone || loc?.zone || "-"}{resolvedPhone ? ` · ${resolvedPhone}` : ""}</small>
                               <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
                                 {items.slice(0, 5).map(o => (
                                   <div key={o.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "8px" }}>
@@ -1630,7 +1633,7 @@ export default function App() {
                                       <small style={{ color: statusColor[o.status] || "#111827" }}>{o.status}</small>
                                     </div>
                                     <small style={{ color: "#374151" }}>{o.customerName} · {o.zone}</small>
-                                    <div style={{ marginTop: "4px", color: "#6b7280", fontSize: "11px" }}>👤 คนขับ: {driver?.name || items[0]?.driverName || did} {driver?.phone ? `· ${driver.phone}` : ""}</div>
+                                    <div style={{ marginTop: "4px", color: "#6b7280", fontSize: "11px" }}>👤 คนขับ: {resolvedName || did} {resolvedPhone ? `· ${resolvedPhone}` : ""}</div>
                                   </div>
                                 ))}
                                 {items.length > 5 && <small style={{ color: "#6b7280" }}>+ อีก {items.length - 5} งาน</small>}
