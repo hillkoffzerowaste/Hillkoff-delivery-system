@@ -1797,7 +1797,7 @@ export default function App() {
                   <option value="COD">COD</option>
                   <option value="PAID">PAID</option>
                 </select>
-                <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="4) จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
+                <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
               </div>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
