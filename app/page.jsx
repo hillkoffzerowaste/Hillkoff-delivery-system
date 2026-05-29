@@ -199,6 +199,9 @@ export default function App() {
   const chatListRef = useRef(null);
   const lastChatIdRef = useRef("");
   const lastEmergencyIdRef = useRef("");
+  const lastEmergencySeenIdFromStorage = useMemo(() => {
+    try { return localStorage.getItem("hillkoff_last_emergency_id") || ""; } catch { return ""; }
+  }, []);
   const [fbAuthReady, setFbAuthReady] = useState(false);
 
   useEffect(() => {
@@ -624,7 +627,20 @@ export default function App() {
     const latestEmergency = [...chatMessages].reverse().find((m) => m?.type === "emergency");
     if (!latestEmergency?.id) return;
     if (latestEmergency.id === lastEmergencyIdRef.current) return;
+    if (latestEmergency.id === lastEmergencySeenIdFromStorage) {
+      lastEmergencyIdRef.current = latestEmergency.id;
+      return;
+    }
+
+    // If emergency is old (e.g., refresh), don't keep alerting.
+    const t = parseChatTime(latestEmergency.createdAt);
+    if (t && (Date.now() - t.getTime()) > 2 * 60_000) {
+      lastEmergencyIdRef.current = latestEmergency.id;
+      try { localStorage.setItem("hillkoff_last_emergency_id", latestEmergency.id); } catch {}
+      return;
+    }
     lastEmergencyIdRef.current = latestEmergency.id;
+    try { localStorage.setItem("hillkoff_last_emergency_id", latestEmergency.id); } catch {}
 
     // Don't alert the sender repeatedly on their own device
     const myPhone = String(state.auth?.phone || "");
@@ -646,7 +662,7 @@ export default function App() {
         alert(`🚨 แจ้งเหตุฉุกเฉิน\n\nจาก: ${latestEmergency.sender_name || "-"}\nโทร: ${latestEmergency.sender_phone || "-"}\n\n${latestEmergency.message || ""}`);
       }
     } catch {}
-  }, [chatMessages, state.auth?.phone]);
+  }, [chatMessages, state.auth?.phone, lastEmergencySeenIdFromStorage]);
 
 		  // Legacy Supabase refresh (disabled). Firestore onSnapshot is used instead.
 		  const refreshFromSupabase = async () => {};
@@ -1216,7 +1232,7 @@ export default function App() {
     if (!order) return;
     
     // Update status to completed
-    updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+    updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
     
     // Show order summary alert
     const summaryText = `✅ ส่งสำเร็จ!\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ${order.photo ? "✅ มี" : "❌ ไม่มี"}\n\nออเดอร์ถูกลงทะเบียนในระบบแล้ว`;
@@ -2124,7 +2140,8 @@ export default function App() {
                 </div>
                 {filteredOrders.map(order => {
                   const assignedDriver = drivers.find(driver => driver.id === order.driverId);
-                  const driverName = order.driverName || assignedDriver?.name || "";
+                  const loc = (state.driverLocations || {})[order.driverId] || null;
+                  const driverName = order.driverName || assignedDriver?.name || loc?.driverName || "";
                   return (
                     <article key={order.id} className="dispatch-row">
                       <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
@@ -2334,7 +2351,7 @@ export default function App() {
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} 
 	                            disabled={false}
 	                            onClick={() => {
-	                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH") });
+	                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
 	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
 	                            }}>✅ ส่งสำเร็จ</button>
 	                        )}
