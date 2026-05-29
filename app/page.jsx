@@ -222,7 +222,14 @@ export default function App() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
-  const [orderForm, setOrderForm] = useState({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+  const [orderForm, setOrderForm] = useState({
+    pickupWindow: "09:00-12:00",
+    qty: "4",
+    qtyUnit: "กล่อง",
+    paymentType: "COD",
+    codAmount: "",
+    salesNote: ""
+  });
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
@@ -901,9 +908,11 @@ export default function App() {
       zone: customer.zone,
       address: customer.address,
       mapUrl: customer.mapUrl,
-      window: orderForm.window,
-      boxes: Number(orderForm.boxes || 0),
-      cod: Number(orderForm.cod || 0),
+      window: orderForm.pickupWindow,
+      boxes: Number(orderForm.qty || 0),
+      qtyUnit: orderForm.qtyUnit || "กล่อง",
+      paymentType: orderForm.paymentType || "COD",
+      cod: (orderForm.paymentType || "COD") === "COD" ? Number(orderForm.codAmount || 0) : 0,
       driverId: "",
       driverName: "",
       salesName: auth.name,
@@ -1778,9 +1787,19 @@ export default function App() {
                 ) : null;
               })()}
               <div className="form-grid">
-                <input value={orderForm.window} onChange={e => setOrderForm(p => ({ ...p, window: e.target.value }))} placeholder="ช่วงเวลาส่ง" />
-                <input value={orderForm.boxes} onChange={e => setOrderForm(p => ({ ...p, boxes: e.target.value }))} type="number" placeholder="จำนวนกล่อง" />
-                <input value={orderForm.cod} onChange={e => setOrderForm(p => ({ ...p, cod: e.target.value }))} type="number" placeholder="COD" />
+                <input value={orderForm.pickupWindow} onChange={e => setOrderForm(p => ({ ...p, pickupWindow: e.target.value }))} placeholder="ช่อง 1: เวลารอรับสินค้า (เช่น 09:00-12:00)" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "8px" }}>
+                  <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="ช่อง 2: จำนวน" />
+                  <select value={orderForm.qtyUnit} onChange={e => setOrderForm(p => ({ ...p, qtyUnit: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+                    <option value="กล่อง">กล่อง</option>
+                    <option value="ถุง">ถุง</option>
+                  </select>
+                </div>
+                <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+                  <option value="COD">ช่อง 3: COD</option>
+                  <option value="PAID">ช่อง 3: PAID</option>
+                </select>
+                <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="ช่อง 4: จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
               </div>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
