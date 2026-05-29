@@ -2131,7 +2131,7 @@ export default function App() {
                       <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
                       <div className="status-stack">
                         <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
-                        <small>{driverName || "-"}</small>
+                        <small>{driverName || "ยังไม่รับงาน"}</small>
                       </div>
                       <strong>{money(order.cod)} บาท</strong>
                       <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️</button>
