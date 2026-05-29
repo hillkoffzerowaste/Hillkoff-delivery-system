@@ -196,6 +196,9 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatText, setChatText] = useState("");
+  const chatListRef = useRef(null);
+  const lastChatIdRef = useRef("");
+  const lastEmergencyIdRef = useRef("");
   const [fbAuthReady, setFbAuthReady] = useState(false);
 
   useEffect(() => {
@@ -519,12 +522,36 @@ export default function App() {
         sender_role: state.auth?.role || "",
         sender_name: state.auth?.name || "",
         sender_phone: state.auth?.phone || "",
+        type: "chat",
         message: text,
         createdAt: fb.serverTimestamp(),
         updatedAt: fb.serverTimestamp()
       });
     } catch (e) {
       alert(`❌ ส่งข้อความไม่สำเร็จ: ${e?.message || e}`);
+    }
+  };
+
+  const sendEmergency = async () => {
+    const note = prompt("🚨 ขอความช่วยเหลือ (ใส่รายละเอียด เช่น รถเสีย/อุบัติเหตุ/ต้องการคนมาเปลี่ยน):");
+    if (note === null) return;
+    const text = String(note || "").trim();
+    if (!text) return;
+    try {
+      const db = getFirestoreDb();
+      await fb.addDoc(fb.collection(db, "chat_messages"), {
+        sender_role: state.auth?.role || "",
+        sender_name: state.auth?.name || "",
+        sender_phone: state.auth?.phone || "",
+        type: "emergency",
+        message: text,
+        createdAt: fb.serverTimestamp(),
+        updatedAt: fb.serverTimestamp()
+      });
+      // Local immediate feedback
+      playNotificationSound();
+    } catch (e) {
+      alert(`❌ ส่งแจ้งเหตุฉุกเฉินไม่สำเร็จ: ${e?.message || e}`);
     }
   };
 
@@ -553,6 +580,73 @@ export default function App() {
     }
     previousOrderCountRef.current = count;
   }, [state.auth?.role, state.auth?.driverId, driverId, state.orders]);
+
+  // Chat UX: auto-scroll to latest message + emergency alert to everyone
+  const scrollChatToBottom = () => {
+    try {
+      const el = chatListRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    } catch {}
+  };
+
+  const parseChatTime = (v) => {
+    try {
+      if (!v) return null;
+      if (typeof v?.toDate === "function") return v.toDate(); // Firestore Timestamp
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    scrollChatToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen]);
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    if (!chatMessages?.length) return;
+    const latest = chatMessages[chatMessages.length - 1];
+    if (latest?.id && latest.id !== lastChatIdRef.current) {
+      lastChatIdRef.current = latest.id;
+      // next tick so DOM paints first
+      setTimeout(scrollChatToBottom, 0);
+    }
+  }, [chatOpen, chatMessages]);
+
+  useEffect(() => {
+    if (!chatMessages?.length) return;
+    // Find latest emergency in the last 50
+    const latestEmergency = [...chatMessages].reverse().find((m) => m?.type === "emergency");
+    if (!latestEmergency?.id) return;
+    if (latestEmergency.id === lastEmergencyIdRef.current) return;
+    lastEmergencyIdRef.current = latestEmergency.id;
+
+    // Don't alert the sender repeatedly on their own device
+    const myPhone = String(state.auth?.phone || "");
+    const isMine = myPhone && String(latestEmergency.sender_phone || "") === myPhone;
+    if (isMine) return;
+
+    // Alert everyone
+    playNotificationSound();
+    requestNotifyPermission().then((ok) => {
+      if (!ok) return;
+      try {
+        new Notification("🚨 แจ้งเหตุฉุกเฉิน", {
+          body: `${latestEmergency.sender_name || "ไม่ระบุ"}: ${latestEmergency.message || ""}`.slice(0, 180),
+        });
+      } catch {}
+    });
+    try {
+      if (typeof window !== "undefined") {
+        alert(`🚨 แจ้งเหตุฉุกเฉิน\n\nจาก: ${latestEmergency.sender_name || "-"}\nโทร: ${latestEmergency.sender_phone || "-"}\n\n${latestEmergency.message || ""}`);
+      }
+    } catch {}
+  }, [chatMessages, state.auth?.phone]);
 
 		  // Legacy Supabase refresh (disabled). Firestore onSnapshot is used instead.
 		  const refreshFromSupabase = async () => {};
@@ -2555,24 +2649,34 @@ export default function App() {
             <b>💬 แชททีม</b>
             <button className="secondary" onClick={() => setChatOpen(false)} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
           </div>
-          <div style={{ padding: "12px 14px", maxHeight: "280px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "8px" }}>
+          <div ref={chatListRef} style={{ padding: "12px 14px", maxHeight: "280px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "8px" }}>
             {chatMessages.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อความ</p>
             ) : (
-              chatMessages.map(m => (
-                <div key={m.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", padding: "10px" }}>
+              chatMessages.map(m => {
+                const t = parseChatTime(m.createdAt);
+                const timeText = t ? t.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "";
+                const isEmergency = m.type === "emergency";
+                return (
+                <div key={m.id} style={{ background: isEmergency ? "#fff1f2" : "white", border: `1px solid ${isEmergency ? "#fecdd3" : "#e5e7eb"}`, borderRadius: "10px", padding: "10px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
-                    <b style={{ fontSize: "12px" }}>{m.sender_name || "ไม่ระบุ"} {m.sender_role ? `(${m.sender_role})` : ""}</b>
-                    <small style={{ color: "#6b7280" }}>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString("th-TH") : ""}</small>
+                    <b style={{ fontSize: "12px", color: isEmergency ? "#9f1239" : "#111827" }}>
+                      {isEmergency ? "🚨 " : ""}{m.sender_name || "ไม่ระบุ"} {m.sender_role ? `(${m.sender_role})` : ""}
+                    </b>
+                    <small style={{ color: "#6b7280" }}>{timeText}</small>
                   </div>
                   <div style={{ fontSize: "13px", whiteSpace: "pre-wrap" }}>{m.message}</div>
                   {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "none" }}>📞 {m.sender_phone}</a>}
                 </div>
-              ))
+              );
+              })}
             )}
           </div>
           <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
             <input value={chatText} onChange={e => setChatText(e.target.value)} placeholder="พิมพ์ข้อความ..." style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }} />
+            <button className="secondary" onClick={sendEmergency} style={{ padding: "10px 12px", background: "#fee2e2", borderColor: "#fecaca", color: "#991b1b", fontWeight: 900 }} title="ขอความช่วยเหลือฉุกเฉิน">
+              🚨
+            </button>
             <button className="primary" onClick={sendChat} style={{ padding: "10px 14px" }}>ส่ง</button>
           </div>
         </div>
