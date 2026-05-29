@@ -2124,13 +2124,14 @@ export default function App() {
                 </div>
                 {filteredOrders.map(order => {
                   const assignedDriver = drivers.find(driver => driver.id === order.driverId);
+                  const driverName = order.driverName || assignedDriver?.name || "";
                   return (
                     <article key={order.id} className="dispatch-row">
                       <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
                       <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
                       <div className="status-stack">
                         <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
-                        <small>{assignedDriver ? assignedDriver.name : "รอคนขับรับ"}</small>
+                        <small>{driverName || "-"}</small>
                       </div>
                       <strong>{money(order.cod)} บาท</strong>
                       <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️</button>
