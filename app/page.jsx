@@ -2123,7 +2123,8 @@ export default function App() {
                           disabled={pendingOrderUpdatesRef.current.has(order.id)}
                           onClick={() => {
                             pendingOrderUpdatesRef.current.add(order.id);
-                            updateOrder(order.id, { driverId, driverName: drivers.find(d => d.id === driverId)?.name, status: "กำลังส่ง" });
+                            const driverName = drivers.find(d => d.id === driverId)?.name || state.auth?.name || "";
+                            updateOrder(order.id, { driverId, driverName, status: "กำลังส่ง" });
                             setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
                           }}>✓ รับออเดอร์นี้</button>
                       </div>
