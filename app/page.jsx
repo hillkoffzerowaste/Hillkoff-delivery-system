@@ -1792,7 +1792,7 @@ export default function App() {
                   <option value="20">เวลารอรับสินค้า: 20 นาที</option>
                   <option value="30">เวลารอรับสินค้า: 30 นาที</option>
                 </select>
-                <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="จำนวนของที่ส่ง" />
+                <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="จำนวนของที่ส่ง/ชิ้น" />
                 <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
                   <option value="COD">3) COD</option>
                   <option value="PAID">3) PAID</option>
