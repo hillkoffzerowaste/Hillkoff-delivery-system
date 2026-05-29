@@ -224,7 +224,7 @@ export default function App() {
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({
     pickupWaitMinutes: "5",
-    qty: "4",
+    qty: "",
     paymentType: "COD",
     codAmount: "",
     salesNote: ""
@@ -1794,8 +1794,8 @@ export default function App() {
                 </select>
                 <input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: e.target.value }))} type="number" placeholder="จำนวนของที่ส่ง/ชิ้น" />
                 <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
-                  <option value="COD">3) COD</option>
-                  <option value="PAID">3) PAID</option>
+                  <option value="COD">COD</option>
+                  <option value="PAID">PAID</option>
                 </select>
                 <input value={orderForm.codAmount} onChange={e => setOrderForm(p => ({ ...p, codAmount: e.target.value }))} type="number" placeholder="4) จำนวนเงิน (กรณี COD)" disabled={orderForm.paymentType !== "COD"} />
               </div>
