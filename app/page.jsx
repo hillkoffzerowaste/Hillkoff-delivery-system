@@ -629,6 +629,7 @@ export default function App() {
 		      const payload = {
 		        driverId: did,
 		        driverName: order?.driverName || d?.name || state.auth?.name || "",
+		        driverPhone: d?.phone || state.auth?.phone || "",
 		        plate: d?.plate || "",
 		        zone: order?.zone || d?.zone || "",
 		        lat: loc.lat,
@@ -1866,7 +1867,7 @@ export default function App() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
                           <div>
                             <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
-                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone} · {location.plate}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone || "-"} · {location.plate}</p>
                             <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>🏪 {location.customerName || location.lastCustomerName || "-"}</p>
                             {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>👤 ติดต่อ: {customer.contact}</p>}
                             <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address || currentOrder?.address || "-"}</p>
