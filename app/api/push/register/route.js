@@ -13,6 +13,8 @@ export async function POST(request) {
   const token = String(payload?.token || "").trim();
   const role = String(payload?.role || "").trim();
   const phoneDigits = String(payload?.phoneDigits || "").trim();
+  const driverId = String(payload?.driverId || "").trim();
+  const deviceId = String(payload?.deviceId || "").trim();
 
   if (!token) return Response.json({ ok: false, error: "Missing token" }, { status: 400 });
   if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
@@ -24,6 +26,9 @@ export async function POST(request) {
       token,
       role,
       phoneDigits,
+      driverId,
+      deviceId,
+      userAgent: request.headers.get("user-agent") || "",
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },

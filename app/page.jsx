@@ -15,6 +15,7 @@ import {
   MessageSquareWarning,
   Navigation,
   PackagePlus,
+  BellRing,
   Search,
   Star,
   Store,
@@ -238,6 +239,8 @@ export default function App() {
     return `hillkoff_chat_last_read_${role || "anon"}_${phone || "unknown"}`;
   }, [state.auth?.phone, state.auth?.role]);
   const [fbAuthReady, setFbAuthReady] = useState(false);
+  const [pushStatus, setPushStatus] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState("default");
 
   // Sales-only Gemini AI sidebar
   const [aiOpen, setAiOpen] = useState(false);
@@ -334,36 +337,84 @@ export default function App() {
   const requestNotifyPermission = async () => {
     try {
       if (typeof Notification === "undefined") return false;
+      setNotificationPermission(Notification.permission);
       if (Notification.permission === "granted") return true;
       if (Notification.permission === "denied") return false;
       const res = await Notification.requestPermission();
+      setNotificationPermission(res);
       return res === "granted";
     } catch {
       return false;
     }
   };
 
-  const ensureWebPushForDriver = async (authState) => {
+  const ensureWebPushForDriver = async (authState, options = {}) => {
+    const showStatus = Boolean(options.showStatus);
     try {
       if (typeof window === "undefined") return;
-      if (!authState?.token) return;
+      if (!authState?.token) {
+        if (showStatus) setPushStatus("กรุณาเข้าสู่ระบบใหม่เพื่อเปิดแจ้งเตือน");
+        return;
+      }
       if (authState.role !== "driver") return;
-      if (!("serviceWorker" in navigator)) return;
+      if (!("serviceWorker" in navigator)) {
+        if (showStatus) setPushStatus("อุปกรณ์นี้ไม่รองรับการแจ้งเตือนพื้นหลัง");
+        return;
+      }
+      if (showStatus) setPushStatus("กำลังเปิดการแจ้งเตือน...");
       await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      const registration = await navigator.serviceWorker.ready;
       const ok = await requestNotifyPermission();
-      if (!ok) return;
-      const tokenRes = await getFcmToken();
-      if (!tokenRes.ok) return;
+      if (!ok) {
+        if (showStatus) setPushStatus("ยังไม่ได้อนุญาตการแจ้งเตือนในเบราว์เซอร์");
+        return;
+      }
+      const tokenRes = await getFcmToken(registration);
+      if (!tokenRes.ok) {
+        if (showStatus) setPushStatus(`เปิดแจ้งเตือนไม่สำเร็จ: ${tokenRes.error || "ไม่มี token"}`);
+        return;
+      }
       const phoneDigits = String(authState.phone || "").replace(/\D/g, "");
-      await fetch("/api/push/register", {
+      const res = await fetch("/api/push/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: tokenRes.token, role: "driver", phoneDigits }),
+        body: JSON.stringify({
+          token: tokenRes.token,
+          role: "driver",
+          phoneDigits,
+          driverId: authState.driverId || "",
+          deviceId: getOrCreateDeviceId()
+        }),
       });
-    } catch {}
+      if (!res.ok) {
+        if (showStatus) setPushStatus("บันทึก token แจ้งเตือนไม่สำเร็จ");
+        return;
+      }
+      if (showStatus) setPushStatus("เปิดแจ้งเตือนออเดอร์แล้ว");
+    } catch (e) {
+      if (showStatus) setPushStatus(`เปิดแจ้งเตือนไม่สำเร็จ: ${e?.message || e}`);
+    }
   };
 
 	  useEffect(() => setState(readState()), []);
+
+  useEffect(() => {
+    try {
+      if (typeof Notification !== "undefined") setNotificationPermission(Notification.permission);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (state.auth?.role !== "driver") return;
+    if (!state.auth?.token) return;
+    try {
+      if (typeof Notification !== "undefined") setNotificationPermission(Notification.permission);
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        ensureWebPushForDriver(state.auth);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.auth?.role, state.auth?.token, state.auth?.driverId, state.auth?.phone]);
 
 	  // Wait for Firebase Auth session to be ready (so Firestore rules see request.auth)
 	  useEffect(() => {
@@ -686,6 +737,9 @@ export default function App() {
           const first = pending[0];
           new Notification("📦 มีออเดอร์ใหม่", {
             body: first ? `${first.customerName || ""} · ${first.zone || ""}` : "มีออเดอร์ใหม่เข้ามา",
+            icon: "/icon-192.png",
+            tag: first?.id ? `new-order-${first.id}` : "new-order",
+            requireInteraction: true,
           });
         } catch {}
       });
@@ -2541,7 +2595,7 @@ export default function App() {
           <div style={{ display: "grid", gap: "16px" }}>
             {/* ส่วนข้อมูลคนขับ */}
             <section className="panel" style={{ background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
                 <div>
                   {drivers.filter(driver => driver.id === driverId).map(driver => (
                     <div key={driver.id}>
@@ -2554,6 +2608,19 @@ export default function App() {
                   <b style={{ fontSize: "20px", color: "#22c55e", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
                   <small style={{ color: "#666" }}>งานที่ยังเหลือ</small>
                 </div>
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+                <button
+                  className={notificationPermission === "granted" ? "primary" : "secondary"}
+                  onClick={() => ensureWebPushForDriver(state.auth, { showStatus: true })}
+                >
+                  <BellRing size={16} /> {notificationPermission === "granted" ? "แจ้งเตือนเปิดอยู่" : "เปิดแจ้งเตือนออเดอร์"}
+                </button>
+                <small style={{ color: notificationPermission === "denied" ? "#b91c1c" : "#69756d" }}>
+                  {pushStatus || (notificationPermission === "denied"
+                    ? "เบราว์เซอร์บล็อกการแจ้งเตือน ต้องปลดบล็อกใน Settings ของเว็บ"
+                    : "รับแจ้งเตือนเมื่อมีออเดอร์ใหม่ แม้ไม่ได้เปิดหน้าแอพอยู่")}
+                </small>
               </div>
             </section>
 

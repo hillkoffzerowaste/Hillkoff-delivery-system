@@ -23,7 +23,24 @@ messaging.onBackgroundMessage((payload) => {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
+    tag: payload?.data?.orderId ? `new-order-${payload.data.orderId}` : "new-order",
+    renotify: true,
+    requireInteraction: true,
     data: payload?.data || {},
   });
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const url = new URL("/", self.location.origin).href;
+    const windows = await clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windows) {
+      if (client.url.startsWith(self.location.origin) && "focus" in client) {
+        return client.focus();
+      }
+    }
+    return clients.openWindow(url);
+  })());
 });
 

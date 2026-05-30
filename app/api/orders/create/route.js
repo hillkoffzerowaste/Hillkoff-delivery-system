@@ -64,7 +64,8 @@ export async function POST(request) {
 
     await db.collection("orders").doc(String(order.id)).set(next, { merge: true });
 
-    // Push notify drivers (best-effort)
+    // Push notify drivers (best-effort). The service worker renders the
+    // notification so it also works when the app is in the background.
     try {
       const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
       const tokens = snap.docs.map((d) => d.id).filter(Boolean);
@@ -73,18 +74,34 @@ export async function POST(request) {
         const msgBody = `${next.customerName || "ลูกค้า"} · ${next.zone || ""}`.trim();
         const admin = await import("firebase-admin");
         const messaging = admin.messaging();
-        await messaging.sendEachForMulticast({
+        const response = await messaging.sendEachForMulticast({
           tokens,
-          notification: { title: msgTitle, body: msgBody },
           data: {
             type: "new_order",
+            title: msgTitle,
+            body: msgBody,
             orderId: String(order.id),
             customerName: String(next.customerName || ""),
             zone: String(next.zone || ""),
           },
+          webpush: {
+            headers: { Urgency: "high" },
+            fcmOptions: { link: "/" },
+          },
         });
+
+        const staleTokenDeletes = [];
+        response.responses.forEach((result, index) => {
+          const code = result.error?.code || "";
+          if (code.includes("registration-token-not-registered") || code.includes("invalid-registration-token")) {
+            staleTokenDeletes.push(db.collection("push_tokens").doc(tokens[index]).delete());
+          }
+        });
+        if (staleTokenDeletes.length) await Promise.allSettled(staleTokenDeletes);
       }
-    } catch {}
+    } catch (e) {
+      console.warn("Push notification failed", e?.message || e);
+    }
 
     return Response.json({ ok: true, data: { id: String(order.id) } });
   } catch (e) {
