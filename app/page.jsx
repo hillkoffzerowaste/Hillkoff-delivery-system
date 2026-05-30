@@ -223,6 +223,7 @@ export default function App() {
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
+  const [chatMeta, setChatMeta] = useState(null);
   const [chatText, setChatText] = useState("");
   const [typingUsers, setTypingUsers] = useState([]); // [{uid,name,phone,updatedAtMs}]
   const chatListRef = useRef(null);
@@ -453,6 +454,15 @@ export default function App() {
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	    const needsChat = Boolean(chatOpen);
 
+      try {
+        unsubs.push(
+          fb.onSnapshot(fb.doc(db, "chat_meta", "team"), (snap) => {
+            setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null);
+            markConnected();
+          })
+        );
+      } catch {}
+
 	    // Orders: keep realtime (core UX), but limit results.
 	    if (needsOrdersRealtime) {
 	      try {
@@ -548,25 +558,7 @@ export default function App() {
 	        );
 	      } catch {}
 
-	      try {
-	        const typingQ = fb.query(fb.collection(db, "chat_typing"), fb.orderBy("updatedAt", "desc"), fb.limit(20));
-	        unsubs.push(
-	          fb.onSnapshot(typingQ, (snap) => {
-	            const now = Date.now();
-	            const rows = snap.docs.map((d) => ({ uid: d.id, ...(d.data() || {}) }));
-	            const list = rows
-	              .map((r) => {
-	                const t = r.updatedAt?.toDate?.() ? r.updatedAt.toDate() : (r.updatedAt ? new Date(r.updatedAt) : null);
-	                const ms = t && !Number.isNaN(t.getTime()) ? t.getTime() : 0;
-	                return { uid: r.uid, name: r.name || r.sender_name || "", phone: r.phone || r.sender_phone || "", typing: Boolean(r.typing), updatedAtMs: ms };
-	              })
-	              .filter((r) => r.typing && r.updatedAtMs && (now - r.updatedAtMs) <= 15_000)
-	              .slice(0, 5);
-	            setTypingUsers(list);
-	            markConnected();
-	          })
-	        );
-	      } catch {}
+	      setTypingUsers([]);
 	    }
 
 	    return () => {
@@ -631,23 +623,25 @@ export default function App() {
     console.log("Component mounted, supabase:", !!supabase);
   }, []);
 
-  const refreshChat = async () => {
-    if (!supabase) return;
-    try {
-      const { data, error } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .order("id", { ascending: false })
-        .limit(50);
-      if (error) return;
-      setChatMessages((data || []).slice().reverse());
-    } catch {}
-  };
-
   useEffect(() => {
     if (!chatOpen) return;
     // Firestore chat is realtime via onSnapshot; no polling needed
   }, [chatOpen]);
+
+  const updateChatSummary = async ({ messageRef, type, text }) => {
+    const db = getFirestoreDb();
+    await fb.setDoc(fb.doc(db, "chat_meta", "team"), {
+      lastMessageId: messageRef?.id || "",
+      lastMessageAt: fb.serverTimestamp(),
+      lastMessageText: String(text || "").slice(0, 160),
+      lastMessageType: type || "chat",
+      lastSenderRole: state.auth?.role || "",
+      lastSenderName: state.auth?.name || "",
+      lastSenderPhone: state.auth?.phone || "",
+      messageCount: fb.increment(1),
+      updatedAt: fb.serverTimestamp()
+    }, { merge: true });
+  };
 
   const sendChat = async () => {
     const text = (chatText || "").trim();
@@ -655,7 +649,7 @@ export default function App() {
     setChatText("");
     try {
       const db = getFirestoreDb();
-      await fb.addDoc(fb.collection(db, "chat_messages"), {
+      const messageRef = await fb.addDoc(fb.collection(db, "chat_messages"), {
         sender_role: state.auth?.role || "",
         sender_name: state.auth?.name || "",
         sender_phone: state.auth?.phone || "",
@@ -664,35 +658,17 @@ export default function App() {
         createdAt: fb.serverTimestamp(),
         updatedAt: fb.serverTimestamp()
       });
+      await updateChatSummary({ messageRef, type: "chat", text });
+      markChatReadToCount(Number(chatMeta?.messageCount || 0) + 1);
       // Clear my typing flag
-      try {
-        const authUser = getFirebaseAuth()?.currentUser;
-        if (authUser?.uid) {
-          await fb.setDoc(fb.doc(db, "chat_typing", authUser.uid), {
-            typing: false,
-            name: state.auth?.name || "",
-            phone: state.auth?.phone || "",
-            updatedAt: fb.serverTimestamp()
-          }, { merge: true });
-        }
-      } catch {}
+      updateTyping(false);
     } catch (e) {
       alert(`❌ ส่งข้อความไม่สำเร็จ: ${e?.message || e}`);
     }
   };
 
   const updateTyping = (isTyping) => {
-    try {
-      const db = getFirestoreDb();
-      const authUser = getFirebaseAuth()?.currentUser;
-      if (!authUser?.uid) return;
-      fb.setDoc(fb.doc(db, "chat_typing", authUser.uid), {
-        typing: Boolean(isTyping),
-        name: state.auth?.name || "",
-        phone: state.auth?.phone || "",
-        updatedAt: fb.serverTimestamp()
-      }, { merge: true }).catch(() => {});
-    } catch {}
+    // Disabled intentionally to avoid high-frequency Firestore writes while typing.
   };
 
   const sendEmergency = async () => {
@@ -702,7 +678,7 @@ export default function App() {
     if (!text) return;
     try {
       const db = getFirestoreDb();
-      await fb.addDoc(fb.collection(db, "chat_messages"), {
+      const messageRef = await fb.addDoc(fb.collection(db, "chat_messages"), {
         sender_role: state.auth?.role || "",
         sender_name: state.auth?.name || "",
         sender_phone: state.auth?.phone || "",
@@ -711,6 +687,8 @@ export default function App() {
         createdAt: fb.serverTimestamp(),
         updatedAt: fb.serverTimestamp()
       });
+      await updateChatSummary({ messageRef, type: "emergency", text });
+      markChatReadToCount(Number(chatMeta?.messageCount || 0) + 1);
       // Local immediate feedback
       playNotificationSound();
     } catch (e) {
@@ -873,47 +851,45 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatOpen]);
 
-  const getLastReadChatMs = () => {
+  const getLastReadChatCount = () => {
     try {
       const v = localStorage.getItem(chatLastReadKey);
       const n = Number(v || 0);
+      if (n > 1_000_000) return 0; // Old versions stored timestamps in this key.
       return Number.isFinite(n) ? n : 0;
     } catch {
       return 0;
     }
   };
 
-  const markChatReadUpToLatest = () => {
+  const markChatReadToCount = (count) => {
     try {
-      if (!chatMessages?.length) return;
-      const latest = chatMessages[chatMessages.length - 1];
-      const t = parseChatTime(latest?.createdAt);
-      const ms = t ? t.getTime() : Date.now();
-      localStorage.setItem(chatLastReadKey, String(ms));
+      const n = Math.max(0, Number(count || 0));
+      localStorage.setItem(chatLastReadKey, String(Number.isFinite(n) ? n : 0));
       setUnreadChatCount(0);
     } catch {}
   };
 
+  const markChatReadUpToLatest = () => {
+    const latestCount = Number(chatMeta?.messageCount || 0);
+    if (latestCount > 0) markChatReadToCount(latestCount);
+  };
+
   useEffect(() => {
-    // Update unread badge while chat is closed
-    if (!chatMessages?.length) {
+    // Update unread badge from the one-doc chat summary, not from the messages list.
+    const latestCount = Number(chatMeta?.messageCount || 0);
+    if (!latestCount) {
       setUnreadChatCount(0);
       return;
     }
     if (chatOpen) {
-      markChatReadUpToLatest();
+      markChatReadToCount(latestCount);
       return;
     }
-    const lastRead = getLastReadChatMs();
-    let count = 0;
-    for (const m of chatMessages) {
-      const t = parseChatTime(m?.createdAt);
-      const ms = t ? t.getTime() : 0;
-      if (ms && ms > lastRead) count += 1;
-    }
-    setUnreadChatCount(count);
+    const lastRead = getLastReadChatCount();
+    setUnreadChatCount(Math.max(0, latestCount - lastRead));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatMessages, chatOpen, chatLastReadKey]);
+  }, [chatMeta?.messageCount, chatOpen, chatLastReadKey]);
 
   useEffect(() => {
     if (!chatOpen) return;
