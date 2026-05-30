@@ -82,6 +82,22 @@ function isSameLocalDay(a, b) {
   );
 }
 
+function generateOrderId() {
+  const now = new Date();
+  const datePart = now.toISOString().slice(2, 10).replaceAll("-", "");
+  const timePart = [
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  ].map((part, index) => String(part).padStart(index === 3 ? 3 : 2, "0")).join("");
+  const randomPart = typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID().slice(0, 8).toUpperCase()
+    : Math.random().toString(36).slice(2, 10).toUpperCase();
+
+  return `DO-${datePart}-${timePart}-${randomPart}`;
+}
+
 function osmPageUrl(lat, lng, zoom = 16) {
   if (lat == null || lng == null) return "";
   return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lng)}#map=${encodeURIComponent(zoom)}/${encodeURIComponent(lat)}/${encodeURIComponent(lng)}`;
@@ -1256,7 +1272,7 @@ export default function App() {
       return;
     }
     
-    const id = `DO-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${String(orders.length + 1).padStart(3, "0")}`;
+    const id = generateOrderId();
     const serviceDate = toServiceDateKey(new Date());
     const nextOrder = {
       id,
