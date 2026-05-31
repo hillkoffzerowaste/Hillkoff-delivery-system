@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Camera,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Download,
   FileSpreadsheet,
@@ -1647,6 +1648,18 @@ export default function App() {
     done: todayOrdersOnly.filter(order => order.status === "ส่งสำเร็จ").length
   };
 
+  const summarizeOrders = (list = []) => {
+    const total = list.length;
+    const waiting = list.filter(order => order.status === "รอคนขับรับ").length;
+    const active = list.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length;
+    const done = list.filter(order => order.status === "ส่งสำเร็จ").length;
+    const issues = list.filter(order => order.status === "ติดปัญหา" || order.complaint).length;
+    const cod = list.reduce((sum, order) => sum + Number(order.cod || 0), 0);
+    const codDone = list.filter(order => order.status === "ส่งสำเร็จ").reduce((sum, order) => sum + Number(order.cod || 0), 0);
+    const completionRate = total ? Math.round((done / total) * 100) : 0;
+    return { total, waiting, active, done, issues, cod, codDone, completionRate };
+  };
+
   const ordersByServiceDate = useMemo(() => {
     const groups = {};
     (state.orders || []).forEach((o) => {
@@ -1658,6 +1671,57 @@ export default function App() {
     const keys = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1)); // desc
     return { keys, groups };
   }, [state.orders]);
+
+  const todaySummary = useMemo(() => summarizeOrders(todayOrdersOnly), [todayOrdersOnly]);
+  const currentMonthKey = todayServiceDate.slice(0, 7);
+  const monthAnalytics = useMemo(() => {
+    const monthKeys = ordersByServiceDate.keys.filter((key) => key.startsWith(currentMonthKey));
+    const days = monthKeys.map((key) => {
+      const list = ordersByServiceDate.groups[key] || [];
+      return { key, ...summarizeOrders(list) };
+    });
+    const monthOrders = days.flatMap((day) => ordersByServiceDate.groups[day.key] || []);
+    const summary = summarizeOrders(monthOrders);
+    const maxDailyTotal = Math.max(1, ...days.map((day) => day.total));
+    const avgDailyOrders = days.length ? Math.round(summary.total / days.length) : 0;
+    return { days, summary, maxDailyTotal, avgDailyOrders };
+  }, [ordersByServiceDate, currentMonthKey]);
+
+  const buildServiceDateReport = (key) => {
+    const list = ordersByServiceDate.groups[key] || [];
+    const stats = summarizeOrders(list);
+    const dt = parseServiceDateKey(key);
+    const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : key;
+    const lines = [
+      `รายงาน Hillkoff Delivery`,
+      `วันที่: ${title}`,
+      `สร้างเมื่อ: ${new Date().toLocaleString("th-TH")}`,
+      "",
+      `สรุป: ${stats.total} งาน | รอรับ ${stats.waiting} | กำลังส่ง ${stats.active} | สำเร็จ ${stats.done} | ปัญหา ${stats.issues}`,
+      `COD รวม: ฿${money(stats.cod)}`,
+      `COD สำเร็จ: ฿${money(stats.codDone)}`,
+      `อัตราสำเร็จ: ${stats.completionRate}%`,
+      "",
+      "รายการออเดอร์:"
+    ];
+    list.forEach((order, index) => {
+      lines.push(`${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}`);
+    });
+    return lines.join("\n");
+  };
+
+  const exportServiceDateReport = (key, mode = "copy") => {
+    const reportText = buildServiceDateReport(key);
+    const fileName = `Hillkoff-Report-${key || "daily"}.txt`;
+    if (mode === "download") {
+      const element = document.createElement("a");
+      element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
+      element.setAttribute("download", fileName);
+      element.click();
+      return;
+    }
+    copyToClipboard(reportText);
+  };
 
   useEffect(() => {
     if (openReportDate) return;
@@ -2845,42 +2909,57 @@ export default function App() {
 
         {displayTab === "reports" && (
           <div className="report-grid">
-            <section className="panel">
-              <div className="panel-head"><h2>รายงานประจำวัน</h2><span>แยกตามวัน</span></div>
+            <section className="panel daily-report-panel">
+              <div className="panel-head report-panel-head">
+                <div>
+                  <h2>รายงานประจำวัน</h2>
+                  <span>แยกตามวัน</span>
+                </div>
+                {openReportDate && (
+                  <button className="secondary compact-btn" onClick={() => exportServiceDateReport(openReportDate, "download")}>
+                    <Download size={14} /> ส่งออกวันที่เลือก
+                  </button>
+                )}
+              </div>
               {ordersByServiceDate.keys.length === 0 ? (
                 <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงาน</p>
               ) : (
-                <div style={{ display: "grid", gap: "10px" }}>
+                <div className="daily-report-scroll">
                   {ordersByServiceDate.keys.map((k) => {
                     const list = ordersByServiceDate.groups[k] || [];
-                    const done = list.filter((o) => o.status === "ส่งสำเร็จ").length;
-                    const active = list.filter((o) => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").length;
-                    const waiting = list.filter((o) => o.status === "รอคนขับรับ").length;
-                    const cod = list.reduce((sum, o) => sum + Number(o.cod || 0), 0);
+                    const stats = summarizeOrders(list);
                     const isOpen = openReportDate === k;
                     const dt = parseServiceDateKey(k);
                     const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : k;
 
                     return (
-                      <div key={k} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
+                      <div key={k} className={`daily-accordion ${isOpen ? "open" : ""}`}>
                         <button
                           type="button"
-                          className="secondary"
+                          className="daily-accordion-trigger"
                           onClick={() => setOpenReportDate((cur) => (cur === k ? "" : k))}
-                          style={{ width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderBottom: isOpen ? "1px solid #e5e7eb" : "none", background: "#f8fafc", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center" }}
+                          aria-expanded={isOpen}
                         >
-                          <div>
-                            <b>{title}</b>
-                            <div style={{ fontSize: "12px", color: "#6b7280" }}>ทั้งหมด {list.length} · รอรับ {waiting} · กำลังส่ง {active} · สำเร็จ {done}</div>
-                          </div>
-                          <div style={{ fontSize: "12px", color: "#111827", fontWeight: 800 }}>COD ฿{money(cod)}</div>
+                          <span className="daily-title">{title}</span>
+                          <span className="daily-meta">{stats.total} งาน</span>
+                          <span className="daily-cod">COD ฿{money(stats.cod)}</span>
+                          <ChevronDown className="daily-chevron" size={16} />
                         </button>
 
                         {isOpen && (
-                          <div className="report-lines" style={{ padding: "10px 12px" }}>
-                            <p>ออเดอร์ทั้งหมด <b>{list.length}</b> งาน</p>
-                            <p>รอคนขับรับ <b>{waiting}</b> · กำลังส่ง <b>{active}</b> · ส่งสำเร็จ <b>{done}</b></p>
-                            <p>COD รวม <b>{money(cod)}</b> บาท</p>
+                          <div className="daily-accordion-body">
+                            <div className="status-chip-row">
+                              <span className="status-chip waiting">รอรับ <b>{stats.waiting}</b></span>
+                              <span className="status-chip active">กำลังส่ง <b>{stats.active}</b></span>
+                              <span className="status-chip done">สำเร็จ <b>{stats.done}</b></span>
+                            </div>
+                            <div className="daily-actions">
+                              <span>สำเร็จ {stats.completionRate}% · COD สำเร็จ ฿{money(stats.codDone)}</span>
+                              <div>
+                                <button className="secondary compact-btn" onClick={() => exportServiceDateReport(k, "copy")}>คัดลอก</button>
+                                <button className="secondary compact-btn" onClick={() => exportServiceDateReport(k, "download")}>TXT</button>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2909,6 +2988,51 @@ export default function App() {
                   <span>{order.id}</span>
                 </div>
               ))}
+            </section>
+
+            <section className="panel analytics-panel">
+              <div className="panel-head"><h2>วิเคราะห์ภาพรวม</h2><span>วันนี้</span></div>
+              <div className="analytics-cards">
+                <div><span>งานวันนี้</span><b>{todaySummary.total}</b></div>
+                <div><span>สำเร็จ</span><b>{todaySummary.done}</b></div>
+                <div><span>COD รวม</span><b>฿{money(todaySummary.cod)}</b></div>
+                <div><span>สำเร็จ</span><b>{todaySummary.completionRate}%</b></div>
+              </div>
+              <div className="status-bar">
+                <span className="waiting" style={{ flexGrow: todaySummary.waiting || 0 }} title={`รอรับ ${todaySummary.waiting}`} />
+                <span className="active" style={{ flexGrow: todaySummary.active || 0 }} title={`กำลังส่ง ${todaySummary.active}`} />
+                <span className="done" style={{ flexGrow: todaySummary.done || 0 }} title={`สำเร็จ ${todaySummary.done}`} />
+              </div>
+              <div className="status-legend">
+                <span><i className="waiting" /> รอรับ {todaySummary.waiting}</span>
+                <span><i className="active" /> กำลังส่ง {todaySummary.active}</span>
+                <span><i className="done" /> สำเร็จ {todaySummary.done}</span>
+              </div>
+            </section>
+
+            <section className="panel analytics-panel monthly-analytics">
+              <div className="panel-head"><h2>วิเคราะห์รายเดือน</h2><span>{currentMonthKey}</span></div>
+              <div className="analytics-cards">
+                <div><span>งานเดือนนี้</span><b>{monthAnalytics.summary.total}</b></div>
+                <div><span>เฉลี่ย/วัน</span><b>{monthAnalytics.avgDailyOrders}</b></div>
+                <div><span>COD เดือน</span><b>฿{money(monthAnalytics.summary.cod)}</b></div>
+                <div><span>สำเร็จ</span><b>{monthAnalytics.summary.completionRate}%</b></div>
+              </div>
+              <div className="monthly-chart" aria-label="กราฟจำนวนงานรายวันของเดือนนี้">
+                {monthAnalytics.days.length === 0 ? (
+                  <p className="muted">ยังไม่มีข้อมูลเดือนนี้</p>
+                ) : monthAnalytics.days.slice().reverse().map((day) => {
+                  const dt = parseServiceDateKey(day.key);
+                  const label = dt ? dt.toLocaleDateString("th-TH", { day: "2-digit", month: "short", timeZone: "Asia/Bangkok" }) : day.key.slice(5);
+                  const height = Math.max(8, Math.round((day.total / monthAnalytics.maxDailyTotal) * 92));
+                  return (
+                    <div key={day.key} className="month-bar-item">
+                      <div className="month-bar-track"><span style={{ height: `${height}%` }} /></div>
+                      <small>{label}</small>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           </div>
         )}

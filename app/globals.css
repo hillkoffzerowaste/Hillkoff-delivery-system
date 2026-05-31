@@ -304,6 +304,258 @@ h2 {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
+.daily-report-panel {
+  height: 430px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.report-panel-head {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.report-panel-head h2 {
+  margin: 0;
+}
+
+.daily-report-scroll {
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+  min-height: 0;
+}
+
+.daily-accordion {
+  border: 1px solid #e4eadf;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.daily-accordion.open {
+  border-color: #b8d2ad;
+  box-shadow: 0 6px 18px rgba(23, 32, 25, 0.06);
+}
+
+.daily-accordion-trigger {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: #f8faf5;
+  color: #172019;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto auto 18px;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.daily-title {
+  font-weight: 900;
+  min-width: 0;
+}
+
+.daily-meta,
+.daily-cod {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.daily-cod {
+  color: #176b3a;
+}
+
+.daily-chevron {
+  transition: transform 0.18s ease;
+}
+
+.daily-accordion.open .daily-chevron {
+  transform: rotate(180deg);
+}
+
+.daily-accordion-body {
+  border-top: 1px solid #e4eadf;
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.status-chip-row,
+.daily-actions,
+.status-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.daily-actions {
+  justify-content: space-between;
+  color: #69756d;
+  font-size: 12px;
+}
+
+.daily-actions > div {
+  display: flex;
+  gap: 6px;
+}
+
+.compact-btn {
+  min-height: 30px;
+  padding: 6px 9px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.status-chip {
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-chip.waiting {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-chip.active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-chip.done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.analytics-panel {
+  min-height: 240px;
+}
+
+.monthly-analytics {
+  grid-column: span 2;
+}
+
+.analytics-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analytics-cards div {
+  border: 1px solid #e4eadf;
+  background: #f8faf5;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.analytics-cards span {
+  display: block;
+  color: #69756d;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.analytics-cards b {
+  color: #172019;
+  font-size: 20px;
+}
+
+.status-bar {
+  height: 14px;
+  display: flex;
+  gap: 3px;
+  margin: 12px 0 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #eef2e9;
+}
+
+.status-bar span {
+  min-width: 4px;
+}
+
+.status-bar .waiting,
+.status-legend .waiting {
+  background: #f59e0b;
+}
+
+.status-bar .active,
+.status-legend .active {
+  background: #3b82f6;
+}
+
+.status-bar .done,
+.status-legend .done {
+  background: #22c55e;
+}
+
+.status-legend {
+  color: #69756d;
+  font-size: 12px;
+}
+
+.status-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.monthly-chart {
+  min-height: 136px;
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding: 6px 2px 0;
+}
+
+.month-bar-item {
+  min-width: 42px;
+  display: grid;
+  grid-template-rows: 98px auto;
+  gap: 6px;
+  justify-items: center;
+}
+
+.month-bar-track {
+  height: 98px;
+  width: 18px;
+  border-radius: 999px;
+  background: #eef2e9;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+}
+
+.month-bar-track span {
+  width: 100%;
+  min-height: 8px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, #22c55e 0%, #176b3a 100%);
+}
+
+.month-bar-item small {
+  color: #69756d;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -833,6 +1085,10 @@ textarea {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+
+  .monthly-analytics {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 720px) {
@@ -870,5 +1126,21 @@ textarea {
 
   .customer-detail {
     flex-direction: column;
+  }
+
+  .daily-report-panel {
+    height: 390px;
+  }
+
+  .daily-accordion-trigger {
+    grid-template-columns: minmax(0, 1fr) auto 18px;
+  }
+
+  .daily-cod {
+    grid-column: 1 / -1;
+  }
+
+  .analytics-cards {
+    grid-template-columns: 1fr;
   }
 }
