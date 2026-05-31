@@ -55,6 +55,7 @@ export async function POST(request) {
       deliveredAt: String(order.deliveredAt || ""),
       complaint: String(order.complaint || ""),
       salesNote: String(order.salesNote || ""),
+      driverNote: String(order.driverNote || ""),
       // Used for day-based separation (today vs history)
       serviceDate: String(order.serviceDate || toServiceDateKey(order.createdAt)),
       createdAt: String(order.createdAt || new Date().toISOString()),

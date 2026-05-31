@@ -152,23 +152,20 @@ function parseServiceDateKey(key) {
   return new Date(Date.UTC(y, mo - 1, d, 0, 0, 0));
 }
 
+function privacySafeName(name) {
+  const value = String(name || "").trim();
+  if (!value) return "";
+  return value.split(/\s+/)[0] || value;
+}
+
 function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
-  lines.push(`ออเดอร์: ${order.id}`);
-  if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
-  if (order.customerPhone) lines.push(`โทร: ${order.customerPhone}`);
-  if (order.address) lines.push(`ที่อยู่: ${order.address}`);
+  lines.push(`งาน: ${order.id}`);
+  if (order.customerName) lines.push(`ลูกค้า: ${privacySafeName(order.customerName)}`);
   if (order.zone) lines.push(`โซน: ${order.zone}`);
-  if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
-  if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
-  if (order.salesName) lines.push(`ฝ่ายขาย: ${order.salesName}`);
-  if (order.salesPhone) lines.push(`ฝ่ายขายโทร: ${order.salesPhone}`);
-  if (order.salesNote) lines.push(`หมายเหตุ: ${order.salesNote}`);
-  lines.push(`COD: ฿${money(order.cod || 0)}`);
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
-  if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
-  if (order.photo) lines.push("POD: (แนบรูปในแชท)");
+  if (order.driverNote) lines.push(`หมายเหตุคนขับ: ${order.driverNote}`);
   return lines.join("\n");
 }
 
@@ -177,24 +174,6 @@ async function dataUrlToFile(dataUrl, fileName) {
   const blob = await res.blob();
   const ext = (blob.type || "image/jpeg").split("/").pop() || "jpg";
   return new File([blob], `${fileName}.${ext}`, { type: blob.type || "image/jpeg" });
-}
-
-function downloadFileToDevice(file, fileName) {
-  try {
-    const blobUrl = URL.createObjectURL(file);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = fileName || file.name || "pod.jpg";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => {
-      try { URL.revokeObjectURL(blobUrl); } catch {}
-    }, 2000);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
@@ -975,6 +954,7 @@ export default function App() {
 	        deliveredAt: order.deliveredAt || "",
 	        complaint: order.complaint || "",
 	        salesNote: order.salesNote || "",
+	        driverNote: order.driverNote || "",
 	        createdAt: order.createdAt || new Date().toISOString(),
 	        updatedAt: new Date().toISOString()
 	      };
@@ -1410,20 +1390,13 @@ export default function App() {
       podFilesRef.current[order.id] = file;
       const previewUrl = URL.createObjectURL(file);
       updateOrder(order.id, { photo: previewUrl, sharedToLine: false });
-      setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — โปรดกดแชร์ลง LINE");
+      setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — พร้อมกดส่งสำเร็จ + แชร์สรุป LINE");
     } catch (error) {
       setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
     }
   };
 
 	  const shareOrderToLine = (order) => {
-	    const text = buildLineMessageForOrder(order);
-	    const file = podFilesRef.current?.[order.id];
-
-	    if (!file) {
-	      alert("ยังไม่พบไฟล์รูป POD ในเครื่อง (อาจรีเฟรชหน้า) กรุณาถ่าย/เลือกรูปใหม่อีกครั้ง");
-	      return;
-	    }
 	    if (!navigator?.share) {
 	      alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
 	      return;
@@ -1431,29 +1404,38 @@ export default function App() {
 
 	    (async () => {
 	      try {
+          const note = prompt("หมายเหตุจากคนขับ (ถ้ามี):", order.driverNote || "");
+          if (note === null) return;
+          const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
+          const completedOrder = {
+            ...order,
+            status: "ส่งสำเร็จ",
+            deliveredAt,
+            driverNote: String(note || "").trim(),
+            driverName: order.driverName || state.auth?.name || "",
+            driverId: order.driverId || state.auth?.driverId || driverId || "",
+            sharedToLine: true
+          };
+	        const text = buildLineMessageForOrder(completedOrder);
+	        const file = podFilesRef.current?.[order.id];
+
 	        // Copy summary text, then immediately open share sheet (single flow)
 	        let copied = false;
 	        try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
 	        if (!copied) {
-	          const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์รูป:\n\n${text}`);
+	          const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
 	          if (!ok) return;
 	        }
 
-	        // Step 1.5: Save POD image to device (best-effort)
-	        const saved = downloadFileToDevice(file, `POD-${order.id}`);
-	        if (!saved) {
-	          // continue anyway
+	        if (file && navigator.canShare?.({ files: [file] })) {
+	          // LINE may ignore text when a file is attached, so the text is copied above.
+	          await navigator.share({ files: [file], text });
+	        } else {
+	          await navigator.share({ text });
 	        }
-
-	        if (!navigator.canShare?.({ files: [file] })) {
-	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์แบบแนบรูปอัตโนมัติ กรุณาเปิดผ่านมือถือ (Chrome/Safari) แล้วกดแชร์อีกครั้ง");
-	          return;
-	        }
-	        // Step 2: Share image file (LINE may ignore text when file is attached)
-	        await navigator.share({ files: [file], text });
-	        updateOrder(order.id, { sharedToLine: true });
+	        updateOrder(order.id, completedOrder);
 	        if (copied) {
-	          setSyncStatus("✅ คัดลอกสรุปแล้ว + แชร์รูปแล้ว (ไปวางสรุปในไลน์ได้ทันที)");
+	          setSyncStatus(`✅ ส่งสำเร็จและคัดลอกสรุปสั้นสำหรับ LINE แล้ว (${order.id})`);
 	        }
 	      } catch {
 	        // user cancelled or share failed
@@ -2806,7 +2788,7 @@ export default function App() {
 	                            className="primary"
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
 	                            onClick={() => shareOrderToLine(order)}
-	                          >💬 แชร์รูป+รายละเอียด (LINE)</button>
+	                          >✅ ส่งสำเร็จ + แชร์สรุป (LINE)</button>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button 
@@ -2816,7 +2798,7 @@ export default function App() {
 	                            onClick={() => {
 	                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
 	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
-	                            }}>✅ ส่งสำเร็จ</button>
+	                            }}>✅ ส่งสำเร็จแล้ว</button>
 	                        )}
                         {order.status === "ส่งสำเร็จ" && (
                           <button 
@@ -2889,7 +2871,7 @@ export default function App() {
 	                            </div>
 	                          )}
 	                          <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>
-	                            💬 แชร์รูป+รายละเอียด (LINE)
+	                            💬 แชร์สรุปสั้น (LINE)
 	                          </button>
 	                        </div>
 	                      ))}
