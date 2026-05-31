@@ -741,6 +741,64 @@ export default function App() {
     return token;
   };
 
+  const buildAiClientSummary = () => {
+    const contextDays = 7;
+    const dateKeys = Array.from({ length: contextDays }, (_, index) =>
+      toServiceDateKey(new Date(Date.now() - index * 24 * 60 * 60 * 1000))
+    );
+    const orders = state.orders || [];
+    const dailyStats = dateKeys.map((date) => {
+      const list = orders.filter((order) => getOrderServiceDate(order) === date);
+      const areas = {};
+      const statuses = {};
+
+      list.forEach((order) => {
+        const area = String(order.zone || order.area || "ไม่ระบุพื้นที่");
+        const status = String(order.status || "ไม่ระบุ");
+        areas[area] = (areas[area] || 0) + 1;
+        statuses[status] = (statuses[status] || 0) + 1;
+      });
+
+      return {
+        date,
+        totalOrders: list.length,
+        done: list.filter((order) => order.status === "ส่งสำเร็จ").length,
+        waiting: list.filter((order) => order.status === "รอคนขับรับ").length,
+        shipping: list.filter((order) => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
+        problem: list.filter((order) => order.status === "ติดปัญหา" || order.complaint).length,
+        canceled: list.filter((order) => order.status === "ยกเลิก").length,
+        codTotal: list.reduce((sum, order) => sum + Number(order.cod || 0), 0),
+        codDone: list.filter((order) => order.status === "ส่งสำเร็จ").reduce((sum, order) => sum + Number(order.cod || 0), 0),
+        areas,
+        statuses,
+      };
+    });
+
+    const statusCounts = {};
+    dailyStats.forEach((day) => {
+      Object.entries(day.statuses || {}).forEach(([status, count]) => {
+        statusCounts[status] = (statusCounts[status] || 0) + Number(count || 0);
+      });
+    });
+
+    return {
+      source: "client_state",
+      generatedAt: new Date().toISOString(),
+      dateRange: {
+        start: dateKeys[dateKeys.length - 1],
+        end: dateKeys[0],
+        timezone: "Asia/Bangkok",
+        contextDays,
+      },
+      total: dailyStats.reduce((sum, day) => sum + Number(day.totalOrders || 0), 0),
+      statusCounts,
+      codTotal: dailyStats.reduce((sum, day) => sum + Number(day.codTotal || 0), 0),
+      dailyStats,
+      firestoreReads: 0,
+      selectedFields: ["serviceDate", "status", "zone", "cod"],
+    };
+  };
+
   const sendToGemini = async (text) => {
     const q = String(text || "").trim();
     if (!q) return;
@@ -752,14 +810,15 @@ export default function App() {
     setAiMessages((prev) => [...prev, { role: "user", text: q }, { role: "model", text: "" }]);
 
     const phoneDigits = String(state.auth?.phone || "").replace(/\D/g, "");
-    const history = [...aiMessages, { role: "user", text: q }].slice(-20);
+    const history = [...aiMessages, { role: "user", text: q }].slice(-10);
+    const clientSummary = buildAiClientSummary();
 
     try {
       const idToken = await refreshAuthToken();
       const res = await fetch("/api/chat/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, phoneDigits, messages: history }),
+        body: JSON.stringify({ idToken, phoneDigits, messages: history, clientSummary }),
       });
       if (!res.ok) {
         const errorPayload = await res.json().catch(() => null);

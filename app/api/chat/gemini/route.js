@@ -5,6 +5,8 @@ export const runtime = "nodejs";
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 const DEFAULT_CONTEXT_DAYS = 3;
+const AGGREGATE_CACHE_TTL_MS = 2 * 60 * 1000;
+const aggregateCache = globalThis.__hillkoffGeminiAggregateCache || (globalThis.__hillkoffGeminiAggregateCache = new Map());
 
 function toServiceDateKeyBangkok(dateLike) {
   const date = dateLike ? new Date(dateLike) : new Date();
@@ -112,6 +114,91 @@ function summarizeOrdersByDate(orders, dateKeys) {
     cod_total: orders.reduce((sum, o) => sum + Number(o.cod || 0), 0),
     dailyStats,
   };
+}
+
+function sanitizeCountRecord(record, limit = 20) {
+  return Object.fromEntries(
+    Object.entries(record || {})
+      .slice(0, limit)
+      .map(([key, value]) => [String(key).slice(0, 80), Number(value || 0)])
+      .filter(([key, value]) => key && Number.isFinite(value))
+  );
+}
+
+function sanitizeClientSummary(value, fallbackContextDays) {
+  if (!value || typeof value !== "object") return null;
+
+  const dailyStats = Array.isArray(value.dailyStats)
+    ? value.dailyStats.slice(0, 14).map((day) => ({
+        date: String(day?.date || ""),
+        totalOrders: Number(day?.totalOrders || 0),
+        done: Number(day?.done || 0),
+        waiting: Number(day?.waiting || 0),
+        shipping: Number(day?.shipping || 0),
+        problem: Number(day?.problem || 0),
+        canceled: Number(day?.canceled || 0),
+        codTotal: Number(day?.codTotal || 0),
+        codDone: Number(day?.codDone || 0),
+        areas: sanitizeCountRecord(day?.areas),
+        statuses: sanitizeCountRecord(day?.statuses),
+      })).filter((day) => day.date)
+    : [];
+
+  if (!dailyStats.length) return null;
+
+  const statusCounts = {};
+  dailyStats.forEach((day) => {
+    Object.entries(day.statuses || {}).forEach(([status, count]) => {
+      statusCounts[status] = (statusCounts[status] || 0) + Number(count || 0);
+    });
+  });
+
+  return {
+    dateRange: {
+      start: String(value?.dateRange?.start || dailyStats[dailyStats.length - 1]?.date || ""),
+      end: String(value?.dateRange?.end || dailyStats[0]?.date || ""),
+      timezone: "Asia/Bangkok",
+      contextDays: Math.min(Number(value?.dateRange?.contextDays || fallbackContextDays || dailyStats.length), 14),
+    },
+    total: dailyStats.reduce((sum, day) => sum + Number(day.totalOrders || 0), 0),
+    statusCounts,
+    codTotal: dailyStats.reduce((sum, day) => sum + Number(day.codTotal || 0), 0),
+    dailyStats,
+    firestoreReads: 0,
+    selectedFields: ["serviceDate", "status", "zone", "cod"],
+    source: "client_summary",
+  };
+}
+
+async function getFirestoreAggregateSummary(db, dateKeys, startKey, todayKey, contextDays) {
+  const cacheKey = `${startKey}:${todayKey}:${contextDays}`;
+  const cached = aggregateCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < AGGREGATE_CACHE_TTL_MS) {
+    return { ...cached.summary, firestoreReads: 0, source: "server_cache" };
+  }
+
+  const ordersSnap = await db
+    .collection("orders")
+    .where("serviceDate", ">=", startKey)
+    .where("serviceDate", "<=", todayKey)
+    .select("serviceDate", "status", "zone", "area", "cod", "codAmount")
+    .get();
+
+  const orders = ordersSnap.docs.map((d) => d.data() || {});
+  const aggregate = summarizeOrdersByDate(orders, dateKeys);
+  const summary = {
+    dateRange: { start: startKey, end: todayKey, timezone: "Asia/Bangkok", contextDays },
+    total: aggregate.total,
+    statusCounts: aggregate.statusCounts,
+    codTotal: aggregate.cod_total,
+    dailyStats: aggregate.dailyStats,
+    firestoreReads: ordersSnap.size,
+    selectedFields: ["serviceDate", "status", "zone", "area", "cod", "codAmount"],
+    source: "firestore_query",
+  };
+
+  aggregateCache.set(cacheKey, { at: Date.now(), summary });
+  return summary;
 }
 
 function isQuotaError(error) {
@@ -268,6 +355,7 @@ export async function POST(request) {
   if (!apiKey) return Response.json({ ok: false, error: "Missing GEMINI_API_KEY" }, { status: 500 });
   const geminiModel = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
   const contextDays = Math.min(readPositiveInt(process.env.GEMINI_CONTEXT_DAYS, DEFAULT_CONTEXT_DAYS), 7);
+  const clientSummary = sanitizeClientSummary(payload?.clientSummary, contextDays);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -285,26 +373,7 @@ export async function POST(request) {
         );
         const todayKey = dateKeys[0];
         const startKey = dateKeys[dateKeys.length - 1];
-        const ordersSnap = await db
-          .collection("orders")
-          .where("serviceDate", ">=", startKey)
-          .where("serviceDate", "<=", todayKey)
-          .select("serviceDate", "status", "zone", "area", "cod", "codAmount")
-          .get();
-
-        const orders = ordersSnap.docs
-          .map((d) => d.data() || {});
-        const aggregate = summarizeOrdersByDate(orders, dateKeys);
-
-        const summary = {
-          dateRange: { start: startKey, end: todayKey, timezone: "Asia/Bangkok", contextDays },
-          total: aggregate.total,
-          statusCounts: aggregate.statusCounts,
-          codTotal: aggregate.cod_total,
-          dailyStats: aggregate.dailyStats,
-          firestoreReads: ordersSnap.size,
-          selectedFields: ["serviceDate", "status", "zone", "area", "cod", "codAmount"],
-        };
+        const summary = clientSummary || await getFirestoreAggregateSummary(db, dateKeys, startKey, todayKey, contextDays);
         fallbackSummary = summary;
 
         const systemInstruction =
