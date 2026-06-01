@@ -410,7 +410,7 @@ export default function App() {
         return;
       }
       if (showStatus) setPushStatus("กำลังเปิดการแจ้งเตือน...");
-      await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/", updateViaCache: "none" });
       const registration = await navigator.serviceWorker.ready;
       const ok = await requestNotifyPermission();
       if (!ok) {

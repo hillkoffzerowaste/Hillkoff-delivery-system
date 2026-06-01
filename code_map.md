@@ -246,8 +246,8 @@
 ### 📄 `public/firebase-messaging-sw.js`
 * **Role:** [SERVICE WORKER] Firebase Cloud Messaging background notification handler.
 * **Key Components & Flow:**
-  - `firebase.initializeApp` -> hardcoded public Firebase config for SW context.
-  - `messaging.onBackgroundMessage` -> shows new-order notification.
+  - Firebase CDN import/init is wrapped in `try/catch` -> prevents ServiceWorker registration failure when script evaluation hits CDN/config errors.
+  - `messaging.onBackgroundMessage` -> shows new-order notification when Firebase messaging initializes.
   - `notificationclick` -> focuses existing app window or opens `/`.
 * **Dependencies:** Firebase compat CDN scripts, FCM payloads from `/api/orders/create`.
 
