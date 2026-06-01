@@ -94,7 +94,7 @@
   - `pinLogin/loginSales/loginDriver/logout` -> Firebase anonymous auth + `/api/auth/login` -> persists `hillkoff_auth` and sets role routing.
   - `createOrder/confirmOrder` -> builds order id/date/customer fields -> calls `/api/orders/create` -> server writes Firestore and sends FCM.
   - `updateOrder/assignDriver/deleteOrder/uploadPod` -> writes order status/assignment/proof fields directly to Firestore -> affects sales, dispatch, driver views.
-  - `driver-sop` tab + `submitDriverDailyAssessment` -> shows daily/weekly vehicle SOP, requires daily checks, writes `driver_daily_assessments/{driverId}_{serviceDate}`.
+  - `driver-sop` tab + `submitDriverDailyAssessment` -> shows morning notice, daily/weekly vehicle SOP, care basics, requires daily checks, writes `driver_daily_assessments/{driverId}_{serviceDate}`.
   - `driver-sop-report` tab + `exportDriverAssessmentReport` -> sales view for completed/missing driver assessments -> calls `/api/driver-assessments/today` and exports TXT/copy report.
   - `ensureWebPushForDriver/requestNotifyPermission` -> registers `firebase-messaging-sw.js`, gets FCM token -> calls `/api/push/register`.
   - `sendChat/sendEmergency/updateTyping/updateChatSummary` -> writes team chat and typing state to Firestore -> chat modal and badge update.

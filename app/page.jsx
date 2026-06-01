@@ -46,6 +46,20 @@ const DRIVER_DAILY_CHECK_ITEMS = [
   { id: "warningLights", label: "ไฟเตือนหน้าปัดและมาตรวัดความร้อนปกติ", detail: "พบไฟเตือนให้จอดในที่ปลอดภัยและแจ้งหัวหน้า" }
 ];
 
+const DRIVER_MORNING_NOTICE = [
+  "ทำแบบประเมินและตรวจรถก่อนออกงานทุกเช้า",
+  "พบความผิดปกติให้หยุดใช้รถก่อน แล้วแจ้งหัวหน้า/ฝ่ายขายทันที",
+  "บันทึกหมายเหตุให้ชัด: อาการที่พบ เวลา เลขไมล์ และจุดที่เกิดปัญหา"
+];
+
+const DRIVER_CARE_BASICS = [
+  "เติมเชื้อเพลิงให้พอรอบงาน และไม่ปล่อยน้ำมันต่ำต่อเนื่อง",
+  "รักษาความสะอาดห้องโดยสาร/ท้ายรถ ไม่ให้สิ่งของกีดขวางหรือหล่นเสียหาย",
+  "ขับนุ่มนวล ไม่เร่ง/เบรกกระชาก ลดการสึกหรอของยาง เบรก และช่วงล่าง",
+  "จอดรถในที่ปลอดภัย ดับเครื่อง ล็อกรถ และเก็บกุญแจตามจุดที่กำหนด",
+  "รถใช้งานหนัก ฝุ่นมาก หรือถนนขรุขระ ให้แจ้งตรวจเร็วกว่าระยะปกติ"
+];
+
 const DRIVER_WEEKLY_CHECK_ITEMS = [
   "ลมยางและสภาพยาง: เช็คตอนยางเย็น ดอกยางไม่สึกผิดปกติ ไม่มีตะปูหรือรอยแตก",
   "น้ำมันเบรกและน้ำมันคลัตช์: ระดับอยู่ที่ MAX",
@@ -3209,8 +3223,15 @@ export default function App() {
                 <span>SOP ประจำวัน</span>
               </div>
               <p style={{ margin: 0, color: "#9a3412", fontWeight: 800 }}>
-                ตรวจรถก่อนรับงานทุกวัน หากพบไฟเตือน กลิ่นไหม้ เสียงผิดปกติ รอยรั่ว หรือความร้อนขึ้น ให้หยุดรถในที่ปลอดภัยและแจ้งหัวหน้าทันที ห้ามฝืนใช้งานรถที่เสี่ยงเสียหายหรือไม่ปลอดภัย
+                ก่อนออกงานทุกเช้า คนขับต้องตรวจสภาพรถและบันทึกแบบประเมินให้ครบ หากพบความผิดปกติให้หยุดใช้รถและแจ้งทันที ห้ามฝืนใช้งานรถที่ไม่พร้อมหรือไม่ปลอดภัย
               </p>
+              <div style={{ display: "grid", gap: "6px", marginTop: "10px" }}>
+                {DRIVER_MORNING_NOTICE.map(item => (
+                  <div key={item} style={{ display: "flex", gap: "8px", alignItems: "flex-start", color: "#7c2d12", fontSize: "13px", fontWeight: 700 }}>
+                    <CheckCircle2 size={15} style={{ flex: "0 0 auto", marginTop: "1px" }} /> <span>{item}</span>
+                  </div>
+                ))}
+              </div>
             </section>
 
             <section className="panel">
@@ -3254,6 +3275,16 @@ export default function App() {
                     {driverAssessmentStatus}
                   </span>
                 )}
+              </div>
+            </section>
+
+            <section className="panel" style={{ background: "#f8fafc" }}>
+              <div className="panel-head">
+                <h2>ดูแลรักษารถระหว่างวัน</h2>
+                <span>ข้อควรจำสั้น ๆ</span>
+              </div>
+              <div className="report-lines">
+                {DRIVER_CARE_BASICS.map(item => <p key={item}>• {item}</p>)}
               </div>
             </section>
 
