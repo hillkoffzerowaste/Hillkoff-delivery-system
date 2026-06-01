@@ -13,6 +13,7 @@
 │       ├── auth/validate/
 │       ├── backup/
 │       ├── chat/gemini/
+│       ├── driver-assessments/today/
 │       ├── google/
 │       ├── orders/create/
 │       ├── push/register/
@@ -85,7 +86,7 @@
 * **Dependencies:** Class names rendered mainly by `app/page.jsx`.
 
 ### 📄 `app/page.jsx`
-* **Role:** [CLIENT ENTRY POINT] Main React application containing login, sales, dispatch, driver, driver SOP checklist, reports, settings, chat, AI assistant, and Firestore sync.
+* **Role:** [CLIENT ENTRY POINT] Main React application containing login, sales, dispatch, driver, driver SOP checklist/reporting, reports, settings, chat, AI assistant, and Firestore sync.
 * **Key Components & Flow:**
   - `defaultState/readState` -> initializes auth/state from `localStorage` -> feeds `App` state.
   - `App` -> controls `displayTab` (`sales|dispatch|driver|reports|settings`) -> renders role-specific dashboards.
@@ -94,11 +95,19 @@
   - `createOrder/confirmOrder` -> builds order id/date/customer fields -> calls `/api/orders/create` -> server writes Firestore and sends FCM.
   - `updateOrder/assignDriver/deleteOrder/uploadPod` -> writes order status/assignment/proof fields directly to Firestore -> affects sales, dispatch, driver views.
   - `driver-sop` tab + `submitDriverDailyAssessment` -> shows daily/weekly vehicle SOP, requires daily checks, writes `driver_daily_assessments/{driverId}_{serviceDate}`.
+  - `driver-sop-report` tab + `exportDriverAssessmentReport` -> sales view for completed/missing driver assessments -> calls `/api/driver-assessments/today` and exports TXT/copy report.
   - `ensureWebPushForDriver/requestNotifyPermission` -> registers `firebase-messaging-sw.js`, gets FCM token -> calls `/api/push/register`.
   - `sendChat/sendEmergency/updateTyping/updateChatSummary` -> writes team chat and typing state to Firestore -> chat modal and badge update.
   - `sendToGemini/buildAiClientSummary/refreshAuthToken` -> streams `/api/chat/gemini` SSE -> sales-only AI summary panel.
   - `generateDailyReport/buildServiceDateReport/exportServiceDateReport` -> derives reports from local `orders` -> copy/download text output.
 * **Dependencies:** Imports `lib/firebaseClient.js`, Lucide icons, calls API routes under `app/api/*`, reads/writes browser `localStorage`, writes Firestore `driver_daily_assessments`, uses OpenStreetMap URLs.
+
+### 📄 `app/api/driver-assessments/today/route.js`
+* **Role:** [API ROUTE] Sales-only report source for today's driver vehicle assessments.
+* **Key Components & Flow:**
+  - `POST` -> verifies Firebase `idToken`, checks `users_by_phone` role is sales -> returns driver roster and today's `driver_daily_assessments`.
+  - `toServiceDateKey` -> normalizes Bangkok service date -> scopes assessment report to one day.
+* **Dependencies:** `lib/firebaseAdmin.js`, Firestore `users_by_phone`, `driver_daily_assessments`; called by `driver-sop-report`.
 
 ### 📄 `app/api/auth/login/route.js`
 * **Role:** [API ROUTE] Server-side login/PIN gate for sales and driver users.

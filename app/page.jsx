@@ -209,7 +209,7 @@ function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
   lines.push(`งาน: ${order.id}`);
-  if (order.customerName) lines.push(`ลูกค้า: ${privacySafeName(order.customerName)}`);
+  if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
   if (order.zone) lines.push(`โซน: ${order.zone}`);
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
   if (order.driverNote) lines.push(`หมายเหตุคนขับ: ${order.driverNote}`);
@@ -336,6 +336,8 @@ export default function App() {
   const [driverWeeklyChecks, setDriverWeeklyChecks] = useState({});
   const [driverAssessmentNotes, setDriverAssessmentNotes] = useState("");
   const [driverAssessmentStatus, setDriverAssessmentStatus] = useState("");
+  const [driverAssessments, setDriverAssessments] = useState([]);
+  const [driverAssessmentDrivers, setDriverAssessmentDrivers] = useState([]);
 
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver" ? (tab === "driver-sop" ? "driver-sop" : "driver") : (tab === "driver" ? "sales" : tab);
@@ -483,6 +485,7 @@ export default function App() {
 	    const needsOrdersRealtime = ["sales", "dispatch", "driver"].includes(String(displayTab || ""));
 	    const needsCustomers = String(displayTab || "") === "sales";
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
+	    const needsDriverAssessments = ["driver-sop-report"].includes(String(displayTab || ""));
 	    const needsChat = Boolean(chatOpen);
 
       try {
@@ -576,6 +579,28 @@ export default function App() {
 	      })();
 	    }
 
+	    // Driver daily vehicle assessments: sales report view only.
+	    if (needsDriverAssessments) {
+	      (async () => {
+	        try {
+	          const res = await fetch("/api/driver-assessments/today", {
+	            method: "POST",
+	            headers: { "Content-Type": "application/json" },
+	            body: JSON.stringify({ idToken: state.auth?.token, serviceDate: todayServiceDate })
+	          });
+	          const json = await res.json();
+	          if (!json?.ok) throw new Error(json?.error || "load failed");
+	          const rows = Array.isArray(json?.data?.assessments) ? json.data.assessments : [];
+	          rows.sort((a, b) => String(b.updatedAt?.seconds || b.updatedAt || "").localeCompare(String(a.updatedAt?.seconds || a.updatedAt || "")));
+	          setDriverAssessments(rows);
+	          setDriverAssessmentDrivers(Array.isArray(json?.data?.drivers) ? json.data.drivers : []);
+	          markConnected();
+	        } catch (e) {
+	          setSyncStatus(`⚠️ โหลดรายงานตรวจรถไม่สำเร็จ: ${e?.message || e}`);
+	        }
+	      })();
+	    }
+
 	    // Chat: realtime only while chat UI is open.
 	    if (needsChat) {
 	      try {
@@ -598,7 +623,7 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate]);
 
   // (Supabase removed) no forced polling needed
 
@@ -1164,6 +1189,36 @@ export default function App() {
   const backlogUndelivered = (orders || []).filter((o) => !isTodayOrder(o) && isUndelivered(o));
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
+  const driverAssessmentRoster = useMemo(() => {
+    const map = new Map();
+    const addDriver = (id, data = {}) => {
+      const did = String(id || "").trim();
+      if (!did) return;
+      const current = map.get(did) || {};
+      map.set(did, {
+        id: did,
+        name: data.name || data.driverName || current.name || did,
+        phone: data.phone || data.driverPhone || current.phone || "",
+        plate: data.plate || current.plate || "",
+        zone: data.zone || current.zone || ""
+      });
+    };
+    (driverAssessmentDrivers || []).forEach(d => addDriver(d.id, d));
+    (drivers || []).forEach(d => addDriver(d.id, d));
+    (orders || []).forEach(o => {
+      if (o.driverId) addDriver(o.driverId, { driverName: o.driverName });
+    });
+    Object.values(state.driverLocations || {}).forEach(loc => addDriver(loc.driverId, loc));
+    (driverAssessments || []).forEach(a => addDriver(a.driverId, a));
+    return Array.from(map.values()).sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
+  }, [driverAssessmentDrivers, drivers, orders, state.driverLocations, driverAssessments]);
+  const todayAssessmentByDriver = useMemo(() => {
+    const map = new Map();
+    (driverAssessments || []).forEach(a => {
+      if (a.driverId) map.set(String(a.driverId), a);
+    });
+    return map;
+  }, [driverAssessments]);
   const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || customers[0];
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
@@ -1561,6 +1616,7 @@ export default function App() {
             driverId: order.driverId || state.auth?.driverId || driverId || "",
             sharedToLine: true
           };
+	        updateOrder(order.id, completedOrder);
 	        const text = buildLineMessageForOrder(completedOrder);
 	        const file = podFilesRef.current?.[order.id];
 
@@ -1578,12 +1634,11 @@ export default function App() {
 	        } else {
 	          await navigator.share({ text });
 	        }
-	        updateOrder(order.id, completedOrder);
 	        if (copied) {
 	          setSyncStatus(`✅ ส่งสำเร็จและคัดลอกสรุปสั้นสำหรับ LINE แล้ว (${order.id})`);
 	        }
-	      } catch {
-	        // user cancelled or share failed
+	      } catch (error) {
+	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${order.id})`);
 	      }
 	    })();
 	  };
@@ -1850,6 +1905,44 @@ export default function App() {
     copyToClipboard(reportText);
   };
 
+  const buildDriverAssessmentReport = () => {
+    const completed = driverAssessmentRoster.filter(driver => todayAssessmentByDriver.has(driver.id));
+    const missing = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
+    const lines = [
+      "รายงานแบบประเมินตรวจรถประจำวัน",
+      `วันที่: ${todayServiceDate}`,
+      `สร้างเมื่อ: ${new Date().toLocaleString("th-TH")}`,
+      "",
+      `สรุป: ทำแล้ว ${completed.length}/${driverAssessmentRoster.length} คน | ยังไม่ทำ ${missing.length} คน`,
+      "",
+      "ทำแบบประเมินแล้ว:"
+    ];
+    completed.forEach((driver, index) => {
+      const assessment = todayAssessmentByDriver.get(driver.id) || {};
+      const notes = assessment.notes ? ` | หมายเหตุ: ${assessment.notes}` : "";
+      lines.push(`${index + 1}. ${driver.name || driver.id}${driver.phone ? ` (${driver.phone})` : ""}${notes}`);
+    });
+    if (!completed.length) lines.push("-");
+    lines.push("", "ยังไม่ได้ทำ:");
+    missing.forEach((driver, index) => {
+      lines.push(`${index + 1}. ${driver.name || driver.id}${driver.phone ? ` (${driver.phone})` : ""}`);
+    });
+    if (!missing.length) lines.push("-");
+    return lines.join("\n");
+  };
+
+  const exportDriverAssessmentReport = (mode = "copy") => {
+    const reportText = buildDriverAssessmentReport();
+    if (mode === "download") {
+      const element = document.createElement("a");
+      element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
+      element.setAttribute("download", `Hillkoff-Driver-Inspection-${todayServiceDate}.txt`);
+      element.click();
+      return;
+    }
+    copyToClipboard(reportText);
+  };
+
   useEffect(() => {
     if (openReportDate) return;
     const first = ordersByServiceDate.keys[0] || "";
@@ -1921,6 +2014,7 @@ export default function App() {
             <>
               <button className={displayTab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
               <button className={displayTab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
+              <button className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => setTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
           )}
           {auth.role === "driver" && (
@@ -1945,7 +2039,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
+            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
           </div>
           <div className="top-actions">
             <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
@@ -3034,6 +3128,76 @@ export default function App() {
                 <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
               </section>
             )}
+          </div>
+        )}
+
+        {auth.role !== "driver" && displayTab === "driver-sop-report" && (
+          <div style={{ display: "grid", gap: "14px" }}>
+            {(() => {
+              const completed = driverAssessmentRoster.filter(driver => todayAssessmentByDriver.has(driver.id));
+              const missing = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
+              const completeRate = driverAssessmentRoster.length ? Math.round((completed.length / driverAssessmentRoster.length) * 100) : 0;
+              return (
+                <>
+                  <section className="panel" style={{ background: missing.length ? "#fff7ed" : "#f0fdf4", borderLeft: `4px solid ${missing.length ? "#f97316" : "#22c55e"}` }}>
+                    <div className="panel-head">
+                      <h2>สรุปแบบประเมินตรวจรถวันนี้</h2>
+                      <span>{todayServiceDate}</span>
+                    </div>
+                    <div className="analytics-cards">
+                      <div><span>ทำแล้ว</span><b>{completed.length}/{driverAssessmentRoster.length}</b></div>
+                      <div><span>ครบถ้วน</span><b>{completeRate}%</b></div>
+                    </div>
+                    <p className="muted" style={{ margin: "10px 0 0" }}>
+                      รายชื่ออ้างอิงจากคนขับที่พบในระบบ, งานจัดส่ง, ตำแหน่งล่าสุด และแบบประเมินที่ส่งเข้ามา
+                    </p>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                      <button className="secondary" onClick={() => exportDriverAssessmentReport("copy")}>คัดลอกรายงาน</button>
+                      <button className="primary" onClick={() => exportDriverAssessmentReport("download")}><Download size={16} /> ดาวน์โหลด TXT</button>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-head">
+                      <h2>ทำแบบประเมินแล้ว</h2>
+                      <span>{completed.length} คน</span>
+                    </div>
+                    <div className="dispatch-table">
+                      {completed.length === 0 ? (
+                        <div className="empty">ยังไม่มีคนขับส่งแบบประเมินวันนี้</div>
+                      ) : completed.map(driver => {
+                        const assessment = todayAssessmentByDriver.get(driver.id) || {};
+                        return (
+                          <div key={driver.id} className="dispatch-row" style={{ gridTemplateColumns: "1fr 1fr 1.4fr" }}>
+                            <div><b>{driver.name || driver.id}</b><span>{driver.phone || "-"}</span></div>
+                            <span>{assessment.readiness === "ready" ? "พร้อมใช้งาน" : "ส่งแบบแล้ว"}</span>
+                            <span>{assessment.notes || "ไม่มีหมายเหตุ"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-head">
+                      <h2>ยังไม่ได้ทำ</h2>
+                      <span>{missing.length} คน</span>
+                    </div>
+                    <div className="dispatch-table">
+                      {missing.length === 0 ? (
+                        <div className="empty">ครบทุกคนแล้ว</div>
+                      ) : missing.map(driver => (
+                        <div key={driver.id} className="dispatch-row" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+                          <div><b>{driver.name || driver.id}</b><span>{driver.phone || "-"}</span></div>
+                          <span>{driver.plate || "-"}</span>
+                          <span>{driver.zone || "-"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              );
+            })()}
           </div>
         )}
 
