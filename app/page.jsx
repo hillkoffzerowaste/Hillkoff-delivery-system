@@ -39,6 +39,53 @@ const ZONES = ["เมืองเชียงใหม่", "แม่ริม
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
 const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
 
+const DRIVER_DAILY_CHECK_ITEMS = [
+  { id: "coolant", label: "ระดับน้ำหม้อพักน้ำอยู่ที่ Full ตอนเครื่องเย็น", detail: "ห้ามเปิดฝาหม้อน้ำเมื่อเครื่องร้อน" },
+  { id: "engineOil", label: "น้ำมันเครื่องอยู่ระหว่าง F และ L", detail: "อุ่นเครื่อง ดับ 2-3 นาที เช็ดก้านวัดแล้ววัดซ้ำ" },
+  { id: "leakage", label: "ไม่มีรอยรั่วใต้ท้องรถหรือในห้องเครื่อง", detail: "ตรวจน้ำมันเครื่อง เกียร์ เฟืองท้าย และน้ำหล่อเย็น" },
+  { id: "warningLights", label: "ไฟเตือนหน้าปัดและมาตรวัดความร้อนปกติ", detail: "พบไฟเตือนให้จอดในที่ปลอดภัยและแจ้งหัวหน้า" }
+];
+
+const DRIVER_WEEKLY_CHECK_ITEMS = [
+  "ลมยางและสภาพยาง: เช็คตอนยางเย็น ดอกยางไม่สึกผิดปกติ ไม่มีตะปูหรือรอยแตก",
+  "น้ำมันเบรกและน้ำมันคลัตช์: ระดับอยู่ที่ MAX",
+  "แบตเตอรี่: น้ำกลั่นอยู่ระดับ UPPER/LEVEL ไม่เติมเกิน",
+  "น้ำมันพาวเวอร์: วัดตามขีด COLD/HOT และอยู่ระดับ MAX",
+  "ระบบไฟ: ไฟหน้า ไฟท้าย ไฟเลี้ยว ไฟเบรก ไฟถอย ไฟฉุกเฉินครบ",
+  "สายพาน: สายพานปั๊มลมและแอร์ไม่มีรอยแตก ไม่หย่อน ไม่ดัง",
+  "รายการเสริม: น้ำมันเกียร์อัตโนมัติ น้ำยาฉีดกระจก ใบปัดน้ำฝนพร้อมใช้งาน"
+];
+
+const DRIVER_RESPONSIBILITIES = [
+  "ตรวจเช็ครถประจำวัน/สัปดาห์ก่อนใช้งานและบันทึกข้อเท็จจริง",
+  "เฝ้าระวังอาการผิดปกติระหว่างขับขี่และหยุดรถเมื่อมีความเสี่ยง",
+  "รายงานปัญหาตามลำดับงาน ไม่สรุปสาเหตุเองเกินข้อมูลที่พบ",
+  "นำรถเข้าซ่อมตามคำสั่ง และทดสอบการใช้งานจริงหลังซ่อมก่อนรับรถ"
+];
+
+const DRIVER_PRECAUTIONS = [
+  "มอง: ตรวจไฟเตือน เครื่องยนต์ แบตเตอรี่ น้ำมันเครื่อง และความร้อน",
+  "ดม: กลิ่นไหม้ กลิ่นน้ำมัน หรือกลิ่นผิดปกติให้หยุดรถทันที",
+  "ฟัง: เสียงเครื่อง ช่วงล่าง หรือสายพานดังผิดปกติให้บันทึกอาการ",
+  "สัมผัส: พวงมาลัยดึง เบรกสั่น รถสั่น หรือแรงตก ให้แจ้งซ่อม",
+  "วินัย: ปรับเบาะ/กระจกก่อนออกรถ และไม่พักเท้าบนคลัตช์หรือเบรก"
+];
+
+const DRIVER_REPAIR_STEPS = [
+  "พนักงานขับรถรายงานข้อเท็จจริง อาการ หรือระยะทางที่ถึงกำหนด",
+  "ผู้อำนวยการกองคลังพิจารณาความเห็นเบื้องต้นและเสนออนุมัติ",
+  "หัวหน้างานธุรการดำเนินการจัดซื้อจัดจ้าง/เบิกจ่ายและสั่งนำรถเข้าซ่อม",
+  "พนักงานขับรถทดสอบหลังซ่อมจริง ตรวจว่าปัญหาหายก่อนลงชื่อรับรถ"
+];
+
+const DRIVER_MAINTENANCE_SCHEDULE = [
+  ["น้ำมันเครื่องและกรองน้ำมันเครื่อง", "10,000 กม.", "เปลี่ยนทุกระยะ"],
+  ["ไส้กรองอากาศ", "20,000 กม.", "ตรวจความสะอาดทุก 2,500 กม."],
+  ["น้ำมันเกียร์", "20,000 กม.", "ตรวจตามคู่มือรถ"],
+  ["น้ำมันเฟืองท้าย", "20,000 กม.", "ครั้งแรกที่ 10,000 กม."],
+  ["น้ำยาหล่อเย็น", "ทุก 2 ปี", "ใช้งานหนักให้ตรวจเร็วกว่ากำหนด"]
+];
+
 const initialCustomers = [];
 
 const initialOrders = [];
@@ -285,9 +332,13 @@ export default function App() {
   const [customersLimit, setCustomersLimit] = useState(20);
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
+  const [driverDailyChecks, setDriverDailyChecks] = useState({});
+  const [driverWeeklyChecks, setDriverWeeklyChecks] = useState({});
+  const [driverAssessmentNotes, setDriverAssessmentNotes] = useState("");
+  const [driverAssessmentStatus, setDriverAssessmentStatus] = useState("");
 
   // Determine active screen early (used for data subscriptions)
-  const displayTab = state.auth?.role === "driver" ? "driver" : (tab === "driver" ? "sales" : tab);
+  const displayTab = state.auth?.role === "driver" ? (tab === "driver-sop" ? "driver-sop" : "driver") : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(new Date());
   const getOrderServiceDate = (o) => String(o?.serviceDate || toServiceDateKey(o?.createdAt || o?.updatedAt || new Date()));
@@ -1429,6 +1480,41 @@ export default function App() {
 	      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
 	    }, 250);
 	  };
+
+  const submitDriverDailyAssessment = async () => {
+    if (state.auth?.role !== "driver") return;
+    const did = state.auth?.driverId || driverId || "";
+    if (!did) {
+      setDriverAssessmentStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกเข้าใหม่");
+      return;
+    }
+    const missing = DRIVER_DAILY_CHECK_ITEMS.filter(item => !driverDailyChecks[item.id]);
+    if (missing.length) {
+      setDriverAssessmentStatus(`⚠️ กรุณาตรวจเช็คประจำวันให้ครบก่อนบันทึก (${missing.length} รายการยังไม่ครบ)`);
+      return;
+    }
+
+    try {
+      const db = getFirestoreDb();
+      const serviceDate = toServiceDateKey(new Date());
+      const docId = `${did}_${serviceDate}`;
+      await fb.setDoc(fb.doc(db, "driver_daily_assessments", docId), {
+        driverId: did,
+        driverName: state.auth?.name || "",
+        driverPhone: state.auth?.phone || "",
+        serviceDate,
+        dailyChecks: driverDailyChecks,
+        weeklyChecks: driverWeeklyChecks,
+        notes: String(driverAssessmentNotes || "").trim(),
+        readiness: "ready",
+        updatedAt: fb.serverTimestamp()
+      }, { merge: true });
+      setDriverAssessmentStatus("✅ บันทึกแบบประเมินประจำวันแล้ว พร้อมเริ่มงาน");
+    } catch (error) {
+      setDriverAssessmentStatus(`❌ บันทึกไม่สำเร็จ: ${error?.message || error}`);
+    }
+  };
+
 	  const updateCustomer = (id, patch) => {
 	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
 	    if (supabase) {
@@ -1838,7 +1924,10 @@ export default function App() {
             </>
           )}
           {auth.role === "driver" && (
-            <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+            <>
+              <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+              <button className={displayTab === "driver-sop" ? "active" : ""} onClick={() => setTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
+            </>
           )}
            {auth.role !== "driver" && (
              <>
@@ -1856,7 +1945,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
+            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
           </div>
           <div className="top-actions">
             <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
@@ -2945,6 +3034,140 @@ export default function App() {
                 <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
               </section>
             )}
+          </div>
+        )}
+
+        {auth.role === "driver" && displayTab === "driver-sop" && (
+          <div style={{ display: "grid", gap: "14px" }}>
+            <section className="panel" style={{ background: "#fff7ed", borderLeft: "4px solid #f97316" }}>
+              <div className="panel-head">
+                <h2>ประกาศสำคัญก่อนเริ่มงาน</h2>
+                <span>SOP ประจำวัน</span>
+              </div>
+              <p style={{ margin: 0, color: "#9a3412", fontWeight: 800 }}>
+                ตรวจรถก่อนรับงานทุกวัน หากพบไฟเตือน กลิ่นไหม้ เสียงผิดปกติ รอยรั่ว หรือความร้อนขึ้น ให้หยุดรถในที่ปลอดภัยและแจ้งหัวหน้าทันที ห้ามฝืนใช้งานรถที่เสี่ยงเสียหายหรือไม่ปลอดภัย
+              </p>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>แบบประเมินตรวจรถประจำวัน</h2>
+                <span>{todayServiceDate}</span>
+              </div>
+              <div style={{ display: "grid", gap: "8px" }}>
+                {DRIVER_DAILY_CHECK_ITEMS.map(item => (
+                  <label key={item.id} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: driverDailyChecks[item.id] ? "#f0fdf4" : "#fff" }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(driverDailyChecks[item.id])}
+                      onChange={e => setDriverDailyChecks(prev => ({ ...prev, [item.id]: e.target.checked }))}
+                      style={{ width: "18px", height: "18px", marginTop: "2px" }}
+                    />
+                    <span>
+                      <b style={{ display: "block" }}>{item.label}</b>
+                      <small style={{ color: "#6b7280" }}>{item.detail}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ marginTop: "12px" }}>
+                <label className="field-label">หมายเหตุอาการผิดปกติ / เลขไมล์ / รายละเอียดที่ต้องแจ้งซ่อม</label>
+                <textarea
+                  value={driverAssessmentNotes}
+                  onChange={e => setDriverAssessmentNotes(e.target.value)}
+                  rows={3}
+                  placeholder="เช่น มีคราบน้ำมันใต้เครื่อง, ไฟเตือนขึ้น, ยางหน้าซ้ายลมอ่อน"
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+                <button className="primary" onClick={submitDriverDailyAssessment}>
+                  <CheckCircle2 size={16} /> บันทึกแบบประเมินวันนี้
+                </button>
+                {driverAssessmentStatus && (
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                    {driverAssessmentStatus}
+                  </span>
+                )}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>หน้าที่และความรับผิดชอบ</h2>
+                <span>ตั้งแต่ก่อนใช้งานถึงหลังซ่อม</span>
+              </div>
+              <div className="report-lines">
+                {DRIVER_RESPONSIBILITIES.map(item => <p key={item}>• {item}</p>)}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>รายการตรวจเช็คประจำสัปดาห์</h2>
+                <span>ตรวจทุก 7 วัน</span>
+              </div>
+              <div style={{ display: "grid", gap: "8px" }}>
+                {DRIVER_WEEKLY_CHECK_ITEMS.map((item, index) => (
+                  <label key={item} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(driverWeeklyChecks[index])}
+                      onChange={e => setDriverWeeklyChecks(prev => ({ ...prev, [index]: e.target.checked }))}
+                      style={{ width: "18px", height: "18px", marginTop: "2px" }}
+                    />
+                    <span>{item}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>จุดสังเกตขณะขับขี่</h2>
+                <span>ความปลอดภัยก่อนความเร็ว</span>
+              </div>
+              <div className="report-lines">
+                {DRIVER_PRECAUTIONS.map(item => <p key={item}>• {item}</p>)}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>ขั้นตอนแจ้งซ่อม</h2>
+                <span>รายงานเป็นลำดับ</span>
+              </div>
+              <div style={{ display: "grid", gap: "8px" }}>
+                {DRIVER_REPAIR_STEPS.map((step, index) => (
+                  <div key={step} style={{ display: "grid", gridTemplateColumns: "32px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: "#f8fafc" }}>
+                    <b style={{ width: "28px", height: "28px", borderRadius: "999px", background: "#176b3a", color: "#fff", display: "grid", placeItems: "center" }}>{index + 1}</b>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: "12px 0 0" }}>สัญลักษณ์มาตรฐาน: I=ตรวจสอบ, A=ปรับตั้ง, R=เปลี่ยนใหม่, T=กวดขันให้แน่น, L=หล่อลื่น</p>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>ตารางบำรุงรักษาตามระยะ</h2>
+                <span>แจ้งเปลี่ยนตามกำหนด</span>
+              </div>
+              <div className="dispatch-table">
+                <div className="dispatch-head" style={{ gridTemplateColumns: "1.2fr 0.8fr 1fr" }}>
+                  <span>รายการ</span><span>ระยะ</span><span>หมายเหตุ</span>
+                </div>
+                {DRIVER_MAINTENANCE_SCHEDULE.map(([name, interval, note]) => (
+                  <div key={name} className="dispatch-row" style={{ gridTemplateColumns: "1.2fr 0.8fr 1fr" }}>
+                    <b>{name}</b>
+                    <span>{interval}</span>
+                    <span>{note}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: "12px 0 0" }}>รถใช้งานหนัก ทางขรุขระ ฝุ่นมาก หรือลากพ่วงบ่อย ให้แจ้งตรวจเร็วกว่าระยะมาตรฐาน</p>
+            </section>
           </div>
         )}
 

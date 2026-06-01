@@ -85,7 +85,7 @@
 * **Dependencies:** Class names rendered mainly by `app/page.jsx`.
 
 ### 📄 `app/page.jsx`
-* **Role:** [CLIENT ENTRY POINT] Main React application containing login, sales, dispatch, driver, reports, settings, chat, AI assistant, and Firestore sync.
+* **Role:** [CLIENT ENTRY POINT] Main React application containing login, sales, dispatch, driver, driver SOP checklist, reports, settings, chat, AI assistant, and Firestore sync.
 * **Key Components & Flow:**
   - `defaultState/readState` -> initializes auth/state from `localStorage` -> feeds `App` state.
   - `App` -> controls `displayTab` (`sales|dispatch|driver|reports|settings`) -> renders role-specific dashboards.
@@ -93,11 +93,12 @@
   - `pinLogin/loginSales/loginDriver/logout` -> Firebase anonymous auth + `/api/auth/login` -> persists `hillkoff_auth` and sets role routing.
   - `createOrder/confirmOrder` -> builds order id/date/customer fields -> calls `/api/orders/create` -> server writes Firestore and sends FCM.
   - `updateOrder/assignDriver/deleteOrder/uploadPod` -> writes order status/assignment/proof fields directly to Firestore -> affects sales, dispatch, driver views.
+  - `driver-sop` tab + `submitDriverDailyAssessment` -> shows daily/weekly vehicle SOP, requires daily checks, writes `driver_daily_assessments/{driverId}_{serviceDate}`.
   - `ensureWebPushForDriver/requestNotifyPermission` -> registers `firebase-messaging-sw.js`, gets FCM token -> calls `/api/push/register`.
   - `sendChat/sendEmergency/updateTyping/updateChatSummary` -> writes team chat and typing state to Firestore -> chat modal and badge update.
   - `sendToGemini/buildAiClientSummary/refreshAuthToken` -> streams `/api/chat/gemini` SSE -> sales-only AI summary panel.
   - `generateDailyReport/buildServiceDateReport/exportServiceDateReport` -> derives reports from local `orders` -> copy/download text output.
-* **Dependencies:** Imports `lib/firebaseClient.js`, Lucide icons, calls API routes under `app/api/*`, reads/writes browser `localStorage`, uses OpenStreetMap URLs.
+* **Dependencies:** Imports `lib/firebaseClient.js`, Lucide icons, calls API routes under `app/api/*`, reads/writes browser `localStorage`, writes Firestore `driver_daily_assessments`, uses OpenStreetMap URLs.
 
 ### 📄 `app/api/auth/login/route.js`
 * **Role:** [API ROUTE] Server-side login/PIN gate for sales and driver users.
