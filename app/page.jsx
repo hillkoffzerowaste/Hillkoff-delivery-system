@@ -1519,9 +1519,18 @@ export default function App() {
 	    setTab("driver");
 	  };
 
-  const deleteOrder = (orderId) => {
-    if (confirm("❌ ลบออเดอร์นี้หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้")) {
-      setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== orderId) }));
+  const deleteOrder = async (orderId) => {
+    if (!confirm("❌ ลบออเดอร์นี้หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้")) return;
+    const previousOrders = state.orders || [];
+    setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== orderId) }));
+    setSyncStatus(`⏳ กำลังลบออเดอร์ "${orderId}" จาก Firestore...`);
+    try {
+      const db = getFirestoreDb();
+      await fb.deleteDoc(fb.doc(db, "orders", String(orderId)));
+      setSyncStatus(`✅ ลบออเดอร์ "${orderId}" สำเร็จ`);
+    } catch (error) {
+      setState(prev => ({ ...prev, orders: previousOrders }));
+      setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
     }
   };
 

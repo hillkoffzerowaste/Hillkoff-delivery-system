@@ -93,7 +93,7 @@
   - Firestore realtime `useEffect` -> subscribes to `orders`, `customers`, `driver_locations`, `chat_messages`, `chat_meta`, `typing_status`, `login_events` conditionally by active tab -> updates local React state.
   - `pinLogin/loginSales/loginDriver/logout` -> Firebase anonymous auth + `/api/auth/login` -> persists `hillkoff_auth` and sets role routing.
   - `createOrder/confirmOrder` -> builds order id/date/customer fields -> calls `/api/orders/create` -> server writes Firestore and sends FCM.
-  - `updateOrder/assignDriver/deleteOrder/uploadPod` -> writes order status/assignment/proof fields directly to Firestore -> affects sales, dispatch, driver views.
+  - `updateOrder/assignDriver/deleteOrder/uploadPod` -> writes order status/assignment/proof fields and deletes orders in Firestore -> affects sales, dispatch, driver views.
   - `driver-sop` tab + `submitDriverDailyAssessment` -> shows morning notice, daily/weekly vehicle SOP, care basics, requires daily checks, writes `driver_daily_assessments/{driverId}_{serviceDate}`.
   - `driver-sop-report` tab + `exportDriverAssessmentReport` -> sales view for completed/missing driver assessments -> calls `/api/driver-assessments/today` and exports TXT/copy report.
   - `ensureWebPushForDriver/requestNotifyPermission` -> registers `firebase-messaging-sw.js`, gets FCM token -> calls `/api/push/register`.
@@ -194,7 +194,7 @@
 * **Key Components & Flow:**
   - `getFirebaseApp/getFirebaseAuth/getFirestoreDb` -> singleton browser Firebase app services.
   - `getFcmToken/getFirebaseMessaging` -> obtains web push token with VAPID key.
-  - `fb` -> exported Firestore function bundle used throughout `app/page.jsx`.
+  - `fb` -> exported Firestore function bundle, including `deleteDoc`, used throughout `app/page.jsx`.
   - `startPhoneSignInE164/signInAnon/fbLogout` -> auth helpers for login/logout flow.
 * **Dependencies:** `firebase/app`, `firebase/auth`, `firebase/firestore`, `firebase/messaging`, `NEXT_PUBLIC_FIREBASE_*`.
 
