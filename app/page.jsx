@@ -284,7 +284,7 @@ export default function App() {
   const [pushStatus, setPushStatus] = useState("");
   const [notificationPermission, setNotificationPermission] = useState("default");
 
-  // Sales-only Gemini AI sidebar
+  // Sales-only database chatbot sidebar
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -852,65 +852,7 @@ export default function App() {
     return token;
   };
 
-  const buildAiClientSummary = () => {
-    const contextDays = 7;
-    const dateKeys = Array.from({ length: contextDays }, (_, index) =>
-      toServiceDateKey(new Date(Date.now() - index * 24 * 60 * 60 * 1000))
-    );
-    const orders = state.orders || [];
-    const dailyStats = dateKeys.map((date) => {
-      const list = orders.filter((order) => getOrderServiceDate(order) === date);
-      const areas = {};
-      const statuses = {};
-
-      list.forEach((order) => {
-        const area = String(order.zone || order.area || "ไม่ระบุพื้นที่");
-        const status = String(order.status || "ไม่ระบุ");
-        areas[area] = (areas[area] || 0) + 1;
-        statuses[status] = (statuses[status] || 0) + 1;
-      });
-
-      return {
-        date,
-        totalOrders: list.length,
-        done: list.filter((order) => order.status === "ส่งสำเร็จ").length,
-        waiting: list.filter((order) => order.status === "รอคนขับรับ").length,
-        shipping: list.filter((order) => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
-        problem: list.filter((order) => order.status === "ติดปัญหา" || order.complaint).length,
-        canceled: list.filter((order) => order.status === "ยกเลิก").length,
-        codTotal: list.reduce((sum, order) => sum + Number(order.cod || 0), 0),
-        codDone: list.filter((order) => order.status === "ส่งสำเร็จ").reduce((sum, order) => sum + Number(order.cod || 0), 0),
-        areas,
-        statuses,
-      };
-    });
-
-    const statusCounts = {};
-    dailyStats.forEach((day) => {
-      Object.entries(day.statuses || {}).forEach(([status, count]) => {
-        statusCounts[status] = (statusCounts[status] || 0) + Number(count || 0);
-      });
-    });
-
-    return {
-      source: "client_state",
-      generatedAt: new Date().toISOString(),
-      dateRange: {
-        start: dateKeys[dateKeys.length - 1],
-        end: dateKeys[0],
-        timezone: "Asia/Bangkok",
-        contextDays,
-      },
-      total: dailyStats.reduce((sum, day) => sum + Number(day.totalOrders || 0), 0),
-      statusCounts,
-      codTotal: dailyStats.reduce((sum, day) => sum + Number(day.codTotal || 0), 0),
-      dailyStats,
-      firestoreReads: 0,
-      selectedFields: ["serviceDate", "status", "zone", "cod"],
-    };
-  };
-
-  const sendToGemini = async (text) => {
+  const sendToChatbot = async (text) => {
     const q = String(text || "").trim();
     if (!q) return;
     if (state.auth?.role !== "sales") return;
@@ -921,59 +863,36 @@ export default function App() {
     setAiMessages((prev) => [...prev, { role: "user", text: q }, { role: "model", text: "" }]);
 
     const phoneDigits = String(state.auth?.phone || "").replace(/\D/g, "");
-    const history = [...aiMessages, { role: "user", text: q }].slice(-10);
-    const clientSummary = buildAiClientSummary();
 
     try {
       const idToken = await refreshAuthToken();
-      const res = await fetch("/api/chat/gemini", {
+      const res = await fetch("/api/chat/bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, phoneDigits, messages: history, clientSummary }),
+        body: JSON.stringify({ idToken, phoneDigits, question: q }),
       });
       if (!res.ok) {
         const errorPayload = await res.json().catch(() => null);
         throw new Error(errorPayload?.error || `HTTP ${res.status}`);
       }
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-        for (const p of parts) {
-          const line = p.split("\n").find((l) => l.startsWith("data: "));
-          if (!line) continue;
-          const jsonText = line.slice(6);
-          let evt;
-          try { evt = JSON.parse(jsonText); } catch { continue; }
-          if (evt.type === "delta") {
-            setAiMessages((prev) => {
-              const next = prev.slice();
-              for (let i = next.length - 1; i >= 0; i--) {
-                if (next[i].role === "model") {
-                  next[i] = { ...next[i], text: String(next[i].text || "") + String(evt.text || "") };
-                  break;
-                }
-              }
-              return next;
-            });
-          } else if (evt.type === "error") {
-            throw new Error(evt.error || "Gemini stream failed");
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || "chatbot failed");
+      setAiMessages((prev) => {
+        const next = prev.slice();
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === "model") {
+            next[i] = { ...next[i], text: json?.data?.answer || "ไม่พบคำตอบจากฐานข้อมูลครับ" };
+            break;
           }
         }
-      }
+        return next;
+      });
     } catch (e) {
       setAiMessages((prev) => {
         const next = prev.slice();
         for (let i = next.length - 1; i >= 0; i--) {
           if (next[i].role === "model") {
-            next[i] = { ...next[i], text: `❌ ขออภัย ผู้ช่วย AI ใช้งานไม่ได้: ${e?.message || String(e)}` };
+            next[i] = { ...next[i], text: `❌ ขออภัย แชทบอทฐานข้อมูลตอบไม่ได้: ${e?.message || String(e)}` };
             break;
           }
         }
@@ -2074,7 +1993,7 @@ export default function App() {
                <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
                <button className={displayTab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> การตั้งค่า</button>
                {auth.role === "sales" && (
-                 <button className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> 🤖 ผู้ช่วย AI (Gemini)</button>
+                 <button className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> แชทบอทฐานข้อมูล</button>
                )}
              </>
            )}
@@ -2111,7 +2030,7 @@ export default function App() {
               }}
             >
               <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-                <b>✨ ผู้ช่วย AI (Gemini)</b>
+                <b>แชทบอทฐานข้อมูล</b>
                 <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setAiOpen(false)}>✕</button>
               </div>
 
@@ -2119,10 +2038,11 @@ export default function App() {
                 {[
                   "สรุปงานส่งภาพรวมและยอด COD วันนี้",
                   "พื้นที่หรือโซนไหนที่มีปริมาณงานหนาแน่นที่สุด",
-                  "สรุปสถานะการเช็คอินและงานของคนขับแต่ละคน",
+                  "วันนี้ใครยังไม่ได้ทำแบบประเมินตรวจรถ",
                   "ตรวจสอบออเดอร์ที่มีปัญหาหรือตกค้าง",
+                  "จำว่า วิธีโทรหาลูกค้า = ให้เปิดรายละเอียดลูกค้าแล้วกดเบอร์โทรจากข้อมูลลูกค้า",
                 ].map((t) => (
-                  <button key={t} className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={aiBusy} onClick={() => sendToGemini(t)}>
+                  <button key={t} className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={aiBusy} onClick={() => sendToChatbot(t)}>
                     {t}
                   </button>
                 ))}
@@ -2130,7 +2050,7 @@ export default function App() {
 
               <div ref={aiListRef} style={{ padding: "12px 14px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "10px" }}>
                 {aiMessages.length === 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>พิมพ์คำถาม หรือกดเลือกคำถามสำเร็จรูปด้านบน</p>
+                  <p className="muted" style={{ margin: 0 }}>ถามข้อมูลในแอพได้ เช่น ออเดอร์วันนี้, ลูกค้า, COD, โซนงาน, ตรวจรถ หรือสอนบอทด้วย “จำว่า หัวข้อ = คำตอบ”</p>
                 ) : (
                   aiMessages.map((m, idx) => (
                     <div key={idx} style={{ justifySelf: m.role === "user" ? "end" : "start", maxWidth: "100%" }}>
@@ -2142,7 +2062,7 @@ export default function App() {
                 )}
                 {aiBusy && (
                   <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "10px 12px", color: "#6b7280", fontSize: "12px" }}>
-                    กำลังวิเคราะห์...
+                    กำลังค้นข้อมูลจาก Firestore...
                   </div>
                 )}
               </div>
@@ -2151,14 +2071,14 @@ export default function App() {
                 <input
                   value={aiInput}
                   onChange={(e) => setAiInput(e.target.value)}
-                  placeholder="ถามผู้ช่วย AI..."
+                  placeholder="ถามแชทบอทฐานข้อมูล..."
                   style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") sendToGemini(aiInput);
+                    if (e.key === "Enter") sendToChatbot(aiInput);
                   }}
                   disabled={aiBusy}
                 />
-                <button className="primary" onClick={() => sendToGemini(aiInput)} disabled={aiBusy} style={{ padding: "10px 14px" }}>
+                <button className="primary" onClick={() => sendToChatbot(aiInput)} disabled={aiBusy} style={{ padding: "10px 14px" }}>
                   ส่ง
                 </button>
               </div>
