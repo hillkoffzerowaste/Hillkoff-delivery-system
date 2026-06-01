@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, signInAnon, getFcmToken } from "../lib/firebaseClient";
+import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, getFcmToken } from "../lib/firebaseClient";
 import {
   AlertTriangle,
   Camera,
@@ -469,11 +469,31 @@ export default function App() {
 	    // onAuthStateChanged should fire immediately (even with null user).
 	    // As a safety net, mark ready after 2s to avoid a stuck "connecting" UI.
 	    const t = setTimeout(() => setFbAuthReady(true), 2000);
-	    const unsub = onFirebaseAuthStateChanged(() => {
+	    const unsubAuth = onFirebaseAuthStateChanged(() => {
 	      clearTimeout(t);
 	      setFbAuthReady(true);
 	    });
-	    return () => { try { unsub?.(); } catch {} };
+	    const unsubToken = onFirebaseIdTokenChanged(async (user) => {
+	      clearTimeout(t);
+	      setFbAuthReady(true);
+	      if (!user) return;
+	      try {
+	        const token = await user.getIdToken();
+	        setState((prev) => {
+	          if (!prev.auth?.role || prev.auth?.token === token) return prev;
+	          const nextAuth = { ...(prev.auth || {}), token };
+	          try { localStorage.setItem("hillkoff_auth", JSON.stringify(nextAuth)); } catch {}
+	          return { ...prev, auth: nextAuth };
+	        });
+	      } catch (e) {
+	        console.warn("Firebase ID token refresh listener failed", e);
+	      }
+	    });
+	    return () => {
+	      clearTimeout(t);
+	      try { unsubAuth?.(); } catch {}
+	      try { unsubToken?.(); } catch {}
+	    };
 	  }, []);
 
 	  // Firestore sync (minimize reads): subscribe only where realtime is needed.
@@ -597,10 +617,11 @@ export default function App() {
 	    if (needsDriverAssessments) {
 	      (async () => {
 	        try {
+	          const idToken = await refreshAuthToken(true);
 	          const res = await fetch("/api/driver-assessments/today", {
 	            method: "POST",
 	            headers: { "Content-Type": "application/json" },
-	            body: JSON.stringify({ idToken: state.auth?.token, serviceDate: todayServiceDate })
+	            body: JSON.stringify({ idToken, serviceDate: todayServiceDate })
 	          });
 	          const json = await res.json();
 	          if (!json?.ok) throw new Error(json?.error || "load failed");
@@ -817,14 +838,14 @@ export default function App() {
     setTimeout(scrollAiToBottom, 0);
   }, [aiOpen, aiMessages]);
 
-  const refreshAuthToken = async () => {
+  const refreshAuthToken = async (forceRefresh = true) => {
     const authClient = getFirebaseAuth();
     const user = authClient.currentUser;
     if (!user) {
       throw new Error("กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่");
     }
 
-    const token = await user.getIdToken(true);
+    const token = await user.getIdToken(forceRefresh);
     const nextAuth = { ...(state.auth || {}), token };
     localStorage.setItem("hillkoff_auth", JSON.stringify(nextAuth));
     setState((prev) => ({ ...prev, auth: { ...(prev.auth || {}), token } }));
@@ -1405,11 +1426,12 @@ export default function App() {
         return;
       }
 	    try {
+	      const idToken = await refreshAuthToken(true);
 	      const res = await fetch("/api/auth/login", {
 	        method: "POST",
 	        headers: { "Content-Type": "application/json" },
 	        body: JSON.stringify({
-	          idToken: state.auth.token,
+	          idToken,
 	          role: "driver",
 	          name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
 	          phone: driverForm.phone.trim(),
@@ -1499,10 +1521,11 @@ export default function App() {
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
 	    // Create via server so it can trigger Web Push notifications (FCM)
+	    const idToken = await refreshAuthToken(true);
 	    const res = await fetch("/api/orders/create", {
 	      method: "POST",
 	      headers: { "Content-Type": "application/json" },
-	      body: JSON.stringify({ idToken: state.auth?.token, order: pendingOrder })
+	      body: JSON.stringify({ idToken, order: pendingOrder })
 	    });
 	    const json = await res.json();
 	    if (!json?.ok) {

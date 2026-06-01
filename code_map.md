@@ -92,10 +92,11 @@
   - `App` -> controls `displayTab` (`sales|dispatch|driver|reports|settings`) -> renders role-specific dashboards.
   - Firestore realtime `useEffect` -> subscribes to `orders`, `customers`, `driver_locations`, `chat_messages`, `chat_meta`, `typing_status`, `login_events` conditionally by active tab -> updates local React state.
   - `pinLogin/loginSales/loginDriver/logout` -> Firebase anonymous auth + `/api/auth/login` -> persists `hillkoff_auth` and sets role routing.
-  - `createOrder/confirmOrder` -> builds order id/date/customer fields -> calls `/api/orders/create` -> server writes Firestore and sends FCM.
+  - `onFirebaseIdTokenChanged/refreshAuthToken` -> keeps `hillkoff_auth.token` fresh and forces `getIdToken(true)` before backend API calls.
+  - `createOrder/confirmOrder` -> builds order id/date/customer fields -> refreshes Firebase ID token, calls `/api/orders/create` -> server writes Firestore and sends FCM.
   - `updateOrder/assignDriver/deleteOrder/uploadPod` -> writes order status/assignment/proof fields and deletes orders in Firestore -> affects sales, dispatch, driver views.
   - `driver-sop` tab + `submitDriverDailyAssessment` -> shows morning notice, daily/weekly vehicle SOP, care basics, requires daily checks, writes `driver_daily_assessments/{driverId}_{serviceDate}`.
-  - `driver-sop-report` tab + `exportDriverAssessmentReport` -> sales view for completed/missing driver assessments -> calls `/api/driver-assessments/today` and exports TXT/copy report.
+  - `driver-sop-report` tab + `exportDriverAssessmentReport` -> sales view for completed/missing driver assessments -> refreshes token, calls `/api/driver-assessments/today`, exports TXT/copy report.
   - `ensureWebPushForDriver/requestNotifyPermission` -> registers `firebase-messaging-sw.js`, gets FCM token -> calls `/api/push/register`.
   - `sendChat/sendEmergency/updateTyping/updateChatSummary` -> writes team chat and typing state to Firestore -> chat modal and badge update.
   - `sendToGemini/buildAiClientSummary/refreshAuthToken` -> streams `/api/chat/gemini` SSE -> sales-only AI summary panel.
@@ -193,6 +194,7 @@
 * **Role:** Browser Firebase adapter for Auth, Firestore, Messaging, and phone/anonymous auth helpers.
 * **Key Components & Flow:**
   - `getFirebaseApp/getFirebaseAuth/getFirestoreDb` -> singleton browser Firebase app services.
+  - `onFirebaseAuthStateChanged/onFirebaseIdTokenChanged` -> exposes Auth readiness and token refresh listeners for `app/page.jsx`.
   - `getFcmToken/getFirebaseMessaging` -> obtains web push token with VAPID key.
   - `fb` -> exported Firestore function bundle, including `deleteDoc`, used throughout `app/page.jsx`.
   - `startPhoneSignInE164/signInAnon/fbLogout` -> auth helpers for login/logout flow.
