@@ -1515,20 +1515,22 @@ export default function App() {
     }
 
     try {
-      const db = getFirestoreDb();
-      const serviceDate = toServiceDateKey(new Date());
-      const docId = `${did}_${serviceDate}`;
-      await fb.setDoc(fb.doc(db, "driver_daily_assessments", docId), {
-        driverId: did,
-        driverName: state.auth?.name || "",
-        driverPhone: state.auth?.phone || "",
-        serviceDate,
-        dailyChecks: driverDailyChecks,
-        weeklyChecks: driverWeeklyChecks,
-        notes: String(driverAssessmentNotes || "").trim(),
-        readiness: "ready",
-        updatedAt: fb.serverTimestamp()
-      }, { merge: true });
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/driver-assessments/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          driverId: did,
+          dailyChecks: driverDailyChecks,
+          weeklyChecks: driverWeeklyChecks,
+          notes: String(driverAssessmentNotes || "").trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
       setDriverAssessmentStatus("✅ บันทึกแบบประเมินประจำวันแล้ว พร้อมเริ่มงาน");
     } catch (error) {
       setDriverAssessmentStatus(`❌ บันทึกไม่สำเร็จ: ${error?.message || error}`);
