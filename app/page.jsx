@@ -347,7 +347,7 @@ export default function App() {
   const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
   const [ordersLimit, setOrdersLimit] = useState(20);
-  const [customersLimit, setCustomersLimit] = useState(20);
+  const customersLimit = 500;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
   const [driverDailyChecks, setDriverDailyChecks] = useState({});
@@ -1207,7 +1207,8 @@ export default function App() {
     return { delivered: delivered.length, complaints, cod, driverScore: [] };
   }, [orders]);
 
-  const filteredCustomers = customers.filter(customer => [customer.name, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
+  const filteredCustomers = customers.filter(customer => [customer.name, customer.contact, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
+  const customerPreviewCount = 3;
   const filteredOrders = orders.filter(order => {
     const queryText = [order.id, order.customerName, order.phone, order.zone, order.address, order.salesNote].join(" ").toLowerCase();
     const matchesQuery = queryText.includes(orderQuery.toLowerCase());
@@ -2490,50 +2491,40 @@ export default function App() {
 
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
-              {displayTab === "sales" && (
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "10px" }}>
-                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setCustomersLimit((n) => n + 20)}>
-                    โหลดเพิ่ม (+20)
-                  </button>
-                </div>
-              )}
               {customers.length === 0 ? (
                 <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
               ) : (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center" }}>
-                    <small style={{ color: "#6b7280" }}>แสดง {showAllCustomers ? "ทั้งหมด" : "ล่าสุด 1 ราย"}</small>
-                    {customers.length > 1 && (
+                    <small style={{ color: "#6b7280" }}>
+                      {customerQuery.trim()
+                        ? `ผลค้นหา ${filteredCustomers.length} ราย`
+                        : `แสดง ${showAllCustomers ? "ทั้งหมด" : `${Math.min(customerPreviewCount, customers.length)} รายแรก`}`}
+                    </small>
+                    {!customerQuery.trim() && customers.length > customerPreviewCount && (
                       <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowAllCustomers(v => !v)}>
-                        {showAllCustomers ? "ย่อรายการ" : `ดูเพิ่มอีก ${customers.length - 1} ราย`}
+                        {showAllCustomers ? "ย่อรายการ" : `ดูเพิ่มเติมอีก ${customers.length - customerPreviewCount} ราย`}
                       </button>
                     )}
                   </div>
 
-                  {showAllCustomers ? (
-                    <>
-                      <label className="search"><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร พื้นที่" /></label>
-                      <div className="customer-list">
-                        {filteredCustomers.map(customer => (
-                          <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
-                            <strong>{customer.name}</strong>
-                            <span>{customer.contact} · {customer.phone}</span>
-                            <span>{customer.zone} · {customer.address}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="customer-list">
-                      {(customers[0] ? [customers[0]] : []).map(customer => (
+                  <label className="search" style={{ marginTop: "8px" }}><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร ผู้ติดต่อ หรือพื้นที่" /></label>
+                  <div className="customer-list">
+                    {(() => {
+                      const q = customerQuery.trim();
+                      const displayCustomers = q ? filteredCustomers.slice(0, 30) : (showAllCustomers ? customers : customers.slice(0, customerPreviewCount));
+                      if (q && displayCustomers.length === 0) {
+                        return <p className="muted" style={{ margin: 0, padding: "10px" }}>ไม่พบลูกค้าที่ตรงกับคำค้น</p>;
+                      }
+                      return displayCustomers.map(customer => (
                         <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
                           <strong>{customer.name}</strong>
                           <span>{customer.contact} · {customer.phone}</span>
                           <span>{customer.zone} · {customer.address}</span>
                         </button>
-                      ))}
-                    </div>
-                  )}
+                      ));
+                    })()}
+                  </div>
                 </>
               )}
 
