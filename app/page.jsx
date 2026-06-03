@@ -342,6 +342,10 @@ export default function App() {
   const [pendingOrder, setPendingOrder] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [openReportDate, setOpenReportDate] = useState("");
+  const [reportExportMode, setReportExportMode] = useState("single");
+  const [reportExportDate, setReportExportDate] = useState(() => toServiceDateKey(new Date()));
+  const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
+  const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
   const [ordersLimit, setOrdersLimit] = useState(20);
   const [customersLimit, setCustomersLimit] = useState(20);
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
@@ -1183,7 +1187,7 @@ export default function App() {
 
   const report = useMemo(() => {
     const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
-    const complaints = orders.filter(order => order.complaint);
+    const complaints = orders.filter(order => order.status === "ติดปัญหา" || order.complaint);
     const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
     // Note: driverScore is now skipped since drivers table is intentionally empty
     return { delivered: delivered.length, complaints, cod, driverScore: [] };
@@ -1812,7 +1816,7 @@ export default function App() {
   const ordersByServiceDate = useMemo(() => {
     const groups = {};
     (state.orders || []).forEach((o) => {
-      const k = String(o?.serviceDate || "");
+      const k = getOrderServiceDate(o);
       if (!k) return;
       groups[k] = groups[k] || [];
       groups[k].push(o);
@@ -1856,6 +1860,43 @@ export default function App() {
     list.forEach((order, index) => {
       lines.push(`${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}`);
     });
+    return lines.join("\n");
+  };
+
+  const buildServiceDateRangeReport = (startKey, endKey) => {
+    const start = startKey && endKey && startKey > endKey ? endKey : startKey;
+    const end = startKey && endKey && startKey > endKey ? startKey : endKey;
+    const keys = ordersByServiceDate.keys
+      .filter((key) => (!start || key >= start) && (!end || key <= end))
+      .slice()
+      .sort((a, b) => (a < b ? -1 : 1));
+    const list = keys.flatMap((key) => ordersByServiceDate.groups[key] || []);
+    const stats = summarizeOrders(list);
+    const startTitle = parseServiceDateKey(start)?.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) || start || "-";
+    const endTitle = parseServiceDateKey(end)?.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) || end || "-";
+    const lines = [
+      `รายงาน Hillkoff Delivery`,
+      `ช่วงวันที่: ${startTitle} - ${endTitle}`,
+      `สร้างเมื่อ: ${new Date().toLocaleString("th-TH")}`,
+      "",
+      `สรุป: ${stats.total} งาน | รอรับ ${stats.waiting} | กำลังส่ง ${stats.active} | สำเร็จ ${stats.done} | ปัญหา ${stats.issues}`,
+      `COD รวม: ฿${money(stats.cod)}`,
+      `COD สำเร็จ: ฿${money(stats.codDone)}`,
+      `อัตราสำเร็จ: ${stats.completionRate}%`,
+      ""
+    ];
+    keys.forEach((key) => {
+      const dayList = ordersByServiceDate.groups[key] || [];
+      const dayStats = summarizeOrders(dayList);
+      const dt = parseServiceDateKey(key);
+      const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : key;
+      lines.push(`วันที่ ${title}: ${dayStats.total} งาน | สำเร็จ ${dayStats.done} | COD ฿${money(dayStats.cod)}`);
+      dayList.forEach((order, index) => {
+        lines.push(`  ${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}`);
+      });
+      lines.push("");
+    });
+    if (!keys.length) lines.push("ไม่มีข้อมูลในช่วงวันที่ที่เลือก");
     return lines.join("\n");
   };
 
@@ -1904,6 +1945,24 @@ export default function App() {
       const element = document.createElement("a");
       element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
       element.setAttribute("download", `Hillkoff-Driver-Inspection-${todayServiceDate}.txt`);
+      element.click();
+      return;
+    }
+    copyToClipboard(reportText);
+  };
+
+  const exportSelectedServiceReport = (mode = "download") => {
+    const isRange = reportExportMode === "range";
+    const reportText = isRange
+      ? buildServiceDateRangeReport(reportExportStartDate, reportExportEndDate)
+      : buildServiceDateReport(reportExportDate);
+    const fileName = isRange
+      ? `Hillkoff-Report-${reportExportStartDate || "start"}-to-${reportExportEndDate || "end"}.txt`
+      : `Hillkoff-Report-${reportExportDate || "daily"}.txt`;
+    if (mode === "download") {
+      const element = document.createElement("a");
+      element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
+      element.setAttribute("download", fileName);
       element.click();
       return;
     }
@@ -2700,6 +2759,9 @@ export default function App() {
                         <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
                         <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
                         <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driverName || "ยังไม่มอบหมาย"}</p>
+                        {order.status === "ส่งสำเร็จ" && order.deliveredAt && (
+                          <p style={{ margin: "2px 0", color: "#16a34a", fontWeight: "bold" }}>✅ เสร็จเมื่อ {order.deliveredAt}</p>
+                        )}
                       </div>
                     );
                   })
@@ -2838,7 +2900,6 @@ export default function App() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <b style={{ fontSize: "20px", color: "#22c55e", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
-                  <small style={{ color: "#666" }}>งานที่ยังเหลือ</small>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
@@ -3328,11 +3389,25 @@ export default function App() {
                   <h2>รายงานประจำวัน</h2>
                   <span>แยกตามวัน</span>
                 </div>
-                {openReportDate && (
-                  <button className="secondary compact-btn" onClick={() => exportServiceDateReport(openReportDate, "download")}>
-                    <Download size={14} /> ส่งออกวันที่เลือก
-                  </button>
+                <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("download")}>
+                  <Download size={14} /> ส่งออกรายงาน
+                </button>
+              </div>
+              <div className="report-export-controls">
+                <select value={reportExportMode} onChange={e => setReportExportMode(e.target.value)}>
+                  <option value="single">เลือกวันที่</option>
+                  <option value="range">เลือกช่วงวันที่</option>
+                </select>
+                {reportExportMode === "range" ? (
+                  <>
+                    <input type="date" value={reportExportStartDate} onChange={e => setReportExportStartDate(e.target.value)} />
+                    <input type="date" value={reportExportEndDate} onChange={e => setReportExportEndDate(e.target.value)} />
+                  </>
+                ) : (
+                  <input type="date" value={reportExportDate} onChange={e => setReportExportDate(e.target.value)} />
                 )}
+                <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("copy")}>คัดลอก</button>
+                <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("download")}>TXT</button>
               </div>
               {ordersByServiceDate.keys.length === 0 ? (
                 <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงาน</p>
@@ -3393,11 +3468,12 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>การร้องเรียน</h2><span>{report.complaints.length} รายการ</span></div>
+              <div className="panel-head"><h2>ปัญหาและการร้องเรียน</h2><span>{report.complaints.length} รายการ</span></div>
               {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
                 <div key={order.id} className="complaint-card">
                   <b>{order.customerName}</b>
-                  <p>{order.complaint}</p>
+                  <small style={{ color: "#6b7280", display: "block", marginTop: "4px" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>
+                  <p>{order.complaint || order.status || "ติดปัญหา"}</p>
                   <span>{order.id}</span>
                 </div>
               ))}
@@ -3453,7 +3529,7 @@ export default function App() {
 	        {displayTab === "settings" && (
 	          <div className="settings-grid">
 		            <section className="panel">
-		              <div className="panel-head"><h2>📋 รายงานประจำวัน</h2><span>สรุปข้อมูลการส่งของทั้งวัน</span></div>
+		              <div className="panel-head"><h2>📋 ส่งออกรายงานสรุปภาพรวม</h2><span>ทั้งหมด</span></div>
 		              <button className="secondary wide" onClick={() => {
 		                const report = generateDailyReport();
 		                copyToClipboard(report);

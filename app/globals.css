@@ -328,6 +328,13 @@ h2 {
   min-height: 0;
 }
 
+.report-export-controls {
+  display: grid;
+  grid-template-columns: 130px repeat(2, minmax(0, 1fr)) auto auto;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
 .daily-accordion {
   border: 1px solid #e4eadf;
   border-radius: 8px;
@@ -1130,6 +1137,10 @@ textarea {
 
   .daily-report-panel {
     height: 390px;
+  }
+
+  .report-export-controls {
+    grid-template-columns: 1fr;
   }
 
   .daily-accordion-trigger {
