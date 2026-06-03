@@ -874,7 +874,12 @@ export default function App() {
       const res = await fetch("/api/chat/bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, phoneDigits, question: q }),
+        body: JSON.stringify({
+          idToken,
+          phoneDigits,
+          question: q,
+          history: aiMessages.slice(-8).map((m) => ({ role: m.role, text: m.text }))
+        }),
       });
       if (!res.ok) {
         const errorPayload = await res.json().catch(() => null);
