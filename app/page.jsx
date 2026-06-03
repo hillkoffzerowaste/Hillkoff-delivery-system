@@ -1841,6 +1841,31 @@ export default function App() {
     return { days, summary, maxDailyTotal, avgDailyOrders };
   }, [ordersByServiceDate, currentMonthKey]);
 
+  const getOrderDriverName = (order) => {
+    const driver = drivers.find(d => d.id === order.driverId);
+    return order.driverName || driver?.name || order.driverId || "ยังไม่ระบุคนขับ";
+  };
+
+  const appendDriverOrderSummary = (lines, list) => {
+    const groups = {};
+    (list || []).forEach((order) => {
+      const name = getOrderDriverName(order);
+      groups[name] = groups[name] || [];
+      groups[name].push(order);
+    });
+    lines.push("", "สรุปตามคนส่ง:");
+    Object.entries(groups).forEach(([driverName, driverOrders], index) => {
+      const doneCount = driverOrders.filter(order => order.status === "ส่งสำเร็จ").length;
+      const cod = driverOrders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
+      lines.push(`${index + 1}. ${driverName} | ${driverOrders.length} งาน | สำเร็จ ${doneCount} | COD ฿${money(cod)}`);
+      driverOrders.forEach((order) => {
+        const deliveredAt = order.deliveredAt ? ` | เสร็จ ${order.deliveredAt}` : "";
+        lines.push(`   - ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}${deliveredAt}`);
+      });
+    });
+    if (!Object.keys(groups).length) lines.push("-");
+  };
+
   const buildServiceDateReport = (key) => {
     const list = ordersByServiceDate.groups[key] || [];
     const stats = summarizeOrders(list);
@@ -1859,8 +1884,9 @@ export default function App() {
       "รายการออเดอร์:"
     ];
     list.forEach((order, index) => {
-      lines.push(`${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}`);
+      lines.push(`${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | คนส่ง ${getOrderDriverName(order)} | COD ฿${money(order.cod || 0)}`);
     });
+    appendDriverOrderSummary(lines, list);
     return lines.join("\n");
   };
 
@@ -1893,10 +1919,11 @@ export default function App() {
       const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : key;
       lines.push(`วันที่ ${title}: ${dayStats.total} งาน | สำเร็จ ${dayStats.done} | COD ฿${money(dayStats.cod)}`);
       dayList.forEach((order, index) => {
-        lines.push(`  ${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}`);
+        lines.push(`  ${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | คนส่ง ${getOrderDriverName(order)} | COD ฿${money(order.cod || 0)}`);
       });
       lines.push("");
     });
+    appendDriverOrderSummary(lines, list);
     if (!keys.length) lines.push("ไม่มีข้อมูลในช่วงวันที่ที่เลือก");
     return lines.join("\n");
   };
@@ -2102,7 +2129,7 @@ export default function App() {
                   "พื้นที่หรือโซนไหนที่มีปริมาณงานหนาแน่นที่สุด",
                   "วันนี้ใครยังไม่ได้ทำแบบประเมินตรวจรถ",
                   "ตรวจสอบออเดอร์ที่มีปัญหาหรือตกค้าง",
-                  "จำว่า วิธีโทรหาลูกค้า = ให้เปิดรายละเอียดลูกค้าแล้วกดเบอร์โทรจากข้อมูลลูกค้า",
+                  "ช่วยแนะนำว่าควรติดตามงานไหนก่อน",
                 ].map((t) => (
                   <button key={t} className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={aiBusy} onClick={() => sendToChatbot(t)}>
                     {t}
@@ -2112,7 +2139,7 @@ export default function App() {
 
               <div ref={aiListRef} style={{ padding: "12px 14px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "10px" }}>
                 {aiMessages.length === 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>ถามข้อมูลในแอพได้ เช่น ออเดอร์วันนี้, ลูกค้า, COD, โซนงาน, ตรวจรถ หรือสอนบอทด้วย “จำว่า หัวข้อ = คำตอบ”</p>
+                  <p className="muted" style={{ margin: 0 }}>ถามข้อมูลในแอพได้ เช่น ออเดอร์วันนี้, ลูกค้า, COD, โซนงาน, ตรวจรถ, งานที่ควรติดตาม หรือให้ช่วยสรุปภาพรวม</p>
                 ) : (
                   aiMessages.map((m, idx) => (
                     <div key={idx} style={{ justifySelf: m.role === "user" ? "end" : "start", maxWidth: "100%" }}>

@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 const MAX_ORDERS = 400;
 const MAX_CUSTOMERS = 250;
 const MAX_KNOWLEDGE = 80;
+const MAX_SESSIONS = 60;
 
 function toServiceDateKeyBangkok(dateLike) {
   const date = dateLike ? new Date(dateLike) : new Date();
@@ -135,40 +136,16 @@ async function safeGetDocs(query) {
 }
 
 async function loadContext(db, todayKey) {
-  const [orders, customers, drivers, locations, assessments, knowledge] = await Promise.all([
+  const [orders, customers, drivers, locations, assessments, knowledge, sessions] = await Promise.all([
     safeGetDocs(db.collection("orders").orderBy("updatedAt", "desc").limit(MAX_ORDERS)),
     safeGetDocs(db.collection("customers").orderBy("updatedAt", "desc").limit(MAX_CUSTOMERS)),
     safeGetDocs(db.collection("users_by_phone").limit(250)),
     safeGetDocs(db.collection("driver_locations").limit(120)),
     safeGetDocs(db.collection("driver_daily_assessments").where("serviceDate", "==", todayKey).limit(250)),
     safeGetDocs(db.collection("chatbot_knowledge").orderBy("updatedAt", "desc").limit(MAX_KNOWLEDGE)),
+    safeGetDocs(db.collection("chatbot_sessions").orderBy("createdAt", "desc").limit(MAX_SESSIONS)),
   ]);
-  return { orders, customers, drivers, locations, assessments, knowledge };
-}
-
-function parseMemoryInstruction(question) {
-  const text = String(question || "").trim();
-  const match = text.match(/^(จำว่า|จำไว้|เพิ่มความรู้|สอนว่า|บันทึกความรู้)\s*[:：-]?\s*(.+)$/i);
-  if (!match) return null;
-  const body = String(match[2] || "").trim();
-  if (!body) return null;
-  const split = body.split(/\s*(?:=>|=|\|)\s*/).filter(Boolean);
-  if (split.length >= 2) return { title: split[0].slice(0, 120), answer: split.slice(1).join(" ").slice(0, 1500) };
-  return { title: body.slice(0, 120), answer: body.slice(0, 1500) };
-}
-
-async function rememberKnowledge(db, phoneDigits, instruction) {
-  const doc = {
-    title: instruction.title,
-    answer: instruction.answer,
-    keywords: normalizeText(`${instruction.title} ${instruction.answer}`).split(" ").filter(Boolean).slice(0, 20),
-    createdBy: phoneDigits,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    source: "chatbot_memory",
-  };
-  const ref = await db.collection("chatbot_knowledge").add(doc);
-  return { id: ref.id, ...doc };
+  return { orders, customers, drivers, locations, assessments, knowledge, sessions };
 }
 
 function findKnowledgeAnswer(question, context) {
@@ -190,6 +167,57 @@ function findKnowledgeAnswer(question, context) {
   }
   if (!best?.item?.answer) return null;
   return `ข้อมูลจากชุดความรู้: ${best.item.title}\n\n${best.item.answer}`;
+}
+
+function findLearnedSessionAnswer(question, context) {
+  const qWords = new Set(normalizeText(question).split(" ").filter((w) => w.length >= 3));
+  let best = null;
+  for (const session of context.sessions || []) {
+    const pastQuestion = String(session.question || "");
+    const answer = String(session.answer || "");
+    if (!pastQuestion || !answer) continue;
+    const words = normalizeText(pastQuestion).split(" ").filter((w) => w.length >= 3);
+    const overlap = words.reduce((sum, word) => sum + (qWords.has(word) ? 1 : 0), 0);
+    const fuzzy = fuzzyIncludes(question, [pastQuestion]) ? 2 : 0;
+    const score = overlap + fuzzy;
+    if (score > 0 && (!best || score > best.score)) best = { score, answer };
+  }
+  if (!best || best.score < 2) return null;
+  return `ผมลองเทียบกับคำถามเดิมที่ใกล้เคียงแล้วนะครับ\n\n${best.answer}`;
+}
+
+function answerPriorityFollowUp(todayKey, context) {
+  const orders = context.orders || [];
+  const todayOrders = orders.filter((order) => orderServiceDate(order) === todayKey);
+  const scope = todayOrders.length ? todayOrders : orders;
+  const problem = scope.filter((o) => o.status === "ติดปัญหา" || o.complaint).slice(0, 8);
+  const waiting = scope.filter((o) => o.status === "รอคนขับรับ").slice(0, 8);
+  const shipping = scope.filter((o) => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").slice(0, 8);
+  const lines = ["ได้ครับ ผมจัดลำดับงานที่ควรตามก่อนให้แบบเร็ว ๆ:", ""];
+  let index = 1;
+  if (problem.length) {
+    lines.push(`${index}. งานติดปัญหา/มีร้องเรียน`);
+    lines.push(...problem.map(formatOrderLine));
+    lines.push("");
+    index += 1;
+  }
+  if (waiting.length) {
+    lines.push(`${index}. งานที่ยังรอคนขับรับ`);
+    lines.push(...waiting.map(formatOrderLine));
+    lines.push("");
+    index += 1;
+  }
+  if (shipping.length) {
+    lines.push(`${index}. งานที่กำลังส่ง ควรเช็คความคืบหน้า`);
+    lines.push(...shipping.map(formatOrderLine));
+    lines.push("");
+  }
+  if (!problem.length && !waiting.length && !shipping.length) {
+    lines.push("ตอนนี้ยังไม่เห็นงานที่ต้องรีบตามเป็นพิเศษครับ ภาพรวมดูนิ่งดี");
+  } else {
+    lines.push("ถ้าจะเริ่ม ผมแนะนำตามงานติดปัญหาก่อน แล้วค่อยไล่งานรอรับครับ");
+  }
+  return lines.join("\n");
 }
 
 function answerAssessments(todayKey, context) {
@@ -275,6 +303,7 @@ function answerDrivers(context) {
 }
 
 function buildAnswer(question, todayKey, context) {
+  if (fuzzyIncludes(question, ["ติดตาม", "ควรติดตาม", "ตามงาน", "เร่งด่วน", "แนะนำ", "งานไหนก่อน"])) return answerPriorityFollowUp(todayKey, context);
   if (hasIntent(question, "assessments")) return answerAssessments(todayKey, context);
   if (hasIntent(question, "orders") || hasIntent(question, "status") || hasIntent(question, "zone") || hasIntent(question, "cod")) return answerOrders(question, todayKey, context);
   if (hasIntent(question, "customers")) return answerCustomers(question, context);
@@ -283,14 +312,16 @@ function buildAnswer(question, todayKey, context) {
   const knowledge = findKnowledgeAnswer(question, context);
   if (knowledge) return knowledge;
 
+  const learned = findLearnedSessionAnswer(question, context);
+  if (learned) return learned;
+
   const todayStats = statusStats((context.orders || []).filter((order) => orderServiceDate(order) === todayKey));
   return [
-    "ผมเป็นแชทบอทฐานข้อมูลของ Hillkoff ตอบจาก Firestore และชุดความรู้ในระบบ ไม่ได้เรียก AI ภายนอกครับ",
+    "ได้ครับ ผมช่วยดูข้อมูลในระบบ Hillkoff ให้ได้จากออเดอร์ ลูกค้า คนขับ ตรวจรถ และประวัติคำถามเดิมครับ",
     "",
     `วันนี้มีออเดอร์ ${todayStats.total} งาน, รอรับ ${todayStats.waiting}, กำลังส่ง ${todayStats.shipping}, สำเร็จ ${todayStats.done}, ปัญหา ${todayStats.problem}`,
     "",
-    "ถามได้เช่น: วันนี้มีออเดอร์กี่งาน, ใครยังไม่ตรวจรถ, ค้นหาลูกค้า, โซนไหนงานเยอะ, COD วันนี้เท่าไหร่",
-    "สอนบอทเพิ่มได้ด้วยคำสั่ง: จำว่า หัวข้อ = คำตอบ",
+    "ถามต่อได้เลย เช่น งานไหนควรตามก่อน, วันนี้ COD เท่าไหร่, โซนไหนงานเยอะ, ใครยังไม่ตรวจรถ, หรือลูกค้าร้านนี้อยู่ตรงไหน",
   ].join("\n");
 }
 
@@ -309,19 +340,6 @@ export async function POST(request) {
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const todayKey = toServiceDateKeyBangkok();
-  const memoryInstruction = parseMemoryInstruction(question);
-  if (memoryInstruction) {
-    const saved = await rememberKnowledge(auth.db, auth.phoneDigits, memoryInstruction);
-    return Response.json({
-      ok: true,
-      data: {
-        answer: `จำข้อมูลใหม่แล้วครับ\n\nหัวข้อ: ${saved.title}\nคำตอบ: ${saved.answer}`,
-        source: "chatbot_memory_saved",
-        memoryId: saved.id,
-      },
-    });
-  }
-
   const context = await loadContext(auth.db, todayKey);
   const answer = buildAnswer(question, todayKey, context);
 
@@ -346,6 +364,7 @@ export async function POST(request) {
         users: context.drivers.length,
         assessments: context.assessments.length,
         knowledge: CHATBOT_SEED_KNOWLEDGE.length + context.knowledge.length,
+        sessions: context.sessions.length,
       },
     },
   });
