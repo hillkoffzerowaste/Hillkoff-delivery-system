@@ -520,7 +520,8 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-	    const needsOrdersRealtime = ["sales", "dispatch", "driver"].includes(String(displayTab || ""));
+	    const needsOrdersRealtime = ["sales", "dispatch", "driver", "reports", "settings"].includes(String(displayTab || ""));
+	    const effectiveOrdersLimit = ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
 	    const needsCustomers = String(displayTab || "") === "sales";
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	    const needsDriverAssessments = ["driver-sop-report"].includes(String(displayTab || ""));
@@ -538,7 +539,7 @@ export default function App() {
 	    // Orders: keep realtime (core UX), but limit results.
 	    if (needsOrdersRealtime) {
 	      try {
-	        let ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(ordersLimit));
+	        let ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
 	        if (state.auth?.role === "driver") {
 	          const did = state.auth?.driverId || driverId || "";
 	          if (did) {
@@ -546,14 +547,14 @@ export default function App() {
 	              fb.collection(db, "orders"),
 	              fb.where("driverId", "in", ["", did]),
 	              fb.orderBy("updatedAt", "desc"),
-	              fb.limit(ordersLimit)
+	              fb.limit(effectiveOrdersLimit)
 	            );
 	          } else {
 	            ordersQ = fb.query(
 	              fb.collection(db, "orders"),
 	              fb.where("driverId", "==", ""),
 	              fb.orderBy("updatedAt", "desc"),
-	              fb.limit(ordersLimit)
+	              fb.limit(effectiveOrdersLimit)
 	            );
 	          }
 	        }
