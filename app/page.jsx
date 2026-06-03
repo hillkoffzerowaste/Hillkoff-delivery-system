@@ -739,6 +739,16 @@ export default function App() {
     }, { merge: true });
   };
 
+  const finalizeChatSend = async ({ messageRef, type, text }) => {
+    try {
+      await updateChatSummary({ messageRef, type, text });
+      markChatReadToCount(Number(chatMeta?.messageCount || 0) + 1);
+    } catch (e) {
+      console.warn("chat summary update failed after message send", e);
+      setSyncStatus("✅ ส่งข้อความแล้ว (อัปเดตสถานะแชทไม่สำเร็จ แต่ข้อความถูกส่งแล้ว)");
+    }
+  };
+
   const sendChat = async () => {
     const text = (chatText || "").trim();
     if (!text) return;
@@ -754,8 +764,7 @@ export default function App() {
         createdAt: fb.serverTimestamp(),
         updatedAt: fb.serverTimestamp()
       });
-      await updateChatSummary({ messageRef, type: "chat", text });
-      markChatReadToCount(Number(chatMeta?.messageCount || 0) + 1);
+      await finalizeChatSend({ messageRef, type: "chat", text });
       // Clear my typing flag
       updateTyping(false);
     } catch (e) {
@@ -783,8 +792,7 @@ export default function App() {
         createdAt: fb.serverTimestamp(),
         updatedAt: fb.serverTimestamp()
       });
-      await updateChatSummary({ messageRef, type: "emergency", text });
-      markChatReadToCount(Number(chatMeta?.messageCount || 0) + 1);
+      await finalizeChatSend({ messageRef, type: "emergency", text });
       // Local immediate feedback
       playNotificationSound();
     } catch (e) {
