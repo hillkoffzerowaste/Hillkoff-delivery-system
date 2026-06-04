@@ -41,6 +41,7 @@ const statusColor = { "รอคนขับรับ": "#92400e", "กำลั
 
 const BRANCH_ROUTE_STOPS = ["สาขาช้างเผือก", "สาขาโรงงานป่าแพ่ง", "สาขาสำนักงานใหญ่", "สาขามหิดล", "สาขาทับเดื่อ"];
 const LONG_ROUTE_STOPS = ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"];
+const LONG_ROUTE_RETURN_STOPS = ["สาขาราติก้า จ.กรุงเทพมหานคร", "เชียงใหม่"];
 const routeTaskStatusColor = { "กำลังวิ่ง": "#1d4ed8", "เช็คอินแล้ว": "#92400e", "เสร็จงาน": "#166534", "ยกเลิก": "#dc2626" };
 
 const DRIVER_DAILY_CHECK_ITEMS = [
@@ -384,7 +385,9 @@ export default function App() {
     type: "branch",
     origin: "สาขาสำนักงานใหญ่",
     branchDestination: "สาขาช้างเผือก",
+    longDirection: "outbound",
     longDestinations: ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"],
+    longReturnDestinations: ["สาขาราติก้า จ.กรุงเทพมหานคร", "เชียงใหม่"],
     note: ""
   });
 
@@ -1159,6 +1162,7 @@ export default function App() {
 		      const db = getFirestoreDb();
 		      const taskForDB = {
 		        type: task.type || "branch",
+		        routeDirection: task.routeDirection || "",
 		        origin: task.origin || "",
 		        destinationSummary: task.destinationSummary || "",
 		        driverId: task.driverId || "",
@@ -1773,8 +1777,9 @@ export default function App() {
     }
     const driver = drivers.find(d => d.id === did) || {};
     const type = routeTaskForm.type === "long" ? "long" : "branch";
+    const longDirection = routeTaskForm.longDirection === "return" ? "return" : "outbound";
     const destinations = type === "long"
-      ? (routeTaskForm.longDestinations || []).filter(Boolean)
+      ? (longDirection === "return" ? (routeTaskForm.longReturnDestinations || []).filter(Boolean) : (routeTaskForm.longDestinations || []).filter(Boolean))
       : [routeTaskForm.branchDestination].filter(Boolean);
     if (!routeTaskForm.origin || destinations.length === 0) {
       setSyncStatus("⚠️ กรุณาเลือกต้นทางและปลายทางงานวิ่ง");
@@ -1795,6 +1800,7 @@ export default function App() {
     const task = {
       id,
       type,
+      routeDirection: type === "long" ? longDirection : "",
       origin: routeTaskForm.origin,
       destinationSummary: destinations.join(" + "),
       driverId: did,
@@ -2742,7 +2748,7 @@ export default function App() {
                         <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "start" }}>
                           <div>
                             <b style={{ display: "block", color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}</b>
-                            <small style={{ color: "#6b7280" }}>{task.id}</small>
+                            <small style={{ color: "#6b7280" }}>{task.id}{task.type === "long" ? ` · ${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : ""}</small>
                           </div>
                           <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "4px 8px", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
                         </div>
@@ -3334,8 +3340,25 @@ export default function App() {
               <div style={{ display: "grid", gap: "12px" }}>
                 <div className="segmented" style={{ marginBottom: 0 }}>
                   <button className={routeTaskForm.type === "branch" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "branch", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งสาขา</button>
-                  <button className={routeTaskForm.type === "long" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "long", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งไกล</button>
+                  <button className={routeTaskForm.type === "long" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "long", origin: p.origin || "สาขาสำนักงานใหญ่", longDirection: p.longDirection || "outbound" }))}>วิ่งไกล</button>
                 </div>
+
+                {routeTaskForm.type === "long" && (
+                  <div className="segmented" style={{ marginBottom: 0 }}>
+                    <button
+                      className={routeTaskForm.longDirection !== "return" ? "active" : ""}
+                      onClick={() => setRouteTaskForm(p => ({ ...p, longDirection: "outbound", origin: "สาขาสำนักงานใหญ่" }))}
+                    >
+                      ขาไป
+                    </button>
+                    <button
+                      className={routeTaskForm.longDirection === "return" ? "active" : ""}
+                      onClick={() => setRouteTaskForm(p => ({ ...p, longDirection: "return", origin: "ร้านหอมไกล จ.ชลบุรี" }))}
+                    >
+                      ขากลับเชียงใหม่
+                    </button>
+                  </div>
+                )}
 
                 <div className="form-grid two">
                   <select value={routeTaskForm.origin} onChange={e => setRouteTaskForm(p => ({ ...p, origin: e.target.value }))}>
@@ -3347,15 +3370,19 @@ export default function App() {
                     </select>
                   ) : (
                     <div style={{ display: "grid", gap: "8px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
-                      {LONG_ROUTE_STOPS.map(stop => (
+                      <b style={{ fontSize: "12px", color: "#374151" }}>
+                        ปลายทาง{routeTaskForm.longDirection === "return" ? "ขากลับ: เรียง ราติก้า → เชียงใหม่" : "ขาไป: เลือกได้ 1 จุด หรือรวม 2 จุด"}
+                      </b>
+                      {(routeTaskForm.longDirection === "return" ? LONG_ROUTE_RETURN_STOPS : LONG_ROUTE_STOPS).map(stop => (
                         <label key={stop} style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px", fontWeight: 700 }}>
                           <input
                             type="checkbox"
-                            checked={(routeTaskForm.longDestinations || []).includes(stop)}
+                            checked={routeTaskForm.longDirection === "return" ? (routeTaskForm.longReturnDestinations || []).includes(stop) : (routeTaskForm.longDestinations || []).includes(stop)}
                             onChange={e => setRouteTaskForm(p => {
-                              const current = p.longDestinations || [];
+                              const field = p.longDirection === "return" ? "longReturnDestinations" : "longDestinations";
+                              const current = p[field] || [];
                               const next = e.target.checked ? Array.from(new Set([...current, stop])) : current.filter(item => item !== stop);
-                              return { ...p, longDestinations: next };
+                              return { ...p, [field]: next };
                             })}
                           />
                           {stop}
@@ -3374,7 +3401,7 @@ export default function App() {
                       return (
                         <div key={task.id} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${taskColor}`, display: "grid", gap: "10px" }}>
                           <div>
-                            <b style={{ color: taskColor, display: "block" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"} · {task.id}</b>
+                            <b style={{ color: taskColor, display: "block" }}>{task.type === "long" ? `งานวิ่งไกล${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : "งานวิ่งสาขา"} · {task.id}</b>
                             <small style={{ color: "#374151" }}>{task.origin} → {task.destinationSummary}</small><br />
                             {task.note && <small style={{ color: "#6b7280" }}>{task.note}</small>}
                           </div>
