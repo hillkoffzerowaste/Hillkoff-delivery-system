@@ -39,6 +39,10 @@ const ZONES = ["เมืองเชียงใหม่", "แม่ริม
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
 const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
 
+const BRANCH_ROUTE_STOPS = ["สาขาช้างเผือก", "สาขาโรงงานป่าแพ่ง", "สาขาสำนักงานใหญ่", "สาขามหิดล", "สาขาทับเดื่อ"];
+const LONG_ROUTE_STOPS = ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"];
+const routeTaskStatusColor = { "กำลังวิ่ง": "#1d4ed8", "เช็คอินแล้ว": "#92400e", "เสร็จงาน": "#166534", "ยกเลิก": "#dc2626" };
+
 const DRIVER_DAILY_CHECK_ITEMS = [
   { id: "coolant", label: "ระดับน้ำหม้อพักน้ำอยู่ที่ Full ตอนเครื่องเย็น", detail: "ห้ามเปิดฝาหม้อน้ำเมื่อเครื่องร้อน" },
   { id: "engineOil", label: "น้ำมันเครื่องอยู่ระหว่าง F และ L", detail: "อุ่นเครื่อง ดับ 2-3 นาที เช็ดก้านวัดแล้ววัดซ้ำ" },
@@ -108,6 +112,7 @@ function defaultState() {
   return {
     customers: initialCustomers,
     orders: initialOrders,
+    routeTasks: [],
     drivers: initialDrivers,
     auth: { role: "", name: "", phone: "", driverId: "", email: "", token: "" },
     loginHistory: [],
@@ -228,6 +233,24 @@ function buildLineMessageForOrder(order) {
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
   if (order.driverNote) lines.push(`หมายเหตุคนขับ: ${order.driverNote}`);
   return lines.join("\n");
+}
+
+function buildLineMessageForRouteTask(task, stop) {
+  const lines = [];
+  lines.push(stop?.kind === "midway" ? "📍 เช็คอินระหว่างทาง" : "✅ เช็คอินงานวิ่ง");
+  lines.push(`งาน: ${task.id}`);
+  lines.push(`ประเภท: ${task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}`);
+  if (task.driverName) lines.push(`คนขับ: ${task.driverName}`);
+  if (task.origin) lines.push(`ต้นทาง: ${task.origin}`);
+  if (task.destinationSummary) lines.push(`ปลายทาง: ${task.destinationSummary}`);
+  if (stop?.name) lines.push(`จุดเช็คอิน: ${stop.name}`);
+  if (stop?.checkedInAt) lines.push(`เวลา: ${stop.checkedInAt}`);
+  if (stop?.note) lines.push(`หมายเหตุ: ${stop.note}`);
+  return lines.join("\n");
+}
+
+function routeTaskStopKey(taskId, stopId) {
+  return `${taskId}_${stopId}`;
 }
 
 async function dataUrlToFile(dataUrl, fileName) {
@@ -356,6 +379,13 @@ export default function App() {
   const [driverAssessmentStatus, setDriverAssessmentStatus] = useState("");
   const [driverAssessments, setDriverAssessments] = useState([]);
   const [driverAssessmentDrivers, setDriverAssessmentDrivers] = useState([]);
+  const [routeTaskForm, setRouteTaskForm] = useState({
+    type: "branch",
+    origin: "สาขาสำนักงานใหญ่",
+    branchDestination: "สาขาช้างเผือก",
+    longDestinations: ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"],
+    note: ""
+  });
 
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver" ? (tab === "driver-sop" ? "driver-sop" : "driver") : (tab === "driver" ? "sales" : tab);
@@ -367,6 +397,7 @@ export default function App() {
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
+  const routeTaskFilesRef = useRef({}); // { [taskId_stopId]: File } kept on-device only (not synced)
   const lastOrdersPullRef = useRef(null);
   const lastCustomersPullRef = useRef(null);
   const lastDriverLocationsPullRef = useRef(null);
@@ -522,6 +553,7 @@ export default function App() {
 
 	    const needsOrdersRealtime = ["sales", "dispatch", "driver", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
+	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
 	    const needsCustomers = String(displayTab || "") === "sales";
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	    const needsDriverAssessments = ["driver-sop-report"].includes(String(displayTab || ""));
@@ -582,6 +614,39 @@ export default function App() {
 	        );
 	      } catch (e) {
 	        console.warn("orders onSnapshot error", e);
+	      }
+	    }
+
+	    if (needsRouteTasksRealtime) {
+	      try {
+	        const routeTasksQ = fb.query(fb.collection(db, "route_tasks"), fb.orderBy("updatedAt", "desc"), fb.limit(100));
+	        unsubs.push(
+	          fb.onSnapshot(
+	            routeTasksQ,
+	            (snap) => {
+	              const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	              setState((prev) => {
+	                const prevById = {};
+	                (prev.routeTasks || []).forEach((task) => { prevById[task.id] = task; });
+	                const merged = rows.map((task) => {
+	                  const previous = prevById[task.id] || {};
+	                  const prevStops = Array.isArray(previous.stops) ? previous.stops : [];
+	                  const stops = Array.isArray(task.stops) ? task.stops.map((stop) => {
+	                    const prevStop = prevStops.find((item) => item.id === stop.id) || {};
+	                    const keepLocalPhoto = prevStop?.photo && (String(prevStop.photo).startsWith("blob:") || String(prevStop.photo).startsWith("data:"));
+	                    return { ...stop, photo: keepLocalPhoto ? prevStop.photo : (stop.photo || "") };
+	                  }) : [];
+	                  return { ...task, stops };
+	                });
+	                return { ...prev, routeTasks: merged };
+	              });
+	              markConnected();
+	            },
+	            (err) => setSyncStatus?.(`⚠️ Firestore route tasks error: ${err.message || err}`)
+	          )
+	        );
+	      } catch (e) {
+	        console.warn("route_tasks onSnapshot error", e);
 	      }
 	    }
 
@@ -1088,6 +1153,39 @@ export default function App() {
 		    }
 		  };
 
+		  const upsertRouteTaskToFirestore = async (task) => {
+		    try {
+		      const db = getFirestoreDb();
+		      const taskForDB = {
+		        type: task.type || "branch",
+		        origin: task.origin || "",
+		        destinationSummary: task.destinationSummary || "",
+		        driverId: task.driverId || "",
+		        driverName: task.driverName || "",
+		        driverPhone: task.driverPhone || "",
+		        status: task.status || "กำลังวิ่ง",
+		        note: task.note || "",
+		        stops: Array.isArray(task.stops) ? task.stops.map((stop) => ({
+		          id: stop.id || "",
+		          name: stop.name || "",
+		          kind: stop.kind || "destination",
+		          status: stop.status || "รอเช็คอิน",
+		          checkedInAt: stop.checkedInAt || "",
+		          note: stop.note || "",
+		          sharedToLine: Boolean(stop.sharedToLine)
+		        })) : [],
+		        startedAt: task.startedAt || new Date().toISOString(),
+		        completedAt: task.completedAt || "",
+		        serviceDate: task.serviceDate || toServiceDateKey(task.startedAt || new Date()),
+		        updatedAt: new Date().toISOString()
+		      };
+		      await fb.setDoc(fb.doc(db, "route_tasks", String(task.id)), taskForDB, { merge: true });
+		      return { ok: true };
+		    } catch (e) {
+		      return { ok: false, error: e?.message || String(e) };
+		    }
+		  };
+
 		  const getCurrentLocationOnce = () => new Promise((resolve, reject) => {
 		    if (typeof window === "undefined") return reject(new Error("no window"));
 		    if (!navigator?.geolocation) return reject(new Error("geolocation not supported"));
@@ -1129,6 +1227,37 @@ export default function App() {
 		    }
 		  };
 
+		  const recordRouteTaskCheckInLocation = async (task, stop) => {
+		    try {
+		      if (state.auth?.role !== "driver") return;
+		      const did = state.auth?.driverId || driverId || "";
+		      if (!did) return;
+		      const d = (state.drivers || []).find(x => x.id === did) || {};
+		      const loc = await getCurrentLocationOnce();
+		      const payload = {
+		        driverId: did,
+		        driverName: task?.driverName || d?.name || state.auth?.name || "",
+		        driverPhone: d?.phone || state.auth?.phone || "",
+		        plate: d?.plate || "",
+		        zone: stop?.name || task?.destinationSummary || "",
+		        lat: loc.lat,
+		        lng: loc.lng,
+		        lastOrderId: "",
+		        lastCustomerName: stop?.name || "",
+		        lastRouteTaskId: task?.id || "",
+		        checkInAt: new Date().toISOString()
+		      };
+		      setState(prev => ({
+		        ...prev,
+		        driverLocations: { ...(prev.driverLocations || {}), [did]: { ...(prev.driverLocations?.[did] || {}), ...payload } }
+		      }));
+		      const saved = await upsertDriverLocationToFirestore(payload);
+		      if (!saved.ok) setSyncStatus(`⚠️ บันทึกพิกัดงานวิ่งไม่สำเร็จ: ${saved.error}`);
+		    } catch (e) {
+		      // ignore GPS permission/timeout
+		    }
+		  };
+
 		  const upsertCustomerToFirestore = async (customer) => {
 		    try {
 		      const db = getFirestoreDb();
@@ -1157,7 +1286,11 @@ export default function App() {
 
   const customers = state.customers;
   const orders = state.orders;
+  const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
+  const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
+  const driverRouteTasks = (routeTasks || []).filter(task => task.driverId === driverId);
+  const activeDriverRouteTasks = driverRouteTasks.filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก");
   const backlogUndelivered = (orders || []).filter((o) => !isTodayOrder(o) && isUndelivered(o));
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
@@ -1580,6 +1713,158 @@ export default function App() {
     } catch (error) {
       setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
     }
+  };
+
+  const createRouteTask = async () => {
+    const did = state.auth?.driverId || driverId || "";
+    if (!did) {
+      setSyncStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกเข้าใหม่");
+      return;
+    }
+    const driver = drivers.find(d => d.id === did) || {};
+    const type = routeTaskForm.type === "long" ? "long" : "branch";
+    const destinations = type === "long"
+      ? (routeTaskForm.longDestinations || []).filter(Boolean)
+      : [routeTaskForm.branchDestination].filter(Boolean);
+    if (!routeTaskForm.origin || destinations.length === 0) {
+      setSyncStatus("⚠️ กรุณาเลือกต้นทางและปลายทางงานวิ่ง");
+      return;
+    }
+    const now = new Date();
+    const id = `RT-${now.toISOString().slice(2, 10).replaceAll("-", "")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const stops = destinations.map((name, index) => ({
+      id: `dest-${index + 1}`,
+      name,
+      kind: "destination",
+      status: "รอเช็คอิน",
+      checkedInAt: "",
+      note: "",
+      photo: "",
+      sharedToLine: false
+    }));
+    const task = {
+      id,
+      type,
+      origin: routeTaskForm.origin,
+      destinationSummary: destinations.join(" + "),
+      driverId: did,
+      driverName: state.auth?.name || driver.name || "",
+      driverPhone: driver.phone || state.auth?.phone || "",
+      status: "กำลังวิ่ง",
+      note: String(routeTaskForm.note || "").trim(),
+      stops,
+      startedAt: now.toISOString(),
+      serviceDate: toServiceDateKey(now)
+    };
+    setState(prev => ({ ...prev, routeTasks: [task, ...(prev.routeTasks || [])] }));
+    const saved = await upsertRouteTaskToFirestore(task);
+    setSyncStatus(saved.ok ? `✅ เริ่ม${type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"} ${task.destinationSummary}` : `⚠️ บันทึกงานวิ่งไม่สำเร็จ: ${saved.error}`);
+  };
+
+  const updateRouteTask = (id, patch) => {
+    setState(prev => {
+      const updatedTasks = (prev.routeTasks || []).map(task => task.id === id ? { ...task, ...patch } : task);
+      const task = updatedTasks.find(item => item.id === id);
+      if (task) {
+        (async () => {
+          const saved = await upsertRouteTaskToFirestore(task);
+          if (!saved.ok) console.error(`Failed to sync route task ${id}:`, saved.error);
+        })();
+      }
+      return { ...prev, routeTasks: updatedTasks };
+    });
+  };
+
+  const uploadRouteTaskPhoto = (task, stopId, file) => {
+    if (!file) return;
+    const key = routeTaskStopKey(task.id, stopId);
+    routeTaskFilesRef.current[key] = file;
+    const previewUrl = URL.createObjectURL(file);
+    const stops = (task.stops || []).map(stop => stop.id === stopId ? { ...stop, photo: previewUrl, sharedToLine: false } : stop);
+    updateRouteTask(task.id, { stops });
+    setSyncStatus("✅ บันทึกรูปเช็คอินงานวิ่งแล้ว พร้อมแชร์ LINE");
+  };
+
+  const addRouteTaskMidwayCheckIn = (task) => {
+    const note = prompt("หมายเหตุเช็คอินระหว่างทาง:", "");
+    if (note === null) return;
+    const stop = {
+      id: `mid-${Date.now()}`,
+      name: "เช็คอินระหว่างทาง",
+      kind: "midway",
+      status: "เช็คอินแล้ว",
+      checkedInAt: new Date().toLocaleString("th-TH"),
+      note: String(note || "").trim(),
+      photo: "",
+      sharedToLine: false
+    };
+    const stops = [...(task.stops || []), stop];
+    updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
+    recordRouteTaskCheckInLocation(task, stop);
+    setSyncStatus(`✅ เพิ่มเช็คอินระหว่างทาง ${task.id}`);
+  };
+
+  const checkInRouteTaskStop = (task, stopId) => {
+    const note = prompt("หมายเหตุจุดเช็คอิน (ถ้ามี):", "");
+    if (note === null) return;
+    let checkedStop = null;
+    const stops = (task.stops || []).map(stop => {
+      if (stop.id !== stopId) return stop;
+      checkedStop = {
+        ...stop,
+        status: "เช็คอินแล้ว",
+        checkedInAt: new Date().toLocaleString("th-TH"),
+        note: String(note || "").trim(),
+        sharedToLine: false
+      };
+      return checkedStop;
+    });
+    updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
+    if (checkedStop) recordRouteTaskCheckInLocation(task, checkedStop);
+    setSyncStatus(`✅ เช็คอิน ${checkedStop?.name || ""} แล้ว กรุณาถ่ายรูปและแชร์ LINE`);
+  };
+
+  const shareRouteTaskStopToLine = (task, stop) => {
+    if (!navigator?.share) {
+      alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
+      return;
+    }
+    (async () => {
+      try {
+        const nextStop = {
+          ...stop,
+          status: "เช็คอินแล้ว",
+          checkedInAt: stop.checkedInAt || new Date().toLocaleString("th-TH"),
+          sharedToLine: true
+        };
+        const stops = (task.stops || []).map(item => item.id === stop.id ? nextStop : item);
+        updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
+        const text = buildLineMessageForRouteTask(task, nextStop);
+        const file = routeTaskFilesRef.current?.[routeTaskStopKey(task.id, stop.id)];
+        let copied = false;
+        try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+        if (!copied) {
+          const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
+          if (!ok) return;
+        }
+        if (file && navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], text });
+        } else {
+          await navigator.share({ text });
+        }
+        setSyncStatus(`✅ แชร์ LINE งานวิ่ง ${task.id} แล้ว`);
+      } catch (error) {
+        setSyncStatus(`✅ บันทึกเช็คอินแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${task.id})`);
+      }
+    })();
+  };
+
+  const completeRouteTask = (task) => {
+    const destinationStops = (task.stops || []).filter(stop => stop.kind !== "midway");
+    const missing = destinationStops.filter(stop => !stop.checkedInAt || !stop.sharedToLine);
+    if (missing.length && !confirm(`ยังมีปลายทางที่ยังไม่แชร์ LINE ครบ (${missing.length} จุด) ต้องการจบงานเลยหรือไม่?`)) return;
+    updateRouteTask(task.id, { status: "เสร็จงาน", completedAt: new Date().toLocaleString("th-TH") });
+    setSyncStatus(`✅ จบงานวิ่ง ${task.id} แล้ว`);
   };
 
 	  const shareOrderToLine = (order) => {
@@ -2194,6 +2479,7 @@ export default function App() {
           <Stat icon={UserCheck} label="รอคนขับรับ" value={`${totals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
           <Stat icon={Navigation} label="กำลังส่ง" value={`${totals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
           <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
+          <Stat icon={MapPinned} label="งานวิ่งวันนี้" value={`${todayRouteTasks.length} งาน`} sub="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
           {auth.role === "driver" && (
             <Stat icon={Star} label="ส่งสำเร็จของฉัน" value={`${orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} งาน`} sub="งานของคุณทั้งหมด" tone="#22c55e" />
           )}
@@ -2388,6 +2674,50 @@ export default function App() {
                   })
                 )}
               </div>
+            </section>
+
+            <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #0e7490" }}>
+              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>{todayRouteTasks.length} งานวันนี้</span></div>
+              {todayRouteTasks.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับเริ่มงานวิ่งสาขาหรืองานวิ่งไกลวันนี้</p>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+                  {todayRouteTasks.map(task => {
+                    const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
+                    const checkedCount = (task.stops || []).filter(stop => stop.checkedInAt).length;
+                    const stopCount = (task.stops || []).length;
+                    const latestStop = (task.stops || []).filter(stop => stop.checkedInAt).slice(-1)[0];
+                    return (
+                      <div key={task.id} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", display: "grid", gap: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "start" }}>
+                          <div>
+                            <b style={{ display: "block", color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}</b>
+                            <small style={{ color: "#6b7280" }}>{task.id}</small>
+                          </div>
+                          <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "4px 8px", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#374151", display: "grid", gap: "3px" }}>
+                          <span><b>คนขับ:</b> {task.driverName || task.driverId || "-"}</span>
+                          <span><b>เส้นทาง:</b> {task.origin} → {task.destinationSummary}</span>
+                          <span><b>เช็คอิน:</b> {checkedCount}/{stopCount} จุด</span>
+                          {latestStop && <span style={{ color: "#0e7490" }}><b>ล่าสุด:</b> {latestStop.name} · {latestStop.checkedInAt}</span>}
+                          {task.note && <span><b>หมายเหตุ:</b> {task.note}</span>}
+                        </div>
+                        <div style={{ display: "grid", gap: "6px" }}>
+                          {(task.stops || []).map(stop => (
+                            <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "8px", fontSize: "12px" }}>
+                              <b>{stop.kind === "midway" ? "ระหว่างทาง" : stop.name}</b>
+                              <span style={{ color: stop.checkedInAt ? "#166534" : "#6b7280", marginLeft: "6px" }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</span>
+                              {stop.checkedInAt && <div style={{ color: "#6b7280", marginTop: "3px" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</div>}
+                              {stop.note && <div style={{ color: "#6b7280", marginTop: "3px" }}>{stop.note}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             <section className="panel" style={{ gridColumn: "1 / -1" }}>
@@ -2949,6 +3279,98 @@ export default function App() {
               </div>
             </section>
 
+            <section className="panel" style={{ borderLeft: "4px solid #0e7490" }}>
+              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>{activeDriverRouteTasks.length} งานกำลังทำ</span></div>
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div className="segmented" style={{ marginBottom: 0 }}>
+                  <button className={routeTaskForm.type === "branch" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "branch", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งสาขา</button>
+                  <button className={routeTaskForm.type === "long" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "long", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งไกล</button>
+                </div>
+
+                <div className="form-grid two">
+                  <select value={routeTaskForm.origin} onChange={e => setRouteTaskForm(p => ({ ...p, origin: e.target.value }))}>
+                    {[...BRANCH_ROUTE_STOPS, ...LONG_ROUTE_STOPS].map(stop => <option key={stop} value={stop}>ต้นทาง: {stop}</option>)}
+                  </select>
+                  {routeTaskForm.type === "branch" ? (
+                    <select value={routeTaskForm.branchDestination} onChange={e => setRouteTaskForm(p => ({ ...p, branchDestination: e.target.value }))}>
+                      {BRANCH_ROUTE_STOPS.map(stop => <option key={stop} value={stop}>ปลายทาง: {stop}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ display: "grid", gap: "8px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
+                      {LONG_ROUTE_STOPS.map(stop => (
+                        <label key={stop} style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px", fontWeight: 700 }}>
+                          <input
+                            type="checkbox"
+                            checked={(routeTaskForm.longDestinations || []).includes(stop)}
+                            onChange={e => setRouteTaskForm(p => {
+                              const current = p.longDestinations || [];
+                              const next = e.target.checked ? Array.from(new Set([...current, stop])) : current.filter(item => item !== stop);
+                              return { ...p, longDestinations: next };
+                            })}
+                          />
+                          {stop}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <textarea value={routeTaskForm.note} onChange={e => setRouteTaskForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุงานวิ่ง เช่น รับของกลับ / เอกสาร / รอบร่วม" rows={2} />
+                <button className="primary wide" onClick={createRouteTask}><MapPinned size={18} /> เริ่มงานวิ่ง</button>
+
+                {activeDriverRouteTasks.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+                    {activeDriverRouteTasks.map(task => {
+                      const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
+                      return (
+                        <div key={task.id} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${taskColor}`, display: "grid", gap: "10px" }}>
+                          <div>
+                            <b style={{ color: taskColor, display: "block" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"} · {task.id}</b>
+                            <small style={{ color: "#374151" }}>{task.origin} → {task.destinationSummary}</small><br />
+                            {task.note && <small style={{ color: "#6b7280" }}>{task.note}</small>}
+                          </div>
+                          <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}>📍 เช็คอินระหว่างทาง</button>
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            {(task.stops || []).map(stop => (
+                              <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", display: "grid", gap: "8px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+                                  <b>{stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name}</b>
+                                  <small style={{ color: stop.checkedInAt ? "#166534" : "#92400e", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
+                                </div>
+                                {stop.checkedInAt && <small style={{ color: "#6b7280" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
+                                {stop.note && <small style={{ color: "#6b7280" }}>{stop.note}</small>}
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                  <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
+                                  <label className="secondary" style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    📷 ถ่ายรูป
+                                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) uploadRouteTaskPhoto(task, stop.id, file);
+                                      e.target.value = "";
+                                    }} />
+                                  </label>
+                                </div>
+                                {(stop.photo || stop.checkedInAt) && (
+                                  <button className="primary" style={{ padding: "8px", fontSize: "12px", background: "#2563eb" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
+                                    💬 แชร์ LINE จุดนี้
+                                  </button>
+                                )}
+                                {stop.photo && (
+                                  <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid #e5e7eb" }}>
+                                    <img src={stop.photo} alt="route check-in" style={{ width: "100%", height: "auto" }} />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <button className="secondary" style={{ padding: "9px", fontSize: "12px", background: "#f0fdf4", color: "#166534" }} onClick={() => completeRouteTask(task)}>✅ จบงานวิ่ง</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
               const pending = orders.filter(o => o.status === "รอคนขับรับ");
@@ -3183,7 +3605,7 @@ export default function App() {
 	              </section>
 	            )}
 
-            {driverOrders.length === 0 && (
+            {driverOrders.length === 0 && driverRouteTasks.length === 0 && (
               <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
                 <p style={{ fontSize: "32px", margin: "0" }}>😴</p>
                 <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
