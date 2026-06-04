@@ -377,6 +377,7 @@ export default function App() {
   const [driverWeeklyChecks, setDriverWeeklyChecks] = useState({});
   const [driverAssessmentNotes, setDriverAssessmentNotes] = useState("");
   const [driverAssessmentStatus, setDriverAssessmentStatus] = useState("");
+  const [driverAssessmentSubmitting, setDriverAssessmentSubmitting] = useState(false);
   const [driverAssessments, setDriverAssessments] = useState([]);
   const [driverAssessmentDrivers, setDriverAssessmentDrivers] = useState([]);
   const [routeTaskForm, setRouteTaskForm] = useState({
@@ -1654,6 +1655,7 @@ export default function App() {
 	  };
 
   const submitDriverDailyAssessment = async () => {
+    if (driverAssessmentSubmitting) return;
     if (state.auth?.role !== "driver") return;
     const did = state.auth?.driverId || driverId || "";
     if (!did) {
@@ -1667,13 +1669,17 @@ export default function App() {
     }
 
     try {
+      setDriverAssessmentSubmitting(true);
+      setDriverAssessmentStatus("⏳ กำลังบันทึกแบบประเมินประจำวัน...");
       const idToken = await refreshAuthToken(true);
       const res = await fetch("/api/driver-assessments/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idToken,
+          assessmentType: "daily",
           driverId: did,
+          phoneDigits: String(state.auth?.phone || "").replace(/\D/g, ""),
           dailyChecks: driverDailyChecks,
           weeklyChecks: driverWeeklyChecks,
           notes: String(driverAssessmentNotes || "").trim()
@@ -1686,6 +1692,50 @@ export default function App() {
       setDriverAssessmentStatus("✅ บันทึกแบบประเมินประจำวันแล้ว พร้อมเริ่มงาน");
     } catch (error) {
       setDriverAssessmentStatus(`❌ บันทึกไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setDriverAssessmentSubmitting(false);
+    }
+  };
+
+  const submitDriverWeeklyAssessment = async () => {
+    if (driverAssessmentSubmitting) return;
+    if (state.auth?.role !== "driver") return;
+    const did = state.auth?.driverId || driverId || "";
+    if (!did) {
+      setDriverAssessmentStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกเข้าใหม่");
+      return;
+    }
+    const missing = DRIVER_WEEKLY_CHECK_ITEMS.filter((_, index) => !driverWeeklyChecks[index]);
+    if (missing.length) {
+      setDriverAssessmentStatus(`⚠️ กรุณาตรวจเช็คประจำสัปดาห์ให้ครบก่อนบันทึก (${missing.length} รายการยังไม่ครบ)`);
+      return;
+    }
+
+    try {
+      setDriverAssessmentSubmitting(true);
+      setDriverAssessmentStatus("⏳ กำลังบันทึกแบบประเมินประจำสัปดาห์...");
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/driver-assessments/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          assessmentType: "weekly",
+          driverId: did,
+          phoneDigits: String(state.auth?.phone || "").replace(/\D/g, ""),
+          weeklyChecks: driverWeeklyChecks,
+          notes: String(driverAssessmentNotes || "").trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      setDriverAssessmentStatus("✅ บันทึกแบบประเมินประจำสัปดาห์แล้ว");
+    } catch (error) {
+      setDriverAssessmentStatus(`❌ บันทึกรายสัปดาห์ไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setDriverAssessmentSubmitting(false);
     }
   };
 
@@ -3736,11 +3786,11 @@ export default function App() {
               </div>
 
               <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
-                <button className="primary" onClick={submitDriverDailyAssessment}>
-                  <CheckCircle2 size={16} /> บันทึกแบบประเมินวันนี้
+                <button type="button" className="primary" onClick={submitDriverDailyAssessment} disabled={driverAssessmentSubmitting}>
+                  <CheckCircle2 size={16} /> {driverAssessmentSubmitting ? "กำลังบันทึก..." : "บันทึกแบบประเมินวันนี้"}
                 </button>
                 {driverAssessmentStatus && (
-                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {driverAssessmentStatus}
                   </span>
                 )}
@@ -3784,6 +3834,17 @@ export default function App() {
                     <span>{item}</span>
                   </label>
                 ))}
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+                <button type="button" className="secondary" onClick={submitDriverWeeklyAssessment} disabled={driverAssessmentSubmitting}>
+                  <CheckCircle2 size={16} /> {driverAssessmentSubmitting ? "กำลังบันทึก..." : "บันทึกแบบประเมินรายสัปดาห์"}
+                </button>
+                <span className="muted" style={{ fontSize: "12px" }}>กดบันทึกหลังตรวจครบทุกข้อ</span>
+                {driverAssessmentStatus && (
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                    {driverAssessmentStatus}
+                  </span>
+                )}
               </div>
             </section>
 
