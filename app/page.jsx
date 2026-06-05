@@ -1179,6 +1179,7 @@ export default function App() {
 		          note: stop.note || "",
 		          sharedToLine: Boolean(stop.sharedToLine)
 		        })) : [],
+		        originStartedAt: task.originStartedAt || "",
 		        startedAt: task.startedAt || new Date().toISOString(),
 		        completedAt: task.completedAt || "",
 		        serviceDate: task.serviceDate || toServiceDateKey(task.startedAt || new Date()),
@@ -1809,6 +1810,7 @@ export default function App() {
       status: "กำลังวิ่ง",
       note: String(routeTaskForm.note || "").trim(),
       stops,
+      originStartedAt: now.toLocaleString("th-TH"),
       startedAt: now.toISOString(),
       serviceDate: toServiceDateKey(now)
     };
@@ -2754,6 +2756,7 @@ export default function App() {
                         </div>
                         <div style={{ fontSize: "12px", color: "#374151", display: "grid", gap: "3px" }}>
                           <span><b>คนขับ:</b> {task.driverName || task.driverId || "-"}</span>
+                          <span style={{ color: "#1d4ed8", fontWeight: 800 }}><b>สถานะคนขับ:</b> เริ่มงานต้นทางแล้ว{task.originStartedAt ? ` · ${task.originStartedAt}` : ""}</span>
                           <span><b>เส้นทาง:</b> {task.origin} → {task.destinationSummary}</span>
                           <span><b>เช็คอิน:</b> {checkedCount}/{stopCount} จุด</span>
                           {latestStop && <span style={{ color: "#0e7490" }}><b>ล่าสุด:</b> {latestStop.name} · {latestStop.checkedInAt}</span>}
