@@ -3963,46 +3963,53 @@ export default function App() {
                 <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงาน</p>
               ) : (
                 <div className="daily-report-scroll">
-                  {ordersByServiceDate.keys.map((k) => {
-                    const list = ordersByServiceDate.groups[k] || [];
+                  {(() => {
+                    const selectedKey = openReportDate || ordersByServiceDate.keys[0] || "";
+                    const list = ordersByServiceDate.groups[selectedKey] || [];
                     const stats = summarizeOrders(list);
-                    const isOpen = openReportDate === k;
-                    const dt = parseServiceDateKey(k);
-                    const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : k;
-
+                    const selectedDate = parseServiceDateKey(selectedKey);
+                    const selectedTitle = selectedDate ? selectedDate.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : selectedKey;
                     return (
-                      <div key={k} className={`daily-accordion ${isOpen ? "open" : ""}`}>
-                        <button
-                          type="button"
-                          className="daily-accordion-trigger"
-                          onClick={() => setOpenReportDate((cur) => (cur === k ? "" : k))}
-                          aria-expanded={isOpen}
-                        >
-                          <span className="daily-title">{title}</span>
+                      <div className="daily-accordion open">
+                        <div className="daily-accordion-trigger">
+                          <select
+                            className="daily-title"
+                            value={selectedKey}
+                            onChange={(e) => {
+                              setOpenReportDate(e.target.value);
+                              setReportExportDate(e.target.value);
+                            }}
+                            aria-label="เลือกวันที่รายงาน"
+                          >
+                            {ordersByServiceDate.keys.map((k) => {
+                              const dt = parseServiceDateKey(k);
+                              const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : k;
+                              return <option key={k} value={k}>{title}</option>;
+                            })}
+                          </select>
                           <span className="daily-meta">{stats.total} งาน</span>
                           <span className="daily-cod">COD ฿{money(stats.cod)}</span>
                           <ChevronDown className="daily-chevron" size={16} />
-                        </button>
+                        </div>
 
-                        {isOpen && (
-                          <div className="daily-accordion-body">
-                            <div className="status-chip-row">
-                              <span className="status-chip waiting">รอรับ <b>{stats.waiting}</b></span>
-                              <span className="status-chip active">กำลังส่ง <b>{stats.active}</b></span>
-                              <span className="status-chip done">สำเร็จ <b>{stats.done}</b></span>
-                            </div>
-                            <div className="daily-actions">
-                              <span>สำเร็จ {stats.completionRate}% · COD สำเร็จ ฿{money(stats.codDone)}</span>
-                              <div>
-                                <button className="secondary compact-btn" onClick={() => exportServiceDateReport(k, "copy")}>คัดลอก</button>
-                                <button className="secondary compact-btn" onClick={() => exportServiceDateReport(k, "download")}>TXT</button>
-                              </div>
+                        <div className="daily-accordion-body">
+                          <b>{selectedTitle}</b>
+                          <div className="status-chip-row">
+                            <span className="status-chip waiting">รอรับ <b>{stats.waiting}</b></span>
+                            <span className="status-chip active">กำลังส่ง <b>{stats.active}</b></span>
+                            <span className="status-chip done">สำเร็จ <b>{stats.done}</b></span>
+                          </div>
+                          <div className="daily-actions">
+                            <span>สำเร็จ {stats.completionRate}% · COD สำเร็จ ฿{money(stats.codDone)}</span>
+                            <div>
+                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "copy")}>คัดลอก</button>
+                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "download")}>TXT</button>
                             </div>
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
               )}
             </section>
