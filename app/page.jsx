@@ -1779,9 +1779,10 @@ export default function App() {
     const driver = drivers.find(d => d.id === did) || {};
     const type = routeTaskForm.type === "long" ? "long" : "branch";
     const longDirection = routeTaskForm.longDirection === "return" ? "return" : "outbound";
-    const destinations = type === "long"
+    const selectedDestinations = type === "long"
       ? (longDirection === "return" ? (routeTaskForm.longReturnDestinations || []).filter(Boolean) : (routeTaskForm.longDestinations || []).filter(Boolean))
       : [routeTaskForm.branchDestination].filter(Boolean);
+    const destinations = Array.from(new Set(selectedDestinations));
     if (!routeTaskForm.origin || destinations.length === 0) {
       setSyncStatus("⚠️ กรุณาเลือกต้นทางและปลายทางงานวิ่ง");
       return;
@@ -3374,23 +3375,27 @@ export default function App() {
                   ) : (
                     <div style={{ display: "grid", gap: "8px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
                       <b style={{ fontSize: "12px", color: "#374151" }}>
-                        ปลายทาง{routeTaskForm.longDirection === "return" ? "ขากลับ: เรียง ราติก้า → เชียงใหม่" : "ขาไป: เลือกได้ 1 จุด หรือรวม 2 จุด"}
+                        ปลายทาง{routeTaskForm.longDirection === "return" ? "ขากลับ: เลือกตามลำดับ" : "ขาไป: เลือกได้ 1 จุด หรือรวม 2 จุดตามลำดับ"}
                       </b>
-                      {(routeTaskForm.longDirection === "return" ? LONG_ROUTE_RETURN_STOPS : LONG_ROUTE_STOPS).map(stop => (
-                        <label key={stop} style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px", fontWeight: 700 }}>
-                          <input
-                            type="checkbox"
-                            checked={routeTaskForm.longDirection === "return" ? (routeTaskForm.longReturnDestinations || []).includes(stop) : (routeTaskForm.longDestinations || []).includes(stop)}
+                      {[0, 1].map(index => {
+                        const field = routeTaskForm.longDirection === "return" ? "longReturnDestinations" : "longDestinations";
+                        const options = routeTaskForm.longDirection === "return" ? LONG_ROUTE_RETURN_STOPS : LONG_ROUTE_STOPS;
+                        const current = routeTaskForm[field] || [];
+                        return (
+                          <select
+                            key={index}
+                            value={current[index] || ""}
                             onChange={e => setRouteTaskForm(p => {
-                              const field = p.longDirection === "return" ? "longReturnDestinations" : "longDestinations";
-                              const current = p[field] || [];
-                              const next = e.target.checked ? Array.from(new Set([...current, stop])) : current.filter(item => item !== stop);
+                              const next = [...(p[field] || [])];
+                              next[index] = e.target.value;
                               return { ...p, [field]: next };
                             })}
-                          />
-                          {stop}
-                        </label>
-                      ))}
+                          >
+                            <option value="">{index === 0 ? "ปลายทางจุดที่ 1" : "ปลายทางจุดที่ 2 (ไม่เลือกได้)"}</option>
+                            {options.map(stop => <option key={stop} value={stop}>{index === 0 ? "จุดที่ 1" : "จุดที่ 2"}: {stop}</option>)}
+                          </select>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
