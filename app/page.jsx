@@ -560,7 +560,7 @@ export default function App() {
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
 	    const needsCustomers = String(displayTab || "") === "sales";
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
-	    const needsDriverAssessments = ["driver-sop-report"].includes(String(displayTab || ""));
+	    const needsDriverAssessments = ["driver-sop-report", "settings"].includes(String(displayTab || ""));
 	    const needsChat = Boolean(chatOpen);
 
       try {
@@ -4140,6 +4140,16 @@ export default function App() {
 		                const weekSum = sumBlock(weekOrders);
 		                const monthSum = sumBlock(monthOrders);
 		                const yearSum = sumBlock(yearOrders);
+		                const completedAssessments = driverAssessmentRoster.filter(driver => todayAssessmentByDriver.has(driver.id));
+		                const missingAssessments = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
+		                const assessmentRate = driverAssessmentRoster.length ? Math.round((completedAssessments.length / driverAssessmentRoster.length) * 100) : 0;
+		                const issueOrders = todayOrders.filter(o => o.status === "ติดปัญหา" || o.complaint);
+		                const improvementItems = [
+		                  "ตรวจสอบการบันทึกจากมือถือ Android/iPhone ให้มีข้อความสถานะชัดเจนทุกครั้ง",
+		                  "เพิ่มรายงานงานวิ่งสาขา/งานวิ่งไกลให้สรุปเป็นรอบและตามคนขับ",
+		                  "ปรับหน้ารายงานให้เลือกช่วงวันและส่งออกข้อมูลได้ครบขึ้น",
+		                  "ติดตามงานค้างและงานติดปัญหาให้ฝ่ายขายเห็นเร็วขึ้น"
+		                ];
 		                return (
 		                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #eee" }}>
 		                    <b>ภาพรวมวันนี้ ({todayText()})</b>
@@ -4157,6 +4167,28 @@ export default function App() {
 		                        <p>สัปดาห์นี้ (จ.-วันนี้) <b>{weekSum.total}</b> งาน · ส่งสำเร็จ <b>{weekSum.done}</b> · COD ฿<b>{money(weekSum.cod)}</b></p>
 		                        <p>เดือนนี้ <b>{monthSum.total}</b> งาน · ส่งสำเร็จ <b>{monthSum.done}</b> · COD ฿<b>{money(monthSum.cod)}</b></p>
 		                        <p>ปีนี้ <b>{yearSum.total}</b> งาน · ส่งสำเร็จ <b>{yearSum.done}</b> · COD ฿<b>{money(yearSum.cod)}</b></p>
+		                      </div>
+		                    </div>
+		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
+		                      <b>รายงานประเมินตรวจสภาพรถวันนี้</b>
+		                      <div className="report-lines" style={{ marginTop: "8px" }}>
+		                        <p>ทำแล้ว <b>{completedAssessments.length}/{driverAssessmentRoster.length}</b> คน · คิดเป็น <b>{assessmentRate}%</b></p>
+		                        <p>ทำแล้ว: <b>{completedAssessments.length ? completedAssessments.map(driver => driver.name || driver.id).join(", ") : "-"}</b></p>
+		                        <p>ยังขาด: <b>{missingAssessments.length ? missingAssessments.map(driver => driver.name || driver.id).join(", ") : "ครบทุกคนแล้ว"}</b></p>
+		                      </div>
+		                    </div>
+		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
+		                      <b>ภาพรวมปัญหาการใช้งานและความต่อเนื่องของแอพ</b>
+		                      <div className="report-lines" style={{ marginTop: "8px" }}>
+		                        <p>สถานะระบบ: <b>{syncStatus || "กำลังตรวจสอบ"}</b></p>
+		                        <p>งานติดปัญหาวันนี้ <b>{issueOrders.length}</b> งาน · งานค้างจากวันก่อน <b>{backlogUndelivered.length}</b> งาน</p>
+		                        <p>ความต่อเนื่อง: แอพยังดึงข้อมูลออเดอร์, รายงาน, ตรวจรถ และสถานะงานจาก Firestore เพื่อให้ฝ่ายขายติดตามภาพรวมได้จากหน้าเดียว</p>
+		                      </div>
+		                    </div>
+		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
+		                      <b>รายการปรับปรุงที่จะแก้ไขเพิ่มเติม</b>
+		                      <div className="report-lines" style={{ marginTop: "8px" }}>
+		                        {improvementItems.map(item => <p key={item}>• {item}</p>)}
 		                      </div>
 		                    </div>
 		                  </div>
