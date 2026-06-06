@@ -142,6 +142,16 @@ function todayText() {
   return new Date().toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function formatThaiDateTime(dateLike) {
+  return new Date(dateLike).toLocaleString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function isSameLocalDay(a, b) {
   if (!a || !b) return false;
   return (
@@ -291,6 +301,7 @@ function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
 
 export default function App() {
   const [tab, setTab] = useState("sales");
+  const [appClock, setAppClock] = useState(() => new Date());
   const [state, setState] = useState(defaultState);
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -329,6 +340,11 @@ export default function App() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMessages, setAiMessages] = useState([]); // [{role:'user'|'model', text:string}]
   const aiListRef = useRef(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => setAppClock(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("hillkoff-last-phone");
@@ -410,7 +426,7 @@ export default function App() {
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver" ? (tab === "driver-sop" ? "driver-sop" : "driver") : (tab === "driver" ? "sales" : tab);
 
-  const todayServiceDate = toServiceDateKey(new Date());
+  const todayServiceDate = toServiceDateKey(appClock);
   const getOrderServiceDate = (o) => String(o?.serviceDate || toServiceDateKey(o?.createdAt || o?.updatedAt || new Date()));
   const isTodayOrder = (o) => getOrderServiceDate(o) === todayServiceDate;
   const isUndelivered = (o) => o?.status !== "ส่งสำเร็จ";
@@ -4268,12 +4284,18 @@ export default function App() {
 		                const missingAssessments = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
 		                const assessmentRate = driverAssessmentRoster.length ? Math.round((completedAssessments.length / driverAssessmentRoster.length) * 100) : 0;
 		                const issueOrders = todayOrders.filter(o => o.status === "ติดปัญหา" || o.complaint);
-		                const improvementItems = [
-		                  "ตรวจสอบการบันทึกจากมือถือ Android/iPhone ให้มีข้อความสถานะชัดเจนทุกครั้ง",
-		                  "เพิ่มรายงานงานวิ่งสาขา/งานวิ่งไกลให้สรุปเป็นรอบและตามคนขับ",
-		                  "ปรับหน้ารายงานให้เลือกช่วงวันและส่งออกข้อมูลได้ครบขึ้น",
-		                  "ติดตามงานค้างและงานติดปัญหาให้ฝ่ายขายเห็นเร็วขึ้น"
-		                ];
+		                const dailyFollowUps = [
+		                  issueOrders.length > 0 ? `ตามงานติดปัญหาวันนี้ ${issueOrders.length} งาน: ${issueOrders.slice(0, 3).map(o => o.id).join(", ")}${issueOrders.length > 3 ? "..." : ""}` : "",
+		                  backlogUndelivered.length > 0 ? `ตามงานค้างจากวันก่อน ${backlogUndelivered.length} งาน ให้ปิดสถานะหรือมอบหมายคนขับต่อ` : "",
+		                  waiting > 0 ? `ยังมีงานรอคนขับรับ ${waiting} งาน ควรตรวจว่าคนขับเห็นคิวครบหรือยัง` : "",
+		                  active > 0 ? `มีงานกำลังส่ง ${active} งาน ควรติดตามก่อนปิดรอบวันนี้` : "",
+		                  missingAssessments.length > 0 ? `ตรวจสภาพรถยังขาด ${missingAssessments.length} คน: ${missingAssessments.slice(0, 4).map(driver => driver.name || driver.id).join(", ")}${missingAssessments.length > 4 ? "..." : ""}` : "",
+		                  todayRouteTasks.length > 0 ? `งานวิ่งวันนี้ ${todayRouteTasks.length} รอบ · เสร็จแล้ว ${completedTodayRouteTasks.length} รอบ · กำลังดำเนินการ ${activeTodayRouteTasks.length} รอบ` : ""
+		                ].filter(Boolean);
+		                if (!dailyFollowUps.length) {
+		                  dailyFollowUps.push("วันนี้ยังไม่มีงานค้าง งานติดปัญหา หรือรายการตรวจรถที่ต้องเร่งตาม");
+		                }
+		                const overviewUpdatedAt = formatThaiDateTime(appClock);
 		                return (
 		                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #eee" }}>
 		                    <b>ภาพรวมวันนี้ ({todayText()})</b>
@@ -4306,13 +4328,13 @@ export default function App() {
 		                      <div className="report-lines" style={{ marginTop: "8px" }}>
 		                        <p>สถานะระบบ: <b>{syncStatus || "กำลังตรวจสอบ"}</b></p>
 		                        <p>งานติดปัญหาวันนี้ <b>{issueOrders.length}</b> งาน · งานค้างจากวันก่อน <b>{backlogUndelivered.length}</b> งาน</p>
-		                        <p>ความต่อเนื่อง: แอพยังดึงข้อมูลออเดอร์, รายงาน, ตรวจรถ และสถานะงานจาก Firestore เพื่อให้ฝ่ายขายติดตามภาพรวมได้จากหน้าเดียว</p>
+		                        <p>อัปเดตล่าสุด: <b>{overviewUpdatedAt}</b> · ข้อมูลคำนวณจากออเดอร์, งานวิ่ง, ตรวจรถ และ Firestore realtime ของวันนี้</p>
 		                      </div>
 		                    </div>
 		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
-		                      <b>รายการปรับปรุงที่จะแก้ไขเพิ่มเติม</b>
+		                      <b>รายการติดตามประจำวันที่เปลี่ยนตามข้อมูลจริง</b>
 		                      <div className="report-lines" style={{ marginTop: "8px" }}>
-		                        {improvementItems.map(item => <p key={item}>• {item}</p>)}
+		                        {dailyFollowUps.map(item => <p key={item}>• {item}</p>)}
 		                      </div>
 		                    </div>
 		                  </div>
