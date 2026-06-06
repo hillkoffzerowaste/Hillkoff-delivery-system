@@ -265,30 +265,6 @@ function buildLineMessageForNewOrder(order) {
   return lines.join("\n");
 }
 
-function buildLineSocialShareUrl(text) {
-  const url = typeof window !== "undefined" && window.location?.href ? window.location.href : "https://line.me";
-  const params = new URLSearchParams({ url, text });
-  return `https://social-plugins.line.me/lineit/share?${params.toString()}`;
-}
-
-function isLikelyDesktop() {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  const mobileData = navigator.userAgentData?.mobile;
-  if (typeof mobileData === "boolean") return !mobileData;
-  return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
-}
-
-function openLineShare(text, popupWindow) {
-  const lineUrl = buildLineSocialShareUrl(text);
-  if (popupWindow && !popupWindow.closed) {
-    popupWindow.location.href = lineUrl;
-    return true;
-  }
-  const opened = window.open(lineUrl, "_blank", "noopener,noreferrer");
-  return Boolean(opened);
-}
-
 function routeTaskStopKey(taskId, stopId) {
   return `${taskId}_${stopId}`;
 }
@@ -1648,7 +1624,6 @@ export default function App() {
 	    if (!pendingOrder) return;
     const shouldShareLine = shareNewOrderToLine;
     const orderForLine = pendingOrder;
-    const linePopup = shouldShareLine && isLikelyDesktop() ? window.open("about:blank", "_blank", "width=960,height=720") : null;
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
@@ -1661,7 +1636,6 @@ export default function App() {
 	    });
 	    const json = await res.json();
 	    if (!json?.ok) {
-        if (linePopup && !linePopup.closed) linePopup.close();
 	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
 	      return;
 	    }
@@ -1674,15 +1648,21 @@ export default function App() {
     setShareNewOrderToLine(false);
     if (shouldShareLine) {
       const text = buildLineMessageForNewOrder(orderForLine);
-      try { await navigator.clipboard?.writeText?.(text); } catch {}
-      try {
-        const openedLine = isLikelyDesktop() ? openLineShare(text, linePopup) : false;
-        if (!openedLine && navigator.share) await navigator.share({ text });
-        if (!openedLine && !navigator.share) openLineShare(text);
-        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดหน้าแชร์ LINE แล้ว`);
-      } catch {
-        if (linePopup && !linePopup.closed) linePopup.close();
-        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หาก LINE ไม่ขึ้น ให้วางข้อความที่คัดลอกไว้`);
+      if (!navigator?.share) {
+        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว แต่อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์`);
+      } else {
+        try {
+          let copied = false;
+          try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+          if (!copied) {
+            const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
+            if (!ok) return;
+          }
+          await navigator.share({ text });
+          setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดแชร์ LINE แล้ว`);
+        } catch {
+          setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้`);
+        }
       }
     } else {
 	    setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวสำเร็จ (Firestore)`);
@@ -4579,7 +4559,7 @@ export default function App() {
               onChange={e => setShareNewOrderToLine(e.target.checked)}
               style={{ marginTop: "2px" }}
             />
-            <span>คัดลอกข้อความคิวงานหลังส่งเข้าคิว</span>
+            <span>แชร์ข้อความคิวงานหลังส่งเข้าคิว</span>
           </label>
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
             <button className="secondary" style={{ flex: 1 }} onClick={() => { setShowOrderConfirm(false); setShareNewOrderToLine(false); }}>❌ ยกเลิก</button>
