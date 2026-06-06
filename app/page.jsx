@@ -1648,12 +1648,14 @@ export default function App() {
     setShareNewOrderToLine(false);
     if (shouldShareLine) {
       const text = buildLineMessageForNewOrder(orderForLine);
+      let copied = false;
+      try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
       if (!navigator?.share) {
-        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว แต่อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์`);
+        setSyncStatus(copied
+          ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และคัดลอกข้อความคิวงานแล้ว`
+          : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว แต่อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์`);
       } else {
         try {
-          let copied = false;
-          try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
           if (!copied) {
             const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
             if (!ok) return;
