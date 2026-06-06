@@ -1624,9 +1624,39 @@ export default function App() {
 	    if (!pendingOrder) return;
     const shouldShareLine = shareNewOrderToLine;
     const orderForLine = pendingOrder;
+    const text = buildLineMessageForNewOrder(orderForLine);
+    let copied = false;
+    let shareOpened = false;
+    try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+    if (shouldShareLine) {
+      if (!navigator?.share) {
+        setSyncStatus(copied
+          ? `⏳ คัดลอกข้อความคิวงานแล้ว กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`
+          : `⏳ กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`);
+      } else {
+        try {
+          if (!copied) {
+            const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
+            if (!ok) return;
+          }
+          await navigator.share({ text });
+          shareOpened = true;
+        } catch {}
+      }
+    }
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
+    setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setSelectedCustomerId("");
+    setOrderCustomerSearch("");
+    setShowOrderConfirm(false);
+    setPendingOrder(null);
+    setShareNewOrderToLine(false);
+    setTab("driver");
+    setSyncStatus(copied
+      ? `⏳ คัดลอกข้อความคิวงานแล้ว กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`
+      : `⏳ กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`);
 	    // Create via server so it can trigger Web Push notifications (FCM)
 	    const idToken = await refreshAuthToken(true);
 	    const res = await fetch("/api/orders/create", {
@@ -1639,37 +1669,21 @@ export default function App() {
 	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
 	      return;
 	    }
-    
-    setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
-    setSelectedCustomerId("");
-    setOrderCustomerSearch("");
-    setShowOrderConfirm(false);
-    setPendingOrder(null);
-    setShareNewOrderToLine(false);
     if (shouldShareLine) {
-      const text = buildLineMessageForNewOrder(orderForLine);
-      let copied = false;
-      try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
       if (!navigator?.share) {
         setSyncStatus(copied
           ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และคัดลอกข้อความคิวงานแล้ว`
           : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว แต่อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์`);
       } else {
-        try {
-          if (!copied) {
-            const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
-            if (!ok) return;
-          }
-          await navigator.share({ text });
-          setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดแชร์ LINE แล้ว`);
-        } catch {
-          setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้`);
-        }
+        setSyncStatus(shareOpened
+          ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดแชร์ LINE แล้ว`
+          : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้`);
       }
     } else {
-	    setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวสำเร็จ (Firestore)`);
+	    setSyncStatus(copied
+        ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และคัดลอกข้อความคิวงานแล้ว`
+        : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวสำเร็จ (Firestore)`);
     }
-	    setTab("driver");
 	  };
 
   const deleteOrder = async (orderId) => {
