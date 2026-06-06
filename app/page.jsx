@@ -250,6 +250,21 @@ function buildLineMessageForRouteTask(task, stop) {
   return lines.join("\n");
 }
 
+function buildLineMessageForNewOrder(order) {
+  const lines = [];
+  lines.push("📦 มีออเดอร์ใหม่เข้าคิวคนขับ");
+  if (order?.id) lines.push(`งาน: ${order.id}`);
+  if (order?.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
+  if (order?.zone) lines.push(`พื้นที่: ${order.zone}`);
+  if (order?.address) lines.push(`ที่อยู่: ${order.address}`);
+  if (order?.window) lines.push(`เวลา: ${order.window}`);
+  if (order?.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
+  if (order?.cod != null) lines.push(`COD: ฿${money(order.cod || 0)}`);
+  if (order?.salesNote) lines.push(`หมายเหตุ: ${order.salesNote}`);
+  lines.push("กรุณาเปิดแอพเพื่อรับงาน");
+  return lines.join("\n");
+}
+
 function routeTaskStopKey(taskId, stopId) {
   return `${taskId}_${stopId}`;
 }
@@ -364,6 +379,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
+  const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [openReportDate, setOpenReportDate] = useState("");
   const [reportExportMode, setReportExportMode] = useState("single");
@@ -371,7 +387,7 @@ export default function App() {
   const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
   const [ordersLimit, setOrdersLimit] = useState(20);
-  const customersLimit = 500;
+  const customersLimit = 3000;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
   const [driverDailyChecks, setDriverDailyChecks] = useState({});
@@ -1295,6 +1311,16 @@ export default function App() {
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
+  const routeTaskSortValue = (task) => new Date(task?.updatedAt || task?.completedAt || task?.startedAt || 0).getTime() || 0;
+  const activeTodayRouteTasks = todayRouteTasks
+    .filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก")
+    .slice()
+    .sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
+  const latestActiveTodayRouteTasks = activeTodayRouteTasks.slice(0, 1);
+  const completedTodayRouteTasks = todayRouteTasks
+    .filter(task => task.status === "เสร็จงาน")
+    .slice()
+    .sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
   const driverRouteTasks = (routeTasks || []).filter(task => task.driverId === driverId);
   const activeDriverRouteTasks = driverRouteTasks.filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก");
   const backlogUndelivered = (orders || []).filter((o) => !isTodayOrder(o) && isUndelivered(o));
@@ -1609,13 +1635,27 @@ export default function App() {
 	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
 	      return;
 	    }
+    const shouldShareLine = shareNewOrderToLine;
+    const orderForLine = pendingOrder;
     
     setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setSelectedCustomerId("");
     setOrderCustomerSearch("");
     setShowOrderConfirm(false);
     setPendingOrder(null);
-	    setSyncStatus(`✅ ส่งออเดอร์ "${pendingOrder.id}" เข้าคิวสำเร็จ (Firestore)`);
+    setShareNewOrderToLine(false);
+    if (shouldShareLine) {
+      const text = buildLineMessageForNewOrder(orderForLine);
+      try { await navigator.clipboard?.writeText?.(text); } catch {}
+      try {
+        if (navigator.share) await navigator.share({ text });
+        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดแชร์ LINE แล้ว`);
+      } catch {
+        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หาก LINE ไม่ขึ้น ให้วางข้อความที่คัดลอกไว้`);
+      }
+    } else {
+	    setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวสำเร็จ (Firestore)`);
+    }
 	    setTab("driver");
 	  };
 
@@ -2736,12 +2776,12 @@ export default function App() {
             </section>
 
             <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #0e7490" }}>
-              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>{todayRouteTasks.length} งานวันนี้</span></div>
-              {todayRouteTasks.length === 0 ? (
-                <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับเริ่มงานวิ่งสาขาหรืองานวิ่งไกลวันนี้</p>
+              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>กำลังทำ {activeTodayRouteTasks.length} งาน · แสดงล่าสุด</span></div>
+              {latestActiveTodayRouteTasks.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>ยังไม่มีงานวิ่งสาขาหรืองานวิ่งไกลที่กำลังทำอยู่</p>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
-                  {todayRouteTasks.map(task => {
+                  {latestActiveTodayRouteTasks.map(task => {
                     const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
                     const checkedCount = (task.stops || []).filter(stop => stop.checkedInAt).length;
                     const stopCount = (task.stops || []).length;
@@ -2964,9 +3004,12 @@ export default function App() {
                   .filter(c => {
                     if (!q) return true;
                     const name = String(c?.name || "").toLowerCase();
+                    const contact = String(c?.contact || "").toLowerCase();
                     const phone = String(c?.phone || "").toLowerCase();
                     const zone = String(c?.zone || "").toLowerCase();
-                    return name.includes(q) || phone.includes(q) || zone.includes(q);
+                    const address = String(c?.address || "").toLowerCase();
+                    const note = String(c?.note || "").toLowerCase();
+                    return name.includes(q) || contact.includes(q) || phone.includes(q) || zone.includes(q) || address.includes(q) || note.includes(q);
                   })
                   .slice(0, 12);
 
@@ -3009,9 +3052,12 @@ export default function App() {
                     const q = (orderCustomerSearch || "").trim().toLowerCase();
                     if (!q) return true;
                     const name = String(c?.name || "").toLowerCase();
+                    const contact = String(c?.contact || "").toLowerCase();
                     const phone = String(c?.phone || "").toLowerCase();
                     const zone = String(c?.zone || "").toLowerCase();
-                    return name.includes(q) || phone.includes(q) || zone.includes(q);
+                    const address = String(c?.address || "").toLowerCase();
+                    const note = String(c?.note || "").toLowerCase();
+                    return name.includes(q) || contact.includes(q) || phone.includes(q) || zone.includes(q) || address.includes(q) || note.includes(q);
                   })
                   .slice(0, 200)
                   .map(c => (
@@ -3154,7 +3200,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length}</span></div>
+              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
                 <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
                   <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
@@ -3162,31 +3208,45 @@ export default function App() {
                 </div>
                 <div style={{ flex: 1, background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
                   <small style={{ color: "#166534" }}>✓ สำเร็จ</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length}</b>
+                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
               <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 ? (
+                {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 && completedTodayRouteTasks.length === 0 ? (
                   <p className="muted">ยังไม่มีการส่ง</p>
                 ) : (
-                  todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
-                    const driver = drivers.find(d => d.id === order.driverId);
-                    const driverName = order.driverName || driver?.name || (order.driverId ? order.driverId : "");
-                    return (
-                      <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
-                          <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
-                          <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdf4", color: order.status === "กำลังส่ง" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                  <>
+                    {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
+                      const driver = drivers.find(d => d.id === order.driverId);
+                      const driverName = order.driverName || driver?.name || (order.driverId ? order.driverId : "");
+                      return (
+                        <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
+                            <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
+                            <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdf4", color: order.status === "กำลังส่ง" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                          </div>
+                          <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
+                          <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
+                          <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driverName || "ยังไม่มอบหมาย"}</p>
+                          {order.status === "ส่งสำเร็จ" && order.deliveredAt && (
+                            <p style={{ margin: "2px 0", color: "#16a34a", fontWeight: "bold" }}>✅ เสร็จเมื่อ {order.deliveredAt}</p>
+                          )}
                         </div>
-                        <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
-                        <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
-                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driverName || "ยังไม่มอบหมาย"}</p>
-                        {order.status === "ส่งสำเร็จ" && order.deliveredAt && (
-                          <p style={{ margin: "2px 0", color: "#16a34a", fontWeight: "bold" }}>✅ เสร็จเมื่อ {order.deliveredAt}</p>
-                        )}
+                      );
+                    })}
+                    {completedTodayRouteTasks.map(task => (
+                      <div key={task.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px", background: "#f0fdf4" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
+                          <b style={{ color: "#166534" }}>{task.id}</b>
+                          <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>✓ งานวิ่งเสร็จ</span>
+                        </div>
+                        <p style={{ margin: "2px 0", color: "#333" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</p>
+                        <p style={{ margin: "2px 0", color: "#666" }}>{task.origin} → {task.destinationSummary}</p>
+                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {task.driverName || task.driverId || "ไม่ระบุคนขับ"}</p>
+                        {task.completedAt && <p style={{ margin: "2px 0", color: "#16a34a", fontWeight: "bold" }}>✅ เสร็จเมื่อ {task.completedAt}</p>}
                       </div>
-                    );
-                  })
+                    ))}
+                  </>
                 )}
               </div>
               {backlogUndelivered.length > 0 && (
@@ -3646,11 +3706,16 @@ export default function App() {
 	                <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
 	                  <h2 style={{ margin: 0 }}>✅ ส่งสำเร็จแล้ว</h2>
 	                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowDeliveredHistory(v => !v)}>
-	                    {showDeliveredHistory ? "ซ่อนรายการ" : "ดูรายการ"}
+	                    {showDeliveredHistory ? "ซ่อนรายการ" : "ดูเพิ่มเติม"}
 	                  </button>
 	                </div>
 	                {(() => {
-	                  const deliveredAll = orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ");
+	                  const deliveredAll = orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").slice().sort((a, b) => {
+	                    const av = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+	                    const bv = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+	                    if (bv !== av) return bv - av;
+	                    return String(b.id || "").localeCompare(String(a.id || ""));
+	                  });
 	                  const deliveredToday = deliveredAll.filter(isTodayOrder);
 	                  const deliveredHistory = deliveredAll.filter(o => !isTodayOrder(o));
 	                  const codAll = deliveredAll.reduce((sum, o) => sum + Number(o.cod || 0), 0);
@@ -3661,13 +3726,17 @@ export default function App() {
 	                  );
 	                })()}
 
-	                {showDeliveredHistory && (
+	                {(() => {
+	                  const deliveredAll = orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").slice().sort((a, b) => {
+	                    const av = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+	                    const bv = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+	                    if (bv !== av) return bv - av;
+	                    return String(b.id || "").localeCompare(String(a.id || ""));
+	                  });
+	                  const visibleDelivered = showDeliveredHistory ? deliveredAll : deliveredAll.slice(0, 1);
+	                  return (
 	                  <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
-	                    {orders
-	                      .filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ")
-	                      .slice()
-	                      .reverse()
-	                      .map(order => (
+	                    {visibleDelivered.map(order => (
 	                        <div key={order.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: "8px" }}>
 	                          <div>
 	                            <b style={{ fontSize: "14px", display: "block" }}>{order.id}</b>
@@ -3686,7 +3755,8 @@ export default function App() {
 	                        </div>
 	                      ))}
 	                  </div>
-	                )}
+	                  );
+	                })()}
 	              </section>
 	            )}
 
@@ -4321,7 +4391,7 @@ export default function App() {
       style={{
         position: "fixed",
         right: "16px",
-        bottom: "16px",
+        bottom: "88px",
         width: "52px",
         height: "52px",
         borderRadius: "999px",
@@ -4444,8 +4514,17 @@ export default function App() {
             <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
             {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
           </div>
+          <label style={{ display: "flex", gap: "8px", alignItems: "flex-start", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px", color: "#1d4ed8", fontSize: "13px", fontWeight: 800 }}>
+            <input
+              type="checkbox"
+              checked={shareNewOrderToLine}
+              onChange={e => setShareNewOrderToLine(e.target.checked)}
+              style={{ marginTop: "2px" }}
+            />
+            <span>แชร์แจ้งเตือนเข้า LINE กลุ่มคนขับหลังส่งเข้าคิว</span>
+          </label>
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
-            <button className="secondary" style={{ flex: 1 }} onClick={() => setShowOrderConfirm(false)}>❌ ยกเลิก</button>
+            <button className="secondary" style={{ flex: 1 }} onClick={() => { setShowOrderConfirm(false); setShareNewOrderToLine(false); }}>❌ ยกเลิก</button>
             <button className="primary" style={{ flex: 1 }} onClick={confirmOrder}>✅ ยืนยันส่ง</button>
           </div>
         </div>
