@@ -427,9 +427,17 @@ export default function App() {
   const displayTab = state.auth?.role === "driver" ? (tab === "driver-sop" ? "driver-sop" : "driver") : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
-  const getOrderServiceDate = (o) => String(o?.serviceDate || toServiceDateKey(o?.createdAt || o?.updatedAt || new Date()));
+  const getOrderServiceDate = (o) => {
+    if (o?.serviceDate) return String(o.serviceDate).slice(0, 10);
+    const sourceDate = o?.createdAt || o?.updatedAt || "";
+    return sourceDate ? toServiceDateKey(sourceDate) : "";
+  };
   const isTodayOrder = (o) => getOrderServiceDate(o) === todayServiceDate;
-  const isUndelivered = (o) => o?.status !== "ส่งสำเร็จ";
+  const isOpenDeliveryStatus = (status) => ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง"].includes(String(status || ""));
+  const isBacklogOrder = (o) => {
+    const serviceDate = getOrderServiceDate(o);
+    return Boolean(serviceDate) && serviceDate < todayServiceDate && isOpenDeliveryStatus(o?.status);
+  };
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
@@ -1341,7 +1349,7 @@ export default function App() {
     .sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
   const driverRouteTasks = (routeTasks || []).filter(task => task.driverId === driverId);
   const activeDriverRouteTasks = driverRouteTasks.filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก");
-  const backlogUndelivered = (orders || []).filter((o) => !isTodayOrder(o) && isUndelivered(o));
+  const backlogUndelivered = (orders || []).filter(isBacklogOrder);
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
   const driverAssessmentRoster = useMemo(() => {
@@ -3322,7 +3330,7 @@ export default function App() {
               {backlogUndelivered.length > 0 && (
                 <div style={{ marginTop: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "10px", borderRadius: "8px", fontSize: "12px" }}>
                   <b style={{ color: "#1d4ed8" }}>📌 งานค้างส่งจากวันก่อน: {backlogUndelivered.length} งาน</b>
-                  <div className="muted" style={{ marginTop: "4px" }}>งานค้างส่งจะยังแสดงต่อในวันถัดไปจนกว่าจะ “ส่งสำเร็จ”</div>
+                  <div className="muted" style={{ marginTop: "4px" }}>นับเฉพาะงานวันก่อนที่ยังรอคนขับรับ/กำลังส่ง/กำลังจัดส่ง</div>
                 </div>
               )}
             </section>
@@ -4304,7 +4312,7 @@ export default function App() {
 		                      <p>รอคนขับรับ <b>{waiting}</b> · กำลังส่ง <b>{active}</b> · ส่งสำเร็จ <b>{done}</b> · ยกเลิก <b>{canceled}</b></p>
 		                      <p>COD วันนี้รวม <b>{money(codAll)}</b> บาท · ส่งสำเร็จ <b>{money(codDone)}</b> บาท</p>
 		                      {backlogUndelivered.length > 0 && (
-		                        <p>งานค้างส่งจากวันก่อน <b>{backlogUndelivered.length}</b> งาน (จะยังแสดงจนกว่าจะส่งสำเร็จ)</p>
+		                        <p>งานค้างส่งจากวันก่อน <b>{backlogUndelivered.length}</b> งาน (นับเฉพาะรอคนขับรับ/กำลังส่ง/กำลังจัดส่ง)</p>
 		                      )}
 		                    </div>
 		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
