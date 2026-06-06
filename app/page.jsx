@@ -265,6 +265,30 @@ function buildLineMessageForNewOrder(order) {
   return lines.join("\n");
 }
 
+function buildLineSocialShareUrl(text) {
+  const url = typeof window !== "undefined" && window.location?.href ? window.location.href : "https://line.me";
+  const params = new URLSearchParams({ url, text });
+  return `https://social-plugins.line.me/lineit/share?${params.toString()}`;
+}
+
+function isLikelyDesktop() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const mobileData = navigator.userAgentData?.mobile;
+  if (typeof mobileData === "boolean") return !mobileData;
+  return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+}
+
+function openLineShare(text, popupWindow) {
+  const lineUrl = buildLineSocialShareUrl(text);
+  if (popupWindow && !popupWindow.closed) {
+    popupWindow.location.href = lineUrl;
+    return true;
+  }
+  const opened = window.open(lineUrl, "_blank", "noopener,noreferrer");
+  return Boolean(opened);
+}
+
 function routeTaskStopKey(taskId, stopId) {
   return `${taskId}_${stopId}`;
 }
@@ -1622,6 +1646,9 @@ export default function App() {
 
 	  const confirmOrder = async () => {
 	    if (!pendingOrder) return;
+    const shouldShareLine = shareNewOrderToLine;
+    const orderForLine = pendingOrder;
+    const linePopup = shouldShareLine && isLikelyDesktop() ? window.open("about:blank", "_blank", "width=960,height=720") : null;
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
@@ -1634,11 +1661,10 @@ export default function App() {
 	    });
 	    const json = await res.json();
 	    if (!json?.ok) {
+        if (linePopup && !linePopup.closed) linePopup.close();
 	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
 	      return;
 	    }
-    const shouldShareLine = shareNewOrderToLine;
-    const orderForLine = pendingOrder;
     
     setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
     setSelectedCustomerId("");
@@ -1650,9 +1676,12 @@ export default function App() {
       const text = buildLineMessageForNewOrder(orderForLine);
       try { await navigator.clipboard?.writeText?.(text); } catch {}
       try {
-        if (navigator.share) await navigator.share({ text });
-        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดแชร์ LINE แล้ว`);
+        const openedLine = isLikelyDesktop() ? openLineShare(text, linePopup) : false;
+        if (!openedLine && navigator.share) await navigator.share({ text });
+        if (!openedLine && !navigator.share) openLineShare(text);
+        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดหน้าแชร์ LINE แล้ว`);
       } catch {
+        if (linePopup && !linePopup.closed) linePopup.close();
         setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หาก LINE ไม่ขึ้น ให้วางข้อความที่คัดลอกไว้`);
       }
     } else {
