@@ -271,10 +271,6 @@ function buildLineSocialShareUrl(text) {
   return `https://social-plugins.line.me/lineit/share?${params.toString()}`;
 }
 
-function buildLineDesktopDeepLinkUrl(text) {
-  return `line://msg/text/${encodeURIComponent(text)}`;
-}
-
 function isLikelyDesktop() {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
@@ -283,50 +279,9 @@ function isLikelyDesktop() {
   return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
 }
 
-function openLineShare(text, popupWindow) {
+function openLineShare(text) {
   const lineUrl = buildLineSocialShareUrl(text);
-  const desktopDeepLinkUrl = buildLineDesktopDeepLinkUrl(text);
-  if (popupWindow && !popupWindow.closed) {
-    popupWindow.document.open();
-    popupWindow.document.write(`
-      <!doctype html>
-      <html lang="th">
-        <head>
-          <meta charset="utf-8" />
-          <title>เปิด LINE</title>
-          <style>
-            body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 28px; color: #111827; background: #f9fafb; }
-            .box { max-width: 560px; margin: 40px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12); }
-            h1 { font-size: 22px; margin: 0 0 10px; }
-            p { line-height: 1.6; color: #4b5563; }
-            .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-            a { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 14px; border-radius: 8px; font-weight: 800; text-decoration: none; }
-            .primary { background: #06c755; color: #fff; }
-            .secondary { background: #eef2ff; color: #3730a3; }
-          </style>
-        </head>
-        <body>
-          <main class="box">
-            <h1>กำลังเปิด LINE Desktop</h1>
-            <p><strong>ข้อความคิวงานถูกคัดลอกแล้ว นำไปวางที่ไลน์กลุ่มได้เลย</strong></p>
-            <p>หาก LINE Desktop ไม่เปิดหรือเลือกกลุ่มไม่ได้ ให้กดปุ่มแชร์ผ่าน LINE Web ด้านล่าง แล้วเลือกกลุ่มไลน์ที่ต้องการส่ง</p>
-            <div class="actions">
-              <a class="primary" id="openLine" href="${desktopDeepLinkUrl}">เปิด LINE Desktop</a>
-              <a class="secondary" href="${lineUrl}" target="_self">แชร์ผ่าน LINE Web</a>
-            </div>
-          </main>
-          <script>
-            setTimeout(function () {
-              document.getElementById("openLine").click();
-            }, 150);
-          </script>
-        </body>
-      </html>
-    `);
-    popupWindow.document.close();
-    return true;
-  }
-  const opened = window.open(desktopDeepLinkUrl, "_blank", "noopener,noreferrer") || window.open(lineUrl, "_blank", "noopener,noreferrer");
+  const opened = window.open(lineUrl, "_blank", "noopener,noreferrer");
   return Boolean(opened);
 }
 
@@ -1689,7 +1644,6 @@ export default function App() {
 	    if (!pendingOrder) return;
     const shouldShareLine = shareNewOrderToLine;
     const orderForLine = pendingOrder;
-    const linePopup = shouldShareLine && isLikelyDesktop() ? window.open("about:blank", "_blank", "width=960,height=720") : null;
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
@@ -1702,7 +1656,6 @@ export default function App() {
 	    });
 	    const json = await res.json();
 	    if (!json?.ok) {
-        if (linePopup && !linePopup.closed) linePopup.close();
 	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
 	      return;
 	    }
@@ -1717,12 +1670,10 @@ export default function App() {
       const text = buildLineMessageForNewOrder(orderForLine);
       try { await navigator.clipboard?.writeText?.(text); } catch {}
       try {
-        const openedLine = isLikelyDesktop() ? openLineShare(text, linePopup) : false;
-        if (!openedLine && navigator.share) await navigator.share({ text });
-        if (!openedLine && !navigator.share) openLineShare(text);
+        if (!isLikelyDesktop() && navigator.share) await navigator.share({ text });
+        if (!isLikelyDesktop() && !navigator.share) openLineShare(text);
         setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว ข้อความคิวงานถูกคัดลอกแล้ว นำไปวางที่ไลน์กลุ่มได้เลย`);
       } catch {
-        if (linePopup && !linePopup.closed) linePopup.close();
         setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หาก LINE ไม่ขึ้น ให้วางข้อความที่คัดลอกไว้`);
       }
     } else {
