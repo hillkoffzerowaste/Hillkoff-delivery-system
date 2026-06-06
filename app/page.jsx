@@ -4579,7 +4579,7 @@ export default function App() {
               onChange={e => setShareNewOrderToLine(e.target.checked)}
               style={{ marginTop: "2px" }}
             />
-            <span>แชร์แจ้งเตือนเข้า LINE กลุ่มคนขับหลังส่งเข้าคิว</span>
+            <span>คัดลอกข้อความคิวงานหลังส่งเข้าคิว</span>
           </label>
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
             <button className="secondary" style={{ flex: 1 }} onClick={() => { setShowOrderConfirm(false); setShareNewOrderToLine(false); }}>❌ ยกเลิก</button>
