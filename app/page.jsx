@@ -308,7 +308,8 @@ function openLineShare(text, popupWindow) {
         <body>
           <main class="box">
             <h1>กำลังเปิด LINE Desktop</h1>
-            <p>ระบบคัดลอกข้อความไว้แล้ว หาก LINE Desktop ไม่เปิดหรือเลือกกลุ่มไม่ได้ ให้กดปุ่มแชร์ผ่าน LINE Web ด้านล่าง แล้วเลือกกลุ่มไลน์ที่ต้องการส่ง</p>
+            <p><strong>ข้อความคิวงานถูกคัดลอกแล้ว นำไปวางที่ไลน์กลุ่มได้เลย</strong></p>
+            <p>หาก LINE Desktop ไม่เปิดหรือเลือกกลุ่มไม่ได้ ให้กดปุ่มแชร์ผ่าน LINE Web ด้านล่าง แล้วเลือกกลุ่มไลน์ที่ต้องการส่ง</p>
             <div class="actions">
               <a class="primary" id="openLine" href="${desktopDeepLinkUrl}">เปิด LINE Desktop</a>
               <a class="secondary" href="${lineUrl}" target="_self">แชร์ผ่าน LINE Web</a>
@@ -1719,7 +1720,7 @@ export default function App() {
         const openedLine = isLikelyDesktop() ? openLineShare(text, linePopup) : false;
         if (!openedLine && navigator.share) await navigator.share({ text });
         if (!openedLine && !navigator.share) openLineShare(text);
-        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดหน้าแชร์ LINE แล้ว`);
+        setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว ข้อความคิวงานถูกคัดลอกแล้ว นำไปวางที่ไลน์กลุ่มได้เลย`);
       } catch {
         if (linePopup && !linePopup.closed) linePopup.close();
         setSyncStatus(`✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หาก LINE ไม่ขึ้น ให้วางข้อความที่คัดลอกไว้`);
