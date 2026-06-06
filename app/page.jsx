@@ -1312,11 +1312,13 @@ export default function App() {
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
   const routeTaskSortValue = (task) => new Date(task?.updatedAt || task?.completedAt || task?.startedAt || 0).getTime() || 0;
+  const sortedTodayRouteTasks = todayRouteTasks.slice().sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
+  const latestTodayRouteTask = sortedTodayRouteTasks[0] || null;
+  const olderTodayRouteTasks = sortedTodayRouteTasks.slice(1);
   const activeTodayRouteTasks = todayRouteTasks
     .filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก")
     .slice()
     .sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
-  const latestActiveTodayRouteTasks = activeTodayRouteTasks.slice(0, 1);
   const completedTodayRouteTasks = todayRouteTasks
     .filter(task => task.status === "เสร็จงาน")
     .slice()
@@ -2776,12 +2778,12 @@ export default function App() {
             </section>
 
             <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #0e7490" }}>
-              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>กำลังทำ {activeTodayRouteTasks.length} งาน · แสดงล่าสุด</span></div>
-              {latestActiveTodayRouteTasks.length === 0 ? (
-                <p className="muted" style={{ margin: 0 }}>ยังไม่มีงานวิ่งสาขาหรืองานวิ่งไกลที่กำลังทำอยู่</p>
+              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>งานวันนี้ {todayRouteTasks.length} งาน · กำลังทำ {activeTodayRouteTasks.length}</span></div>
+              {!latestTodayRouteTask ? (
+                <p className="muted" style={{ margin: 0 }}>ยังไม่มีงานวิ่งสาขาหรืองานวิ่งไกลวันนี้</p>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
-                  {latestActiveTodayRouteTasks.map(task => {
+                <div style={{ display: "grid", gap: "12px" }}>
+                  {[latestTodayRouteTask].map(task => {
                     const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
                     const checkedCount = (task.stops || []).filter(stop => stop.checkedInAt).length;
                     const stopCount = (task.stops || []).length;
@@ -2816,6 +2818,33 @@ export default function App() {
                       </div>
                     );
                   })}
+                  {olderTodayRouteTasks.length > 0 && (
+                    <details style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
+                      <summary style={{ cursor: "pointer", fontWeight: 900, color: "#0e7490" }}>
+                        ดูงานที่ผ่านมาเพิ่มเติม ({olderTodayRouteTasks.length} งาน)
+                      </summary>
+                      <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+                        {olderTodayRouteTasks.map(task => {
+                          const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
+                          const checkedCount = (task.stops || []).filter(stop => stop.checkedInAt).length;
+                          const stopCount = (task.stops || []).length;
+                          const latestStop = (task.stops || []).filter(stop => stop.checkedInAt).slice(-1)[0];
+                          return (
+                            <div key={task.id} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px", fontSize: "12px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "start" }}>
+                                <b style={{ color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"} · {task.id}</b>
+                                <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "3px 7px", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
+                              </div>
+                              <span><b>คนขับ:</b> {task.driverName || task.driverId || "-"}</span>
+                              <span><b>เส้นทาง:</b> {task.origin} → {task.destinationSummary}</span>
+                              <span><b>เช็คอิน:</b> {checkedCount}/{stopCount} จุด{latestStop ? ` · ล่าสุด ${latestStop.name}` : ""}</span>
+                              {task.completedAt && <span style={{ color: "#166534", fontWeight: 800 }}><b>จบงาน:</b> {task.completedAt}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
             </section>
