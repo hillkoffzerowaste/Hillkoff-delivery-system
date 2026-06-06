@@ -5,6 +5,7 @@ Operational dashboard for Hillkoff local delivery in Chiang Mai and nearby provi
 ## 📋 Quick Links
 
 - 📖 **[Workflow Documentation](WORKFLOW.md)** - How sales & drivers use the system
+- 📋 **[System Workflow 2026](SYSTEM_WORKFLOW_2026.md)** - แผนภาพระบบ, flow งานคนขับ/ฝ่ายขาย, และ roadmap Google login + OTP
 - 🔄 **[Backup System](BACKUP_SYSTEM.md)** - Automatic data backup & recovery
 - 🚀 **[Supabase Setup](SUPABASE_SETUP.md)** - Database configuration & reset guide
 
@@ -332,5 +333,4 @@ Internal use only - Hillkoff Local Delivery
 - [Next.js Documentation](https://nextjs.org/docs)
 - [React Documentation](https://react.dev)
 - [Supabase Dashboard](https://app.supabase.com)
-
 
