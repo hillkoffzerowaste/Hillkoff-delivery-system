@@ -1,4 +1,5 @@
 import { getAdminDb, getAdminAuth } from "../../../../lib/firebaseAdmin";
+import { pushLineText } from "../../../../lib/lineOa";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,22 @@ function toServiceDateKey(dateLike) {
   const m = parts.find((p) => p.type === "month")?.value || "01";
   const d = parts.find((p) => p.type === "day")?.value || "01";
   return `${y}-${m}-${d}`;
+}
+
+function buildLineMessage(orderId, order) {
+  const lines = [
+    "มีออเดอร์ใหม่เข้าคิวคนขับ",
+    `งาน: ${orderId}`,
+    `ลูกค้า: ${order.customerName || "-"}`,
+    `พื้นที่: ${order.zone || "-"}`,
+    `ที่อยู่: ${order.address || "-"}`,
+    `เวลา: ${order.window || "-"}`,
+    `จำนวน: ${order.boxes || 0} กล่อง`,
+    `COD: ฿${Number(order.cod || 0).toLocaleString("th-TH")}`
+  ];
+  if (order.salesNote) lines.push(`หมายเหตุ: ${order.salesNote}`);
+  lines.push("กรุณาเปิดแอพเพื่อรับงาน");
+  return lines.join("\n");
 }
 
 export async function POST(request) {
@@ -102,6 +119,24 @@ export async function POST(request) {
       }
     } catch (e) {
       console.warn("Push notification failed", e?.message || e);
+    }
+
+    try {
+      const lineResult = await pushLineText({
+        text: buildLineMessage(String(order.id), next),
+        metadata: { orderId: String(order.id), source: "orders.create" }
+      });
+      await db.collection("notifications").add({
+        channel: "line",
+        type: "new_order",
+        orderId: String(order.id),
+        text: buildLineMessage(String(order.id), next),
+        result: lineResult,
+        createdByUid: decoded.uid,
+        createdAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn("LINE OA notification failed", e?.message || e);
     }
 
     return Response.json({ ok: true, data: { id: String(order.id) } });

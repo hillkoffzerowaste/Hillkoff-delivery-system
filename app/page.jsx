@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, getFcmToken } from "../lib/firebaseClient";
+import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, getFcmToken } from "../lib/firebaseClient";
 import {
   AlertTriangle,
   Camera,
@@ -309,6 +309,10 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [loginStage, setLoginStage] = useState("login"); // login | set_pin
+  const [googleOtpStage, setGoogleOtpStage] = useState("idle"); // idle | otp
+  const [googleOtpSession, setGoogleOtpSession] = useState(null);
+  const [googleOtpCode, setGoogleOtpCode] = useState("");
+  const [googleOtpDevCode, setGoogleOtpDevCode] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -548,26 +552,34 @@ export default function App() {
 	    // onAuthStateChanged should fire immediately (even with null user).
 	    // As a safety net, mark ready after 2s to avoid a stuck "connecting" UI.
 	    const t = setTimeout(() => setFbAuthReady(true), 2000);
-	    const unsubAuth = onFirebaseAuthStateChanged(() => {
-	      clearTimeout(t);
-	      setFbAuthReady(true);
-	    });
-	    const unsubToken = onFirebaseIdTokenChanged(async (user) => {
-	      clearTimeout(t);
-	      setFbAuthReady(true);
-	      if (!user) return;
-	      try {
-	        const token = await user.getIdToken();
-	        setState((prev) => {
-	          if (!prev.auth?.role || prev.auth?.token === token) return prev;
-	          const nextAuth = { ...(prev.auth || {}), token };
-	          try { localStorage.setItem("hillkoff_auth", JSON.stringify(nextAuth)); } catch {}
-	          return { ...prev, auth: nextAuth };
-	        });
-	      } catch (e) {
-	        console.warn("Firebase ID token refresh listener failed", e);
-	      }
-	    });
+      let unsubAuth = null;
+      let unsubToken = null;
+      try {
+	      unsubAuth = onFirebaseAuthStateChanged(() => {
+	        clearTimeout(t);
+	        setFbAuthReady(true);
+	      });
+	      unsubToken = onFirebaseIdTokenChanged(async (user) => {
+	        clearTimeout(t);
+	        setFbAuthReady(true);
+	        if (!user) return;
+	        try {
+	          const token = await user.getIdToken();
+	          setState((prev) => {
+	            if (!prev.auth?.role || prev.auth?.token === token) return prev;
+	            const nextAuth = { ...(prev.auth || {}), token };
+	            try { localStorage.setItem("hillkoff_auth", JSON.stringify(nextAuth)); } catch {}
+	            return { ...prev, auth: nextAuth };
+	          });
+	        } catch (e) {
+	          console.warn("Firebase ID token refresh listener failed", e);
+	        }
+	      });
+      } catch (e) {
+        clearTimeout(t);
+        setFbAuthReady(true);
+        console.warn("Firebase Auth listener disabled", e?.message || e);
+      }
 	    return () => {
 	      clearTimeout(t);
 	      try { unsubAuth?.(); } catch {}
@@ -1421,6 +1433,131 @@ export default function App() {
 	  };
 
   const setAuth = authPatch => setState(prev => ({ ...prev, auth: { ...(prev.auth || {}), ...authPatch } }));
+
+  const applyLoginSession = async (data, idToken) => {
+    const d = data || {};
+    const dp = d.driverProfile || null;
+    const profileName =
+      dp && (dp.firstName || dp.lastName)
+        ? `${String(dp.firstName || "").trim()} ${String(dp.lastName || "").trim()}`.trim()
+        : "";
+    const role = d.role || loginForm.role;
+    const newAuthState = {
+      role,
+      name: role === "driver" ? (profileName || d.name || loginForm.name.trim() || "") : (d.name || loginForm.name.trim() || ""),
+      phone: d.phone || loginForm.phone.trim(),
+      driverId: d.driverId || "",
+      email: d.email || "",
+      token: idToken
+    };
+    localStorage.setItem("hillkoff_auth", JSON.stringify(newAuthState));
+    setState(prev => ({ ...prev, auth: newAuthState }));
+    if (newAuthState.driverId) setDriverId(newAuthState.driverId);
+    ensureWebPushForDriver(newAuthState);
+    if (rememberPhone && newAuthState.phone) {
+      try { localStorage.setItem("hillkoff-last-phone", newAuthState.phone); } catch {}
+    }
+    if (newAuthState.role === "driver") {
+      const missing = !dp?.firstName || !dp?.plate || !dp?.vehicle;
+      if (dp) {
+        setDriverForm(p => ({
+          ...p,
+          firstName: dp.firstName || p.firstName,
+          lastName: dp.lastName || p.lastName,
+          phone: newAuthState.phone || p.phone,
+          vehicle: dp.vehicle || p.vehicle,
+          plate: dp.plate || p.plate,
+          zone: dp.zone || p.zone
+        }));
+      } else {
+        setDriverForm(p => ({ ...p, phone: newAuthState.phone || p.phone }));
+      }
+      if (missing || d.status === "pending_profile") {
+        setAuth({ role: "driver-register" });
+        setTab("driver");
+        setSyncStatus("⚠️ กรุณากรอกข้อมูลคนขับครั้งแรก");
+        return;
+      }
+      setTab("driver");
+    } else {
+      setTab("sales");
+    }
+  };
+
+  const startGoogleOtpLogin = async () => {
+    if (loginForm.role === "driver" && !loginForm.phone.trim()) {
+      setSyncStatus("⚠️ คนขับต้องกรอกเบอร์โทรเพื่อผูกโปรไฟล์");
+      return;
+    }
+    try {
+      setSyncStatus("⏳ กำลังเปิด Google Login...");
+      setGoogleOtpCode("");
+      setGoogleOtpDevCode("");
+      const cred = await signInWithGoogle();
+      const user = cred?.user;
+      if (!user) throw new Error("No Google user");
+      const idToken = await user.getIdToken(true);
+      const res = await fetch("/api/auth/google/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          role: loginForm.role,
+          name: loginForm.name.trim() || user.displayName || "",
+          phone: loginForm.phone.trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setGoogleOtpSession(json.data || null);
+      setGoogleOtpDevCode(json.data?.devOtp || "");
+      setGoogleOtpStage("otp");
+      setSyncStatus("✅ ยืนยัน Google แล้ว กรุณากรอก OTP ภายใน 5 นาที");
+    } catch (e) {
+      setSyncStatus(`❌ Google Login ไม่สำเร็จ: ${e?.message || e}`);
+    }
+  };
+
+  const verifyGoogleOtpLogin = async () => {
+    if (!googleOtpSession?.sessionId || !googleOtpCode.trim()) {
+      setSyncStatus("⚠️ กรุณากรอก OTP");
+      return;
+    }
+    try {
+      setSyncStatus("⏳ กำลังตรวจ OTP...");
+      const user = getFirebaseAuth().currentUser;
+      if (!user) throw new Error("Google session expired");
+      const idToken = await user.getIdToken(true);
+      const res = await fetch("/api/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          sessionId: googleOtpSession.sessionId,
+          otp: googleOtpCode.trim(),
+          deviceId: getOrCreateDeviceId()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        const errorText = {
+          OTP_INVALID: "OTP ไม่ถูกต้อง",
+          OTP_EXPIRED: "OTP หมดอายุแล้ว กรุณาขอใหม่",
+          OTP_ALREADY_USED: "OTP นี้ถูกใช้ไปแล้ว",
+          OTP_TOO_MANY_ATTEMPTS: "กรอกผิดเกินจำนวนที่กำหนด กรุณาขอใหม่"
+        }[json?.error] || json?.error || `HTTP ${res.status}`;
+        throw new Error(errorText);
+      }
+      await applyLoginSession(json.data, idToken);
+      setGoogleOtpStage("idle");
+      setGoogleOtpSession(null);
+      setGoogleOtpCode("");
+      setGoogleOtpDevCode("");
+      setSyncStatus("✅ เข้าสู่ระบบด้วย Google + OTP สำเร็จ");
+    } catch (e) {
+      setSyncStatus(`❌ ตรวจ OTP ไม่สำเร็จ: ${e?.message || e}`);
+    }
+  };
 
   const pinLogin = async () => {
     if (!loginForm.phone.trim()) return;
@@ -2462,13 +2599,28 @@ export default function App() {
           </div>
           {auth.role !== "driver-register" ? (
             <>
-              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>Phone + PIN</span></div>
+              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>Google + OTP</span></div>
               <div className="segmented">
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
               </div>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
+              {googleOtpStage === "otp" ? (
+                <>
+                  <input value={googleOtpCode} onChange={e => setGoogleOtpCode(e.target.value)} placeholder="OTP 6 หลัก" inputMode="numeric" />
+                  {googleOtpDevCode && (
+                    <p className="login-note">รหัสทดสอบเครื่องนี้: <b>{googleOtpDevCode}</b></p>
+                  )}
+                  <button className="primary wide" onClick={verifyGoogleOtpLogin}>ยืนยัน OTP และเข้าใช้งาน</button>
+                  <button className="secondary wide" onClick={startGoogleOtpLogin}>ขอ OTP ใหม่</button>
+                </>
+              ) : (
+                <button className="primary wide" onClick={startGoogleOtpLogin}>
+                  เข้าใช้งานด้วย Google + OTP
+                </button>
+              )}
+              <p className="login-note">ฝ่ายขายต้องใช้ Google อีเมล @hillkoff.com ส่วนคนขับใช้ Google ส่วนตัวได้และต้องผูกเบอร์กับโปรไฟล์</p>
               <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder={loginStage === "set_pin" ? "ตั้ง PIN (อย่างน้อย 4 ตัว)" : "PIN"} inputMode="numeric" />
               {loginStage === "set_pin" && (
                 <input value={pinConfirm} onChange={e => setPinConfirm(e.target.value)} placeholder="ยืนยัน PIN" inputMode="numeric" />
@@ -2478,9 +2630,9 @@ export default function App() {
                 จดจำเบอร์โทรในครั้งต่อไป
               </label>
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {loginStage === "set_pin" ? "ตั้ง PIN และเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขาย" : "เข้าใช้งานคนขับ")}
+                {loginStage === "set_pin" ? "ตั้ง PIN สำรองและเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขายด้วย PIN สำรอง" : "เข้าใช้งานคนขับด้วย PIN สำรอง")}
               </button>
-              <p className="login-note">ล็อกอินด้วยเบอร์โทร + PIN (ใช้ Firebase Auth แบบ Anonymous เพื่อผ่าน Firestore Rules)</p>
+              <p className="login-note">PIN สำรองยังใช้ Firebase Auth แบบ Anonymous เพื่อผ่าน Firestore Rules ระหว่างย้ายระบบ</p>
             </>
           ) : (
             <>
