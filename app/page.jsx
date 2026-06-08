@@ -2154,6 +2154,31 @@ export default function App() {
     setSyncStatus(`✅ จบงานวิ่ง ${task.id} แล้ว`);
   };
 
+  const sharePendingOrderQueueToLine = (order) => {
+    const text = buildLineMessageForNewOrder(order);
+
+    (async () => {
+      let copied = false;
+      try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+
+      if (navigator?.share) {
+        try {
+          if (!copied) {
+            const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
+            if (!ok) return;
+          }
+          await navigator.share({ text });
+          setSyncStatus(`✅ คัดลอกและเปิดแชร์ LINE สำหรับออเดอร์ "${order.id}" แล้ว`);
+          return;
+        } catch {}
+      }
+
+      setSyncStatus(copied
+        ? `✅ คัดลอกข้อความคิวงานของออเดอร์ "${order.id}" แล้ว นำไปวางในกลุ่ม LINE ได้เลย`
+        : `⚠️ คัดลอกอัตโนมัติไม่ได้ กรุณาคัดลอกข้อความนี้เอง:\n${text}`);
+    })();
+  };
+
 	  const shareOrderToLine = (order) => {
 	    if (!navigator?.share) {
 	      alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
@@ -3417,12 +3442,15 @@ export default function App() {
               ) : (
                 <div style={{ display: "grid", gap: "8px" }}>
                   {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").map(order => (
-                    <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
                       <div style={{ flex: 1 }}>
                         <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
                         <small style={{ color: "#666" }}>{order.zone} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
                       </div>
-                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px", marginLeft: "8px" }} onClick={() => deleteOrder(order.id)}>🗑️ ลบ</button>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <button className="primary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => sharePendingOrderQueueToLine(order)}>💬 คัดลอก/แชร์</button>
+                        <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️ ลบ</button>
+                      </div>
                     </div>
                   ))}
                 </div>
