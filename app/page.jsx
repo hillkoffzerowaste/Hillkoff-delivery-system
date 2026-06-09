@@ -617,10 +617,14 @@ export default function App() {
 
       try {
         unsubs.push(
-          fb.onSnapshot(fb.doc(db, "chat_meta", "team"), (snap) => {
-            setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null);
-            markConnected();
-          })
+          fb.onSnapshot(
+            fb.doc(db, "chat_meta", "team"),
+            (snap) => {
+              setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null);
+              markConnected();
+            },
+            (err) => setSyncStatus?.(`⚠️ Firestore chat status error: ${err.message || err}`)
+          )
         );
       } catch {}
 
@@ -1318,18 +1322,14 @@ export default function App() {
 
 		  const upsertCustomerToFirestore = async (customer) => {
 		    try {
-		      const db = getFirestoreDb();
-		      const customerForDB = {
-		        name: customer.name || "",
-		        contact: customer.contact || "",
-		        phone: customer.phone || "",
-		        zone: customer.zone || "",
-		        address: customer.address || "",
-		        mapUrl: customer.mapUrl || "",
-		        note: customer.note || "",
-		        updatedAt: new Date().toISOString()
-		      };
-		      await fb.setDoc(fb.doc(db, "customers", String(customer.id)), customerForDB, { merge: true });
+		      const idToken = await refreshAuthToken(true);
+		      const res = await fetch("/api/customers/upsert", {
+		        method: "POST",
+		        headers: { "Content-Type": "application/json" },
+		        body: JSON.stringify({ idToken, customer })
+		      });
+		      const json = await res.json().catch(() => null);
+		      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
 		      return { ok: true };
 		    } catch (e) {
 		      return { ok: false, error: e?.message || String(e) };
@@ -1424,9 +1424,13 @@ export default function App() {
 	    if (!customerForm.name.trim()) return;
 	    const id = `C${String(customers.length + 1).padStart(3, "0")}`;
 	    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
-	    setState(prev => ({ ...prev, customers: [nextCustomer, ...(prev.customers || [])] }));
+	    setSyncStatus(`⏳ กำลังบันทึกลูกค้า "${nextCustomer.name}"...`);
     const saved = await upsertCustomerToFirestore(nextCustomer);
-    if (!saved.ok) setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
+    if (!saved.ok) {
+      setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
+      return;
+    }
+	    setState(prev => ({ ...prev, customers: [nextCustomer, ...(prev.customers || [])] }));
 	    setSelectedCustomerId(id);
 	    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
 	    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
@@ -1972,13 +1976,23 @@ export default function App() {
     }
   };
 
-	  const updateCustomer = (id, patch) => {
-	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c) }));
-	    if (supabase) {
-	      const existing = state.customers.find(c => c.id === id);
-	      if (existing) upsertCustomerToFirestore({ ...existing, ...patch });
+	  const updateCustomer = async (id, patch) => {
+	    const existing = state.customers.find(c => c.id === id);
+	    if (!existing) return;
+	    const nextCustomer = { ...existing, ...patch, name: String(patch.name || existing.name || "").trim() };
+	    if (!nextCustomer.name) {
+	      setSyncStatus("⚠️ กรุณากรอกชื่อลูกค้า");
+	      return;
 	    }
+	    setSyncStatus(`⏳ กำลังบันทึกข้อมูลลูกค้า "${nextCustomer.name}"...`);
+	    const saved = await upsertCustomerToFirestore(nextCustomer);
+	    if (!saved.ok) {
+	      setSyncStatus(`⚠️ แก้ไขข้อมูลลูกค้าไม่สำเร็จ: ${saved.error}`);
+	      return;
+	    }
+	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? nextCustomer : c) }));
 	    setEditingCustomerId(null);
+	    setSyncStatus(`✅ แก้ไขข้อมูลลูกค้า "${nextCustomer.name}" สำเร็จ`);
 	  };
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
     driverId: nextDriverId,
