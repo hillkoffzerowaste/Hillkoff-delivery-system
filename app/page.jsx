@@ -1411,6 +1411,15 @@ export default function App() {
   }, [orders]);
 
   const filteredCustomers = customers.filter(customer => [customer.name, customer.contact, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
+  const customerNameCounts = useMemo(() => {
+    const counts = {};
+    (customers || []).forEach((customer) => {
+      const key = String(customer?.name || "").trim().toLowerCase();
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [customers]);
   const customerPreviewCount = 3;
   const filteredOrders = orders.filter(order => {
     const queryText = [order.id, order.customerName, order.phone, order.zone, order.address, order.salesNote].join(" ").toLowerCase();
@@ -1993,6 +2002,34 @@ export default function App() {
 	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? nextCustomer : c) }));
 	    setEditingCustomerId(null);
 	    setSyncStatus(`✅ แก้ไขข้อมูลลูกค้า "${nextCustomer.name}" สำเร็จ`);
+	  };
+
+	  const deleteCustomer = async (customer) => {
+	    const id = String(customer?.id || "");
+	    const name = String(customer?.name || "").trim() || id;
+	    if (!id) return;
+	    const confirmed = window.confirm(`ลบข้อมูลลูกค้า "${name}" ใช่ไหม?`);
+	    if (!confirmed) return;
+	    setSyncStatus(`⏳ กำลังลบลูกค้า "${name}"...`);
+	    try {
+	      const idToken = await refreshAuthToken(true);
+	      const res = await fetch("/api/customers/delete", {
+	        method: "POST",
+	        headers: { "Content-Type": "application/json" },
+	        body: JSON.stringify({ idToken, customerId: id })
+	      });
+	      const json = await res.json().catch(() => null);
+	      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+	      setState(prev => {
+	        const nextCustomers = (prev.customers || []).filter(c => c.id !== id);
+	        return { ...prev, customers: nextCustomers };
+	      });
+	      if (selectedCustomerId === id) setSelectedCustomerId("");
+	      if (editingCustomerId === id) setEditingCustomerId(null);
+	      setSyncStatus(`✅ ลบลูกค้า "${name}" สำเร็จ`);
+	    } catch (e) {
+	      setSyncStatus(`⚠️ ลบลูกค้าไม่สำเร็จ: ${e?.message || e}`);
+	    }
 	  };
   const assignDriver = (id, nextDriverId) => updateOrder(id, {
     driverId: nextDriverId,
@@ -3217,7 +3254,12 @@ export default function App() {
                       }
                       return displayCustomers.map(customer => (
                         <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
-                          <strong>{customer.name}</strong>
+                          <strong>
+                            {customer.name}
+                            {customerNameCounts[String(customer.name || "").trim().toLowerCase()] > 1 && (
+                              <small className="duplicate-count">ซ้ำ {customerNameCounts[String(customer.name || "").trim().toLowerCase()]} ราย</small>
+                            )}
+                          </strong>
                           <span>{customer.contact} · {customer.phone}</span>
                           <span>{customer.zone} · {customer.address}</span>
                         </button>
@@ -3238,10 +3280,13 @@ export default function App() {
                       <small style={{ color: "#666" }}>{selectedCustomer.address}</small>
                     </div>
                   </div>
-                  <button className="secondary" style={{ width: "100%", padding: "8px", fontSize: "12px" }} onClick={() => {
-                    setEditingCustomerId(selectedCustomer.id);
-                    setEditCustomerForm(selectedCustomer);
-                  }}>✏️ แก้ไขข้อมูล</button>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => {
+                      setEditingCustomerId(selectedCustomer.id);
+                      setEditCustomerForm(selectedCustomer);
+                    }}>✏️ แก้ไขข้อมูล</button>
+                    <button className="secondary danger" style={{ padding: "8px", fontSize: "12px" }} onClick={() => deleteCustomer(selectedCustomer)}>ลบลูกค้า</button>
+                  </div>
                 </div>
               )}
             </section>
