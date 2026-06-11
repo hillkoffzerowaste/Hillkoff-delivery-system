@@ -618,18 +618,23 @@ export default function App() {
 	    const needsDriverAssessments = ["driver-sop-report", "settings"].includes(String(displayTab || ""));
 	    const needsChat = Boolean(chatOpen);
 
-      try {
-        unsubs.push(
-          fb.onSnapshot(
-            fb.doc(db, "chat_meta", "team"),
-            (snap) => {
-              setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null);
-              markConnected();
-            },
-            (err) => setSyncStatus?.(`⚠️ Firestore chat status error: ${err.message || err}`)
-          )
-        );
-      } catch {}
+      if (needsChat) {
+        try {
+          unsubs.push(
+            fb.onSnapshot(
+              fb.doc(db, "chat_meta", "team"),
+              (snap) => {
+                setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null);
+                markConnected();
+              },
+              (err) => {
+                console.warn("Firestore chat status error", err);
+                setChatMeta(null);
+              }
+            )
+          );
+        } catch {}
+      }
 
 	    // Orders: keep realtime (core UX), but limit results.
 	    if (needsOrdersRealtime) {
