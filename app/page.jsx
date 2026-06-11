@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
+const DRIVER_ORDERS_HISTORY_LIMIT = 1000;
 
 // Supabase removed: Firebase (Auth+Firestore) is used instead
 let supabase = null;
@@ -608,7 +609,9 @@ export default function App() {
 	    };
 
 	    const needsOrdersRealtime = ["sales", "dispatch", "driver", "reports", "settings"].includes(String(displayTab || ""));
-	    const effectiveOrdersLimit = ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
+	    const effectiveOrdersLimit = state.auth?.role === "driver"
+	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
+	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
 	    const needsCustomers = String(displayTab || "") === "sales";
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
