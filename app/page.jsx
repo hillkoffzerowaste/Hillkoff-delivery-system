@@ -210,6 +210,58 @@ function digitsOnly(raw) {
   return String(raw || "").replace(/[^\d]/g, "");
 }
 
+function normalizeCustomerText(raw) {
+  return String(raw || "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_.(),/\\]+/g, " ");
+}
+
+function compactCustomerText(raw) {
+  return normalizeCustomerText(raw).replace(/\s+/g, "");
+}
+
+function customerSearchValues(customer) {
+  const fields = [
+    customer?.id,
+    customer?.name,
+    customer?.contact,
+    customer?.phone,
+    customer?.zone,
+    customer?.address,
+    customer?.note
+  ];
+  return {
+    text: normalizeCustomerText(fields.join(" ")),
+    compact: compactCustomerText(fields.join(" ")),
+    phone: digitsOnly(customer?.phone)
+  };
+}
+
+function customerMatchesQuery(customer, rawQuery) {
+  const query = normalizeCustomerText(rawQuery);
+  if (!query) return true;
+  const values = customerSearchValues(customer);
+  const compactQuery = compactCustomerText(query);
+  const phoneQuery = digitsOnly(rawQuery);
+  const words = query.split(/\s+/).filter(Boolean);
+  return (
+    words.every((word) => values.text.includes(word) || values.compact.includes(compactCustomerText(word))) ||
+    (compactQuery && values.compact.includes(compactQuery)) ||
+    (phoneQuery.length >= 3 && values.phone.includes(phoneQuery))
+  );
+}
+
+function customerNameKey(rawName) {
+  return compactCustomerText(rawName);
+}
+
+function generateCustomerId() {
+  const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `C-${Date.now().toString(36).toUpperCase()}-${randomPart}`;
+}
+
 function formatWithCommas(rawDigits) {
   const d = digitsOnly(rawDigits);
   if (!d) return "";
@@ -718,19 +770,24 @@ export default function App() {
 	      }
 	    }
 
-	    // Customers: one-time fetch (no realtime needed).
+	    // Customers: keep the full searchable list current across sales devices.
 	    if (needsCustomers) {
-	      (async () => {
-	        try {
-	          const custQ = fb.query(fb.collection(db, "customers"), fb.orderBy("updatedAt", "desc"), fb.limit(customersLimit));
-	          const snap = await fb.getDocs(custQ);
-	          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-	          setState((prev) => ({ ...prev, customers: rows }));
-	          markConnected();
-	        } catch (e) {
-	          // ignore
-	        }
-	      })();
+	      try {
+	        const custQ = fb.query(fb.collection(db, "customers"), fb.orderBy("updatedAt", "desc"), fb.limit(customersLimit));
+	        unsubs.push(
+	          fb.onSnapshot(
+	            custQ,
+	            (snap) => {
+	              const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+	              setState((prev) => ({ ...prev, customers: rows }));
+	              markConnected();
+	            },
+	            (err) => setSyncStatus?.(`⚠️ Firestore customers error: ${err.message || err}`)
+	          )
+	        );
+	      } catch (e) {
+	        console.warn("customers onSnapshot error", e);
+	      }
 	    }
 
 	    // Driver locations: one-time fetch (check-in based; no constant realtime needed).
@@ -1402,7 +1459,7 @@ export default function App() {
     });
     return map;
   }, [driverAssessments]);
-  const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || customers[0];
+  const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || null;
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
     const isAvailable = !order.driverId || order.driverId === "";
@@ -1418,11 +1475,11 @@ export default function App() {
     return { delivered: delivered.length, complaints, cod, driverScore: [] };
   }, [orders]);
 
-  const filteredCustomers = customers.filter(customer => [customer.name, customer.contact, customer.phone, customer.zone, customer.address].join(" ").toLowerCase().includes(customerQuery.toLowerCase()));
+  const filteredCustomers = customers.filter(customer => customerMatchesQuery(customer, customerQuery));
   const customerNameCounts = useMemo(() => {
     const counts = {};
     (customers || []).forEach((customer) => {
-      const key = String(customer?.name || "").trim().toLowerCase();
+      const key = customerNameKey(customer?.name);
       if (!key) return;
       counts[key] = (counts[key] || 0) + 1;
     });
@@ -1438,16 +1495,46 @@ export default function App() {
   });
 
   const saveCustomer = async () => {
-	    if (!customerForm.name.trim()) return;
-	    const id = `C${String(customers.length + 1).padStart(3, "0")}`;
-	    const nextCustomer = { id, ...customerForm, name: customerForm.name.trim() };
+	    const normalizedName = String(customerForm.name || "").trim();
+	    if (!normalizedName) {
+	      setSyncStatus("⚠️ กรุณากรอกชื่อลูกค้า");
+	      return;
+	    }
+	    const nameKey = customerNameKey(normalizedName);
+	    const phoneKey = digitsOnly(customerForm.phone);
+	    const existingByName = customers.find(customer => customerNameKey(customer?.name) === nameKey);
+	    if (existingByName) {
+	      setSelectedCustomerId(existingByName.id);
+	      setCustomerQuery(normalizedName);
+	      setSyncStatus(`⚠️ มีลูกค้า "${existingByName.name}" อยู่แล้ว กรุณาเลือกใช้หรือแก้ไขข้อมูลเดิม`);
+	      return;
+	    }
+	    const existingByPhone = phoneKey.length >= 8
+	      ? customers.find(customer => digitsOnly(customer?.phone) === phoneKey)
+	      : null;
+	    if (existingByPhone) {
+	      const shouldCreate = window.confirm(
+	        `พบเบอร์ ${customerForm.phone} อยู่ในข้อมูลลูกค้า "${existingByPhone.name}" แล้ว\n\nต้องการเพิ่มเป็นลูกค้ารายใหม่จริงหรือไม่?`
+	      );
+	      if (!shouldCreate) {
+	        setSelectedCustomerId(existingByPhone.id);
+	        setCustomerQuery(customerForm.phone);
+	        setSyncStatus(`ℹ️ เลือกข้อมูลลูกค้า "${existingByPhone.name}" ที่ใช้เบอร์นี้อยู่แล้ว`);
+	        return;
+	      }
+	    }
+	    const id = generateCustomerId();
+	    const nextCustomer = { id, ...customerForm, name: normalizedName };
 	    setSyncStatus(`⏳ กำลังบันทึกลูกค้า "${nextCustomer.name}"...`);
     const saved = await upsertCustomerToFirestore(nextCustomer);
     if (!saved.ok) {
       setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
       return;
     }
-	    setState(prev => ({ ...prev, customers: [nextCustomer, ...(prev.customers || [])] }));
+	    setState(prev => ({
+	      ...prev,
+	      customers: [nextCustomer, ...(prev.customers || []).filter(customer => customer.id !== id)]
+	    }));
 	    setSelectedCustomerId(id);
 	    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
 	    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
@@ -3264,8 +3351,8 @@ export default function App() {
                         <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
                           <strong>
                             {customer.name}
-                            {customerNameCounts[String(customer.name || "").trim().toLowerCase()] > 1 && (
-                              <small className="duplicate-count">ซ้ำ {customerNameCounts[String(customer.name || "").trim().toLowerCase()]} ราย</small>
+                            {customerNameCounts[customerNameKey(customer.name)] > 1 && (
+                              <small className="duplicate-count">ซ้ำ {customerNameCounts[customerNameKey(customer.name)]} ราย</small>
                             )}
                           </strong>
                           <span>{customer.contact} · {customer.phone}</span>
@@ -3321,19 +3408,10 @@ export default function App() {
             <section className="panel">
               <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>เลือกลูกค้าจากรายชื่อ</span></div>
               {(() => {
-                const q = (orderCustomerSearch || "").trim().toLowerCase();
+                const q = (orderCustomerSearch || "").trim();
                 const matches = customers
-                  .filter(c => {
-                    if (!q) return true;
-                    const name = String(c?.name || "").toLowerCase();
-                    const contact = String(c?.contact || "").toLowerCase();
-                    const phone = String(c?.phone || "").toLowerCase();
-                    const zone = String(c?.zone || "").toLowerCase();
-                    const address = String(c?.address || "").toLowerCase();
-                    const note = String(c?.note || "").toLowerCase();
-                    return name.includes(q) || contact.includes(q) || phone.includes(q) || zone.includes(q) || address.includes(q) || note.includes(q);
-                  })
-                  .slice(0, 12);
+                  .filter(c => customerMatchesQuery(c, q))
+                  .slice(0, 30);
 
                 return (
                   <div style={{ position: "relative" }}>
@@ -3341,11 +3419,14 @@ export default function App() {
                       <Search size={16} />
                       <input
                         value={orderCustomerSearch}
-                        onChange={e => setOrderCustomerSearch(e.target.value)}
+                        onChange={e => {
+                          setOrderCustomerSearch(e.target.value);
+                          setSelectedCustomerId("");
+                        }}
                         placeholder="ค้นหาชื่อลูกค้า / เบอร์ / พื้นที่ แล้วเลือกจากรายการ"
                       />
                     </label>
-                    {q && matches.length > 0 && !selectedCustomerId && (
+                    {q && matches.length > 0 && (
                       <div style={{ position: "absolute", top: "44px", left: 0, right: 0, zIndex: 20, background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.08)", overflow: "hidden" }}>
                         {matches.map(c => (
                           <button
@@ -3370,18 +3451,7 @@ export default function App() {
               <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
                 <option value="">-- เลือกลูกค้า --</option>
                 {customers
-                  .filter(c => {
-                    const q = (orderCustomerSearch || "").trim().toLowerCase();
-                    if (!q) return true;
-                    const name = String(c?.name || "").toLowerCase();
-                    const contact = String(c?.contact || "").toLowerCase();
-                    const phone = String(c?.phone || "").toLowerCase();
-                    const zone = String(c?.zone || "").toLowerCase();
-                    const address = String(c?.address || "").toLowerCase();
-                    const note = String(c?.note || "").toLowerCase();
-                    return name.includes(q) || contact.includes(q) || phone.includes(q) || zone.includes(q) || address.includes(q) || note.includes(q);
-                  })
-                  .slice(0, 200)
+                  .filter(c => customerMatchesQuery(c, orderCustomerSearch))
                   .map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
