@@ -496,6 +496,7 @@ export default function App() {
     return Boolean(serviceDate) && serviceDate < todayServiceDate && isOpenDeliveryStatus(o?.status);
   };
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
+  const [showDriverDailyReport, setShowDriverDailyReport] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
   const routeTaskFilesRef = useRef({}); // { [taskId_stopId]: File } kept on-device only (not synced)
@@ -1466,6 +1467,29 @@ export default function App() {
     const isAssignedToMe = order.driverId === driverId;
     return isAvailable || isAssignedToMe;
   });
+  const driverTodayOrders = (orders || [])
+    .filter(order => order.driverId === driverId && isTodayOrder(order))
+    .slice()
+    .sort((a, b) => {
+      const av = new Date(a.updatedAt || a.deliveredAt || a.createdAt || 0).getTime() || 0;
+      const bv = new Date(b.updatedAt || b.deliveredAt || b.createdAt || 0).getTime() || 0;
+      if (bv !== av) return bv - av;
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    });
+  const driverTodayCompletedOrders = driverTodayOrders.filter(order => order.status === "ส่งสำเร็จ");
+  const driverTodayRouteTasks = (routeTasks || [])
+    .filter(task => task.driverId === driverId && String(task?.serviceDate || "") === todayServiceDate)
+    .slice()
+    .sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
+  const driverTodayCompletedRouteTasks = driverTodayRouteTasks.filter(task => task.status === "เสร็จงาน");
+  const driverTodayWorkSummary = {
+    orders: driverTodayOrders.length,
+    completedOrders: driverTodayCompletedOrders.length,
+    routeTasks: driverTodayRouteTasks.length,
+    completedRouteTasks: driverTodayCompletedRouteTasks.length,
+    cod: driverTodayOrders.reduce((sum, order) => sum + Number(order.cod || 0), 0),
+    codDone: driverTodayCompletedOrders.reduce((sum, order) => sum + Number(order.cod || 0), 0)
+  };
 
   const report = useMemo(() => {
     const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
@@ -2647,6 +2671,69 @@ export default function App() {
     return lines.join("\n");
   };
 
+  const buildDriverDailyWorkReport = () => {
+    const dt = parseServiceDateKey(todayServiceDate);
+    const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : todayServiceDate;
+    const driver = drivers.find(d => d.id === driverId) || {};
+    const driverName = state.auth?.name || driver.name || driverId || "-";
+    const normalActive = driverTodayOrders.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length;
+    const routeActive = driverTodayRouteTasks.filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก").length;
+    const lines = [
+      "รายงานการทำงานประจำวัน",
+      `วันที่: ${title}`,
+      `คนขับ: ${driverName}`,
+      `สร้างเมื่อ: ${new Date().toLocaleString("th-TH")}`,
+      "",
+      `สรุป: ออเดอร์ปกติ ${driverTodayOrders.length} งาน | ส่งสำเร็จ ${driverTodayCompletedOrders.length} | กำลังทำ ${normalActive}`,
+      `งานวิ่งสาขา/วิ่งไกล ${driverTodayRouteTasks.length} งาน | เสร็จงาน ${driverTodayCompletedRouteTasks.length} | กำลังทำ ${routeActive}`,
+      `COD รวม: ฿${money(driverTodayWorkSummary.cod)} | COD ส่งสำเร็จ: ฿${money(driverTodayWorkSummary.codDone)}`,
+      "",
+      "ออเดอร์ปกติ:"
+    ];
+
+    if (driverTodayOrders.length) {
+      driverTodayOrders.forEach((order, index) => {
+        const deliveredAt = order.deliveredAt ? ` | เสร็จ ${order.deliveredAt}` : "";
+        lines.push(`${index + 1}. ${order.id} | ${order.customerName || "-"} | ${order.zone || "-"} | ${order.status || "-"} | COD ฿${money(order.cod || 0)}${deliveredAt}`);
+      });
+    } else {
+      lines.push("-");
+    }
+
+    lines.push("", "งานวิ่งสาขา/วิ่งไกล:");
+    if (driverTodayRouteTasks.length) {
+      driverTodayRouteTasks.forEach((task, index) => {
+        const type = task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา";
+        const direction = task.type === "long" ? (task.routeDirection === "return" ? " ขากลับเชียงใหม่" : " ขาไป") : "";
+        const completedAt = task.completedAt ? ` | จบงาน ${task.completedAt}` : "";
+        lines.push(`${index + 1}. ${task.id} | ${type}${direction} | ${task.origin || "-"} -> ${task.destinationSummary || "-"} | ${task.status || "-"}${completedAt}`);
+        (task.stops || []).forEach((stop, stopIndex) => {
+          const checked = stop.checkedInAt ? ` | เช็คอิน ${stop.checkedInAt}` : "";
+          const shared = stop.sharedToLine ? " | แชร์ LINE แล้ว" : "";
+          const note = stop.note ? ` | ${stop.note}` : "";
+          lines.push(`   ${stopIndex + 1}) ${stop.kind === "midway" ? "ระหว่างทาง" : stop.name || "-"}${checked}${shared}${note}`);
+        });
+      });
+    } else {
+      lines.push("-");
+    }
+
+    lines.push("", "ประวัติส่งสำเร็จวันนี้:");
+    if (driverTodayCompletedOrders.length || driverTodayCompletedRouteTasks.length) {
+      driverTodayCompletedOrders.forEach((order, index) => {
+        lines.push(`${index + 1}. ออเดอร์ ${order.id} | ${order.customerName || "-"} | ${order.deliveredAt || "-"}`);
+      });
+      driverTodayCompletedRouteTasks.forEach((task, index) => {
+        const type = task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา";
+        lines.push(`${driverTodayCompletedOrders.length + index + 1}. ${type} ${task.id} | ${task.destinationSummary || "-"} | ${task.completedAt || "-"}`);
+      });
+    } else {
+      lines.push("-");
+    }
+
+    return lines.join("\n");
+  };
+
   const buildServiceDateRangeReport = (startKey, endKey) => {
     const start = startKey && endKey && startKey > endKey ? endKey : startKey;
     const end = startKey && endKey && startKey > endKey ? startKey : endKey;
@@ -3794,6 +3881,37 @@ export default function App() {
               </div>
             </section>
 
+            <section className="panel" style={{ borderLeft: "4px solid #2563eb" }}>
+              <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>รายงานการทำงานวันนี้</h2>
+                  <span>{todayServiceDate}</span>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowDriverDailyReport(v => !v)}>
+                    <FileText size={14} /> {showDriverDailyReport ? "ซ่อนรายงาน" : "ดูรายงาน"}
+                  </button>
+                  <button className="primary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => copyToClipboard(buildDriverDailyWorkReport())}>
+                    <ClipboardList size={14} /> คัดลอก
+                  </button>
+                </div>
+              </div>
+              <div className="analytics-cards" style={{ marginTop: "12px" }}>
+                <div><span>ออเดอร์ปกติ</span><b>{driverTodayWorkSummary.orders}</b></div>
+                <div><span>ส่งสำเร็จ</span><b>{driverTodayWorkSummary.completedOrders}</b></div>
+                <div><span>งานวิ่ง</span><b>{driverTodayWorkSummary.routeTasks}</b></div>
+                <div><span>วิ่งเสร็จ</span><b>{driverTodayWorkSummary.completedRouteTasks}</b></div>
+              </div>
+              <p className="muted" style={{ margin: "10px 0 0" }}>
+                COD วันนี้ ฿{money(driverTodayWorkSummary.cod)} · COD ส่งสำเร็จ ฿{money(driverTodayWorkSummary.codDone)}
+              </p>
+              {showDriverDailyReport && (
+                <pre style={{ margin: "12px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", color: "#374151", fontSize: "12px", lineHeight: 1.6 }}>
+                  {buildDriverDailyWorkReport()}
+                </pre>
+              )}
+            </section>
+
             <section className="panel" style={{ borderLeft: "4px solid #0e7490" }}>
               <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>{activeDriverRouteTasks.length} งานกำลังทำ</span></div>
               <div style={{ display: "grid", gap: "12px" }}>
@@ -4095,13 +4213,16 @@ export default function App() {
 	              </section>
 	            )}
 
-	            {/* สรุป/ประวัติออเดอร์ที่ส่งสำเร็จ (พับเก็บ) */}
-	            {orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0 && (
+	            {/* สรุป/ประวัติส่งสำเร็จประจำวัน */}
+	            {(driverTodayCompletedOrders.length > 0 || driverTodayCompletedRouteTasks.length > 0 || orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0) && (
 	              <section className="panel" style={{ background: "#f8fafc" }}>
 	                <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-	                  <h2 style={{ margin: 0 }}>✅ ส่งสำเร็จแล้ว</h2>
+	                  <div>
+	                    <h2 style={{ margin: 0 }}>✅ ประวัติส่งสำเร็จวันนี้</h2>
+	                    <span>ออเดอร์ {driverTodayCompletedOrders.length} · งานวิ่ง {driverTodayCompletedRouteTasks.length}</span>
+	                  </div>
 	                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowDeliveredHistory(v => !v)}>
-	                    {showDeliveredHistory ? "ซ่อนรายการ" : "ดูเพิ่มเติม"}
+	                    {showDeliveredHistory ? "ซ่อนย้อนหลัง" : "ดูย้อนหลัง"}
 	                  </button>
 	                </div>
 	                {(() => {
@@ -4116,7 +4237,7 @@ export default function App() {
 	                  const codAll = deliveredAll.reduce((sum, o) => sum + Number(o.cod || 0), 0);
 	                  return (
 	                    <div style={{ color: "#6b7280", fontSize: "12px" }}>
-	                      วันนี้ {deliveredToday.length} งาน · ย้อนหลัง {deliveredHistory.length} งาน · รวม COD ฿{money(codAll)}
+	                      วันนี้ {deliveredToday.length + driverTodayCompletedRouteTasks.length} งาน · ย้อนหลัง {deliveredHistory.length} งาน · รวม COD ออเดอร์ ฿{money(codAll)}
 	                    </div>
 	                  );
 	                })()}
@@ -4128,9 +4249,17 @@ export default function App() {
 	                    if (bv !== av) return bv - av;
 	                    return String(b.id || "").localeCompare(String(a.id || ""));
 	                  });
-	                  const visibleDelivered = showDeliveredHistory ? deliveredAll : deliveredAll.slice(0, 1);
+	                  const deliveredToday = deliveredAll.filter(isTodayOrder);
+	                  const deliveredHistory = deliveredAll.filter(o => !isTodayOrder(o));
+	                  const visibleDelivered = showDeliveredHistory ? [...deliveredToday, ...deliveredHistory] : deliveredToday;
+	                  const visibleRouteTasks = driverTodayCompletedRouteTasks;
 	                  return (
 	                  <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+	                    {visibleDelivered.length === 0 && visibleRouteTasks.length === 0 && (
+	                      <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", color: "#6b7280", fontSize: "12px" }}>
+	                        ยังไม่มีรายการส่งสำเร็จในวันนี้
+	                      </div>
+	                    )}
 	                    {visibleDelivered.map(order => (
 	                        <div key={order.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: "8px" }}>
 	                          <div>
@@ -4149,6 +4278,28 @@ export default function App() {
 	                          </button>
 	                        </div>
 	                      ))}
+	                    {visibleRouteTasks.map(task => (
+	                      <div key={task.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #bfdbfe", display: "flex", flexDirection: "column", gap: "8px" }}>
+	                        <div>
+	                          <b style={{ fontSize: "14px", display: "block", color: "#166534" }}>{task.id}</b>
+	                          <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</b>
+	                          <small style={{ color: "#6b7280" }}>{task.origin || "-"} → {task.destinationSummary || "-"}</small><br/>
+	                          {task.completedAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {task.completedAt}</small>}
+	                        </div>
+	                        {(task.stops || []).length > 0 && (
+	                          <div style={{ display: "grid", gap: "4px", color: "#6b7280", fontSize: "12px" }}>
+	                            {(task.stops || []).map(stop => (
+	                              <small key={stop.id}>
+	                                {stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name || "-"}{stop.checkedInAt ? ` · ${stop.checkedInAt}` : ""}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}
+	                              </small>
+	                            ))}
+	                          </div>
+	                        )}
+	                        <button className="primary" style={{ padding: "8px", fontSize: "12px", background: "#2563eb" }} onClick={() => copyToClipboard(buildLineMessageForRouteTask(task, { name: task.destinationSummary, checkedInAt: task.completedAt, note: task.note }))}>
+	                          💬 คัดลอกสรุปงานวิ่ง
+	                        </button>
+	                      </div>
+	                    ))}
 	                  </div>
 	                  );
 	                })()}
