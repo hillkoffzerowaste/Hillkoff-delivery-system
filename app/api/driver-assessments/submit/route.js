@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
+import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
 
 export const runtime = "nodejs";
 
@@ -32,6 +33,27 @@ function toWeekKey(dateLike) {
   const diffToMonday = day === 0 ? -6 : 1 - day;
   bangkokDate.setUTCDate(bangkokDate.getUTCDate() + diffToMonday);
   return toServiceDateKey(bangkokDate);
+}
+
+async function syncMileageToGoogle(payload) {
+  const webAppUrl = process.env.GOOGLE_MILEAGE_WEB_APP_URL || process.env.GOOGLE_SHEETS_WEB_APP_URL || "";
+  if (!webAppUrl) return { ok: true, skipped: true };
+  try {
+    const response = await fetch(webAppUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "upsertDailyMileage", ...payload })
+    });
+    const text = await response.text();
+    if (!response.ok) return { ok: false, error: text || `HTTP ${response.status}` };
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: true, raw: text };
+    }
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
 }
 
 export async function POST(request) {
@@ -79,11 +101,20 @@ export async function POST(request) {
 
     const dailyChecks = payload?.dailyChecks && typeof payload.dailyChecks === "object" ? payload.dailyChecks : {};
     const weeklyChecks = payload?.weeklyChecks && typeof payload.weeklyChecks === "object" ? payload.weeklyChecks : {};
+    const rawVehicle = payload?.vehicle && typeof payload.vehicle === "object" ? payload.vehicle : {};
+    const vehicle = findVehicleById(rawVehicle.id || rawVehicle.assetCode) || null;
+    const odometerStart = Number(payload?.odometerStart || 0);
 
     if (assessmentType === "daily") {
       const missing = [...DAILY_CHECK_IDS].filter((id) => !dailyChecks[id]);
       if (missing.length) {
         return Response.json({ ok: false, error: "Daily checks incomplete" }, { status: 400 });
+      }
+      if (!vehicle) {
+        return Response.json({ ok: false, error: "Vehicle required" }, { status: 400 });
+      }
+      if (!Number.isFinite(odometerStart) || odometerStart <= 0) {
+        return Response.json({ ok: false, error: "Odometer start required" }, { status: 400 });
       }
     }
 
@@ -113,6 +144,19 @@ export async function POST(request) {
       readiness: "ready",
       updatedAt: FieldValue.serverTimestamp()
     };
+    const vehiclePayload = vehicle ? {
+      vehicleId: vehicle.id,
+      assetCode: vehicle.assetCode,
+      plate: vehicle.plate,
+      vehicleType: vehicle.vehicleType,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      vehicleName: vehicleDisplayName(vehicle),
+      responsiblePerson: vehicle.responsiblePerson,
+      department: vehicle.department,
+      vehicleChangedToday: Boolean(payload?.vehicleChangedToday),
+      odometerStart
+    } : {};
 
     if (assessmentType === "weekly") {
       const weekKey = toWeekKey(new Date());
@@ -135,13 +179,29 @@ export async function POST(request) {
 
     await db.collection("driver_daily_assessments").doc(docId).set({
       ...commonAssessment,
+      ...vehiclePayload,
       serviceDate,
       dailyChecks,
       weeklyChecks,
-      assessmentType: "daily"
+      assessmentType: "daily",
+      googleSyncStatus: "pending"
     }, { merge: true });
 
-    return Response.json({ ok: true, data: { id: docId, serviceDate, driverId, assessmentType } });
+    const googleSync = await syncMileageToGoogle({
+      serviceDate,
+      driverId,
+      driverName,
+      driverPhone: commonAssessment.driverPhone,
+      notes: commonAssessment.notes,
+      ...vehiclePayload
+    });
+    await db.collection("driver_daily_assessments").doc(docId).set({
+      googleSyncStatus: googleSync?.ok === false ? "failed" : (googleSync?.skipped ? "skipped" : "synced"),
+      googleSyncError: googleSync?.ok === false ? String(googleSync.error || "sync failed").slice(0, 500) : "",
+      googleSyncedAt: googleSync?.skipped ? null : FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return Response.json({ ok: true, data: { id: docId, serviceDate, driverId, assessmentType, googleSync } });
   } catch (e) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
   }
