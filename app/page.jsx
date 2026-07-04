@@ -2471,11 +2471,12 @@ export default function App() {
 	    }
 
 	    (async () => {
+	      let completedOrder = null;
 	      try {
           const note = prompt("หมายเหตุจากคนขับ (ถ้ามี):", order.driverNote || "");
           if (note === null) return;
           const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
-          const completedOrder = {
+          completedOrder = {
             ...order,
             status: "ส่งสำเร็จ",
             deliveredAt,
@@ -2484,7 +2485,6 @@ export default function App() {
             driverId: order.driverId || state.auth?.driverId || driverId || "",
             sharedToLine: true
           };
-	        updateOrder(order.id, completedOrder);
 	        const text = buildLineMessageForOrder(completedOrder);
 	        const file = podFilesRef.current?.[order.id];
 
@@ -2502,10 +2502,14 @@ export default function App() {
 	        } else {
 	          await navigator.share({ text });
 	        }
+	        updateOrder(order.id, completedOrder);
 	        if (copied) {
 	          setSyncStatus(`✅ ส่งสำเร็จและคัดลอกสรุปสั้นสำหรับ LINE แล้ว (${order.id})`);
 	        }
 	      } catch (error) {
+	        if (completedOrder) {
+	          updateOrder(order.id, { ...completedOrder, sharedToLine: false });
+	        }
 	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${order.id})`);
 	      }
 	    })();
