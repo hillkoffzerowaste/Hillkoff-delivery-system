@@ -482,6 +482,8 @@ export default function App() {
   });
   const [fuelBillStatus, setFuelBillStatus] = useState("");
   const [fuelBillSubmitting, setFuelBillSubmitting] = useState(false);
+  const [dailyVehicleStartSaved, setDailyVehicleStartSaved] = useState(false);
+  const [dailyVehicleStartSubmitting, setDailyVehicleStartSubmitting] = useState(false);
   const [vehicleUsageForm, setVehicleUsageForm] = useState({
     odometer: "",
     usageType: "ส่งของ",
@@ -1475,6 +1477,29 @@ export default function App() {
   }, [driverVehicleId, defaultDriverVehicle]);
   const selectedDriverVehicleId = selectedDriverVehicle?.id || "";
   const selectedDriverVehicleIsDefault = Boolean(defaultDriverVehicle?.id && selectedDriverVehicle?.id === defaultDriverVehicle.id);
+  const dailyVehicleStartKey = useMemo(() => {
+    if (auth.role !== "driver") return "";
+    const driverKey = auth.driverId || auth.phone || driverId || "driver";
+    return `hillkoff_vehicle_start:${driverKey}:${todayServiceDate}`;
+  }, [auth.role, auth.driverId, auth.phone, driverId, todayServiceDate]);
+  useEffect(() => {
+    if (!dailyVehicleStartKey || typeof window === "undefined") {
+      setDailyVehicleStartSaved(false);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(dailyVehicleStartKey);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (saved?.odometerStart && saved?.vehicleId) {
+        setDailyVehicleStartSaved(true);
+        setDriverOdometerStart(formatWithCommas(saved.odometerStart));
+        setDriverVehicleId(saved.vehicleId);
+        return;
+      }
+    } catch {}
+    setDailyVehicleStartSaved(false);
+  }, [dailyVehicleStartKey]);
+  const needsDailyVehicleStart = auth.role === "driver" && (!dailyVehicleStartSaved || !driverOdometerStart || !selectedDriverVehicle?.id);
   useEffect(() => {
     if (auth.role !== "driver") return;
     if (driverVehicleId) return;
@@ -2078,6 +2103,11 @@ export default function App() {
       setDriverAssessmentStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกเข้าใหม่");
       return;
     }
+    if (needsDailyVehicleStart) {
+      setDriverAssessmentStatus("⚠️ กรุณาบันทึกเริ่มใช้รถวันนี้ก่อนส่งแบบประเมิน");
+      setTab("driver-vehicle");
+      return;
+    }
     const missing = DRIVER_DAILY_CHECK_ITEMS.filter(item => !driverDailyChecks[item.id]);
     if (missing.length) {
       setDriverAssessmentStatus(`⚠️ กรุณาตรวจเช็คประจำวันให้ครบก่อนบันทึก (${missing.length} รายการยังไม่ครบ)`);
@@ -2166,6 +2196,63 @@ export default function App() {
       setDriverAssessmentStatus(`❌ บันทึกรายสัปดาห์ไม่สำเร็จ: ${error?.message || error}`);
     } finally {
       setDriverAssessmentSubmitting(false);
+    }
+  };
+
+  const submitDailyVehicleStart = async () => {
+    if (dailyVehicleStartSubmitting) return;
+    if (state.auth?.role !== "driver") return;
+    const odometerStart = Number(digitsOnly(driverOdometerStart));
+    if (!selectedDriverVehicle?.id) {
+      setVehicleUsageStatus("⚠️ กรุณาเลือกรถที่ใช้วันนี้");
+      return;
+    }
+    if (!odometerStart || odometerStart <= 0) {
+      setVehicleUsageStatus("⚠️ กรุณากรอกเลขไมล์เริ่มต้นวันนี้");
+      return;
+    }
+
+    try {
+      setDailyVehicleStartSubmitting(true);
+      setVehicleUsageStatus("⏳ กำลังบันทึกเริ่มใช้รถวันนี้...");
+      const db = getFirestoreDb();
+      const payload = {
+        serviceDate: todayServiceDate,
+        eventType: "start",
+        driverId: state.auth?.driverId || driverId || "",
+        driverName: state.auth?.name || selectedDriverProfile?.name || "",
+        driverPhone: state.auth?.phone || "",
+        vehicleId: selectedDriverVehicle.id,
+        assetCode: selectedDriverVehicle.assetCode,
+        plate: selectedDriverVehicle.plate,
+        vehicleName: vehicleDisplayName(selectedDriverVehicle),
+        brand: selectedDriverVehicle.brand,
+        model: selectedDriverVehicle.model,
+        responsiblePerson: selectedDriverVehicle.responsiblePerson,
+        department: selectedDriverVehicle.department,
+        odometer: odometerStart,
+        odometerStart,
+        usageType: "เริ่มใช้รถวันนี้",
+        detail: "บันทึกเริ่มต้นประจำวัน",
+        note: "",
+        createdAt: fb.serverTimestamp(),
+        updatedAt: fb.serverTimestamp()
+      };
+      await fb.addDoc(fb.collection(db, "vehicle_usage_events"), payload);
+      if (dailyVehicleStartKey && typeof window !== "undefined") {
+        localStorage.setItem(dailyVehicleStartKey, JSON.stringify({
+          serviceDate: todayServiceDate,
+          vehicleId: selectedDriverVehicle.id,
+          odometerStart,
+          savedAt: new Date().toISOString()
+        }));
+      }
+      setDailyVehicleStartSaved(true);
+      setVehicleUsageStatus("✅ บันทึกเริ่มใช้รถวันนี้แล้ว");
+    } catch (error) {
+      setVehicleUsageStatus(`❌ บันทึกเริ่มใช้รถไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setDailyVehicleStartSubmitting(false);
     }
   };
 
@@ -3156,6 +3243,53 @@ export default function App() {
           </div>
         </header>
         <div className="sync-banner">{syncStatus}</div>
+        {auth.role === "driver" && needsDailyVehicleStart && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1400, display: "grid", placeItems: "center", padding: "16px" }}>
+            <section className="panel" style={{ width: "min(520px, 100%)", borderLeft: "4px solid #2563eb", boxShadow: "0 16px 40px rgba(0,0,0,0.25)" }}>
+              <div className="panel-head">
+                <h2>เริ่มใช้รถวันนี้</h2>
+                <span>{todayServiceDate}</span>
+              </div>
+              <p className="muted" style={{ marginTop: 0 }}>กรุณายืนยันรถและกรอกเลขไมล์เริ่มต้นก่อนใช้งานแอพประจำวัน</p>
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div>
+                  <label className="field-label">รถที่ใช้วันนี้</label>
+                  <select
+                    value={selectedDriverVehicleId}
+                    onChange={e => {
+                      setDriverVehicleId(e.target.value);
+                      setDriverVehicleChangedToday(true);
+                    }}
+                  >
+                    {HILLKOFF_VEHICLES.map(vehicle => (
+                      <option key={vehicle.id} value={vehicle.id}>
+                        {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">เลขไมล์เริ่มต้นวันนี้</label>
+                  <input
+                    value={driverOdometerStart}
+                    onChange={e => setDriverOdometerStart(formatWithCommas(e.target.value))}
+                    inputMode="numeric"
+                    placeholder="เช่น 120,500"
+                    autoFocus
+                  />
+                </div>
+                <button type="button" className="primary wide" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
+                  <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
+                </button>
+                {vehicleUsageStatus && (
+                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166534" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                    {vehicleUsageStatus}
+                  </span>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
 
         {auth.role === "sales" && aiOpen && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 2000 }} onClick={() => setAiOpen(false)}>
@@ -4574,6 +4708,12 @@ export default function App() {
                     placeholder="เช่น 120,500"
                   />
                   <small className="muted" style={{ display: "block", marginTop: "6px" }}>เลขไมล์นี้จะใช้คู่กับแบบประเมินตรวจรถประจำวัน</small>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "10px" }}>
+                    <button type="button" className="primary" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
+                      <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
+                    </button>
+                    {dailyVehicleStartSaved && <span style={{ color: "#166534", fontWeight: 800, fontSize: "12px" }}>บันทึกเริ่มต้นวันนี้แล้ว</span>}
+                  </div>
                 </div>
               </div>
             </section>
