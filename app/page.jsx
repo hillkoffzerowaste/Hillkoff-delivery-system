@@ -482,6 +482,19 @@ export default function App() {
   });
   const [fuelBillStatus, setFuelBillStatus] = useState("");
   const [fuelBillSubmitting, setFuelBillSubmitting] = useState(false);
+  const [vehicleUsageForm, setVehicleUsageForm] = useState({
+    odometer: "",
+    usageType: "ส่งของ",
+    detail: "",
+    note: ""
+  });
+  const [vehicleEndForm, setVehicleEndForm] = useState({
+    odometer: "",
+    summary: "",
+    note: ""
+  });
+  const [vehicleUsageStatus, setVehicleUsageStatus] = useState("");
+  const [vehicleUsageSubmitting, setVehicleUsageSubmitting] = useState(false);
   const [driverAssessmentNotes, setDriverAssessmentNotes] = useState("");
   const [driverAssessmentStatus, setDriverAssessmentStatus] = useState("");
   const [driverAssessmentSubmitting, setDriverAssessmentSubmitting] = useState(false);
@@ -498,7 +511,9 @@ export default function App() {
   });
 
   // Determine active screen early (used for data subscriptions)
-  const displayTab = state.auth?.role === "driver" ? (tab === "driver-sop" ? "driver-sop" : "driver") : (tab === "driver" ? "sales" : tab);
+  const displayTab = state.auth?.role === "driver"
+    ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : "driver")
+    : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
   const getOrderServiceDate = (o) => {
@@ -2070,11 +2085,13 @@ export default function App() {
     }
     const odometerStart = Number(digitsOnly(driverOdometerStart));
     if (!odometerStart || odometerStart <= 0) {
-      setDriverAssessmentStatus("⚠️ กรุณากรอกเลขไมล์เริ่มงานวันนี้");
+      setDriverAssessmentStatus("⚠️ กรุณาไปแถบ บันทึกการใช้รถ เพื่อกรอกเลขไมล์เริ่มต้นก่อนส่งแบบประเมิน");
+      setTab("driver-vehicle");
       return;
     }
     if (!selectedDriverVehicle?.id) {
-      setDriverAssessmentStatus("⚠️ กรุณาเลือกรถที่ใช้วันนี้");
+      setDriverAssessmentStatus("⚠️ กรุณาไปแถบ บันทึกการใช้รถ เพื่อเลือกรถที่ใช้วันนี้ก่อนส่งแบบประเมิน");
+      setTab("driver-vehicle");
       return;
     }
 
@@ -2436,6 +2453,65 @@ export default function App() {
       setFuelBillStatus(`❌ บันทึกบิลน้ำมันไม่สำเร็จ: ${error?.message || error}`);
     } finally {
       setFuelBillSubmitting(false);
+    }
+  };
+
+  const submitVehicleUsageEvent = async (eventType = "segment") => {
+    if (vehicleUsageSubmitting) return;
+    if (state.auth?.role !== "driver") return;
+    if (!selectedDriverVehicle?.id) {
+      setVehicleUsageStatus("⚠️ กรุณาเลือกรถที่ใช้ก่อนบันทึก");
+      return;
+    }
+    const source = eventType === "end" ? vehicleEndForm : vehicleUsageForm;
+    const odometer = Number(digitsOnly(source.odometer));
+    if (!odometer || odometer <= 0) {
+      setVehicleUsageStatus("⚠️ กรุณากรอกเลขไมล์ให้ถูกต้อง");
+      return;
+    }
+    const startOdometer = Number(digitsOnly(driverOdometerStart));
+    if (eventType === "end" && startOdometer && odometer < startOdometer) {
+      setVehicleUsageStatus("⚠️ เลขไมล์สิ้นสุดต้องไม่น้อยกว่าเลขไมล์เริ่มต้น");
+      return;
+    }
+
+    try {
+      setVehicleUsageSubmitting(true);
+      setVehicleUsageStatus(eventType === "end" ? "⏳ กำลังบันทึกจบการใช้รถ..." : "⏳ กำลังบันทึกเลขไมล์ระหว่างวัน...");
+      const db = getFirestoreDb();
+      const payload = {
+        serviceDate: todayServiceDate,
+        eventType,
+        driverId: state.auth?.driverId || driverId || "",
+        driverName: state.auth?.name || selectedDriverProfile?.name || "",
+        driverPhone: state.auth?.phone || "",
+        vehicleId: selectedDriverVehicle.id,
+        assetCode: selectedDriverVehicle.assetCode,
+        plate: selectedDriverVehicle.plate,
+        vehicleName: vehicleDisplayName(selectedDriverVehicle),
+        brand: selectedDriverVehicle.brand,
+        model: selectedDriverVehicle.model,
+        responsiblePerson: selectedDriverVehicle.responsiblePerson,
+        department: selectedDriverVehicle.department,
+        odometer,
+        odometerStart: startOdometer || 0,
+        usageType: eventType === "end" ? "จบการใช้รถวันนี้" : String(vehicleUsageForm.usageType || "").trim(),
+        detail: eventType === "end" ? String(vehicleEndForm.summary || "").trim() : String(vehicleUsageForm.detail || "").trim(),
+        note: String(source.note || "").trim(),
+        createdAt: fb.serverTimestamp(),
+        updatedAt: fb.serverTimestamp()
+      };
+      await fb.addDoc(fb.collection(db, "vehicle_usage_events"), payload);
+      setVehicleUsageStatus(eventType === "end" ? "✅ บันทึกจบการใช้รถวันนี้แล้ว" : "✅ บันทึกเลขไมล์ระหว่างวันแล้ว");
+      if (eventType === "end") {
+        setVehicleEndForm({ odometer: "", summary: "", note: "" });
+      } else {
+        setVehicleUsageForm({ odometer: "", usageType: vehicleUsageForm.usageType || "ส่งของ", detail: "", note: "" });
+      }
+    } catch (error) {
+      setVehicleUsageStatus(`❌ บันทึกการใช้รถไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setVehicleUsageSubmitting(false);
     }
   };
 
@@ -3052,6 +3128,7 @@ export default function App() {
           {auth.role === "driver" && (
             <>
               <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+              <button className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => setTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
               <button className={displayTab === "driver-sop" ? "active" : ""} onClick={() => setTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
             </>
           )}
@@ -3071,7 +3148,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
+            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-vehicle" ? "บันทึกการใช้รถ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
           </div>
           <div className="top-actions">
             <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
@@ -4434,6 +4511,199 @@ export default function App() {
           </div>
         )}
 
+        {auth.role === "driver" && displayTab === "driver-vehicle" && (
+          <div style={{ display: "grid", gap: "14px" }}>
+            <section className="panel" style={{ borderLeft: "4px solid #2563eb" }}>
+              <div className="panel-head">
+                <h2>รถที่ใช้วันนี้</h2>
+                <span>{todayServiceDate}</span>
+              </div>
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", display: "grid", gap: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <b style={{ display: "block", color: "#111827" }}>{vehicleDisplayName(selectedDriverVehicle)}</b>
+                      <small style={{ color: "#6b7280" }}>
+                        {selectedDriverVehicle?.assetCode || "-"} · ผู้รับผิดชอบ {selectedDriverVehicle?.responsiblePerson || "-"} · {selectedDriverVehicle?.department || "-"}
+                      </small>
+                    </div>
+                    <button type="button" className="secondary" style={{ padding: "8px 10px", fontSize: "12px" }} onClick={() => setShowDriverVehiclePicker(v => !v)}>
+                      {showDriverVehiclePicker ? "ปิดรายการรถ" : "เปลี่ยนรถวันนี้"}
+                    </button>
+                  </div>
+                  {!selectedDriverVehicleIsDefault && (
+                    <small style={{ color: "#92400e", fontWeight: 800 }}>วันนี้ใช้รถคนละคันกับรถประจำ ระบบจะบันทึกไว้ในรายงาน</small>
+                  )}
+                  {showDriverVehiclePicker && (
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <select
+                        value={selectedDriverVehicleId}
+                        onChange={e => {
+                          setDriverVehicleId(e.target.value);
+                          setDriverVehicleChangedToday(true);
+                        }}
+                      >
+                        {HILLKOFF_VEHICLES.map(vehicle => (
+                          <option key={vehicle.id} value={vehicle.id}>
+                            {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ padding: "7px 10px", fontSize: "12px", width: "fit-content" }}
+                        onClick={() => {
+                          if (defaultDriverVehicle?.id) {
+                            setDriverVehicleId(defaultDriverVehicle.id);
+                            setDriverVehicleChangedToday(false);
+                          }
+                        }}
+                      >
+                        กลับไปรถประจำ
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="field-label">เลขไมล์เริ่มต้นวันนี้</label>
+                  <input
+                    value={driverOdometerStart}
+                    onChange={e => setDriverOdometerStart(formatWithCommas(e.target.value))}
+                    inputMode="numeric"
+                    placeholder="เช่น 120,500"
+                  />
+                  <small className="muted" style={{ display: "block", marginTop: "6px" }}>เลขไมล์นี้จะใช้คู่กับแบบประเมินตรวจรถประจำวัน</small>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2>บันทึกเลขไมล์ระหว่างวัน</h2>
+                <span>บันทึกเป็นช่วงการใช้งาน</span>
+              </div>
+              <div className="form-grid two">
+                <input
+                  value={vehicleUsageForm.odometer}
+                  onChange={e => setVehicleUsageForm(p => ({ ...p, odometer: formatWithCommas(e.target.value) }))}
+                  inputMode="numeric"
+                  placeholder="เลขไมล์ปัจจุบัน"
+                />
+                <select value={vehicleUsageForm.usageType} onChange={e => setVehicleUsageForm(p => ({ ...p, usageType: e.target.value }))}>
+                  <option value="ส่งของ">ส่งของ</option>
+                  <option value="งานวิ่งสาขา">งานวิ่งสาขา</option>
+                  <option value="งานวิ่งไกล">งานวิ่งไกล</option>
+                  <option value="เติมน้ำมัน">เติมน้ำมัน</option>
+                  <option value="เข้าซ่อม/ตรวจเช็ค">เข้าซ่อม/ตรวจเช็ค</option>
+                  <option value="รับของ">รับของ</option>
+                  <option value="ธุระบริษัท">ธุระบริษัท</option>
+                  <option value="อื่น ๆ">อื่น ๆ</option>
+                </select>
+              </div>
+              <textarea
+                value={vehicleUsageForm.detail}
+                onChange={e => setVehicleUsageForm(p => ({ ...p, detail: e.target.value }))}
+                rows={2}
+                placeholder="รายละเอียดการใช้งาน เช่น กลับสาขา / ส่งโซนแม่ริม / รับของโรงงาน"
+                style={{ marginTop: "10px" }}
+              />
+              <textarea
+                value={vehicleUsageForm.note}
+                onChange={e => setVehicleUsageForm(p => ({ ...p, note: e.target.value }))}
+                rows={2}
+                placeholder="หมายเหตุเพิ่มเติม"
+                style={{ marginTop: "10px" }}
+              />
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+                <button type="button" className="primary" onClick={() => submitVehicleUsageEvent("segment")} disabled={vehicleUsageSubmitting}>
+                  <FileText size={16} /> {vehicleUsageSubmitting ? "กำลังบันทึก..." : "บันทึกช่วงการใช้รถ"}
+                </button>
+                {vehicleUsageStatus && (
+                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166534" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                    {vehicleUsageStatus}
+                  </span>
+                )}
+              </div>
+            </section>
+
+            <section className="panel" style={{ borderLeft: "4px solid #0f766e" }}>
+              <div className="panel-head">
+                <h2>จบการใช้รถวันนี้</h2>
+                <span>{driverOdometerStart ? `เริ่ม ${driverOdometerStart}` : "ยังไม่มีเลขไมล์เริ่มต้น"}</span>
+              </div>
+              <div className="form-grid two">
+                <input
+                  value={vehicleEndForm.odometer}
+                  onChange={e => setVehicleEndForm(p => ({ ...p, odometer: formatWithCommas(e.target.value) }))}
+                  inputMode="numeric"
+                  placeholder="เลขไมล์สิ้นสุด"
+                />
+                <input
+                  value={vehicleEndForm.summary}
+                  onChange={e => setVehicleEndForm(p => ({ ...p, summary: e.target.value }))}
+                  placeholder="สรุปการใช้งานวันนี้"
+                />
+              </div>
+              <textarea
+                value={vehicleEndForm.note}
+                onChange={e => setVehicleEndForm(p => ({ ...p, note: e.target.value }))}
+                rows={2}
+                placeholder="หมายเหตุหลังใช้งาน / ปัญหารถที่พบ"
+                style={{ marginTop: "10px" }}
+              />
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+                <button type="button" className="secondary" onClick={() => submitVehicleUsageEvent("end")} disabled={vehicleUsageSubmitting}>
+                  <CheckCircle2 size={16} /> {vehicleUsageSubmitting ? "กำลังบันทึก..." : "จบการใช้รถวันนี้"}
+                </button>
+              </div>
+            </section>
+
+            <section className="panel" style={{ borderLeft: "4px solid #16a34a" }}>
+              <div className="panel-head">
+                <h2>บันทึกบิลน้ำมัน</h2>
+                <span>{vehicleDisplayName(selectedDriverVehicle)}</span>
+              </div>
+              <div className="form-grid two">
+                <input
+                  value={fuelBillForm.odometer}
+                  onChange={e => setFuelBillForm(p => ({ ...p, odometer: formatWithCommas(e.target.value) }))}
+                  inputMode="numeric"
+                  placeholder="เลขไมล์ตอนเติม"
+                />
+                <select value={fuelBillForm.fuelType} onChange={e => setFuelBillForm(p => ({ ...p, fuelType: e.target.value }))}>
+                  <option value="ดีเซล">ดีเซล</option>
+                  <option value="เบนซิน">เบนซิน</option>
+                  <option value="แก๊สโซฮอล์">แก๊สโซฮอล์</option>
+                  <option value="อื่น ๆ">อื่น ๆ</option>
+                </select>
+                <input value={fuelBillForm.liters} onChange={e => setFuelBillForm(p => ({ ...p, liters: e.target.value }))} inputMode="decimal" placeholder="จำนวนลิตร" />
+                <input value={fuelBillForm.amount} onChange={e => setFuelBillForm(p => ({ ...p, amount: e.target.value }))} inputMode="decimal" placeholder="ยอดเงิน" />
+                <input value={fuelBillForm.pricePerLiter} onChange={e => setFuelBillForm(p => ({ ...p, pricePerLiter: e.target.value }))} inputMode="decimal" placeholder="ราคาต่อลิตร (ไม่กรอกได้)" />
+                <input value={fuelBillForm.station} onChange={e => setFuelBillForm(p => ({ ...p, station: e.target.value }))} placeholder="ปั๊มน้ำมัน" />
+                <input value={fuelBillForm.receiptNo} onChange={e => setFuelBillForm(p => ({ ...p, receiptNo: e.target.value }))} placeholder="เลขที่บิล" />
+              </div>
+              <textarea
+                value={fuelBillForm.note}
+                onChange={e => setFuelBillForm(p => ({ ...p, note: e.target.value }))}
+                rows={2}
+                placeholder="หมายเหตุบิลน้ำมัน"
+                style={{ marginTop: "10px" }}
+              />
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+                <button type="button" className="primary" onClick={submitFuelBill} disabled={fuelBillSubmitting}>
+                  <FileSpreadsheet size={16} /> {fuelBillSubmitting ? "กำลังบันทึก..." : "บันทึกบิลน้ำมัน"}
+                </button>
+                {fuelBillStatus && (
+                  <span style={{ color: fuelBillStatus.startsWith("✅") ? "#166534" : fuelBillStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                    {fuelBillStatus}
+                  </span>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
         {auth.role !== "driver" && displayTab === "driver-sop-report" && (
           <div style={{ display: "grid", gap: "14px" }}>
             {(() => {
@@ -4530,64 +4800,16 @@ export default function App() {
                 <h2>แบบประเมินตรวจรถประจำวัน</h2>
                 <span>{todayServiceDate}</span>
               </div>
-              <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
-                <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", display: "grid", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-                    <div>
-                      <b style={{ display: "block", color: "#111827" }}>รถที่ใช้วันนี้</b>
-                      <span style={{ display: "block", color: "#374151", fontWeight: 800 }}>{vehicleDisplayName(selectedDriverVehicle)}</span>
-                      <small style={{ color: "#6b7280" }}>
-                        {selectedDriverVehicle?.assetCode || "-"} · ผู้รับผิดชอบ {selectedDriverVehicle?.responsiblePerson || "-"} · {selectedDriverVehicle?.department || "-"}
-                      </small>
-                    </div>
-                    <button type="button" className="secondary" style={{ padding: "8px 10px", fontSize: "12px" }} onClick={() => setShowDriverVehiclePicker(v => !v)}>
-                      {showDriverVehiclePicker ? "ปิดรายการรถ" : "เปลี่ยนรถวันนี้"}
-                    </button>
-                  </div>
-                  {!selectedDriverVehicleIsDefault && (
-                    <small style={{ color: "#92400e", fontWeight: 800 }}>วันนี้ใช้รถคนละคันกับรถประจำ ระบบจะบันทึกไว้ในรายงาน</small>
-                  )}
-                  {showDriverVehiclePicker && (
-                    <div style={{ display: "grid", gap: "8px" }}>
-                      <select
-                        value={selectedDriverVehicleId}
-                        onChange={e => {
-                          setDriverVehicleId(e.target.value);
-                          setDriverVehicleChangedToday(true);
-                        }}
-                      >
-                        {HILLKOFF_VEHICLES.map(vehicle => (
-                          <option key={vehicle.id} value={vehicle.id}>
-                            {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="secondary"
-                        style={{ padding: "7px 10px", fontSize: "12px", width: "fit-content" }}
-                        onClick={() => {
-                          if (defaultDriverVehicle?.id) {
-                            setDriverVehicleId(defaultDriverVehicle.id);
-                            setDriverVehicleChangedToday(false);
-                          }
-                        }}
-                      >
-                        กลับไปรถประจำ
-                      </button>
-                    </div>
-                  )}
+              {selectedDriverVehicle?.id && driverOdometerStart ? (
+                <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", color: "#166534", fontSize: "13px", fontWeight: 800 }}>
+                  รถวันนี้: {vehicleDisplayName(selectedDriverVehicle)} · เลขไมล์เริ่ม {driverOdometerStart}
                 </div>
-                <div>
-                  <label className="field-label">เลขไมล์เริ่มงานวันนี้</label>
-                  <input
-                    value={driverOdometerStart}
-                    onChange={e => setDriverOdometerStart(formatWithCommas(e.target.value))}
-                    inputMode="numeric"
-                    placeholder="เช่น 120,500"
-                  />
+              ) : (
+                <div style={{ background: "#fef9c3", border: "1px solid #facc15", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", color: "#854d0e", fontSize: "13px", fontWeight: 800, display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <span>กรุณาบันทึกรถที่ใช้และเลขไมล์เริ่มต้นในแถบ บันทึกการใช้รถ ก่อนส่งแบบประเมิน</span>
+                  <button type="button" className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setTab("driver-vehicle")}>ไปบันทึกการใช้รถ</button>
                 </div>
-              </div>
+              )}
               <div style={{ display: "grid", gap: "8px" }}>
                 {DRIVER_DAILY_CHECK_ITEMS.map(item => (
                   <label key={item.id} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: driverDailyChecks[item.id] ? "#f0fdf4" : "#fff" }}>
@@ -4622,49 +4844,6 @@ export default function App() {
                 {driverAssessmentStatus && (
                   <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {driverAssessmentStatus}
-                  </span>
-                )}
-              </div>
-            </section>
-
-            <section className="panel" style={{ borderLeft: "4px solid #16a34a" }}>
-              <div className="panel-head">
-                <h2>บันทึกบิลน้ำมัน</h2>
-                <span>{vehicleDisplayName(selectedDriverVehicle)}</span>
-              </div>
-              <div className="form-grid two">
-                <input
-                  value={fuelBillForm.odometer}
-                  onChange={e => setFuelBillForm(p => ({ ...p, odometer: formatWithCommas(e.target.value) }))}
-                  inputMode="numeric"
-                  placeholder="เลขไมล์ตอนเติม"
-                />
-                <select value={fuelBillForm.fuelType} onChange={e => setFuelBillForm(p => ({ ...p, fuelType: e.target.value }))}>
-                  <option value="ดีเซล">ดีเซล</option>
-                  <option value="เบนซิน">เบนซิน</option>
-                  <option value="แก๊สโซฮอล์">แก๊สโซฮอล์</option>
-                  <option value="อื่น ๆ">อื่น ๆ</option>
-                </select>
-                <input value={fuelBillForm.liters} onChange={e => setFuelBillForm(p => ({ ...p, liters: e.target.value }))} inputMode="decimal" placeholder="จำนวนลิตร" />
-                <input value={fuelBillForm.amount} onChange={e => setFuelBillForm(p => ({ ...p, amount: e.target.value }))} inputMode="decimal" placeholder="ยอดเงิน" />
-                <input value={fuelBillForm.pricePerLiter} onChange={e => setFuelBillForm(p => ({ ...p, pricePerLiter: e.target.value }))} inputMode="decimal" placeholder="ราคาต่อลิตร (ไม่กรอกได้)" />
-                <input value={fuelBillForm.station} onChange={e => setFuelBillForm(p => ({ ...p, station: e.target.value }))} placeholder="ปั๊มน้ำมัน" />
-                <input value={fuelBillForm.receiptNo} onChange={e => setFuelBillForm(p => ({ ...p, receiptNo: e.target.value }))} placeholder="เลขที่บิล" />
-              </div>
-              <textarea
-                value={fuelBillForm.note}
-                onChange={e => setFuelBillForm(p => ({ ...p, note: e.target.value }))}
-                rows={2}
-                placeholder="หมายเหตุบิลน้ำมัน"
-                style={{ marginTop: "10px" }}
-              />
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
-                <button type="button" className="primary" onClick={submitFuelBill} disabled={fuelBillSubmitting}>
-                  <FileSpreadsheet size={16} /> {fuelBillSubmitting ? "กำลังบันทึก..." : "บันทึกบิลน้ำมัน"}
-                </button>
-                {fuelBillStatus && (
-                  <span style={{ color: fuelBillStatus.startsWith("✅") ? "#166534" : fuelBillStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
-                    {fuelBillStatus}
                   </span>
                 )}
               </div>
