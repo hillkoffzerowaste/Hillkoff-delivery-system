@@ -201,7 +201,16 @@ export async function POST(request) {
       googleSyncedAt: googleSync?.skipped ? null : FieldValue.serverTimestamp()
     }, { merge: true });
 
-    return Response.json({ ok: true, data: { id: docId, serviceDate, driverId, assessmentType, googleSync } });
+    return Response.json({
+      ok: true,
+      data: {
+        id: docId,
+        serviceDate,
+        driverId,
+        assessmentType,
+        googleSyncStatus: googleSync?.ok === false ? "failed" : (googleSync?.skipped ? "skipped" : "synced")
+      }
+    });
   } catch (e) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
   }

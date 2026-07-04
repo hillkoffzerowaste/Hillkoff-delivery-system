@@ -90,7 +90,10 @@ export async function POST(request) {
     if (!Number.isFinite(amount) || amount <= 0) {
       return Response.json({ ok: false, error: "Amount required" }, { status: 400 });
     }
-    if (liters < 0 || pricePerLiter < 0) {
+    if (!Number.isFinite(liters) || liters <= 0) {
+      return Response.json({ ok: false, error: "Liters required" }, { status: 400 });
+    }
+    if (pricePerLiter < 0) {
       return Response.json({ ok: false, error: "Invalid fuel values" }, { status: 400 });
     }
 
@@ -135,7 +138,14 @@ export async function POST(request) {
       googleSyncedAt: googleSync?.skipped ? null : FieldValue.serverTimestamp()
     }, { merge: true });
 
-    return Response.json({ ok: true, data: { id: billRef.id, serviceDate, googleSync } });
+    return Response.json({
+      ok: true,
+      data: {
+        id: billRef.id,
+        serviceDate,
+        googleSyncStatus: googleSync?.ok === false ? "failed" : (googleSync?.skipped ? "skipped" : "synced")
+      }
+    });
   } catch (error) {
     return Response.json({ ok: false, error: error?.message || String(error) }, { status: 401 });
   }

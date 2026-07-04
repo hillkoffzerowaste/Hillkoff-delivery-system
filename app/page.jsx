@@ -2391,8 +2391,8 @@ export default function App() {
       setFuelBillStatus("⚠️ กรุณากรอกยอดเงินบิลน้ำมัน");
       return;
     }
-    if (fuelBillForm.liters && (!liters || liters <= 0)) {
-      setFuelBillStatus("⚠️ จำนวนลิตรต้องมากกว่า 0");
+    if (!liters || liters <= 0) {
+      setFuelBillStatus("⚠️ กรุณากรอกจำนวนลิตรให้มากกว่า 0");
       return;
     }
     const pricePerLiter = typedPrice || (liters > 0 ? Number((amount / liters).toFixed(2)) : 0);
@@ -2411,7 +2411,7 @@ export default function App() {
           vehicle: selectedDriverVehicle,
           odometer,
           fuelType: String(fuelBillForm.fuelType || "").trim(),
-          liters: liters || 0,
+          liters,
           amount,
           pricePerLiter,
           station: String(fuelBillForm.station || "").trim(),
@@ -2483,7 +2483,7 @@ export default function App() {
             driverNote: String(note || "").trim(),
             driverName: order.driverName || state.auth?.name || "",
             driverId: order.driverId || state.auth?.driverId || driverId || "",
-            sharedToLine: true
+            sharedToLine: false
           };
 	        const text = buildLineMessageForOrder(completedOrder);
 	        const file = podFilesRef.current?.[order.id];
@@ -2502,14 +2502,12 @@ export default function App() {
 	        } else {
 	          await navigator.share({ text });
 	        }
-	        updateOrder(order.id, completedOrder);
+	        updateOrder(order.id, { ...completedOrder, sharedToLine: true });
 	        if (copied) {
 	          setSyncStatus(`✅ ส่งสำเร็จและคัดลอกสรุปสั้นสำหรับ LINE แล้ว (${order.id})`);
 	        }
 	      } catch (error) {
-	        if (completedOrder) {
-	          updateOrder(order.id, { ...completedOrder, sharedToLine: false });
-	        }
+	        if (completedOrder) updateOrder(order.id, completedOrder);
 	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${order.id})`);
 	      }
 	    })();
