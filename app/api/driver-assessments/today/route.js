@@ -1,4 +1,5 @@
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
+import { HILLKOFF_VEHICLES } from "../../../../lib/vehicleMaster";
 
 export const runtime = "nodejs";
 
@@ -53,7 +54,7 @@ export async function POST(request) {
 
     const assessments = assessmentsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
 
-    return Response.json({ ok: true, data: { serviceDate, drivers, assessments } });
+    return Response.json({ ok: true, data: { serviceDate, drivers, assessments, vehicles: HILLKOFF_VEHICLES } });
   } catch (e) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
   }
