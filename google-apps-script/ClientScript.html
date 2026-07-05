@@ -268,16 +268,16 @@
   }
 
   function refreshSummaries() {
-    if (!confirm("ยืนยัน Refresh Summary")) return;
+    if (!confirm("ยืนยันคำนวณสรุปใหม่จาก Sheet")) return;
     setLoading(true);
     google.script.run
       .withSuccessHandler((result) => {
         setLoading(false);
         if (!result || result.ok === false) {
-          toast(result?.error || "Refresh Summary ไม่สำเร็จ", true);
+          toast(result?.error || "คำนวณสรุปใหม่จาก Sheet ไม่สำเร็จ", true);
           return;
         }
-        toast("Refresh Summary สำเร็จ");
+        toast("คำนวณสรุปใหม่จาก Sheet สำเร็จ");
         refreshDashboard();
       })
       .withFailureHandler(saveFailed)
