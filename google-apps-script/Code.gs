@@ -115,7 +115,9 @@ var VEHICLES = [
 ];
 
 function doGet(e) {
+  var lock = LockService.getScriptLock();
   try {
+    lock.waitLock(30000);
     var ss = setupWorkbook();
     return jsonResponse({
       ok: true,
@@ -125,13 +127,19 @@ function doGet(e) {
     });
   } catch (error) {
     return jsonResponse({ ok: false, error: String(error && error.message ? error.message : error) });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (lockError) {}
   }
 }
 
 function doPost(e) {
   var ss = null;
   var payload = {};
+  var lock = LockService.getScriptLock();
   try {
+    lock.waitLock(30000);
     payload = parsePayload(e);
     ss = setupWorkbook();
 
@@ -161,6 +169,10 @@ function doPost(e) {
       logSync(ss, payload.action || "error", "FAILED", String(error && error.message ? error.message : error), payload.id || "");
     } catch (logError) {}
     return jsonResponse({ ok: false, error: String(error && error.message ? error.message : error) });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (lockError) {}
   }
 }
 
@@ -232,8 +244,7 @@ function ensureSheetWithHeaders(ss, sheetName, headers) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
   if (sheet.getLastColumn() > headers.length) {
-    var extraColumns = sheet.getLastColumn() - headers.length;
-    sheet.getRange(1, headers.length + 1, 1, extraColumns).clearContent();
+    sheet.getRange(1, headers.length + 1, 1, sheet.getLastColumn() - headers.length).clearContent();
   }
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.setFrozenRows(1);
