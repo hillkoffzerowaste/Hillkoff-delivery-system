@@ -2215,30 +2215,29 @@ export default function App() {
     try {
       setDailyVehicleStartSubmitting(true);
       setVehicleUsageStatus("⏳ กำลังบันทึกเริ่มใช้รถวันนี้...");
-      const db = getFirestoreDb();
-      const payload = {
-        serviceDate: todayServiceDate,
-        eventType: "start",
-        driverId: state.auth?.driverId || driverId || "",
-        driverName: state.auth?.name || selectedDriverProfile?.name || "",
-        driverPhone: state.auth?.phone || "",
-        vehicleId: selectedDriverVehicle.id,
-        assetCode: selectedDriverVehicle.assetCode,
-        plate: selectedDriverVehicle.plate,
-        vehicleName: vehicleDisplayName(selectedDriverVehicle),
-        brand: selectedDriverVehicle.brand,
-        model: selectedDriverVehicle.model,
-        responsiblePerson: selectedDriverVehicle.responsiblePerson,
-        department: selectedDriverVehicle.department,
-        odometer: odometerStart,
-        odometerStart,
-        usageType: "เริ่มใช้รถวันนี้",
-        detail: "บันทึกเริ่มต้นประจำวัน",
-        note: "",
-        createdAt: fb.serverTimestamp(),
-        updatedAt: fb.serverTimestamp()
-      };
-      await fb.addDoc(fb.collection(db, "vehicle_usage_events"), payload);
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/vehicle-usage/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          eventType: "start",
+          driverId: state.auth?.driverId || driverId || "",
+          driverName: state.auth?.name || selectedDriverProfile?.name || "",
+          driverPhone: state.auth?.phone || "",
+          vehicleId: selectedDriverVehicle.id,
+          vehicle: selectedDriverVehicle,
+          odometer: odometerStart,
+          odometerStart,
+          usageType: "เริ่มใช้รถวันนี้",
+          detail: "บันทึกเริ่มต้นประจำวัน",
+          note: ""
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
       if (dailyVehicleStartKey && typeof window !== "undefined") {
         localStorage.setItem(dailyVehicleStartKey, JSON.stringify({
           serviceDate: todayServiceDate,
@@ -2565,30 +2564,29 @@ export default function App() {
     try {
       setVehicleUsageSubmitting(true);
       setVehicleUsageStatus(eventType === "end" ? "⏳ กำลังบันทึกจบการใช้รถ..." : "⏳ กำลังบันทึกเลขไมล์ระหว่างวัน...");
-      const db = getFirestoreDb();
-      const payload = {
-        serviceDate: todayServiceDate,
-        eventType,
-        driverId: state.auth?.driverId || driverId || "",
-        driverName: state.auth?.name || selectedDriverProfile?.name || "",
-        driverPhone: state.auth?.phone || "",
-        vehicleId: selectedDriverVehicle.id,
-        assetCode: selectedDriverVehicle.assetCode,
-        plate: selectedDriverVehicle.plate,
-        vehicleName: vehicleDisplayName(selectedDriverVehicle),
-        brand: selectedDriverVehicle.brand,
-        model: selectedDriverVehicle.model,
-        responsiblePerson: selectedDriverVehicle.responsiblePerson,
-        department: selectedDriverVehicle.department,
-        odometer,
-        odometerStart: startOdometer || 0,
-        usageType: eventType === "end" ? "จบการใช้รถวันนี้" : String(vehicleUsageForm.usageType || "").trim(),
-        detail: eventType === "end" ? String(vehicleEndForm.summary || "").trim() : String(vehicleUsageForm.detail || "").trim(),
-        note: String(source.note || "").trim(),
-        createdAt: fb.serverTimestamp(),
-        updatedAt: fb.serverTimestamp()
-      };
-      await fb.addDoc(fb.collection(db, "vehicle_usage_events"), payload);
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/vehicle-usage/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          eventType,
+          driverId: state.auth?.driverId || driverId || "",
+          driverName: state.auth?.name || selectedDriverProfile?.name || "",
+          driverPhone: state.auth?.phone || "",
+          vehicleId: selectedDriverVehicle.id,
+          vehicle: selectedDriverVehicle,
+          odometer,
+          odometerStart: startOdometer || 0,
+          usageType: eventType === "end" ? "จบการใช้รถวันนี้" : String(vehicleUsageForm.usageType || "").trim(),
+          detail: eventType === "end" ? String(vehicleEndForm.summary || "").trim() : String(vehicleUsageForm.detail || "").trim(),
+          note: String(source.note || "").trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
       setVehicleUsageStatus(eventType === "end" ? "✅ บันทึกจบการใช้รถวันนี้แล้ว" : "✅ บันทึกเลขไมล์ระหว่างวันแล้ว");
       if (eventType === "end") {
         setVehicleEndForm({ odometer: "", summary: "", note: "" });
