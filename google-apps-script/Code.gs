@@ -270,6 +270,7 @@ function ensureSummarySheets(ss) {
   var daily = ss.getSheetByName(SHEET_NAMES.dailySummary) || ss.insertSheet(SHEET_NAMES.dailySummary);
   daily.clear();
   var dailyOutput = buildDailyVehicleSummary(segmentRows, fuelRows);
+  prepareOutputRange(daily, dailyOutput.length, dailyOutput[0].length);
   daily.getRange(1, 1, dailyOutput.length, dailyOutput[0].length).setValues(dailyOutput);
   daily.getRange(1, 1, 1, dailyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   daily.autoResizeColumns(1, dailyOutput[0].length);
@@ -277,6 +278,7 @@ function ensureSummarySheets(ss) {
   var monthly = ss.getSheetByName(SHEET_NAMES.monthlySummary) || ss.insertSheet(SHEET_NAMES.monthlySummary);
   monthly.clear();
   var monthlyOutput = buildMonthlyVehicleSummary(segmentRows, fuelRows);
+  prepareOutputRange(monthly, monthlyOutput.length, monthlyOutput[0].length);
   monthly.getRange(1, 1, monthlyOutput.length, monthlyOutput[0].length).setValues(monthlyOutput);
   monthly.getRange(1, 1, 1, monthlyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   monthly.autoResizeColumns(1, monthlyOutput[0].length);
@@ -284,6 +286,7 @@ function ensureSummarySheets(ss) {
   var dash = ss.getSheetByName(SHEET_NAMES.dashboard) || ss.insertSheet(SHEET_NAMES.dashboard);
   dash.clear();
   var dashboardRows = buildDashboardSummary(segmentRows, fuelRows, dailyRows, vehicleRows, logRows);
+  prepareOutputRange(dash, dashboardRows.length, dashboardRows[0].length);
   dash.getRange(1, 1, dashboardRows.length, dashboardRows[0].length).setValues(dashboardRows);
   dash.getRange(1, 1, 1, dashboardRows[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   dash.autoResizeColumns(1, dashboardRows[0].length);
@@ -293,6 +296,11 @@ function readSheetRows(ss, sheetName) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet || sheet.getLastRow() <= 1) return [];
   return sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+}
+
+function prepareOutputRange(sheet, rowCount, columnCount) {
+  if (rowCount <= 0 || columnCount <= 0) return;
+  sheet.getRange(1, 1, rowCount, columnCount).setNumberFormat("@");
 }
 
 function buildDailyVehicleSummary(segmentRows, fuelRows) {
