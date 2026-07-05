@@ -240,6 +240,14 @@ function removeDefaultSheetIfSafe(ss) {
   if (thaiSheet && ss.getSheets().length > 1) ss.deleteSheet(thaiSheet);
 }
 
+function applyBasicFilter(sheet, columnCount) {
+  var lastRow = Math.max(sheet.getLastRow(), 1);
+  var columns = Number(columnCount || sheet.getLastColumn() || 0);
+  if (!columns) return;
+  if (sheet.getFilter()) return;
+  sheet.getRange(1, 1, lastRow, columns).createFilter();
+}
+
 function ensureSheetWithHeaders(ss, sheetName, headers) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
@@ -250,6 +258,7 @@ function ensureSheetWithHeaders(ss, sheetName, headers) {
   sheet.setFrozenRows(1);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#e5e7eb");
   sheet.autoResizeColumns(1, headers.length);
+  applyBasicFilter(sheet, headers.length);
   return sheet;
 }
 
@@ -274,6 +283,7 @@ function ensureSummarySheets(ss) {
   daily.getRange(1, 1, dailyOutput.length, dailyOutput[0].length).setValues(dailyOutput);
   daily.getRange(1, 1, 1, dailyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   daily.autoResizeColumns(1, dailyOutput[0].length);
+  applyBasicFilter(daily, dailyOutput[0].length);
 
   var monthly = ss.getSheetByName(SHEET_NAMES.monthlySummary) || ss.insertSheet(SHEET_NAMES.monthlySummary);
   monthly.clear();
@@ -282,6 +292,7 @@ function ensureSummarySheets(ss) {
   monthly.getRange(1, 1, monthlyOutput.length, monthlyOutput[0].length).setValues(monthlyOutput);
   monthly.getRange(1, 1, 1, monthlyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   monthly.autoResizeColumns(1, monthlyOutput[0].length);
+  applyBasicFilter(monthly, monthlyOutput[0].length);
 
   var dash = ss.getSheetByName(SHEET_NAMES.dashboard) || ss.insertSheet(SHEET_NAMES.dashboard);
   dash.clear();
@@ -290,6 +301,7 @@ function ensureSummarySheets(ss) {
   dash.getRange(1, 1, dashboardRows.length, dashboardRows[0].length).setValues(dashboardRows);
   dash.getRange(1, 1, 1, dashboardRows[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   dash.autoResizeColumns(1, dashboardRows[0].length);
+  applyBasicFilter(dash, dashboardRows[0].length);
 }
 
 function readSheetRows(ss, sheetName) {
