@@ -328,7 +328,7 @@ function buildMonthlyVehicleSummary(segmentRows, fuelRows) {
   var monthlyMap = {};
   sortedKeys(dailyMap).forEach(function(key) {
     var item = dailyMap[key];
-    var month = text(item.serviceDate).substring(0, 7);
+    var month = normalizeServiceDate(item.serviceDate).substring(0, 7);
     if (!month) return;
     var monthlyKey = [month, item.vehicleId, item.driverId].join("|");
     if (!monthlyMap[monthlyKey]) {
@@ -421,7 +421,7 @@ function buildDashboardSummary(segmentRows, fuelRows, dailyRows, vehicleRows, lo
 function buildDailyVehicleMap(segmentRows, fuelRows) {
   var map = {};
   segmentRows.forEach(function(row) {
-    var serviceDate = text(row[1]);
+    var serviceDate = normalizeServiceDate(row[1]);
     var vehicleId = text(row[6]);
     var driverId = text(row[3]);
     if (!serviceDate || !vehicleId || !driverId) return;
@@ -452,7 +452,7 @@ function buildDailyVehicleMap(segmentRows, fuelRows) {
   });
 
   fuelRows.forEach(function(row) {
-    var serviceDate = text(row[1]);
+    var serviceDate = normalizeServiceDate(row[1]);
     var vehicleId = text(row[5]);
     var driverId = text(row[2]);
     if (!serviceDate || !vehicleId || !driverId) return;
@@ -532,7 +532,7 @@ function summarizePeriod(dailyMap, periodKey, isMonth) {
   };
   sortedKeys(dailyMap).forEach(function(key) {
     var item = dailyMap[key];
-    var serviceDate = text(item.serviceDate);
+    var serviceDate = normalizeServiceDate(item.serviceDate);
     var matches = isMonth ? serviceDate.substring(0, 7) === periodKey : serviceDate === periodKey;
     if (!matches) return;
     vehicles[item.vehicleId] = true;
@@ -555,11 +555,11 @@ function summarizePeriod(dailyMap, periodKey, isMonth) {
 }
 
 function countRowsByDate(rows, dateKey) {
-  return rows.filter(function(row) { return text(row[1]) === dateKey; }).length;
+  return rows.filter(function(row) { return normalizeServiceDate(row[1]) === dateKey; }).length;
 }
 
 function countRowsByMonth(rows, monthKey) {
-  return rows.filter(function(row) { return text(row[1]).substring(0, 7) === monthKey; }).length;
+  return rows.filter(function(row) { return normalizeServiceDate(row[1]).substring(0, 7) === monthKey; }).length;
 }
 
 function mergeSummaryBlocks(leftHeaders, leftRows, rightHeaders, rightRows) {
@@ -609,6 +609,20 @@ function getBangkokDateKey(dateLike) {
   var date = dateLike ? new Date(dateLike) : new Date();
   var parts = Utilities.formatDate(date, "Asia/Bangkok", "yyyy-MM-dd");
   return parts;
+}
+
+function normalizeServiceDate(value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, "Asia/Bangkok", "yyyy-MM-dd");
+  }
+  var raw = text(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  var parsed = new Date(raw);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, "Asia/Bangkok", "yyyy-MM-dd");
+  }
+  return raw;
 }
 
 function normalizeEventType(value) {
