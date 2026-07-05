@@ -305,6 +305,17 @@
 
   .editor-panel { margin-bottom: 14px; background: var(--surface-warm); }
 
+  .report-export-panel {
+    margin-bottom: 14px;
+    background: var(--surface-warm);
+  }
+
+  .report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   .filters {
     display: grid;
     grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px);
@@ -439,6 +450,8 @@
     .range-bar { grid-template-columns: 1fr; }
     .range-actions { display: grid; grid-template-columns: 1fr 1fr; }
     .range-actions button { width: 100%; white-space: normal; }
+    .report-actions { display: grid; grid-template-columns: 1fr; }
+    .report-actions button { width: 100%; white-space: normal; }
     .kpi-grid { grid-template-columns: 1fr; }
     .section-head, .panel-head { align-items: flex-start; flex-direction: column; }
     table { min-width: 760px; }

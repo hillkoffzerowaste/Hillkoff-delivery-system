@@ -145,6 +145,20 @@
           <h2>รายงานบัญชี</h2>
           <span class="muted">สรุปจาก Sheet เดิม</span>
         </div>
+        <section class="panel report-export-panel">
+          <div class="panel-head">
+            <h3>ส่งออกรายงาน</h3>
+            <span class="pill">ตามช่วงวันที่ที่เลือก</span>
+          </div>
+          <div class="report-actions">
+            <button class="primary" type="button" onclick="printReport()">พิมพ์ / PDF</button>
+            <button class="secondary" type="button" onclick="copyLineSummary()">คัดลอกสรุป LINE</button>
+            <button class="secondary" type="button" onclick="exportCsv('usage')">CSV การใช้รถ</button>
+            <button class="secondary" type="button" onclick="exportCsv('fuel')">CSV บิลน้ำมัน</button>
+            <button class="secondary" type="button" onclick="exportCsv('daily')">CSV สรุปรายวัน</button>
+            <button class="secondary" type="button" onclick="exportCsv('monthly')">CSV สรุปรายเดือน</button>
+          </div>
+        </section>
         <div class="grid-two">
           <section class="panel">
             <div class="panel-head"><h3>รายวัน</h3></div>

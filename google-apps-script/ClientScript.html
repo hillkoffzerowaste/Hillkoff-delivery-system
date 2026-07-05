@@ -170,6 +170,225 @@
     `).join("") || emptyRow(6);
   }
 
+  function exportCsv(type) {
+    const report = buildCsvReport(type);
+    if (!report.rows.length) {
+      toast("ไม่มีข้อมูลสำหรับส่งออก", true);
+      return;
+    }
+    const csv = [report.headers, ...report.rows].map((row) => row.map(csvValue).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${report.fileName}_${reportDateRangeSlug()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    toast(`ส่งออก ${report.title} แล้ว`);
+  }
+
+  function buildCsvReport(type) {
+    const reports = {
+      usage: {
+        title: "การใช้รถ",
+        fileName: "vehicle-usage",
+        headers: ["วันที่", "ทะเบียน", "ผู้ขับ", "ประเภทบันทึก", "เลขไมค์ก่อนหน้า", "เลขไมค์ปัจจุบัน", "ระยะทาง", "การใช้งาน", "รายละเอียด", "หมายเหตุ"],
+        rows: (dashboard.usageRows || []).map((row) => [
+          row.serviceDate,
+          row.plate || row.assetCode,
+          row.driverName || row.driverId,
+          eventLabel(row.eventType),
+          row.odometerStart,
+          row.odometer,
+          usageDistance(row),
+          row.usageType,
+          row.detail,
+          row.note
+        ])
+      },
+      fuel: {
+        title: "บิลน้ำมัน",
+        fileName: "fuel-bills",
+        headers: ["วันที่", "ทะเบียน", "ผู้ขับ", "เลขไมค์ตอนเติมน้ำมัน", "ประเภทน้ำมัน", "ลิตร", "ยอดเงิน", "บาทต่อลิตร", "ปั๊ม", "เลขที่บิล", "หมายเหตุ"],
+        rows: (dashboard.fuelRows || []).map((row) => [
+          row.serviceDate,
+          row.plate || row.assetCode,
+          row.driverName || row.driverId,
+          row.odometer,
+          row.fuelType,
+          row.liters,
+          row.amount,
+          row.pricePerLiter,
+          row.station,
+          row.receiptNo,
+          row.note
+        ])
+      },
+      daily: {
+        title: "สรุปรายวัน",
+        fileName: "daily-summary",
+        headers: ["วันที่", "ทะเบียน", "ผู้ขับ", "ระยะทาง", "ค่าน้ำมัน", "สถานะ"],
+        rows: (dashboard.dailySummary || []).map((row) => [
+          row.serviceDate,
+          row.plate,
+          row.driverName,
+          row.distance,
+          row.fuelAmount,
+          row.status
+        ])
+      },
+      monthly: {
+        title: "สรุปรายเดือน",
+        fileName: "monthly-summary",
+        headers: ["เดือน", "ทะเบียน", "ผู้ขับ", "วันใช้งาน", "ระยะทาง", "ค่าน้ำมัน"],
+        rows: (dashboard.monthlySummary || []).map((row) => [
+          row.month,
+          row.plate,
+          row.driverName,
+          row.workingDays,
+          row.distance,
+          row.fuelAmount
+        ])
+      }
+    };
+    return reports[type] || { title: "", fileName: "report", headers: [], rows: [] };
+  }
+
+  function copyLineSummary() {
+    const kpi = dashboard.kpis?.range || dashboard.kpis?.month || {};
+    const today = dashboard.kpis?.today || {};
+    const alertCount = (dashboard.alerts || []).length;
+    const text = [
+      `รายงานการใช้รถ ${reportDateRangeText()}`,
+      `รถใช้งานวันนี้: ${formatNumber(today.vehicles)} คัน`,
+      `ผู้ขับวันนี้: ${formatNumber(today.drivers)} คน`,
+      `ระยะทางรวม: ${formatNumber(kpi.distance)} กม.`,
+      `ค่าน้ำมันรวม: ${formatNumber(kpi.fuelAmount)} บาท`,
+      `น้ำมันรวม: ${formatNumber(kpi.fuelLiters)} ลิตร`,
+      `บาท/กม.: ${formatNumber(kpi.bahtPerKm)}`,
+      `กม./ลิตร: ${formatNumber(kpi.kmPerLiter)}`,
+      `รายการต้องตรวจ: ${formatNumber(alertCount)} รายการ`
+    ].join("\n");
+
+    copyText(text)
+      .then(() => toast("คัดลอกสรุป LINE แล้ว"))
+      .catch(() => toast("คัดลอกไม่สำเร็จ", true));
+  }
+
+  function printReport() {
+    const html = buildPrintReportHtml();
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast("เบราว์เซอร์บล็อกหน้าพิมพ์ กรุณาอนุญาต popup", true);
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  }
+
+  function buildPrintReportHtml() {
+    const kpi = dashboard.kpis?.range || dashboard.kpis?.month || {};
+    const alerts = dashboard.alerts || [];
+    return `<!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>รายงานการใช้รถ</title>
+          <style>
+            body { font-family: Arial, "Noto Sans Thai", sans-serif; color: #17231a; margin: 24px; }
+            h1 { margin: 0 0 4px; font-size: 24px; }
+            h2 { margin: 22px 0 10px; font-size: 17px; }
+            .muted { color: #66736b; }
+            .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 16px 0; }
+            .kpi { border: 1px solid #dbe3dc; border-radius: 8px; padding: 10px; }
+            .kpi span { display: block; color: #66736b; font-size: 12px; }
+            .kpi strong { display: block; margin-top: 4px; font-size: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+            th, td { border: 1px solid #dbe3dc; padding: 7px 8px; text-align: left; vertical-align: top; font-size: 12px; }
+            th { background: #edf3ee; }
+            @media print { body { margin: 12mm; } .page-break { page-break-before: always; } }
+          </style>
+        </head>
+        <body>
+          <h1>รายงานการใช้รถและค่าน้ำมัน</h1>
+          <div class="muted">ช่วงวันที่: ${escapeHtml(reportDateRangeText())}</div>
+          <div class="kpis">
+            ${printKpi("ระยะทางรวม", formatNumber(kpi.distance), "กม.")}
+            ${printKpi("ค่าน้ำมันรวม", formatNumber(kpi.fuelAmount), "บาท")}
+            ${printKpi("น้ำมันรวม", formatNumber(kpi.fuelLiters), "ลิตร")}
+            ${printKpi("บาท/กม.", formatNumber(kpi.bahtPerKm), "")}
+            ${printKpi("รายการต้องตรวจ", formatNumber(alerts.length), "รายการ")}
+          </div>
+          <h2>สรุปรายวัน</h2>
+          ${printTable(["วันที่", "ทะเบียน", "ผู้ขับ", "ระยะทาง", "ค่าน้ำมัน", "สถานะ"], (dashboard.dailySummary || []).map((row) => [row.serviceDate, row.plate, row.driverName, formatNumber(row.distance), formatNumber(row.fuelAmount), row.status]))}
+          <h2>สรุปรายเดือน</h2>
+          ${printTable(["เดือน", "ทะเบียน", "ผู้ขับ", "วันใช้งาน", "ระยะทาง", "ค่าน้ำมัน"], (dashboard.monthlySummary || []).map((row) => [row.month, row.plate, row.driverName, formatNumber(row.workingDays), formatNumber(row.distance), formatNumber(row.fuelAmount)]))}
+          <h2 class="page-break">รายละเอียดการใช้รถ</h2>
+          ${printTable(["วันที่", "ทะเบียน", "ผู้ขับ", "ประเภท", "เลขไมค์ก่อนหน้า", "เลขไมค์ปัจจุบัน", "ระยะทาง", "การใช้งาน"], (dashboard.usageRows || []).map((row) => [row.serviceDate, row.plate || row.assetCode, row.driverName || row.driverId, eventLabel(row.eventType), formatNumber(row.odometerStart), formatNumber(row.odometer), formatNumber(usageDistance(row)), row.usageType || row.detail || row.note]))}
+          <h2>บิลน้ำมัน</h2>
+          ${printTable(["วันที่", "ทะเบียน", "ผู้ขับ", "เลขไมค์ตอนเติม", "ลิตร", "ยอดเงิน", "ปั๊ม", "เลขที่บิล"], (dashboard.fuelRows || []).map((row) => [row.serviceDate, row.plate || row.assetCode, row.driverName || row.driverId, formatNumber(row.odometer), formatNumber(row.liters), formatNumber(row.amount), row.station, row.receiptNo]))}
+          <h2>รายการต้องตรวจ</h2>
+          ${printTable(["ประเภท", "รายละเอียด"], alerts.map((row) => [row.title, row.detail]))}
+        </body>
+      </html>`;
+  }
+
+  function printKpi(label, value, unit) {
+    return `<div class="kpi"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><span>${escapeHtml(unit)}</span></div>`;
+  }
+
+  function printTable(headers, rows) {
+    const body = rows.length ? rows.map((row) => `<tr>${row.map((value) => `<td>${escapeHtml(value ?? "")}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}" class="muted">ไม่มีข้อมูล</td></tr>`;
+    return `<table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise((resolve, reject) => {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy") ? resolve() : reject(new Error("copy failed"));
+      } catch (error) {
+        reject(error);
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    });
+  }
+
+  function csvValue(value) {
+    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  }
+
+  function usageDistance(row) {
+    if (row.odometerStart === "" || row.odometerStart == null || row.odometer === "" || row.odometer == null) return "";
+    const start = Number(row.odometerStart);
+    const end = Number(row.odometer);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : "";
+  }
+
+  function reportDateRangeText() {
+    const filters = dashboard.filters || getDateFilters();
+    return `${filters.dateFrom || "-"} ถึง ${filters.dateTo || "-"}`;
+  }
+
+  function reportDateRangeSlug() {
+    const filters = dashboard.filters || getDateFilters();
+    return `${filters.dateFrom || "all"}_${filters.dateTo || "today"}`.replace(/[^\dA-Za-z_-]/g, "-");
+  }
+
   function fillFormOptions() {
     const vehicleOptions = `<option value="">เลือกรถ</option>` + (dashboard.vehicles || []).map((v) => {
       const value = escapeAttr(v.assetCode || v.plate);
