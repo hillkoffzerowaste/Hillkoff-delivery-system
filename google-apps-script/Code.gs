@@ -7,7 +7,8 @@
 
 var CONFIG = {
   spreadsheetName: "Hillkoff Vehicle Usage System",
-  spreadsheetIdProperty: "HILLKOFF_VEHICLE_USAGE_SPREADSHEET_ID"
+  spreadsheetIdProperty: "HILLKOFF_VEHICLE_USAGE_SPREADSHEET_ID",
+  fallbackSpreadsheetId: "1jPy3C9LNvttC62piJeWKC8IWIue4i_KDILY-imbRanc"
 };
 
 var SHEET_NAMES = {
@@ -177,19 +178,32 @@ function setupWorkbook() {
 function getOrCreateSpreadsheet() {
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty(CONFIG.spreadsheetIdProperty);
-  var ss = null;
-  if (id) {
-    try {
-      ss = SpreadsheetApp.openById(id);
-    } catch (error) {
-      ss = null;
-    }
+  var ss = id ? openSpreadsheetById(id) : null;
+  if (ss) {
+    props.setProperty(CONFIG.spreadsheetIdProperty, ss.getId());
+    return ss;
   }
+
+  ss = openSpreadsheetById(CONFIG.fallbackSpreadsheetId);
+  if (ss) {
+    props.setProperty(CONFIG.spreadsheetIdProperty, CONFIG.fallbackSpreadsheetId);
+    return ss;
+  }
+
   if (!ss) {
     ss = SpreadsheetApp.create(CONFIG.spreadsheetName);
     props.setProperty(CONFIG.spreadsheetIdProperty, ss.getId());
   }
   return ss;
+}
+
+function openSpreadsheetById(id) {
+  if (!id) return null;
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (error) {
+    return null;
+  }
 }
 
 function removeDefaultSheetIfSafe(ss) {
