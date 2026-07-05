@@ -37,6 +37,27 @@ async function findDriverUser(db, decoded, payload) {
   return { doc, user };
 }
 
+async function syncUsageToGoogle(payload) {
+  const webAppUrl = process.env.GOOGLE_MILEAGE_WEB_APP_URL || process.env.GOOGLE_SHEETS_WEB_APP_URL || "";
+  if (!webAppUrl) return { ok: true, skipped: true };
+  try {
+    const response = await fetch(webAppUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "appendUsageSegment", ...payload })
+    });
+    const text = await response.text();
+    if (!response.ok) return { ok: false, error: text || `HTTP ${response.status}` };
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: true, raw: text };
+    }
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+}
+
 export async function POST(request) {
   let payload;
   try {
@@ -103,18 +124,31 @@ export async function POST(request) {
       usageType: String(payload?.usageType || "").trim(),
       detail: String(payload?.detail || "").trim(),
       note: String(payload?.note || "").trim(),
+      googleSyncStatus: "pending",
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     };
 
     await eventRef.set(event, { merge: true });
+    const googleSync = await syncUsageToGoogle({
+      ...event,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const googleSyncStatus = googleSync?.ok === false ? "failed" : (googleSync?.skipped ? "skipped" : "synced");
+    await eventRef.set({
+      googleSyncStatus,
+      googleSyncError: googleSync?.ok === false ? String(googleSync.error || "sync failed").slice(0, 500) : "",
+      googleSyncedAt: googleSync?.skipped ? null : FieldValue.serverTimestamp()
+    }, { merge: true });
 
     return Response.json({
       ok: true,
       data: {
         id: eventRef.id,
         serviceDate,
-        eventType
+        eventType,
+        googleSyncStatus
       }
     });
   } catch (error) {
