@@ -150,6 +150,7 @@ function doPost(e) {
     }
 
     logSync(ss, payload.action, "OK", JSON.stringify(result), payload.id || payload.recordKey || "");
+    ensureSummarySheets(ss);
     return jsonResponse({ ok: true, data: result, spreadsheetUrl: ss.getUrl() });
   } catch (error) {
     try {
@@ -193,7 +194,9 @@ function getOrCreateSpreadsheet() {
 
 function removeDefaultSheetIfSafe(ss) {
   var sheet = ss.getSheetByName("Sheet1");
+  var thaiSheet = ss.getSheetByName("ชีต1");
   if (sheet && ss.getSheets().length > 1) ss.deleteSheet(sheet);
+  if (thaiSheet && ss.getSheets().length > 1) ss.deleteSheet(thaiSheet);
 }
 
 function ensureSheetWithHeaders(ss, sheetName, headers) {
@@ -221,34 +224,177 @@ function ensureVehiclesSeeded(ss) {
 }
 
 function ensureSummarySheets(ss) {
+  var segmentRows = readSheetRows(ss, SHEET_NAMES.usageSegments);
+  var fuelRows = readSheetRows(ss, SHEET_NAMES.fuelBills);
+  var dailyRows = readSheetRows(ss, SHEET_NAMES.dailyUsage);
+  var vehicleRows = readSheetRows(ss, SHEET_NAMES.vehicles);
+  var logRows = readSheetRows(ss, SHEET_NAMES.syncLogs);
+
   var daily = ss.getSheetByName(SHEET_NAMES.dailySummary) || ss.insertSheet(SHEET_NAMES.dailySummary);
-  if (daily.getLastRow() === 0) {
-    daily.getRange(1, 1, 1, 3).setValues([["Service Date", "Vehicle Records", "Odometer Starts"]]);
-    daily.getRange(2, 1).setFormula("=QUERY({'Daily Usage'!B2:B,'Daily Usage'!F2:F,'Daily Usage'!O2:O},\"select Col1,count(Col2),sum(Col3) where Col1 is not null group by Col1 label count(Col2) '', sum(Col3) ''\",0)");
-    daily.getRange(1, 5, 1, 3).setValues([["Service Date", "Fuel Liters", "Fuel Amount"]]);
-    daily.getRange(2, 5).setFormula("=QUERY({'Fuel Bills'!B2:B,'Fuel Bills'!Q2:Q,'Fuel Bills'!R2:R},\"select Col1,sum(Col2),sum(Col3) where Col1 is not null group by Col1 label sum(Col2) '', sum(Col3) ''\",0)");
-    daily.getRange(1, 1, 1, 7).setFontWeight("bold").setBackground("#e5e7eb");
-  }
+  daily.clear();
+  var dailyUsageSummary = buildDailyUsageSummary(segmentRows);
+  var dailyFuelSummary = buildDailyFuelSummary(fuelRows);
+  var dailyOutput = mergeSummaryBlocks(
+    ["Service Date", "Segment Records", "Start Events", "End Events", "Latest Odometer", "Min Start Odometer", "Distance Estimate"],
+    dailyUsageSummary,
+    ["Service Date", "Fuel Liters", "Fuel Amount"],
+    dailyFuelSummary
+  );
+  daily.getRange(1, 1, dailyOutput.length, dailyOutput[0].length).setValues(dailyOutput);
+  daily.getRange(1, 1, 1, dailyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
+  daily.autoResizeColumns(1, dailyOutput[0].length);
 
   var monthly = ss.getSheetByName(SHEET_NAMES.monthlySummary) || ss.insertSheet(SHEET_NAMES.monthlySummary);
-  if (monthly.getLastRow() === 0) {
-    monthly.getRange(1, 1, 1, 6).setValues([["Month", "Vehicle ID", "Plate", "Fuel Liters", "Fuel Amount", "Fuel Records"]]);
-    monthly.getRange(2, 1).setFormula("=QUERY({ARRAYFORMULA(IF('Fuel Bills'!B2:B=\"\",\"\",LEFT('Fuel Bills'!B2:B,7))),'Fuel Bills'!F2:F,'Fuel Bills'!H2:H,'Fuel Bills'!Q2:Q,'Fuel Bills'!R2:R},\"select Col1,Col2,Col3,sum(Col4),sum(Col5),count(Col2) where Col1 is not null group by Col1,Col2,Col3 label sum(Col4) '', sum(Col5) '', count(Col2) ''\",0)");
-    monthly.getRange(1, 1, 1, 6).setFontWeight("bold").setBackground("#e5e7eb");
-  }
+  monthly.clear();
+  var monthlyUsageSummary = buildMonthlyUsageSummary(segmentRows);
+  var monthlyFuelSummary = buildMonthlyFuelSummary(fuelRows);
+  var monthlyOutput = mergeSummaryBlocks(
+    ["Month", "Vehicle ID", "Plate", "Segment Records", "Start Events", "End Events", "Latest Odometer", "Min Start Odometer", "Distance Estimate"],
+    monthlyUsageSummary,
+    ["Month", "Vehicle ID", "Plate", "Fuel Liters", "Fuel Amount", "Fuel Records"],
+    monthlyFuelSummary
+  );
+  monthly.getRange(1, 1, monthlyOutput.length, monthlyOutput[0].length).setValues(monthlyOutput);
+  monthly.getRange(1, 1, 1, monthlyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
+  monthly.autoResizeColumns(1, monthlyOutput[0].length);
 
   var dash = ss.getSheetByName(SHEET_NAMES.dashboard) || ss.insertSheet(SHEET_NAMES.dashboard);
-  if (dash.getLastRow() === 0) {
-    dash.getRange(1, 1, 1, 2).setValues([["Metric", "Value"]]);
-    dash.getRange(2, 1, 5, 2).setValues([
-      ["Spreadsheet", CONFIG.spreadsheetName],
-      ["Vehicle Master Count", "=COUNTA(Vehicles!B2:B)"],
-      ["Daily Usage Records", "=COUNTA('Daily Usage'!A2:A)"],
-      ["Fuel Bill Records", "=COUNTA('Fuel Bills'!A2:A)"],
-      ["Last Sync Log", "=IFERROR(INDEX('Sync Logs'!A:A,COUNTA('Sync Logs'!A:A)),\"\")"]
-    ]);
-    dash.getRange(1, 1, 1, 2).setFontWeight("bold").setBackground("#e5e7eb");
+  dash.clear();
+  var lastLog = logRows.length ? logRows[logRows.length - 1] : [];
+  var dashboardRows = [
+    ["Metric", "Value"],
+    ["Spreadsheet", CONFIG.spreadsheetName],
+    ["Vehicle Master Count", vehicleRows.length],
+    ["Daily Usage Records", dailyRows.length],
+    ["Usage Segment Records", segmentRows.length],
+    ["Fuel Bill Records", fuelRows.length],
+    ["Last Sync Log Time", lastLog[0] || ""],
+    ["Last Sync Action", lastLog[1] || ""],
+    ["Last Sync Status", lastLog[2] || ""]
+  ];
+  dash.getRange(1, 1, dashboardRows.length, 2).setValues(dashboardRows);
+  dash.getRange(1, 1, 1, 2).setFontWeight("bold").setBackground("#e5e7eb");
+  dash.autoResizeColumns(1, 2);
+}
+
+function readSheetRows(ss, sheetName) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+}
+
+function mergeSummaryBlocks(leftHeaders, leftRows, rightHeaders, rightRows) {
+  var rowCount = Math.max(leftRows.length, rightRows.length, 1);
+  var rows = [leftHeaders.concat([""]).concat(rightHeaders)];
+  for (var i = 0; i < rowCount; i++) {
+    var left = i < leftRows.length ? leftRows[i] : blankArray(leftHeaders.length);
+    var right = i < rightRows.length ? rightRows[i] : blankArray(rightHeaders.length);
+    rows.push(left.concat([""]).concat(right));
   }
+  return rows;
+}
+
+function blankArray(length) {
+  var values = [];
+  for (var i = 0; i < length; i++) values.push("");
+  return values;
+}
+
+function sortedKeys(map) {
+  return Object.keys(map).sort();
+}
+
+function numeric(value) {
+  var n = Number(value);
+  return isNaN(n) ? 0 : n;
+}
+
+function normalizeEventType(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildDailyUsageSummary(rows) {
+  var map = {};
+  rows.forEach(function(row) {
+    var serviceDate = text(row[1]);
+    if (!serviceDate) return;
+    if (!map[serviceDate]) map[serviceDate] = { records: 0, starts: 0, ends: 0, latestOdometer: 0, minStart: null };
+    var item = map[serviceDate];
+    item.records += 1;
+    var eventType = normalizeEventType(row[2]);
+    if (eventType === "start") item.starts += 1;
+    if (eventType === "end") item.ends += 1;
+    var odometer = numeric(row[10]);
+    if (odometer > item.latestOdometer) item.latestOdometer = odometer;
+    var start = numeric(row[11]);
+    if (start > 0 && (item.minStart === null || start < item.minStart)) item.minStart = start;
+  });
+  return sortedKeys(map).map(function(key) {
+    var item = map[key];
+    var distance = item.latestOdometer && item.minStart !== null ? item.latestOdometer - item.minStart : "";
+    return [key, item.records, item.starts, item.ends, item.latestOdometer || "", item.minStart || "", distance];
+  });
+}
+
+function buildMonthlyUsageSummary(rows) {
+  var map = {};
+  rows.forEach(function(row) {
+    var serviceDate = text(row[1]);
+    if (!serviceDate) return;
+    var month = serviceDate.substring(0, 7);
+    var vehicleId = text(row[6]);
+    var plate = text(row[8]);
+    var key = [month, vehicleId, plate].join("|");
+    if (!map[key]) map[key] = { month: month, vehicleId: vehicleId, plate: plate, records: 0, starts: 0, ends: 0, latestOdometer: 0, minStart: null };
+    var item = map[key];
+    item.records += 1;
+    var eventType = normalizeEventType(row[2]);
+    if (eventType === "start") item.starts += 1;
+    if (eventType === "end") item.ends += 1;
+    var odometer = numeric(row[10]);
+    if (odometer > item.latestOdometer) item.latestOdometer = odometer;
+    var start = numeric(row[11]);
+    if (start > 0 && (item.minStart === null || start < item.minStart)) item.minStart = start;
+  });
+  return sortedKeys(map).map(function(key) {
+    var item = map[key];
+    var distance = item.latestOdometer && item.minStart !== null ? item.latestOdometer - item.minStart : "";
+    return [item.month, item.vehicleId, item.plate, item.records, item.starts, item.ends, item.latestOdometer || "", item.minStart || "", distance];
+  });
+}
+
+function buildDailyFuelSummary(rows) {
+  var map = {};
+  rows.forEach(function(row) {
+    var serviceDate = text(row[1]);
+    if (!serviceDate) return;
+    if (!map[serviceDate]) map[serviceDate] = { liters: 0, amount: 0 };
+    map[serviceDate].liters += numeric(row[16]);
+    map[serviceDate].amount += numeric(row[17]);
+  });
+  return sortedKeys(map).map(function(key) {
+    return [key, map[key].liters, map[key].amount];
+  });
+}
+
+function buildMonthlyFuelSummary(rows) {
+  var map = {};
+  rows.forEach(function(row) {
+    var serviceDate = text(row[1]);
+    if (!serviceDate) return;
+    var month = serviceDate.substring(0, 7);
+    var vehicleId = text(row[5]);
+    var plate = text(row[7]);
+    var key = [month, vehicleId, plate].join("|");
+    if (!map[key]) map[key] = { month: month, vehicleId: vehicleId, plate: plate, liters: 0, amount: 0, records: 0 };
+    map[key].liters += numeric(row[16]);
+    map[key].amount += numeric(row[17]);
+    map[key].records += 1;
+  });
+  return sortedKeys(map).map(function(key) {
+    var item = map[key];
+    return [item.month, item.vehicleId, item.plate, item.liters, item.amount, item.records];
+  });
 }
 
 function parsePayload(e) {
