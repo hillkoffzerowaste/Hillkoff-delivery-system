@@ -1472,6 +1472,12 @@ export default function App() {
     };
   }, [drivers, auth.driverId, auth.name, auth.phone, driverId]);
   const defaultDriverVehicle = useMemo(() => findDefaultVehicleForDriver(selectedDriverProfile), [selectedDriverProfile]);
+  const latestDriverVehicleKey = useMemo(() => {
+    if (auth.role !== "driver") return "";
+    const driverKey = auth.driverId || auth.phone || driverId || "driver";
+    return `hillkoff_latest_vehicle:${driverKey}`;
+  }, [auth.role, auth.driverId, auth.phone, driverId]);
+  const [latestDriverVehicleId, setLatestDriverVehicleId] = useState("");
   const selectedDriverVehicle = useMemo(() => {
     return findVehicleById(driverVehicleId) || defaultDriverVehicle || HILLKOFF_VEHICLES[0] || null;
   }, [driverVehicleId, defaultDriverVehicle]);
@@ -1501,11 +1507,22 @@ export default function App() {
   }, [dailyVehicleStartKey]);
   const needsDailyVehicleStart = auth.role === "driver" && (!dailyVehicleStartSaved || !driverOdometerStart || !selectedDriverVehicle?.id);
   useEffect(() => {
+    if (!latestDriverVehicleKey || typeof window === "undefined") {
+      setLatestDriverVehicleId("");
+      return;
+    }
+    try {
+      setLatestDriverVehicleId(localStorage.getItem(latestDriverVehicleKey) || "");
+    } catch {
+      setLatestDriverVehicleId("");
+    }
+  }, [latestDriverVehicleKey]);
+  useEffect(() => {
     if (auth.role !== "driver") return;
     if (driverVehicleId) return;
-    const nextVehicle = findDefaultVehicleForDriver(selectedDriverProfile);
+    const nextVehicle = findVehicleById(latestDriverVehicleId) || findDefaultVehicleForDriver(selectedDriverProfile);
     if (nextVehicle?.id) setDriverVehicleId(nextVehicle.id);
-  }, [auth.role, driverVehicleId, selectedDriverProfile]);
+  }, [auth.role, driverVehicleId, latestDriverVehicleId, selectedDriverProfile]);
   const driverAssessmentRoster = useMemo(() => {
     const map = new Map();
     const addDriver = (id, data = {}) => {
@@ -2246,8 +2263,15 @@ export default function App() {
           savedAt: new Date().toISOString()
         }));
       }
+      if (latestDriverVehicleKey && typeof window !== "undefined") {
+        localStorage.setItem(latestDriverVehicleKey, selectedDriverVehicle.id);
+        setLatestDriverVehicleId(selectedDriverVehicle.id);
+      }
       setDailyVehicleStartSaved(true);
-      setVehicleUsageStatus("✅ บันทึกเริ่มใช้รถวันนี้แล้ว");
+      const autoClosed = json?.data?.autoClosed;
+      setVehicleUsageStatus(autoClosed?.id
+        ? "✅ บันทึกเริ่มใช้รถวันนี้แล้ว และปิดงานค้างของรถคันนี้ให้อัตโนมัติ"
+        : "✅ บันทึกเริ่มใช้รถวันนี้แล้ว");
     } catch (error) {
       setVehicleUsageStatus(`❌ บันทึกเริ่มใช้รถไม่สำเร็จ: ${error?.message || error}`);
     } finally {
@@ -2586,6 +2610,10 @@ export default function App() {
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      if (latestDriverVehicleKey && typeof window !== "undefined") {
+        localStorage.setItem(latestDriverVehicleKey, selectedDriverVehicle.id);
+        setLatestDriverVehicleId(selectedDriverVehicle.id);
       }
       setVehicleUsageStatus(eventType === "end" ? "✅ บันทึกจบการใช้รถวันนี้แล้ว" : "✅ บันทึกเลขไมล์ระหว่างวันแล้ว");
       if (eventType === "end") {

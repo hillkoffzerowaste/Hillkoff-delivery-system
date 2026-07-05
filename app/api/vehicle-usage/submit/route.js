@@ -58,6 +58,30 @@ async function syncUsageToGoogle(payload) {
   }
 }
 
+function timestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function findLatestPreviousVehicleEvent(db, { vehicleId, serviceDate }) {
+  const snap = await db.collection("vehicle_usage_events").where("vehicleId", "==", vehicleId).get();
+  return snap.docs
+    .map((doc) => ({ doc, data: doc.data() || {} }))
+    .filter(({ data }) => !data.autoClosed && String(data.serviceDate || "") < serviceDate)
+    .sort((a, b) => {
+      const dateCompare = String(b.data.serviceDate || "").localeCompare(String(a.data.serviceDate || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return timestampMillis(b.data.createdAt || b.data.updatedAt) - timestampMillis(a.data.createdAt || a.data.updatedAt);
+    })[0] || null;
+}
+
+function autoCloseDocId({ sourceEventId, startServiceDate }) {
+  return `auto_end_${String(sourceEventId || "").replace(/[^A-Za-z0-9_-]/g, "_")}_${String(startServiceDate || "").replace(/[^0-9-]/g, "_")}`;
+}
+
 export async function POST(request) {
   let payload;
   try {
@@ -102,6 +126,79 @@ export async function POST(request) {
       payload?.driverName || user.name || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || ""
     ).trim();
     const driverPhone = String(payload?.driverPhone || user.phone || user.phoneDigits || "").trim();
+
+    let autoClosed = null;
+    if (eventType === "start") {
+      const latestPrevious = await findLatestPreviousVehicleEvent(db, { vehicleId: vehicle.id, serviceDate });
+      const previous = latestPrevious?.data || null;
+      if (previous && String(previous.eventType || "") !== "end") {
+        const autoEndRef = db.collection("vehicle_usage_events").doc(autoCloseDocId({
+          sourceEventId: latestPrevious.doc.id,
+          startServiceDate: serviceDate
+        }));
+        const existingAutoClose = await autoEndRef.get();
+        if (existingAutoClose.exists) {
+          autoClosed = {
+            id: existingAutoClose.id,
+            serviceDate: previous.serviceDate,
+            eventType: "end",
+            skippedDuplicate: true
+          };
+        } else {
+          const previousStart = Number(previous.odometerStart || previous.odometer || 0);
+          const warning = previousStart > 0 && odometer < previousStart
+            ? "เลขไมล์เริ่มต้นครั้งใหม่ต่ำกว่าเลขไมล์เดิม กรุณาตรวจสอบ"
+            : "";
+          const autoEnd = {
+            id: autoEndRef.id,
+            serviceDate: String(previous.serviceDate || ""),
+            eventType: "end",
+            driverId: String(previous.driverId || ""),
+            driverName: String(previous.driverName || ""),
+            driverPhone: String(previous.driverPhone || ""),
+            vehicleId: vehicle.id,
+            assetCode: vehicle.assetCode,
+            plate: vehicle.plate,
+            vehicleName: vehicleDisplayName(vehicle),
+            brand: vehicle.brand,
+            model: vehicle.model,
+            responsiblePerson: vehicle.responsiblePerson,
+            department: vehicle.department,
+            odometer,
+            odometerStart: previousStart,
+            usageType: "จบงานอัตโนมัติ",
+            detail: "ระบบจบงานอัตโนมัติจากเลขไมล์เริ่มต้นครั้งถัดไป",
+            note: warning || "ระบบจบงานอัตโนมัติจากเลขไมล์เริ่มต้นครั้งถัดไป",
+            autoClosed: true,
+            autoClosedFromEventId: latestPrevious.doc.id,
+            autoClosedByStartServiceDate: serviceDate,
+            autoClosedByDriverId: driverId,
+            googleSyncStatus: "pending",
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+          };
+          await autoEndRef.set(autoEnd, { merge: true });
+          const autoGoogleSync = await syncUsageToGoogle({
+            ...autoEnd,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          const autoGoogleSyncStatus = autoGoogleSync?.ok === false ? "failed" : (autoGoogleSync?.skipped ? "skipped" : "synced");
+          await autoEndRef.set({
+            googleSyncStatus: autoGoogleSyncStatus,
+            googleSyncError: autoGoogleSync?.ok === false ? String(autoGoogleSync.error || "sync failed").slice(0, 500) : "",
+            googleSyncedAt: autoGoogleSync?.skipped ? null : FieldValue.serverTimestamp()
+          }, { merge: true });
+          autoClosed = {
+            id: autoEndRef.id,
+            serviceDate: autoEnd.serviceDate,
+            eventType: "end",
+            googleSyncStatus: autoGoogleSyncStatus,
+            warning
+          };
+        }
+      }
+    }
 
     const eventRef = db.collection("vehicle_usage_events").doc();
     const event = {
@@ -148,7 +245,8 @@ export async function POST(request) {
         id: eventRef.id,
         serviceDate,
         eventType,
-        googleSyncStatus
+        googleSyncStatus,
+        autoClosed
       }
     });
   } catch (error) {
