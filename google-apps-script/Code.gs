@@ -22,73 +22,73 @@ var SHEET_NAMES = {
   syncLogs: "Sync Logs"
 };
 
-var VEHICLE_HEADERS = ["No", "Asset Code", "Plate", "Vehicle Type", "Brand", "Model", "Responsible Person", "Department", "Active"];
+var VEHICLE_HEADERS = ["ลำดับ", "รหัสทรัพย์สิน", "ทะเบียน", "ประเภทรถ", "ยี่ห้อ", "รุ่น", "ผู้รับผิดชอบ", "แผนก", "สถานะใช้งาน"];
 var DAILY_USAGE_HEADERS = [
-  "Record Key",
-  "Service Date",
-  "Driver ID",
-  "Driver Name",
-  "Driver Phone",
-  "Vehicle ID",
-  "Asset Code",
-  "Plate",
-  "Vehicle Type",
-  "Brand",
-  "Model",
-  "Vehicle Name",
-  "Responsible Person",
-  "Department",
-  "Odometer Start",
-  "Odometer End",
-  "Total Distance",
-  "Vehicle Changed Today",
-  "Notes",
-  "Sync Timestamp"
+  "รหัสรายการ",
+  "วันที่",
+  "รหัสคนขับ",
+  "ชื่อคนขับ",
+  "เบอร์โทร",
+  "รหัสรถ",
+  "รหัสทรัพย์สิน",
+  "ทะเบียน",
+  "ประเภทรถ",
+  "ยี่ห้อ",
+  "รุ่น",
+  "ชื่อรถ",
+  "ผู้รับผิดชอบ",
+  "แผนก",
+  "เลขไมล์เริ่ม",
+  "เลขไมล์สิ้นสุด",
+  "ระยะทางรวม",
+  "เปลี่ยนรถวันนี้",
+  "หมายเหตุ",
+  "เวลาซิงก์"
 ];
 var USAGE_SEGMENT_HEADERS = [
-  "ID",
-  "Service Date",
-  "Event Type",
-  "Driver ID",
-  "Driver Name",
-  "Driver Phone",
-  "Vehicle ID",
-  "Asset Code",
-  "Plate",
-  "Vehicle Name",
-  "Odometer",
-  "Odometer Start",
-  "Usage Type",
-  "Detail",
-  "Note",
-  "Sync Timestamp"
+  "รหัสรายการ",
+  "วันที่",
+  "ประเภทเหตุการณ์",
+  "รหัสคนขับ",
+  "ชื่อคนขับ",
+  "เบอร์โทร",
+  "รหัสรถ",
+  "รหัสทรัพย์สิน",
+  "ทะเบียน",
+  "ชื่อรถ",
+  "เลขไมล์",
+  "เลขไมล์เริ่ม",
+  "ประเภทการใช้งาน",
+  "รายละเอียด",
+  "หมายเหตุ",
+  "เวลาซิงก์"
 ];
 var FUEL_BILL_HEADERS = [
-  "ID",
-  "Service Date",
-  "Driver ID",
-  "Driver Name",
-  "Driver Phone",
-  "Vehicle ID",
-  "Asset Code",
-  "Plate",
-  "Vehicle Type",
-  "Brand",
-  "Model",
-  "Vehicle Name",
-  "Responsible Person",
-  "Department",
-  "Odometer",
-  "Fuel Type",
-  "Liters",
-  "Amount",
-  "Price Per Liter",
-  "Station",
-  "Receipt No",
-  "Note",
-  "Sync Timestamp"
+  "รหัสบิล",
+  "วันที่",
+  "รหัสคนขับ",
+  "ชื่อคนขับ",
+  "เบอร์โทร",
+  "รหัสรถ",
+  "รหัสทรัพย์สิน",
+  "ทะเบียน",
+  "ประเภทรถ",
+  "ยี่ห้อ",
+  "รุ่น",
+  "ชื่อรถ",
+  "ผู้รับผิดชอบ",
+  "แผนก",
+  "เลขไมล์ตอนเติม",
+  "ประเภทน้ำมัน",
+  "ลิตร",
+  "จำนวนเงิน",
+  "ราคาต่อลิตร",
+  "ปั๊มน้ำมัน",
+  "เลขที่บิล",
+  "หมายเหตุ",
+  "เวลาซิงก์"
 ];
-var SYNC_LOG_HEADERS = ["Timestamp", "Action", "Status", "Message", "Payload ID"];
+var SYNC_LOG_HEADERS = ["เวลาซิงก์", "คำสั่ง", "สถานะ", "ข้อความ", "รหัสข้อมูล"];
 
 var VEHICLES = [
   [1, "AS541-6101-0001", "ยข 6001 ชม", "รถบรรทุกส่วนบุคคล (4 ล้อ)", "TOYOTA", "Hillux Revo", "สมชาย พรมมี", "Factory-TD", "YES"],
@@ -162,6 +162,19 @@ function doPost(e) {
   }
 }
 
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("Hillkoff")
+    .addItem("รีเฟรชสรุป", "refreshSummaries")
+    .addToUi();
+}
+
+function refreshSummaries() {
+  var ss = getOrCreateSpreadsheet();
+  ensureSummarySheets(ss);
+  return { ok: true, spreadsheetUrl: ss.getUrl(), sheets: getSheetNames(ss) };
+}
+
 function setupWorkbook() {
   var ss = getOrCreateSpreadsheet();
   ensureSheetWithHeaders(ss, SHEET_NAMES.vehicles, VEHICLE_HEADERS);
@@ -216,14 +229,11 @@ function removeDefaultSheetIfSafe(ss) {
 function ensureSheetWithHeaders(ss, sheetName, headers) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
-  var currentHeaders = sheet.getLastRow() > 0 ? sheet.getRange(1, 1, 1, Math.max(headers.length, sheet.getLastColumn())).getValues()[0] : [];
-  var needsHeaders = sheet.getLastRow() === 0 || String(currentHeaders[0] || "") !== headers[0];
-  if (needsHeaders) {
-    sheet.clear();
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  } else {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (sheet.getLastColumn() > headers.length) {
+    var extraColumns = sheet.getLastColumn() - headers.length;
+    sheet.getRange(1, headers.length + 1, 1, extraColumns).clearContent();
   }
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.setFrozenRows(1);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#e5e7eb");
   sheet.autoResizeColumns(1, headers.length);
@@ -246,55 +256,310 @@ function ensureSummarySheets(ss) {
 
   var daily = ss.getSheetByName(SHEET_NAMES.dailySummary) || ss.insertSheet(SHEET_NAMES.dailySummary);
   daily.clear();
-  var dailyUsageSummary = buildDailyUsageSummary(segmentRows);
-  var dailyFuelSummary = buildDailyFuelSummary(fuelRows);
-  var dailyOutput = mergeSummaryBlocks(
-    ["Service Date", "Segment Records", "Start Events", "End Events", "Latest Odometer", "Min Start Odometer", "Distance Estimate"],
-    dailyUsageSummary,
-    ["Service Date", "Fuel Liters", "Fuel Amount"],
-    dailyFuelSummary
-  );
+  var dailyOutput = buildDailyVehicleSummary(segmentRows, fuelRows);
   daily.getRange(1, 1, dailyOutput.length, dailyOutput[0].length).setValues(dailyOutput);
   daily.getRange(1, 1, 1, dailyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   daily.autoResizeColumns(1, dailyOutput[0].length);
 
   var monthly = ss.getSheetByName(SHEET_NAMES.monthlySummary) || ss.insertSheet(SHEET_NAMES.monthlySummary);
   monthly.clear();
-  var monthlyUsageSummary = buildMonthlyUsageSummary(segmentRows);
-  var monthlyFuelSummary = buildMonthlyFuelSummary(fuelRows);
-  var monthlyOutput = mergeSummaryBlocks(
-    ["Month", "Vehicle ID", "Plate", "Segment Records", "Start Events", "End Events", "Latest Odometer", "Min Start Odometer", "Distance Estimate"],
-    monthlyUsageSummary,
-    ["Month", "Vehicle ID", "Plate", "Fuel Liters", "Fuel Amount", "Fuel Records"],
-    monthlyFuelSummary
-  );
+  var monthlyOutput = buildMonthlyVehicleSummary(segmentRows, fuelRows);
   monthly.getRange(1, 1, monthlyOutput.length, monthlyOutput[0].length).setValues(monthlyOutput);
   monthly.getRange(1, 1, 1, monthlyOutput[0].length).setFontWeight("bold").setBackground("#e5e7eb");
   monthly.autoResizeColumns(1, monthlyOutput[0].length);
 
   var dash = ss.getSheetByName(SHEET_NAMES.dashboard) || ss.insertSheet(SHEET_NAMES.dashboard);
   dash.clear();
-  var lastLog = logRows.length ? logRows[logRows.length - 1] : [];
-  var dashboardRows = [
-    ["Metric", "Value"],
-    ["Spreadsheet", CONFIG.spreadsheetName],
-    ["Vehicle Master Count", vehicleRows.length],
-    ["Daily Usage Records", dailyRows.length],
-    ["Usage Segment Records", segmentRows.length],
-    ["Fuel Bill Records", fuelRows.length],
-    ["Last Sync Log Time", lastLog[0] || ""],
-    ["Last Sync Action", lastLog[1] || ""],
-    ["Last Sync Status", lastLog[2] || ""]
-  ];
-  dash.getRange(1, 1, dashboardRows.length, 2).setValues(dashboardRows);
-  dash.getRange(1, 1, 1, 2).setFontWeight("bold").setBackground("#e5e7eb");
-  dash.autoResizeColumns(1, 2);
+  var dashboardRows = buildDashboardSummary(segmentRows, fuelRows, dailyRows, vehicleRows, logRows);
+  dash.getRange(1, 1, dashboardRows.length, dashboardRows[0].length).setValues(dashboardRows);
+  dash.getRange(1, 1, 1, dashboardRows[0].length).setFontWeight("bold").setBackground("#e5e7eb");
+  dash.autoResizeColumns(1, dashboardRows[0].length);
 }
 
 function readSheetRows(ss, sheetName) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet || sheet.getLastRow() <= 1) return [];
   return sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+}
+
+function buildDailyVehicleSummary(segmentRows, fuelRows) {
+  var map = buildDailyVehicleMap(segmentRows, fuelRows);
+  var headers = [
+    "วันที่",
+    "ทะเบียน",
+    "ชื่อรถ",
+    "คนขับ",
+    "เลขไมล์เริ่ม",
+    "เลขไมล์ล่าสุด",
+    "ระยะทางรวม",
+    "จำนวนรายการ",
+    "เริ่มใช้รถ",
+    "จบงาน",
+    "น้ำมันลิตร",
+    "ค่าน้ำมัน",
+    "สถานะ",
+    "หมายเหตุ"
+  ];
+  var rows = sortedKeys(map).map(function(key) {
+    var item = map[key];
+    var distance = calculateDistance(item);
+    return [
+      item.serviceDate,
+      item.plate,
+      item.vehicleName,
+      item.driverName,
+      item.startOdometer || "",
+      item.latestOdometer || "",
+      distance,
+      item.records,
+      item.startEvents,
+      item.endEvents,
+      item.fuelLiters || "",
+      item.fuelAmount || "",
+      getUsageStatus(item),
+      item.notes.join(" | ")
+    ];
+  });
+  return [headers].concat(rows);
+}
+
+function buildMonthlyVehicleSummary(segmentRows, fuelRows) {
+  var dailyMap = buildDailyVehicleMap(segmentRows, fuelRows);
+  var monthlyMap = {};
+  sortedKeys(dailyMap).forEach(function(key) {
+    var item = dailyMap[key];
+    var month = text(item.serviceDate).substring(0, 7);
+    if (!month) return;
+    var monthlyKey = [month, item.vehicleId, item.driverId].join("|");
+    if (!monthlyMap[monthlyKey]) {
+      monthlyMap[monthlyKey] = {
+        month: month,
+        plate: item.plate,
+        vehicleName: item.vehicleName,
+        driverName: item.driverName,
+        workingDays: {},
+        distance: 0,
+        records: 0,
+        fuelLiters: 0,
+        fuelAmount: 0,
+        notes: []
+      };
+    }
+    var target = monthlyMap[monthlyKey];
+    target.workingDays[item.serviceDate] = true;
+    target.distance += numeric(calculateDistance(item));
+    target.records += item.records;
+    target.fuelLiters += item.fuelLiters;
+    target.fuelAmount += item.fuelAmount;
+    if (item.notes.length) target.notes = target.notes.concat(item.notes);
+  });
+
+  var headers = [
+    "เดือน",
+    "ทะเบียน",
+    "ชื่อรถ",
+    "คนขับ",
+    "วันใช้งาน",
+    "ระยะทางรวม",
+    "ระยะทางเฉลี่ย/วัน",
+    "จำนวนรายการ",
+    "น้ำมันลิตร",
+    "ค่าน้ำมันรวม",
+    "ค่าเฉลี่ยบาท/กม.",
+    "หมายเหตุ"
+  ];
+  var rows = sortedKeys(monthlyMap).map(function(key) {
+    var item = monthlyMap[key];
+    var workingDays = Object.keys(item.workingDays).length;
+    var avgDistance = workingDays ? roundNumber(item.distance / workingDays) : "";
+    var bahtPerKm = item.distance ? roundNumber(item.fuelAmount / item.distance) : "";
+    return [
+      item.month,
+      item.plate,
+      item.vehicleName,
+      item.driverName,
+      workingDays,
+      roundNumber(item.distance),
+      avgDistance,
+      item.records,
+      item.fuelLiters || "",
+      item.fuelAmount || "",
+      bahtPerKm,
+      uniqueValues(item.notes).join(" | ")
+    ];
+  });
+  return [headers].concat(rows);
+}
+
+function buildDashboardSummary(segmentRows, fuelRows, dailyRows, vehicleRows, logRows) {
+  var today = getBangkokDateKey(new Date());
+  var month = today.substring(0, 7);
+  var dailyMap = buildDailyVehicleMap(segmentRows, fuelRows);
+  var todayStats = summarizePeriod(dailyMap, today, false);
+  var monthStats = summarizePeriod(dailyMap, month, true);
+  var lastLog = logRows.length ? logRows[logRows.length - 1] : [];
+  return [
+    ["รายการ", "วันนี้", "เดือนนี้"],
+    ["รถที่ใช้งาน", todayStats.vehicles, monthStats.vehicles],
+    ["คนขับที่บันทึก", todayStats.drivers, monthStats.drivers],
+    ["ระยะทางรวม", todayStats.distance, monthStats.distance],
+    ["รายการใช้งานรถ", todayStats.records, monthStats.records],
+    ["รายการเริ่มใช้รถ", todayStats.startEvents, monthStats.startEvents],
+    ["รายการจบงาน", todayStats.endEvents, monthStats.endEvents],
+    ["รายการยังไม่จบงาน", todayStats.openItems, monthStats.openItems],
+    ["บิลน้ำมัน", todayStats.fuelRecords, monthStats.fuelRecords],
+    ["น้ำมันลิตร", todayStats.fuelLiters, monthStats.fuelLiters],
+    ["ค่าน้ำมัน", todayStats.fuelAmount, monthStats.fuelAmount],
+    ["จำนวนรถในทะเบียน", vehicleRows.length, vehicleRows.length],
+    ["บันทึกตรวจรถประจำวัน", countRowsByDate(dailyRows, today), countRowsByMonth(dailyRows, month)],
+    ["อัปเดตล่าสุด", lastLog[0] || "", lastLog[0] || ""],
+    ["คำสั่งซิงก์ล่าสุด", lastLog[1] || "", lastLog[1] || ""],
+    ["สถานะซิงก์ล่าสุด", lastLog[2] || "", lastLog[2] || ""]
+  ];
+}
+
+function buildDailyVehicleMap(segmentRows, fuelRows) {
+  var map = {};
+  segmentRows.forEach(function(row) {
+    var serviceDate = text(row[1]);
+    var vehicleId = text(row[6]);
+    var driverId = text(row[3]);
+    if (!serviceDate || !vehicleId || !driverId) return;
+    var key = [serviceDate, vehicleId, driverId].join("|");
+    var item = ensureDailyMapItem(map, key, {
+      serviceDate: serviceDate,
+      vehicleId: vehicleId,
+      driverId: driverId,
+      plate: text(row[8]),
+      vehicleName: text(row[9]),
+      driverName: text(row[4])
+    });
+    item.records += 1;
+    var eventType = normalizeEventType(row[2]);
+    if (eventType === "start") item.startEvents += 1;
+    if (eventType === "end") item.endEvents += 1;
+    var odometer = numeric(row[10]);
+    var odometerStart = numeric(row[11]);
+    if (odometerStart > 0 && (item.startOdometer === 0 || odometerStart < item.startOdometer)) {
+      item.startOdometer = odometerStart;
+    }
+    if (eventType === "start" && odometer > 0 && (item.startOdometer === 0 || odometer < item.startOdometer)) {
+      item.startOdometer = odometer;
+    }
+    if (odometer > item.latestOdometer) item.latestOdometer = odometer;
+    var note = text(row[14]);
+    if (note) item.notes.push(note);
+  });
+
+  fuelRows.forEach(function(row) {
+    var serviceDate = text(row[1]);
+    var vehicleId = text(row[5]);
+    var driverId = text(row[2]);
+    if (!serviceDate || !vehicleId || !driverId) return;
+    var key = [serviceDate, vehicleId, driverId].join("|");
+    var item = ensureDailyMapItem(map, key, {
+      serviceDate: serviceDate,
+      vehicleId: vehicleId,
+      driverId: driverId,
+      plate: text(row[7]),
+      vehicleName: text(row[11]),
+      driverName: text(row[3])
+    });
+    item.fuelRecords += 1;
+    item.fuelLiters += numeric(row[16]);
+    item.fuelAmount += numeric(row[17]);
+    var note = text(row[21]);
+    if (note) item.notes.push(note);
+  });
+  return map;
+}
+
+function ensureDailyMapItem(map, key, values) {
+  if (!map[key]) {
+    map[key] = {
+      serviceDate: values.serviceDate,
+      vehicleId: values.vehicleId,
+      driverId: values.driverId,
+      plate: values.plate,
+      vehicleName: values.vehicleName,
+      driverName: values.driverName,
+      startOdometer: 0,
+      latestOdometer: 0,
+      records: 0,
+      startEvents: 0,
+      endEvents: 0,
+      fuelRecords: 0,
+      fuelLiters: 0,
+      fuelAmount: 0,
+      notes: []
+    };
+  } else {
+    if (!map[key].plate && values.plate) map[key].plate = values.plate;
+    if (!map[key].vehicleName && values.vehicleName) map[key].vehicleName = values.vehicleName;
+    if (!map[key].driverName && values.driverName) map[key].driverName = values.driverName;
+  }
+  return map[key];
+}
+
+function calculateDistance(item) {
+  if (item.latestOdometer > 0 && item.startOdometer > 0) {
+    return Math.max(0, item.latestOdometer - item.startOdometer);
+  }
+  return "";
+}
+
+function getUsageStatus(item) {
+  if (item.endEvents > 0) return "จบงานแล้ว";
+  if (item.startEvents > 0 || item.records > 0) return "กำลังใช้งาน/ยังไม่จบ";
+  if (item.fuelRecords > 0) return "มีบิลน้ำมัน";
+  return "";
+}
+
+function summarizePeriod(dailyMap, periodKey, isMonth) {
+  var vehicles = {};
+  var drivers = {};
+  var stats = {
+    vehicles: 0,
+    drivers: 0,
+    distance: 0,
+    records: 0,
+    startEvents: 0,
+    endEvents: 0,
+    openItems: 0,
+    fuelRecords: 0,
+    fuelLiters: 0,
+    fuelAmount: 0
+  };
+  sortedKeys(dailyMap).forEach(function(key) {
+    var item = dailyMap[key];
+    var serviceDate = text(item.serviceDate);
+    var matches = isMonth ? serviceDate.substring(0, 7) === periodKey : serviceDate === periodKey;
+    if (!matches) return;
+    vehicles[item.vehicleId] = true;
+    drivers[item.driverId] = true;
+    stats.distance += numeric(calculateDistance(item));
+    stats.records += item.records;
+    stats.startEvents += item.startEvents;
+    stats.endEvents += item.endEvents;
+    if (item.startEvents > item.endEvents) stats.openItems += 1;
+    stats.fuelRecords += item.fuelRecords;
+    stats.fuelLiters += item.fuelLiters;
+    stats.fuelAmount += item.fuelAmount;
+  });
+  stats.vehicles = Object.keys(vehicles).length;
+  stats.drivers = Object.keys(drivers).length;
+  stats.distance = roundNumber(stats.distance);
+  stats.fuelLiters = roundNumber(stats.fuelLiters);
+  stats.fuelAmount = roundNumber(stats.fuelAmount);
+  return stats;
+}
+
+function countRowsByDate(rows, dateKey) {
+  return rows.filter(function(row) { return text(row[1]) === dateKey; }).length;
+}
+
+function countRowsByMonth(rows, monthKey) {
+  return rows.filter(function(row) { return text(row[1]).substring(0, 7) === monthKey; }).length;
 }
 
 function mergeSummaryBlocks(leftHeaders, leftRows, rightHeaders, rightRows) {
@@ -321,6 +586,29 @@ function sortedKeys(map) {
 function numeric(value) {
   var n = Number(value);
   return isNaN(n) ? 0 : n;
+}
+
+function roundNumber(value) {
+  var n = numeric(value);
+  return Math.round(n * 100) / 100;
+}
+
+function uniqueValues(values) {
+  var seen = {};
+  var result = [];
+  values.forEach(function(value) {
+    var clean = text(value);
+    if (!clean || seen[clean]) return;
+    seen[clean] = true;
+    result.push(clean);
+  });
+  return result;
+}
+
+function getBangkokDateKey(dateLike) {
+  var date = dateLike ? new Date(dateLike) : new Date();
+  var parts = Utilities.formatDate(date, "Asia/Bangkok", "yyyy-MM-dd");
+  return parts;
 }
 
 function normalizeEventType(value) {
@@ -509,7 +797,6 @@ function appendUsageSegment(ss, payload) {
   var id = text(payload.id) || Utilities.getUuid();
   var values = sheet.getDataRange().getValues();
   var existingRow = findRowByColumnValue(values, 0, id);
-  if (existingRow > 0) return { action: "duplicate_skipped", row: existingRow, id: id };
 
   var row = [
     id,
@@ -529,6 +816,10 @@ function appendUsageSegment(ss, payload) {
     text(payload.note),
     new Date()
   ];
+  if (existingRow > 0) {
+    sheet.getRange(existingRow, 1, 1, USAGE_SEGMENT_HEADERS.length).setValues([row]);
+    return { action: "updated", row: existingRow, id: id };
+  }
   sheet.appendRow(row);
   return { action: "inserted", row: sheet.getLastRow(), id: id };
 }
