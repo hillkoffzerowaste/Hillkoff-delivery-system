@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?!= include("Styles"); ?>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Hillkoff</p>
+        <h1>Vehicle Control Dashboard</h1>
+        <p id="updatedAt" class="muted">กำลังโหลดข้อมูล...</p>
+      </div>
+      <div class="top-actions">
+        <button class="secondary" type="button" onclick="refreshDashboard()">รีเฟรช</button>
+        <a id="sheetLink" class="primary" href="#" target="_blank" rel="noopener">เปิด Google Sheet</a>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Dashboard sections">
+      <button class="tab active" type="button" data-tab="overview" onclick="switchTab('overview')">ภาพรวม</button>
+      <button class="tab" type="button" data-tab="usage" onclick="switchTab('usage')">การใช้รถ</button>
+      <button class="tab" type="button" data-tab="fuel" onclick="switchTab('fuel')">บิลน้ำมัน</button>
+      <button class="tab" type="button" data-tab="reports" onclick="switchTab('reports')">รายงาน</button>
+      <button class="tab" type="button" data-tab="add" onclick="switchTab('add')">เพิ่มข้อมูล</button>
+    </nav>
+
+    <main>
+      <section id="overview" class="tab-panel active">
+        <div class="section-head">
+          <h2>ภาพรวมวันนี้</h2>
+          <span id="todayLabel" class="pill"></span>
+        </div>
+        <div id="todayKpis" class="kpi-grid"></div>
+
+        <div class="section-head">
+          <h2>ภาพรวมเดือนนี้</h2>
+          <span id="monthLabel" class="pill"></span>
+        </div>
+        <div id="monthKpis" class="kpi-grid"></div>
+
+        <div class="grid-two">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>แจ้งเตือนที่ต้องตรวจ</h3>
+              <span id="alertCount" class="pill danger">0</span>
+            </div>
+            <div id="alertsList" class="list"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h3>อันดับใช้งาน</h3>
+            </div>
+            <div id="rankingList" class="list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="usage" class="tab-panel">
+        <div class="section-head">
+          <h2>รายการการใช้รถ</h2>
+          <button class="primary" type="button" onclick="openUsageForm()">เพิ่มรายการ</button>
+        </div>
+        <div class="filters">
+          <input id="usageSearch" type="search" placeholder="ค้นหา วันที่ ทะเบียน คนขับ สถานะ" oninput="renderUsageTable()">
+          <select id="usageStatus" onchange="renderUsageTable()">
+            <option value="">ทุกสถานะ</option>
+            <option value="start">เริ่มใช้</option>
+            <option value="segment">ระหว่างวัน</option>
+            <option value="end">จบงาน</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th>ทะเบียน</th>
+                <th>คนขับ</th>
+                <th>เหตุการณ์</th>
+                <th>เลขไมค์</th>
+                <th>เลขไมค์เริ่ม</th>
+                <th>รายละเอียด</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="usageTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="fuel" class="tab-panel">
+        <div class="section-head">
+          <h2>บิลน้ำมัน</h2>
+          <button class="primary" type="button" onclick="openFuelForm()">เพิ่มบิล</button>
+        </div>
+        <div class="filters">
+          <input id="fuelSearch" type="search" placeholder="ค้นหา วันที่ ทะเบียน คนขับ ปั๊ม เลขบิล" oninput="renderFuelTable()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th>ทะเบียน</th>
+                <th>คนขับ</th>
+                <th>เลขไมค์</th>
+                <th>ลิตร</th>
+                <th>ยอดเงิน</th>
+                <th>ปั๊ม</th>
+                <th>เลขบิล</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="fuelTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="reports" class="tab-panel">
+        <div class="section-head">
+          <h2>รายงานบัญชี</h2>
+          <span class="muted">สรุปจาก Sheet เดิม</span>
+        </div>
+        <div class="grid-two">
+          <section class="panel">
+            <div class="panel-head"><h3>รายวัน</h3></div>
+            <div class="table-wrap compact">
+              <table>
+                <thead>
+                  <tr><th>วันที่</th><th>ทะเบียน</th><th>คนขับ</th><th>ระยะทาง</th><th>ค่าน้ำมัน</th><th>สถานะ</th></tr>
+                </thead>
+                <tbody id="dailyReport"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h3>รายเดือน</h3></div>
+            <div class="table-wrap compact">
+              <table>
+                <thead>
+                  <tr><th>เดือน</th><th>ทะเบียน</th><th>คนขับ</th><th>วันใช้งาน</th><th>ระยะทาง</th><th>ค่าน้ำมัน</th></tr>
+                </thead>
+                <tbody id="monthlyReport"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="add" class="tab-panel">
+        <div class="grid-two">
+          <section class="panel">
+            <div class="panel-head"><h3>บันทึกการใช้รถ</h3></div>
+            <form id="usageForm" onsubmit="submitUsage(event)">
+              <input type="hidden" name="id">
+              <label>วันที่<input name="serviceDate" type="date" required></label>
+              <label>รถ<select name="vehicleKey" required></select></label>
+              <label>คนขับ<select name="driverKey"></select></label>
+              <label>ประเภทเหตุการณ์
+                <select name="eventType" required>
+                  <option value="start">เริ่มใช้รถ</option>
+                  <option value="segment">ระหว่างวัน</option>
+                  <option value="end">จบงาน</option>
+                </select>
+              </label>
+              <label>เลขไมค์<input name="odometer" type="number" min="0" step="1" required></label>
+              <label>เลขไมค์เริ่ม<input name="odometerStart" type="number" min="0" step="1"></label>
+              <label>ประเภทการใช้งาน<input name="usageType" type="text" placeholder="เช่น ส่งของ, เข้าสาขา, ตรวจงาน"></label>
+              <label>รายละเอียด<textarea name="detail" rows="3"></textarea></label>
+              <label>หมายเหตุ<textarea name="note" rows="3"></textarea></label>
+              <div class="form-actions">
+                <button class="secondary" type="button" onclick="resetUsageForm()">ล้างฟอร์ม</button>
+                <button class="primary" type="submit">บันทึกการใช้รถ</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><h3>บันทึกบิลน้ำมัน</h3></div>
+            <form id="fuelForm" onsubmit="submitFuel(event)">
+              <input type="hidden" name="id">
+              <label>วันที่<input name="serviceDate" type="date" required></label>
+              <label>รถ<select name="vehicleKey" required></select></label>
+              <label>คนขับ<select name="driverKey"></select></label>
+              <label>เลขไมค์ตอนเติม<input name="odometer" type="number" min="0" step="1"></label>
+              <label>ประเภทน้ำมัน<input name="fuelType" type="text" placeholder="ดีเซล / แก๊สโซฮอล์"></label>
+              <label>ลิตร<input name="liters" type="number" min="0" step="0.01" required></label>
+              <label>ยอดเงิน<input name="amount" type="number" min="0" step="0.01" required></label>
+              <label>ปั๊มน้ำมัน<input name="station" type="text"></label>
+              <label>เลขที่บิล<input name="receiptNo" type="text"></label>
+              <label>หมายเหตุ<textarea name="note" rows="3"></textarea></label>
+              <div class="form-actions">
+                <button class="secondary" type="button" onclick="resetFuelForm()">ล้างฟอร์ม</button>
+                <button class="primary" type="submit">บันทึกบิลน้ำมัน</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status"></div>
+    <div id="loading" class="loading">กำลังโหลด...</div>
+    <?!= include("ClientScript"); ?>
+  </body>
+</html>

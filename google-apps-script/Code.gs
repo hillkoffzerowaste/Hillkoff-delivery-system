@@ -115,6 +115,16 @@ var VEHICLES = [
 ];
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.action === "setup") {
+    return serveSetupJson();
+  }
+  return HtmlService.createTemplateFromFile("Index")
+    .evaluate()
+    .setTitle("Hillkoff Vehicle Dashboard")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function serveSetupJson() {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
@@ -132,6 +142,10 @@ function doGet(e) {
       lock.releaseLock();
     } catch (lockError) {}
   }
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 function doPost(e) {
@@ -187,6 +201,422 @@ function refreshSummaries() {
   var ss = getOrCreateSpreadsheet();
   ensureSummarySheets(ss);
   return { ok: true, spreadsheetUrl: ss.getUrl(), sheets: getSheetNames(ss) };
+}
+
+function getWebDashboardData() {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    var ss = setupWorkbook();
+    var usageRows = readSheetRows(ss, SHEET_NAMES.usageSegments).map(mapUsageSegmentRow).filter(hasServiceDate);
+    var fuelRows = readSheetRows(ss, SHEET_NAMES.fuelBills).map(mapFuelBillRow).filter(hasServiceDate);
+    var dailyRows = readSheetRows(ss, SHEET_NAMES.dailySummary).map(mapDailySummaryRow);
+    var monthlyRows = readSheetRows(ss, SHEET_NAMES.monthlySummary).map(mapMonthlySummaryRow);
+    var syncRows = readSheetRows(ss, SHEET_NAMES.syncLogs).map(mapSyncLogRow);
+    var vehicleRows = readSheetRows(ss, SHEET_NAMES.vehicles).map(mapVehicleRow);
+    var today = getBangkokDateKey(new Date());
+    var month = today.substring(0, 7);
+    var result = {
+      ok: true,
+      sheetUrl: ss.getUrl(),
+      updatedAt: dashboardDateTime(new Date()),
+      today: today,
+      month: month,
+      vehicles: vehicleRows,
+      drivers: buildDashboardDrivers(usageRows, fuelRows, dailyRows),
+      kpis: buildWebKpis(usageRows, fuelRows, today, month),
+      usageRows: usageRows.slice().reverse(),
+      fuelRows: fuelRows.slice().reverse(),
+      dailySummary: dailyRows.slice().reverse(),
+      monthlySummary: monthlyRows.slice().reverse(),
+      syncLogs: syncRows.slice().reverse().slice(0, 25),
+      alerts: buildWebAlerts(usageRows, fuelRows, syncRows),
+      rankings: buildWebRankings(dailyRows, monthlyRows, fuelRows)
+    };
+    return result;
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (lockError) {}
+  }
+}
+
+function saveDashboardFuelBill(payload) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    var ss = setupWorkbook();
+    var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.fuelBills, FUEL_BILL_HEADERS);
+    var data = payload || {};
+    var id = text(data.id) || makeManualId("manual_fuel");
+    if (!text(data.serviceDate)) throw new Error("Missing serviceDate");
+    var vehicle = findDashboardVehicle(ss, data.vehicleId || data.assetCode || data.plate);
+    if (!vehicle.assetCode) throw new Error("Vehicle not found");
+    var liters = numeric(data.liters);
+    var amount = numeric(data.amount);
+    var pricePerLiter = numeric(data.pricePerLiter) || (liters ? roundNumber(amount / liters) : "");
+    var row = [
+      id,
+      normalizeServiceDate(data.serviceDate),
+      text(data.driverId),
+      text(data.driverName),
+      text(data.driverPhone),
+      text(data.vehicleId || vehicle.assetCode),
+      text(data.assetCode || vehicle.assetCode),
+      text(data.plate || vehicle.plate),
+      text(data.vehicleType || vehicle.vehicleType),
+      text(data.brand || vehicle.brand),
+      text(data.model || vehicle.model),
+      text(data.vehicleName || dashboardVehicleName(vehicle)),
+      text(data.responsiblePerson || vehicle.responsiblePerson),
+      text(data.department || vehicle.department),
+      numberOrBlank(data.odometer),
+      text(data.fuelType),
+      numberOrBlank(liters),
+      numberOrBlank(amount),
+      numberOrBlank(pricePerLiter),
+      text(data.station),
+      text(data.receiptNo),
+      text(data.note),
+      new Date()
+    ];
+    var values = sheet.getDataRange().getValues();
+    var targetRow = findRowByColumnValue(values, 0, id);
+    if (targetRow > 0) {
+      sheet.getRange(targetRow, 1, 1, FUEL_BILL_HEADERS.length).setValues([row]);
+    } else {
+      sheet.appendRow(row);
+      targetRow = sheet.getLastRow();
+    }
+    logSync(ss, "manual_dashboard_fuel", "OK", "saved fuel bill from dashboard", id);
+    ensureSummarySheets(ss);
+    return { ok: true, id: id, row: targetRow, action: targetRow > 0 ? "saved" : "inserted" };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (lockError) {}
+  }
+}
+
+function saveDashboardUsageSegment(payload) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    var ss = setupWorkbook();
+    var data = payload || {};
+    if (!text(data.serviceDate)) throw new Error("Missing serviceDate");
+    if (!text(data.eventType)) throw new Error("Missing eventType");
+    if (!numeric(data.odometer)) throw new Error("Missing odometer");
+    var vehicle = findDashboardVehicle(ss, data.vehicleId || data.assetCode || data.plate);
+    if (!vehicle.assetCode) throw new Error("Vehicle not found");
+    data.id = text(data.id) || makeManualId("manual_usage");
+    data.serviceDate = normalizeServiceDate(data.serviceDate);
+    data.vehicleId = text(data.vehicleId || vehicle.assetCode);
+    data.assetCode = text(data.assetCode || vehicle.assetCode);
+    data.plate = text(data.plate || vehicle.plate);
+    data.vehicleName = text(data.vehicleName || dashboardVehicleName(vehicle));
+    var result = appendUsageSegment(ss, data);
+    logSync(ss, "manual_dashboard_usage", "OK", "saved usage segment from dashboard", data.id);
+    ensureSummarySheets(ss);
+    return { ok: true, id: data.id, data: result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (lockError) {}
+  }
+}
+
+function mapVehicleRow(row) {
+  return {
+    no: text(row[0]),
+    assetCode: text(row[1]),
+    plate: text(row[2]),
+    vehicleType: text(row[3]),
+    brand: text(row[4]),
+    model: text(row[5]),
+    responsiblePerson: text(row[6]),
+    department: text(row[7]),
+    active: text(row[8])
+  };
+}
+
+function mapUsageSegmentRow(row) {
+  return {
+    id: text(row[0]),
+    serviceDate: normalizeServiceDate(row[1]),
+    eventType: text(row[2]),
+    driverId: text(row[3]),
+    driverName: text(row[4]),
+    driverPhone: text(row[5]),
+    vehicleId: text(row[6]),
+    assetCode: text(row[7]),
+    plate: text(row[8]),
+    vehicleName: text(row[9]),
+    odometer: numeric(row[10]),
+    odometerStart: numeric(row[11]),
+    usageType: text(row[12]),
+    detail: text(row[13]),
+    note: text(row[14]),
+    syncedAt: dashboardDateTime(row[15])
+  };
+}
+
+function mapFuelBillRow(row) {
+  return {
+    id: text(row[0]),
+    serviceDate: normalizeServiceDate(row[1]),
+    driverId: text(row[2]),
+    driverName: text(row[3]),
+    driverPhone: text(row[4]),
+    vehicleId: text(row[5]),
+    assetCode: text(row[6]),
+    plate: text(row[7]),
+    vehicleType: text(row[8]),
+    brand: text(row[9]),
+    model: text(row[10]),
+    vehicleName: text(row[11]),
+    responsiblePerson: text(row[12]),
+    department: text(row[13]),
+    odometer: numeric(row[14]),
+    fuelType: text(row[15]),
+    liters: numeric(row[16]),
+    amount: numeric(row[17]),
+    pricePerLiter: numeric(row[18]),
+    station: text(row[19]),
+    receiptNo: text(row[20]),
+    note: text(row[21]),
+    syncedAt: dashboardDateTime(row[22])
+  };
+}
+
+function mapDailySummaryRow(row) {
+  return {
+    serviceDate: normalizeServiceDate(row[0]),
+    plate: text(row[1]),
+    vehicleName: text(row[2]),
+    driverName: text(row[3]),
+    odometerStart: numeric(row[4]),
+    latestOdometer: numeric(row[5]),
+    distance: numeric(row[6]),
+    records: numeric(row[7]),
+    startEvents: numeric(row[8]),
+    endEvents: numeric(row[9]),
+    fuelLiters: numeric(row[10]),
+    fuelAmount: numeric(row[11]),
+    status: text(row[12]),
+    note: text(row[13])
+  };
+}
+
+function mapMonthlySummaryRow(row) {
+  return {
+    month: text(row[0]),
+    plate: text(row[1]),
+    vehicleName: text(row[2]),
+    driverName: text(row[3]),
+    workingDays: numeric(row[4]),
+    distance: numeric(row[5]),
+    avgDistance: numeric(row[6]),
+    records: numeric(row[7]),
+    fuelLiters: numeric(row[8]),
+    fuelAmount: numeric(row[9]),
+    bahtPerKm: numeric(row[10]),
+    note: text(row[11])
+  };
+}
+
+function mapSyncLogRow(row) {
+  return {
+    syncedAt: dashboardDateTime(row[0]),
+    action: text(row[1]),
+    status: text(row[2]),
+    message: text(row[3]),
+    payloadId: text(row[4])
+  };
+}
+
+function hasServiceDate(row) {
+  return !!text(row && row.serviceDate);
+}
+
+function buildDashboardDrivers(usageRows, fuelRows, dailyRows) {
+  var map = {};
+  function add(driverId, driverName, driverPhone) {
+    var key = text(driverId || driverName || driverPhone);
+    if (!key) return;
+    if (!map[key]) map[key] = { driverId: text(driverId), driverName: text(driverName), driverPhone: text(driverPhone) };
+    if (!map[key].driverName && driverName) map[key].driverName = text(driverName);
+    if (!map[key].driverPhone && driverPhone) map[key].driverPhone = text(driverPhone);
+  }
+  usageRows.forEach(function(row) { add(row.driverId, row.driverName, row.driverPhone); });
+  fuelRows.forEach(function(row) { add(row.driverId, row.driverName, row.driverPhone); });
+  dailyRows.forEach(function(row) { add(row.driverName, row.driverName, ""); });
+  return Object.keys(map).map(function(key) { return map[key]; }).sort(function(a, b) {
+    return text(a.driverName || a.driverId).localeCompare(text(b.driverName || b.driverId));
+  });
+}
+
+function buildWebKpis(usageRows, fuelRows, today, month) {
+  return {
+    today: summarizeWebPeriod(usageRows, fuelRows, today, false),
+    month: summarizeWebPeriod(usageRows, fuelRows, month, true)
+  };
+}
+
+function summarizeWebPeriod(usageRows, fuelRows, periodKey, isMonth) {
+  var vehicles = {};
+  var drivers = {};
+  var latest = {};
+  var starts = 0;
+  var ends = 0;
+  var autoEnds = 0;
+  var distance = 0;
+  var records = 0;
+  usageRows.forEach(function(row) {
+    var date = normalizeServiceDate(row.serviceDate);
+    var matches = isMonth ? date.substring(0, 7) === periodKey : date === periodKey;
+    if (!matches) return;
+    records++;
+    if (row.vehicleId || row.plate) vehicles[row.vehicleId || row.plate] = true;
+    if (row.driverId || row.driverName) drivers[row.driverId || row.driverName] = true;
+    if (row.eventType === "start") starts++;
+    if (row.eventType === "end") ends++;
+    if (String(row.usageType + " " + row.detail + " " + row.note).indexOf("อัตโนมัติ") >= 0) autoEnds++;
+    var key = [row.serviceDate, row.vehicleId || row.plate, row.driverId || row.driverName].join("|");
+    latest[key] = row;
+    if (row.odometerStart && row.odometer >= row.odometerStart) distance += row.odometer - row.odometerStart;
+  });
+  var fuelRecords = 0;
+  var fuelLiters = 0;
+  var fuelAmount = 0;
+  fuelRows.forEach(function(row) {
+    var date = normalizeServiceDate(row.serviceDate);
+    var matches = isMonth ? date.substring(0, 7) === periodKey : date === periodKey;
+    if (!matches) return;
+    fuelRecords++;
+    fuelLiters += numeric(row.liters);
+    fuelAmount += numeric(row.amount);
+  });
+  var openItems = 0;
+  Object.keys(latest).forEach(function(key) {
+    if (latest[key].eventType !== "end") openItems++;
+  });
+  return {
+    vehicles: Object.keys(vehicles).length,
+    drivers: Object.keys(drivers).length,
+    records: records,
+    starts: starts,
+    ends: ends,
+    autoEnds: autoEnds,
+    openItems: openItems,
+    distance: roundNumber(distance),
+    fuelRecords: fuelRecords,
+    fuelLiters: roundNumber(fuelLiters),
+    fuelAmount: roundNumber(fuelAmount),
+    bahtPerKm: distance ? roundNumber(fuelAmount / distance) : 0,
+    kmPerLiter: fuelLiters ? roundNumber(distance / fuelLiters) : 0
+  };
+}
+
+function buildWebAlerts(usageRows, fuelRows, syncRows) {
+  var alerts = [];
+  var latest = {};
+  var usageByDateVehicle = {};
+  usageRows.forEach(function(row) {
+    var key = [row.serviceDate, row.vehicleId || row.plate, row.driverId || row.driverName].join("|");
+    latest[key] = row;
+    usageByDateVehicle[[row.serviceDate, row.vehicleId || row.plate].join("|")] = true;
+    if (row.odometerStart && row.odometer && row.odometer < row.odometerStart) {
+      alerts.push({ type: "danger", title: "เลขไมค์ผิดปกติ", detail: [row.serviceDate, row.plate, row.driverName].join(" | ") });
+    }
+  });
+  Object.keys(latest).forEach(function(key) {
+    var row = latest[key];
+    if (row.eventType !== "end") {
+      alerts.push({ type: "warning", title: "ยังไม่จบงาน", detail: [row.serviceDate, row.plate, row.driverName].join(" | ") });
+    }
+  });
+  fuelRows.forEach(function(row) {
+    var key = [row.serviceDate, row.vehicleId || row.plate].join("|");
+    if (row.serviceDate && !usageByDateVehicle[key]) {
+      alerts.push({ type: "info", title: "มีบิลน้ำมันแต่ไม่พบการใช้รถวันเดียวกัน", detail: [row.serviceDate, row.plate, row.amount].join(" | ") });
+    }
+  });
+  syncRows.forEach(function(row) {
+    if (text(row.status).toUpperCase() === "FAILED") {
+      alerts.push({ type: "danger", title: "Sync failed", detail: [row.syncedAt, row.action, row.message].join(" | ") });
+    }
+  });
+  return alerts.slice(-30).reverse();
+}
+
+function buildWebRankings(dailyRows, monthlyRows, fuelRows) {
+  return {
+    vehicleDistance: rankBy(dailyRows, "plate", "distance", 5),
+    driverDistance: rankBy(dailyRows, "driverName", "distance", 5),
+    vehicleFuelAmount: rankFuelByVehicle(fuelRows, 5),
+    monthlyDistance: rankBy(monthlyRows, "plate", "distance", 5)
+  };
+}
+
+function rankBy(rows, labelField, valueField, limit) {
+  var map = {};
+  rows.forEach(function(row) {
+    var label = text(row[labelField]) || "-";
+    map[label] = (map[label] || 0) + numeric(row[valueField]);
+  });
+  return Object.keys(map).map(function(label) {
+    return { label: label, value: roundNumber(map[label]) };
+  }).sort(function(a, b) {
+    return b.value - a.value;
+  }).slice(0, limit || 5);
+}
+
+function rankFuelByVehicle(rows, limit) {
+  var map = {};
+  rows.forEach(function(row) {
+    var label = text(row.plate || row.assetCode) || "-";
+    if (!map[label]) map[label] = { amount: 0, liters: 0 };
+    map[label].amount += numeric(row.amount);
+    map[label].liters += numeric(row.liters);
+  });
+  return Object.keys(map).map(function(label) {
+    return { label: label, value: roundNumber(map[label].amount), subValue: roundNumber(map[label].liters) };
+  }).sort(function(a, b) {
+    return b.value - a.value;
+  }).slice(0, limit || 5);
+}
+
+function findDashboardVehicle(ss, key) {
+  var clean = text(key);
+  var rows = readSheetRows(ss, SHEET_NAMES.vehicles).map(mapVehicleRow);
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (clean && (row.assetCode === clean || row.plate === clean)) return row;
+  }
+  return {};
+}
+
+function dashboardVehicleName(vehicle) {
+  if (!vehicle) return "";
+  return [vehicle.plate, vehicle.brand, vehicle.model].filter(function(value) { return text(value); }).join(" · ");
+}
+
+function makeManualId(prefix) {
+  return prefix + "_" + Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyyMMdd_HHmmss") + "_" + Utilities.getUuid().slice(0, 8);
+}
+
+function dashboardDateTime(value) {
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, "Asia/Bangkok", "yyyy-MM-dd HH:mm");
+  }
+  return text(value);
 }
 
 function setupWorkbook() {

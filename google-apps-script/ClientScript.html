@@ -1,0 +1,359 @@
+<script>
+  let dashboard = {
+    vehicles: [],
+    drivers: [],
+    usageRows: [],
+    fuelRows: [],
+    dailySummary: [],
+    monthlySummary: [],
+    rankings: {},
+    alerts: [],
+    kpis: { today: {}, month: {} }
+  };
+
+  document.addEventListener("DOMContentLoaded", refreshDashboard);
+
+  function refreshDashboard() {
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler((data) => {
+        setLoading(false);
+        if (!data || data.ok === false) {
+          toast(data?.error || "โหลดข้อมูลไม่สำเร็จ", true);
+          return;
+        }
+        dashboard = data;
+        renderAll();
+      })
+      .withFailureHandler((error) => {
+        setLoading(false);
+        toast(error?.message || String(error), true);
+      })
+      .getWebDashboardData();
+  }
+
+  function renderAll() {
+    document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด: ${dashboard.updatedAt || "-"}`;
+    document.getElementById("todayLabel").textContent = dashboard.today || "";
+    document.getElementById("monthLabel").textContent = dashboard.month || "";
+    document.getElementById("sheetLink").href = dashboard.sheetUrl || "#";
+    renderKpis("todayKpis", dashboard.kpis.today || {}, [
+      ["vehicles", "รถใช้งาน", "คัน"],
+      ["drivers", "คนขับ", "คน"],
+      ["distance", "ระยะทาง", "กม."],
+      ["fuelAmount", "ค่าน้ำมัน", "บาท"],
+      ["openItems", "ยังไม่จบงาน", "รายการ"]
+    ]);
+    renderKpis("monthKpis", dashboard.kpis.month || {}, [
+      ["distance", "ระยะทางรวม", "กม."],
+      ["fuelAmount", "ค่าน้ำมันรวม", "บาท"],
+      ["fuelLiters", "น้ำมันรวม", "ลิตร"],
+      ["bahtPerKm", "บาท/กม.", ""],
+      ["kmPerLiter", "กม./ลิตร", ""]
+    ]);
+    fillFormOptions();
+    renderAlerts();
+    renderRankings();
+    renderUsageTable();
+    renderFuelTable();
+    renderReports();
+  }
+
+  function renderKpis(targetId, source, items) {
+    document.getElementById(targetId).innerHTML = items.map(([key, label, unit]) => `
+      <div class="kpi">
+        <span>${escapeHtml(label)}</span>
+        <strong>${formatNumber(source[key])}</strong>
+        <small>${escapeHtml(unit)}</small>
+      </div>
+    `).join("");
+  }
+
+  function renderAlerts() {
+    const alerts = dashboard.alerts || [];
+    document.getElementById("alertCount").textContent = alerts.length;
+    document.getElementById("alertsList").innerHTML = alerts.length ? alerts.slice(0, 12).map((item) => `
+      <div class="list-item ${escapeHtml(item.type || "info")}">
+        <b>${escapeHtml(item.title || "-")}</b>
+        <small>${escapeHtml(item.detail || "")}</small>
+      </div>
+    `).join("") : `<div class="list-item"><b>ไม่มีรายการแจ้งเตือน</b><small>ข้อมูลล่าสุดปกติ</small></div>`;
+  }
+
+  function renderRankings() {
+    const groups = [
+      ["รถระยะทางสูงสุด", dashboard.rankings?.vehicleDistance || [], "กม."],
+      ["คนขับระยะทางสูงสุด", dashboard.rankings?.driverDistance || [], "กม."],
+      ["รถค่าน้ำมันสูงสุด", dashboard.rankings?.vehicleFuelAmount || [], "บาท"]
+    ];
+    document.getElementById("rankingList").innerHTML = groups.map(([title, rows, unit]) => `
+      <div class="list-item">
+        <b>${escapeHtml(title)}</b>
+        <small>${rows.length ? rows.map((r) => `${escapeHtml(r.label)}: ${formatNumber(r.value)} ${unit}`).join(" | ") : "ยังไม่มีข้อมูล"}</small>
+      </div>
+    `).join("");
+  }
+
+  function renderUsageTable() {
+    const q = lower(document.getElementById("usageSearch")?.value);
+    const status = document.getElementById("usageStatus")?.value || "";
+    const rows = (dashboard.usageRows || []).filter((row) => {
+      if (status && row.eventType !== status) return false;
+      return !q || lower(Object.values(row).join(" ")).includes(q);
+    }).slice(0, 300);
+    document.getElementById("usageTable").innerHTML = rows.map((row) => `
+      <tr>
+        <td>${escapeHtml(row.serviceDate)}</td>
+        <td>${escapeHtml(row.plate || row.assetCode)}</td>
+        <td>${escapeHtml(row.driverName || row.driverId)}</td>
+        <td>${escapeHtml(eventLabel(row.eventType))}</td>
+        <td>${formatNumber(row.odometer)}</td>
+        <td>${formatNumber(row.odometerStart)}</td>
+        <td>${escapeHtml(row.usageType || row.detail || row.note)}</td>
+        <td><div class="row-actions"><button class="secondary mini" type="button" onclick="editUsage('${escapeAttr(row.id)}')">แก้ไข</button></div></td>
+      </tr>
+    `).join("") || emptyRow(8);
+  }
+
+  function renderFuelTable() {
+    const q = lower(document.getElementById("fuelSearch")?.value);
+    const rows = (dashboard.fuelRows || []).filter((row) => !q || lower(Object.values(row).join(" ")).includes(q)).slice(0, 300);
+    document.getElementById("fuelTable").innerHTML = rows.map((row) => `
+      <tr>
+        <td>${escapeHtml(row.serviceDate)}</td>
+        <td>${escapeHtml(row.plate || row.assetCode)}</td>
+        <td>${escapeHtml(row.driverName || row.driverId)}</td>
+        <td>${formatNumber(row.odometer)}</td>
+        <td>${formatNumber(row.liters)}</td>
+        <td>${formatNumber(row.amount)}</td>
+        <td>${escapeHtml(row.station)}</td>
+        <td>${escapeHtml(row.receiptNo)}</td>
+        <td><div class="row-actions"><button class="secondary mini" type="button" onclick="editFuel('${escapeAttr(row.id)}')">แก้ไข</button></div></td>
+      </tr>
+    `).join("") || emptyRow(9);
+  }
+
+  function renderReports() {
+    document.getElementById("dailyReport").innerHTML = (dashboard.dailySummary || []).slice(0, 150).map((row) => `
+      <tr>
+        <td>${escapeHtml(row.serviceDate)}</td>
+        <td>${escapeHtml(row.plate)}</td>
+        <td>${escapeHtml(row.driverName)}</td>
+        <td>${formatNumber(row.distance)}</td>
+        <td>${formatNumber(row.fuelAmount)}</td>
+        <td>${escapeHtml(row.status)}</td>
+      </tr>
+    `).join("") || emptyRow(6);
+    document.getElementById("monthlyReport").innerHTML = (dashboard.monthlySummary || []).slice(0, 150).map((row) => `
+      <tr>
+        <td>${escapeHtml(row.month)}</td>
+        <td>${escapeHtml(row.plate)}</td>
+        <td>${escapeHtml(row.driverName)}</td>
+        <td>${formatNumber(row.workingDays)}</td>
+        <td>${formatNumber(row.distance)}</td>
+        <td>${formatNumber(row.fuelAmount)}</td>
+      </tr>
+    `).join("") || emptyRow(6);
+  }
+
+  function fillFormOptions() {
+    const vehicleOptions = `<option value="">เลือกรถ</option>` + (dashboard.vehicles || []).map((v) => {
+      const value = escapeAttr(v.assetCode || v.plate);
+      const label = [v.plate, v.brand, v.model, v.responsiblePerson].filter(Boolean).join(" · ");
+      return `<option value="${value}">${escapeHtml(label)}</option>`;
+    }).join("");
+    const driverOptions = `<option value="">เลือก/พิมพ์ชื่อในหมายเหตุได้</option>` + (dashboard.drivers || []).map((d) => {
+      const value = escapeAttr(d.driverId || d.driverName);
+      const label = [d.driverName, d.driverPhone].filter(Boolean).join(" · ");
+      return `<option value="${value}">${escapeHtml(label || value)}</option>`;
+    }).join("");
+    document.querySelectorAll('select[name="vehicleKey"]').forEach((el) => el.innerHTML = vehicleOptions);
+    document.querySelectorAll('select[name="driverKey"]').forEach((el) => el.innerHTML = driverOptions);
+  }
+
+  function submitUsage(event) {
+    event.preventDefault();
+    const form = event.target;
+    const vehicle = findVehicle(form.vehicleKey.value);
+    const driver = findDriver(form.driverKey.value);
+    const payload = {
+      id: form.id.value,
+      serviceDate: form.serviceDate.value,
+      eventType: form.eventType.value,
+      driverId: driver.driverId || form.driverKey.value,
+      driverName: driver.driverName || form.driverKey.value,
+      driverPhone: driver.driverPhone || "",
+      vehicleId: vehicle.assetCode || form.vehicleKey.value,
+      assetCode: vehicle.assetCode || form.vehicleKey.value,
+      plate: vehicle.plate || "",
+      vehicleName: [vehicle.plate, vehicle.brand, vehicle.model].filter(Boolean).join(" · "),
+      odometer: form.odometer.value,
+      odometerStart: form.odometerStart.value,
+      usageType: form.usageType.value,
+      detail: form.detail.value,
+      note: form.note.value
+    };
+    if (!confirm("ยืนยันบันทึกการใช้รถ")) return;
+    setLoading(true);
+    google.script.run.withSuccessHandler(afterSave).withFailureHandler(saveFailed).saveDashboardUsageSegment(payload);
+  }
+
+  function submitFuel(event) {
+    event.preventDefault();
+    const form = event.target;
+    const vehicle = findVehicle(form.vehicleKey.value);
+    const driver = findDriver(form.driverKey.value);
+    const liters = Number(form.liters.value || 0);
+    const amount = Number(form.amount.value || 0);
+    const payload = {
+      id: form.id.value,
+      serviceDate: form.serviceDate.value,
+      driverId: driver.driverId || form.driverKey.value,
+      driverName: driver.driverName || form.driverKey.value,
+      driverPhone: driver.driverPhone || "",
+      vehicleId: vehicle.assetCode || form.vehicleKey.value,
+      assetCode: vehicle.assetCode || form.vehicleKey.value,
+      plate: vehicle.plate || "",
+      vehicleType: vehicle.vehicleType || "",
+      brand: vehicle.brand || "",
+      model: vehicle.model || "",
+      vehicleName: [vehicle.plate, vehicle.brand, vehicle.model].filter(Boolean).join(" · "),
+      responsiblePerson: vehicle.responsiblePerson || "",
+      department: vehicle.department || "",
+      odometer: form.odometer.value,
+      fuelType: form.fuelType.value,
+      liters: form.liters.value,
+      amount: form.amount.value,
+      pricePerLiter: liters ? amount / liters : "",
+      station: form.station.value,
+      receiptNo: form.receiptNo.value,
+      note: form.note.value
+    };
+    if (!confirm("ยืนยันบันทึกบิลน้ำมัน")) return;
+    setLoading(true);
+    google.script.run.withSuccessHandler(afterSave).withFailureHandler(saveFailed).saveDashboardFuelBill(payload);
+  }
+
+  function afterSave(result) {
+    setLoading(false);
+    if (!result || result.ok === false) {
+      toast(result?.error || "บันทึกไม่สำเร็จ", true);
+      return;
+    }
+    toast("บันทึกสำเร็จ");
+    resetUsageForm();
+    resetFuelForm();
+    refreshDashboard();
+  }
+
+  function saveFailed(error) {
+    setLoading(false);
+    toast(error?.message || String(error), true);
+  }
+
+  function editUsage(id) {
+    const row = (dashboard.usageRows || []).find((item) => item.id === id);
+    if (!row) return;
+    switchTab("add");
+    const form = document.getElementById("usageForm");
+    form.id.value = row.id || "";
+    form.serviceDate.value = row.serviceDate || "";
+    form.vehicleKey.value = row.assetCode || row.vehicleId || row.plate || "";
+    form.driverKey.value = row.driverId || row.driverName || "";
+    form.eventType.value = row.eventType || "segment";
+    form.odometer.value = row.odometer || "";
+    form.odometerStart.value = row.odometerStart || "";
+    form.usageType.value = row.usageType || "";
+    form.detail.value = row.detail || "";
+    form.note.value = row.note || "";
+  }
+
+  function editFuel(id) {
+    const row = (dashboard.fuelRows || []).find((item) => item.id === id);
+    if (!row) return;
+    switchTab("add");
+    const form = document.getElementById("fuelForm");
+    form.id.value = row.id || "";
+    form.serviceDate.value = row.serviceDate || "";
+    form.vehicleKey.value = row.assetCode || row.vehicleId || row.plate || "";
+    form.driverKey.value = row.driverId || row.driverName || "";
+    form.odometer.value = row.odometer || "";
+    form.fuelType.value = row.fuelType || "";
+    form.liters.value = row.liters || "";
+    form.amount.value = row.amount || "";
+    form.station.value = row.station || "";
+    form.receiptNo.value = row.receiptNo || "";
+    form.note.value = row.note || "";
+  }
+
+  function openUsageForm() {
+    switchTab("add");
+    document.getElementById("usageForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openFuelForm() {
+    switchTab("add");
+    document.getElementById("fuelForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function resetUsageForm() {
+    document.getElementById("usageForm").reset();
+    document.querySelector('#usageForm input[name="id"]').value = "";
+  }
+
+  function resetFuelForm() {
+    document.getElementById("fuelForm").reset();
+    document.querySelector('#fuelForm input[name="id"]').value = "";
+  }
+
+  function switchTab(tabId) {
+    document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
+    document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
+  }
+
+  function findVehicle(key) {
+    return (dashboard.vehicles || []).find((v) => v.assetCode === key || v.plate === key) || {};
+  }
+
+  function findDriver(key) {
+    return (dashboard.drivers || []).find((d) => d.driverId === key || d.driverName === key) || {};
+  }
+
+  function eventLabel(value) {
+    return { start: "เริ่มใช้", segment: "ระหว่างวัน", end: "จบงาน", probe: "ทดสอบ" }[value] || value || "-";
+  }
+
+  function emptyRow(colspan) {
+    return `<tr><td colspan="${colspan}" class="muted">ยังไม่มีข้อมูล</td></tr>`;
+  }
+
+  function formatNumber(value) {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) return value || "-";
+    return n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
+  }
+
+  function lower(value) {
+    return String(value || "").toLowerCase();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/`/g, "&#096;");
+  }
+
+  function toast(message, isError) {
+    const el = document.getElementById("toast");
+    el.textContent = message;
+    el.classList.toggle("error", Boolean(isError));
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 3600);
+  }
+
+  function setLoading(show) {
+    document.getElementById("loading").classList.toggle("show", Boolean(show));
+  }
+</script>
