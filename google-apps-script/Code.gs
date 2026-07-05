@@ -144,6 +144,8 @@ function doPost(e) {
       result = appendFuelBill(ss, payload);
     } else if (payload.action === "appendUsageSegment") {
       result = appendUsageSegment(ss, payload);
+    } else if (payload.action === "replaceUsageSegments") {
+      result = replaceUsageSegments(ss, payload);
     } else if (payload.action === "setup") {
       result = { spreadsheetUrl: ss.getUrl(), sheets: getSheetNames(ss) };
     } else {
@@ -811,8 +813,34 @@ function appendUsageSegment(ss, payload) {
   var id = text(payload.id) || Utilities.getUuid();
   var values = sheet.getDataRange().getValues();
   var existingRow = findRowByColumnValue(values, 0, id);
+  var row = buildUsageSegmentRow(payload, id);
+  if (existingRow > 0) {
+    sheet.getRange(existingRow, 1, 1, USAGE_SEGMENT_HEADERS.length).setValues([row]);
+    return { action: "updated", row: existingRow, id: id };
+  }
+  sheet.appendRow(row);
+  return { action: "inserted", row: sheet.getLastRow(), id: id };
+}
 
-  var row = [
+function replaceUsageSegments(ss, payload) {
+  var rows = Array.isArray(payload.rows) ? payload.rows : [];
+  if (!Array.isArray(payload.rows)) throw new Error("rows must be an array");
+  var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.usageSegments, USAGE_SEGMENT_HEADERS);
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(sheet.getLastColumn(), USAGE_SEGMENT_HEADERS.length)).clearContent();
+  }
+  var output = rows.map(function(row) {
+    var id = text(row.id) || Utilities.getUuid();
+    return buildUsageSegmentRow(row, id);
+  });
+  if (output.length) {
+    sheet.getRange(2, 1, output.length, USAGE_SEGMENT_HEADERS.length).setValues(output);
+  }
+  return { action: "replaced", rows: output.length };
+}
+
+function buildUsageSegmentRow(payload, id) {
+  return [
     id,
     text(payload.serviceDate),
     text(payload.eventType),
@@ -830,12 +858,6 @@ function appendUsageSegment(ss, payload) {
     text(payload.note),
     new Date()
   ];
-  if (existingRow > 0) {
-    sheet.getRange(existingRow, 1, 1, USAGE_SEGMENT_HEADERS.length).setValues([row]);
-    return { action: "updated", row: existingRow, id: id };
-  }
-  sheet.appendRow(row);
-  return { action: "inserted", row: sheet.getLastRow(), id: id };
 }
 
 function logSync(ss, action, status, message, payloadId) {
