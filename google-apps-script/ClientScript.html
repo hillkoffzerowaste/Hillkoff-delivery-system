@@ -19,26 +19,30 @@
   });
 
   function refreshDashboard() {
+    updateWorkflowStatus("กำลังโหลดข้อมูลจาก Sheet...");
     setLoading(true);
     google.script.run
       .withSuccessHandler((data) => {
         setLoading(false);
         if (!data || data.ok === false) {
           toast(data?.error || "โหลดข้อมูลไม่สำเร็จ", true);
+          updateWorkflowStatus("โหลดข้อมูลไม่สำเร็จ");
           return;
         }
         dashboard = data;
         renderAll();
+        updateWorkflowStatus("ข้อมูลพร้อมใช้งาน");
       })
       .withFailureHandler((error) => {
         setLoading(false);
         toast(error?.message || String(error), true);
+        updateWorkflowStatus("โหลดข้อมูลไม่สำเร็จ");
       })
       .getWebDashboardData(getDateFilters());
   }
 
   function renderAll() {
-    document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด: ${dashboard.updatedAt || "-"}`;
+    document.getElementById("updatedAt").textContent = `ข้อมูลล่าสุดจาก Sheet: ${dashboard.updatedAt || "-"}`;
     document.getElementById("todayLabel").textContent = dashboard.today || "";
     document.getElementById("monthLabel").textContent = `${dashboard.filters?.dateFrom || ""} ถึง ${dashboard.filters?.dateTo || ""}`;
     document.getElementById("sheetLink").href = dashboard.sheetUrl || "#";
@@ -57,6 +61,7 @@
       ["kmPerLiter", "กม./ลิตร", ""]
     ]);
     fillFormOptions();
+    populateTableFilters();
     renderAlerts();
     renderAlertsTable();
     renderRankings();
@@ -74,6 +79,11 @@
         <small>${escapeHtml(unit)}</small>
       </div>
     `).join("");
+  }
+
+  function updateWorkflowStatus(message) {
+    const el = document.getElementById("workflowStatus");
+    if (el) el.textContent = `สถานะ: ${message}`;
   }
 
   function setChartMode(mode) {
@@ -401,11 +411,67 @@
     `).join("");
   }
 
+  function populateTableFilters() {
+    populateSelect("usageVehicleFilter", uniqueValues(dashboard.usageRows || [], rowVehicleKey), "รถทุกคัน");
+    populateSelect("usageDriverFilter", uniqueValues(dashboard.usageRows || [], rowDriverKey), "คนขับทั้งหมด");
+    populateSelect("usageDepartmentFilter", uniqueValues(dashboard.usageRows || [], rowDepartment), "ทุกแผนก");
+    populateSelect("fuelVehicleFilter", uniqueValues(dashboard.fuelRows || [], rowVehicleKey), "รถทุกคัน");
+    populateSelect("fuelDriverFilter", uniqueValues(dashboard.fuelRows || [], rowDriverKey), "คนขับทั้งหมด");
+    populateSelect("fuelDepartmentFilter", uniqueValues(dashboard.fuelRows || [], rowDepartment), "ทุกแผนก");
+  }
+
+  function populateSelect(id, values, allLabel) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const previous = el.value;
+    el.innerHTML = `<option value="">${escapeHtml(allLabel)}</option>` + values.map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("");
+    if (previous && values.includes(previous)) el.value = previous;
+  }
+
+  function uniqueValues(rows, getter) {
+    return Array.from(new Set(rows.map(getter).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "th"));
+  }
+
+  function rowDepartment(row) {
+    if (row.department) return row.department;
+    const vehicle = findVehicle(row.assetCode || row.vehicleId || row.plate);
+    return (vehicle && vehicle.department) || "";
+  }
+
+  function rowVehicleKey(row) {
+    return row.plate || row.assetCode || row.vehicleId || "";
+  }
+
+  function rowDriverKey(row) {
+    return row.driverName || row.driverId || "";
+  }
+
+  function clearUsageFilters() {
+    ["usageSearch", "usageVehicleFilter", "usageDriverFilter", "usageDepartmentFilter", "usageStatus"].forEach(clearFilterValue);
+    renderUsageTable();
+  }
+
+  function clearFuelFilters() {
+    ["fuelSearch", "fuelVehicleFilter", "fuelDriverFilter", "fuelDepartmentFilter"].forEach(clearFilterValue);
+    renderFuelTable();
+  }
+
+  function clearFilterValue(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  }
+
   function renderUsageTable() {
     const q = lower(document.getElementById("usageSearch")?.value);
     const status = document.getElementById("usageStatus")?.value || "";
+    const vehicle = document.getElementById("usageVehicleFilter")?.value || "";
+    const driver = document.getElementById("usageDriverFilter")?.value || "";
+    const department = document.getElementById("usageDepartmentFilter")?.value || "";
     const rows = (dashboard.usageRows || []).filter((row) => {
       if (status && row.eventType !== status) return false;
+      if (vehicle && rowVehicleKey(row) !== vehicle) return false;
+      if (driver && rowDriverKey(row) !== driver) return false;
+      if (department && rowDepartment(row) !== department) return false;
       return !q || lower(Object.values(row).join(" ")).includes(q);
     }).slice(0, 300);
     document.getElementById("usageTable").innerHTML = rows.map((row) => `
@@ -424,7 +490,15 @@
 
   function renderFuelTable() {
     const q = lower(document.getElementById("fuelSearch")?.value);
-    const rows = (dashboard.fuelRows || []).filter((row) => !q || lower(Object.values(row).join(" ")).includes(q)).slice(0, 300);
+    const vehicle = document.getElementById("fuelVehicleFilter")?.value || "";
+    const driver = document.getElementById("fuelDriverFilter")?.value || "";
+    const department = document.getElementById("fuelDepartmentFilter")?.value || "";
+    const rows = (dashboard.fuelRows || []).filter((row) => {
+      if (vehicle && rowVehicleKey(row) !== vehicle) return false;
+      if (driver && rowDriverKey(row) !== driver) return false;
+      if (department && rowDepartment(row) !== department) return false;
+      return !q || lower(Object.values(row).join(" ")).includes(q);
+    }).slice(0, 300);
     document.getElementById("fuelTable").innerHTML = rows.map((row) => `
       <tr>
         <td>${escapeHtml(row.serviceDate)}</td>
@@ -441,6 +515,7 @@
   }
 
   function renderReports() {
+    renderReportSummaryCards();
     document.getElementById("dailyReport").innerHTML = (dashboard.dailySummary || []).slice(0, 150).map((row) => `
       <tr>
         <td>${escapeHtml(row.serviceDate)}</td>
@@ -463,6 +538,29 @@
     `).join("") || emptyRow(6);
   }
 
+  function renderReportSummaryCards() {
+    const target = document.getElementById("reportSummaryCards");
+    if (!target) return;
+    const kpi = dashboard.kpis?.range || dashboard.kpis?.month || {};
+    const usageCount = (dashboard.usageRows || []).length;
+    const fuelCount = (dashboard.fuelRows || []).length;
+    const alertCount = (dashboard.alerts || []).length;
+    const cards = [
+      ["ระยะทางรวม", formatNumber(kpi.distance), "กม."],
+      ["ค่าน้ำมันรวม", formatNumber(kpi.fuelAmount), "บาท"],
+      ["บันทึกการใช้รถ", formatNumber(usageCount), "รายการ"],
+      ["บิลน้ำมัน", formatNumber(fuelCount), "รายการ"],
+      ["ต้องตรวจ", formatNumber(alertCount), "รายการ"]
+    ];
+    target.innerHTML = cards.map(([label, value, unit]) => `
+      <div class="summary-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+        <small>${escapeHtml(unit)}</small>
+      </div>
+    `).join("");
+  }
+
   function exportCsv(type) {
     const report = buildCsvReport(type);
     if (!report.rows.length) {
@@ -479,6 +577,10 @@
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
     toast(`ส่งออก ${report.title} แล้ว`);
+  }
+
+  function exportSelectedCsv() {
+    exportCsv(document.getElementById("csvExportType")?.value || "usage");
   }
 
   function buildCsvReport(type) {
@@ -721,6 +823,7 @@
     };
     payload.editorName = document.getElementById("editorName").value;
     if (!confirm("ยืนยันบันทึกการใช้รถ")) return;
+    updateWorkflowStatus("กำลังบันทึกการใช้รถ...");
     setLoading(true);
     google.script.run.withSuccessHandler(afterSave).withFailureHandler(saveFailed).saveDashboardUsageSegment(payload);
   }
@@ -758,6 +861,7 @@
     };
     payload.editorName = document.getElementById("editorName").value;
     if (!confirm("ยืนยันบันทึกบิลน้ำมัน")) return;
+    updateWorkflowStatus("กำลังบันทึกบิลน้ำมัน...");
     setLoading(true);
     google.script.run.withSuccessHandler(afterSave).withFailureHandler(saveFailed).saveDashboardFuelBill(payload);
   }
@@ -766,9 +870,11 @@
     setLoading(false);
     if (!result || result.ok === false) {
       toast(result?.error || "บันทึกไม่สำเร็จ", true);
+      updateWorkflowStatus("บันทึกไม่สำเร็จ");
       return;
     }
-    toast("บันทึกสำเร็จ");
+    toast("บันทึกสำเร็จ กำลังโหลดข้อมูลล่าสุด");
+    updateWorkflowStatus("บันทึกสำเร็จ กำลังโหลดข้อมูลล่าสุด...");
     resetUsageForm();
     resetFuelForm();
     refreshDashboard();
@@ -777,19 +883,23 @@
   function saveFailed(error) {
     setLoading(false);
     toast(error?.message || String(error), true);
+    updateWorkflowStatus("ทำรายการไม่สำเร็จ");
   }
 
   function refreshSummaries() {
     if (!confirm("ยืนยันคำนวณสรุปใหม่จาก Sheet")) return;
+    updateWorkflowStatus("กำลังคำนวณสรุปใหม่จาก Sheet...");
     setLoading(true);
     google.script.run
       .withSuccessHandler((result) => {
         setLoading(false);
         if (!result || result.ok === false) {
           toast(result?.error || "คำนวณสรุปใหม่จาก Sheet ไม่สำเร็จ", true);
+          updateWorkflowStatus("คำนวณสรุปใหม่ไม่สำเร็จ");
           return;
         }
-        toast("คำนวณสรุปใหม่จาก Sheet สำเร็จ");
+        toast("คำนวณสรุปใหม่จาก Sheet สำเร็จ กำลังโหลดข้อมูลล่าสุด");
+        updateWorkflowStatus("คำนวณสรุปใหม่สำเร็จ กำลังโหลดข้อมูลล่าสุด...");
         refreshDashboard();
       })
       .withFailureHandler(saveFailed)

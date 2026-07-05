@@ -13,9 +13,9 @@
         <p class="eyebrow">Hillkoff</p>
         <h1>Vehicle Control Dashboard</h1>
         <p id="updatedAt" class="muted">กำลังโหลดข้อมูล...</p>
+        <p id="workflowStatus" class="muted status-line">สถานะ: กำลังเตรียมข้อมูล</p>
       </div>
       <div class="top-actions">
-        <button class="secondary" type="button" onclick="refreshDashboard()">รีเฟรช</button>
         <a id="sheetLink" class="primary" href="#" target="_blank" rel="noopener">เปิด Google Sheet</a>
       </div>
     </header>
@@ -38,7 +38,6 @@
           <button class="secondary" type="button" onclick="setQuickRange('month')">เดือนนี้</button>
           <button class="secondary" type="button" onclick="setQuickRange('30days')">30 วัน</button>
           <button class="primary" type="button" onclick="refreshDashboard()">โหลดข้อมูล</button>
-          <button class="secondary" type="button" onclick="refreshSummaries()">คำนวณสรุปใหม่จาก Sheet</button>
         </div>
       </section>
 
@@ -117,12 +116,22 @@
         </div>
         <div class="filters">
           <input id="usageSearch" type="search" placeholder="ค้นหา วันที่ ทะเบียน คนขับ สถานะ" oninput="renderUsageTable()">
+          <select id="usageVehicleFilter" onchange="renderUsageTable()">
+            <option value="">รถทุกคัน</option>
+          </select>
+          <select id="usageDriverFilter" onchange="renderUsageTable()">
+            <option value="">คนขับทั้งหมด</option>
+          </select>
+          <select id="usageDepartmentFilter" onchange="renderUsageTable()">
+            <option value="">ทุกแผนก</option>
+          </select>
           <select id="usageStatus" onchange="renderUsageTable()">
             <option value="">ทุกสถานะ</option>
             <option value="start">เริ่มใช้</option>
             <option value="segment">ระหว่างวัน</option>
             <option value="end">จบงาน</option>
           </select>
+          <button class="secondary" type="button" onclick="clearUsageFilters()">ล้างตัวกรอง</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -150,6 +159,16 @@
         </div>
         <div class="filters">
           <input id="fuelSearch" type="search" placeholder="ค้นหา วันที่ ทะเบียน คนขับ ปั๊ม เลขบิล" oninput="renderFuelTable()">
+          <select id="fuelVehicleFilter" onchange="renderFuelTable()">
+            <option value="">รถทุกคัน</option>
+          </select>
+          <select id="fuelDriverFilter" onchange="renderFuelTable()">
+            <option value="">คนขับทั้งหมด</option>
+          </select>
+          <select id="fuelDepartmentFilter" onchange="renderFuelTable()">
+            <option value="">ทุกแผนก</option>
+          </select>
+          <button class="secondary" type="button" onclick="clearFuelFilters()">ล้างตัวกรอง</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -189,13 +208,18 @@
             <h3>ส่งออกรายงาน</h3>
             <span class="pill">ตามช่วงวันที่ที่เลือก</span>
           </div>
+          <div id="reportSummaryCards" class="report-summary-grid"></div>
           <div class="report-actions">
             <button class="primary" type="button" onclick="printReport()">พิมพ์ / PDF</button>
             <button class="secondary" type="button" onclick="copyLineSummary()">คัดลอกสรุป LINE</button>
-            <button class="secondary" type="button" onclick="exportCsv('usage')">CSV การใช้รถ</button>
-            <button class="secondary" type="button" onclick="exportCsv('fuel')">CSV บิลน้ำมัน</button>
-            <button class="secondary" type="button" onclick="exportCsv('daily')">CSV สรุปรายวัน</button>
-            <button class="secondary" type="button" onclick="exportCsv('monthly')">CSV สรุปรายเดือน</button>
+            <select id="csvExportType" aria-label="เลือกประเภทรายงาน CSV">
+              <option value="usage">CSV การใช้รถ</option>
+              <option value="fuel">CSV บิลน้ำมัน</option>
+              <option value="daily">CSV สรุปรายวัน</option>
+              <option value="monthly">CSV สรุปรายเดือน</option>
+            </select>
+            <button class="secondary" type="button" onclick="exportSelectedCsv()">ส่งออก CSV</button>
+            <button class="secondary quiet-action" type="button" onclick="refreshSummaries()">คำนวณสรุปใหม่จาก Sheet</button>
           </div>
         </section>
         <div class="grid-two">
