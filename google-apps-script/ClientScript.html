@@ -10,6 +10,8 @@
     alerts: [],
     kpis: { today: {}, month: {} }
   };
+  let chartMode = "daily";
+  let overviewCharts = {};
 
   document.addEventListener("DOMContentLoaded", () => {
     initDateRange();
@@ -61,6 +63,7 @@
     renderUsageTable();
     renderFuelTable();
     renderReports();
+    renderOverviewCharts();
   }
 
   function renderKpis(targetId, source, items) {
@@ -71,6 +74,296 @@
         <small>${escapeHtml(unit)}</small>
       </div>
     `).join("");
+  }
+
+  function setChartMode(mode) {
+    chartMode = mode;
+    document.querySelectorAll(".chart-mode").forEach((button) => {
+      button.classList.toggle("active", button.dataset.chartMode === mode);
+    });
+    renderOverviewCharts();
+  }
+
+  function renderOverviewCharts() {
+    const notice = document.getElementById("chartUnavailable");
+    if (!document.getElementById("trendChart")) return;
+    if (typeof Chart === "undefined") {
+      if (notice) {
+        notice.textContent = "โหลดไลบรารีกราฟไม่สำเร็จ กรุณาลองรีเฟรชหน้า";
+        notice.classList.add("show");
+      }
+      return;
+    }
+    if (notice) notice.classList.remove("show");
+    destroyOverviewCharts();
+
+    const periodRows = buildPeriodAnalytics(chartMode);
+    const vehicleRows = buildVehicleAnalytics();
+    const qualityRows = buildDataQualityRows();
+    const labels = periodRows.map((row) => row.label);
+
+    overviewCharts.trend = createChart("trendChart", {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            type: "line",
+            label: "ระยะทาง (กม.)",
+            data: periodRows.map((row) => row.distance),
+            borderColor: "#14783d",
+            backgroundColor: "rgba(20, 120, 61, 0.12)",
+            borderWidth: 2,
+            tension: 0.28,
+            yAxisID: "y"
+          },
+          {
+            type: "bar",
+            label: "ค่าน้ำมัน (บาท)",
+            data: periodRows.map((row) => row.fuelAmount),
+            backgroundColor: "rgba(161, 98, 7, 0.28)",
+            borderColor: "#a16207",
+            borderWidth: 1,
+            yAxisID: "y1"
+          }
+        ]
+      },
+      options: chartOptions({
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: "กม." } },
+          y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "บาท" } }
+        }
+      })
+    });
+
+    overviewCharts.fuelLiter = createChart("fuelLiterChart", {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "ลิตร",
+          data: periodRows.map((row) => row.fuelLiters),
+          backgroundColor: "rgba(37, 99, 235, 0.26)",
+          borderColor: "#2563eb",
+          borderWidth: 1
+        }]
+      },
+      options: chartOptions()
+    });
+
+    overviewCharts.vehicleDistance = createChart("vehicleDistanceChart", horizontalBarConfig(
+      vehicleRows.slice().sort((a, b) => b.distance - a.distance).slice(0, 10),
+      "distance",
+      "กม.",
+      "#14783d"
+    ));
+
+    overviewCharts.vehicleFuel = createChart("vehicleFuelChart", horizontalBarConfig(
+      vehicleRows.slice().sort((a, b) => b.fuelAmount - a.fuelAmount).slice(0, 10),
+      "fuelAmount",
+      "บาท",
+      "#a16207"
+    ));
+
+    overviewCharts.vehicleCost = createChart("vehicleCostChart", horizontalBarConfig(
+      vehicleRows.filter((row) => row.bahtPerKm > 0).sort((a, b) => b.bahtPerKm - a.bahtPerKm).slice(0, 10),
+      "bahtPerKm",
+      "บาท/กม.",
+      "#2563eb"
+    ));
+
+    overviewCharts.dataQuality = createChart("dataQualityChart", {
+      type: "doughnut",
+      data: {
+        labels: qualityRows.map((row) => row.label),
+        datasets: [{
+          data: qualityRows.map((row) => row.value),
+          backgroundColor: ["#14783d", "#a16207", "#b42318", "#2563eb"],
+          borderColor: "#ffffff",
+          borderWidth: 2
+        }]
+      },
+      options: chartOptions({ cutout: "62%" })
+    });
+  }
+
+  function destroyOverviewCharts() {
+    Object.values(overviewCharts).forEach((chart) => {
+      if (chart && typeof chart.destroy === "function") chart.destroy();
+    });
+    overviewCharts = {};
+  }
+
+  function createChart(canvasId, config) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    try {
+      return new Chart(canvas, config);
+    } catch (error) {
+      console.error(`Chart render failed: ${canvasId}`, error);
+      const notice = document.getElementById("chartUnavailable");
+      if (notice) {
+        notice.textContent = "แสดงกราฟบางส่วนไม่สำเร็จ แต่ข้อมูลหลักยังใช้งานได้";
+        notice.classList.add("show");
+      }
+      return null;
+    }
+  }
+
+  function chartOptions(extra) {
+    const base = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, boxHeight: 12 } },
+        tooltip: {
+          callbacks: {
+            label: (context) => `${context.dataset.label || context.label}: ${formatNumber(context.parsed.y ?? context.parsed.x ?? context.parsed)}`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+        y: { beginAtZero: true }
+      }
+    };
+    return mergeChartOptions(base, extra || {});
+  }
+
+  function mergeChartOptions(base, extra) {
+    return {
+      ...base,
+      ...extra,
+      plugins: { ...(base.plugins || {}), ...(extra.plugins || {}) },
+      scales: { ...(base.scales || {}), ...(extra.scales || {}) }
+    };
+  }
+
+  function horizontalBarConfig(rows, metric, unit, color) {
+    return {
+      type: "bar",
+      data: {
+        labels: rows.map((row) => row.label),
+        datasets: [{
+          label: unit,
+          data: rows.map((row) => row[metric]),
+          backgroundColor: chartColor(color, 0.26),
+          borderColor: color,
+          borderWidth: 1
+        }]
+      },
+      options: chartOptions({
+        indexAxis: "y",
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true },
+          y: { ticks: { autoSkip: false } }
+        }
+      })
+    };
+  }
+
+  function buildPeriodAnalytics(mode) {
+    const map = {};
+    (dashboard.usageRows || []).forEach((row) => {
+      const key = periodKey(row.serviceDate, mode);
+      if (!key) return;
+      const item = ensurePeriodItem(map, key);
+      item.distance += Number(usageDistance(row) || 0);
+      item.records += 1;
+    });
+    (dashboard.fuelRows || []).forEach((row) => {
+      const key = periodKey(row.serviceDate, mode);
+      if (!key) return;
+      const item = ensurePeriodItem(map, key);
+      item.fuelAmount += Number(row.amount || 0);
+      item.fuelLiters += Number(row.liters || 0);
+    });
+    return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }
+
+  function ensurePeriodItem(map, key) {
+    if (!map[key.sortKey]) {
+      map[key.sortKey] = { label: key.label, sortKey: key.sortKey, distance: 0, fuelAmount: 0, fuelLiters: 0, records: 0 };
+    }
+    return map[key.sortKey];
+  }
+
+  function periodKey(value, mode) {
+    if (!value) return null;
+    const parts = String(value).slice(0, 10).split("-");
+    if (parts.length !== 3) return null;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    const day = Number(parts[2]);
+    if (!year || !month || !day) return null;
+    if (mode === "monthly") {
+      const sortKey = `${year}-${String(month).padStart(2, "0")}`;
+      return { sortKey, label: sortKey };
+    }
+    const date = new Date(year, month - 1, day);
+    if (Number.isNaN(date.getTime())) return null;
+    if (mode === "weekly") {
+      const monday = new Date(date);
+      const dayIndex = (monday.getDay() + 6) % 7;
+      monday.setDate(monday.getDate() - dayIndex);
+      const sortKey = formatDateInput(monday);
+      return { sortKey, label: `สัปดาห์ ${sortKey}` };
+    }
+    const sortKey = formatDateInput(date);
+    return { sortKey, label: sortKey };
+  }
+
+  function buildVehicleAnalytics() {
+    const map = {};
+    (dashboard.usageRows || []).forEach((row) => {
+      const key = row.plate || row.assetCode || "ไม่ระบุรถ";
+      const item = ensureVehicleItem(map, key);
+      item.distance += Number(usageDistance(row) || 0);
+      item.usageRecords += 1;
+    });
+    (dashboard.fuelRows || []).forEach((row) => {
+      const key = row.plate || row.assetCode || "ไม่ระบุรถ";
+      const item = ensureVehicleItem(map, key);
+      item.fuelAmount += Number(row.amount || 0);
+      item.fuelLiters += Number(row.liters || 0);
+      item.fuelRecords += 1;
+    });
+    return Object.values(map).map((item) => ({
+      ...item,
+      bahtPerKm: item.distance > 0 ? item.fuelAmount / item.distance : 0
+    }));
+  }
+
+  function ensureVehicleItem(map, key) {
+    if (!map[key]) {
+      map[key] = { label: key, distance: 0, fuelAmount: 0, fuelLiters: 0, usageRecords: 0, fuelRecords: 0 };
+    }
+    return map[key];
+  }
+
+  function buildDataQualityRows() {
+    const usageRows = dashboard.usageRows || [];
+    const ended = usageRows.filter((row) => row.eventType === "end").length;
+    const starts = usageRows.filter((row) => row.eventType === "start").length;
+    const segments = usageRows.filter((row) => row.eventType === "segment").length;
+    const alerts = (dashboard.alerts || []).length;
+    return [
+      { label: "จบงาน", value: ended },
+      { label: "เริ่ม/ระหว่างวัน", value: starts + segments },
+      { label: "ต้องตรวจ", value: alerts },
+      { label: "บิลน้ำมัน", value: (dashboard.fuelRows || []).length }
+    ].filter((row) => row.value > 0);
+  }
+
+  function chartColor(hex, alpha) {
+    const clean = hex.replace("#", "");
+    const bigint = parseInt(clean, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   function renderAlerts() {

@@ -4,6 +4,7 @@
     <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <?!= include("Styles"); ?>
   </head>
   <body>
@@ -53,6 +54,44 @@
           <span id="monthLabel" class="pill"></span>
         </div>
         <div id="monthKpis" class="kpi-grid"></div>
+
+        <section class="panel analytics-panel">
+          <div class="panel-head">
+            <h3>วิเคราะห์การใช้รถ</h3>
+            <div class="chart-mode-controls" aria-label="Chart grouping">
+              <button class="chart-mode active" type="button" data-chart-mode="daily" onclick="setChartMode('daily')">รายวัน</button>
+              <button class="chart-mode" type="button" data-chart-mode="weekly" onclick="setChartMode('weekly')">รายสัปดาห์</button>
+              <button class="chart-mode" type="button" data-chart-mode="monthly" onclick="setChartMode('monthly')">รายเดือน</button>
+            </div>
+          </div>
+          <div id="chartUnavailable" class="muted chart-unavailable">กำลังเตรียมกราฟ...</div>
+          <div class="chart-grid">
+            <section class="chart-card chart-card-wide">
+              <h3>แนวโน้มระยะทางและค่าน้ำมัน</h3>
+              <div class="chart-frame"><canvas id="trendChart"></canvas></div>
+            </section>
+            <section class="chart-card">
+              <h3>ลิตรน้ำมันตามช่วงเวลา</h3>
+              <div class="chart-frame"><canvas id="fuelLiterChart"></canvas></div>
+            </section>
+            <section class="chart-card">
+              <h3>Top 10 รถตามระยะทาง</h3>
+              <div class="chart-frame"><canvas id="vehicleDistanceChart"></canvas></div>
+            </section>
+            <section class="chart-card">
+              <h3>Top 10 รถตามค่าน้ำมัน</h3>
+              <div class="chart-frame"><canvas id="vehicleFuelChart"></canvas></div>
+            </section>
+            <section class="chart-card">
+              <h3>ต้นทุนบาท/กม. ต่อรถ</h3>
+              <div class="chart-frame"><canvas id="vehicleCostChart"></canvas></div>
+            </section>
+            <section class="chart-card">
+              <h3>คุณภาพข้อมูล</h3>
+              <div class="chart-frame"><canvas id="dataQualityChart"></canvas></div>
+            </section>
+          </div>
+        </section>
 
         <div class="grid-two">
           <section class="panel">
