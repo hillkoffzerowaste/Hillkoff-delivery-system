@@ -23,11 +23,24 @@
       <button class="tab active" type="button" data-tab="overview" onclick="switchTab('overview')">ภาพรวม</button>
       <button class="tab" type="button" data-tab="usage" onclick="switchTab('usage')">การใช้รถ</button>
       <button class="tab" type="button" data-tab="fuel" onclick="switchTab('fuel')">บิลน้ำมัน</button>
+      <button class="tab" type="button" data-tab="alerts" onclick="switchTab('alerts')">แจ้งเตือน</button>
       <button class="tab" type="button" data-tab="reports" onclick="switchTab('reports')">รายงาน</button>
       <button class="tab" type="button" data-tab="add" onclick="switchTab('add')">เพิ่มข้อมูล</button>
     </nav>
 
     <main>
+      <section class="range-bar">
+        <label>จากวันที่<input id="dateFrom" type="date" onchange="refreshDashboard()"></label>
+        <label>ถึงวันที่<input id="dateTo" type="date" onchange="refreshDashboard()"></label>
+        <div class="range-actions">
+          <button class="secondary" type="button" onclick="setQuickRange('today')">วันนี้</button>
+          <button class="secondary" type="button" onclick="setQuickRange('month')">เดือนนี้</button>
+          <button class="secondary" type="button" onclick="setQuickRange('30days')">30 วัน</button>
+          <button class="primary" type="button" onclick="refreshDashboard()">โหลดข้อมูล</button>
+          <button class="secondary" type="button" onclick="refreshSummaries()">Refresh Summary</button>
+        </div>
+      </section>
+
       <section id="overview" class="tab-panel active">
         <div class="section-head">
           <h2>ภาพรวมวันนี้</h2>
@@ -36,7 +49,7 @@
         <div id="todayKpis" class="kpi-grid"></div>
 
         <div class="section-head">
-          <h2>ภาพรวมเดือนนี้</h2>
+          <h2>ภาพรวมช่วงวันที่</h2>
           <span id="monthLabel" class="pill"></span>
         </div>
         <div id="monthKpis" class="kpi-grid"></div>
@@ -119,6 +132,14 @@
         </div>
       </section>
 
+      <section id="alerts" class="tab-panel">
+        <div class="section-head">
+          <h2>รายการที่ต้องตรวจ</h2>
+          <span class="muted">ตามช่วงวันที่ที่เลือก</span>
+        </div>
+        <div id="alertsTable" class="alert-grid"></div>
+      </section>
+
       <section id="reports" class="tab-panel">
         <div class="section-head">
           <h2>รายงานบัญชี</h2>
@@ -151,6 +172,10 @@
       </section>
 
       <section id="add" class="tab-panel">
+        <section class="panel editor-panel">
+          <div class="panel-head"><h3>ข้อมูลผู้บันทึก</h3></div>
+          <label>ชื่อผู้บันทึก/ผู้แก้ไข<input id="editorName" type="text" placeholder="เช่น แผนกบัญชี / ชื่อผู้แก้ไข"></label>
+        </section>
         <div class="grid-two">
           <section class="panel">
             <div class="panel-head"><h3>บันทึกการใช้รถ</h3></div>

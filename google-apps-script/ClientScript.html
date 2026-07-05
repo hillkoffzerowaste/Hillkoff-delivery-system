@@ -11,7 +11,10 @@
     kpis: { today: {}, month: {} }
   };
 
-  document.addEventListener("DOMContentLoaded", refreshDashboard);
+  document.addEventListener("DOMContentLoaded", () => {
+    initDateRange();
+    refreshDashboard();
+  });
 
   function refreshDashboard() {
     setLoading(true);
@@ -29,13 +32,13 @@
         setLoading(false);
         toast(error?.message || String(error), true);
       })
-      .getWebDashboardData();
+      .getWebDashboardData(getDateFilters());
   }
 
   function renderAll() {
     document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด: ${dashboard.updatedAt || "-"}`;
     document.getElementById("todayLabel").textContent = dashboard.today || "";
-    document.getElementById("monthLabel").textContent = dashboard.month || "";
+    document.getElementById("monthLabel").textContent = `${dashboard.filters?.dateFrom || ""} ถึง ${dashboard.filters?.dateTo || ""}`;
     document.getElementById("sheetLink").href = dashboard.sheetUrl || "#";
     renderKpis("todayKpis", dashboard.kpis.today || {}, [
       ["vehicles", "รถใช้งาน", "คัน"],
@@ -44,7 +47,7 @@
       ["fuelAmount", "ค่าน้ำมัน", "บาท"],
       ["openItems", "ยังไม่จบงาน", "รายการ"]
     ]);
-    renderKpis("monthKpis", dashboard.kpis.month || {}, [
+    renderKpis("monthKpis", dashboard.kpis.range || dashboard.kpis.month || {}, [
       ["distance", "ระยะทางรวม", "กม."],
       ["fuelAmount", "ค่าน้ำมันรวม", "บาท"],
       ["fuelLiters", "น้ำมันรวม", "ลิตร"],
@@ -53,6 +56,7 @@
     ]);
     fillFormOptions();
     renderAlerts();
+    renderAlertsTable();
     renderRankings();
     renderUsageTable();
     renderFuelTable();
@@ -78,6 +82,16 @@
         <small>${escapeHtml(item.detail || "")}</small>
       </div>
     `).join("") : `<div class="list-item"><b>ไม่มีรายการแจ้งเตือน</b><small>ข้อมูลล่าสุดปกติ</small></div>`;
+  }
+
+  function renderAlertsTable() {
+    const alerts = dashboard.alerts || [];
+    document.getElementById("alertsTable").innerHTML = alerts.length ? alerts.map((item) => `
+      <div class="list-item ${escapeHtml(item.type || "info")}">
+        <b>${escapeHtml(item.title || "-")}</b>
+        <small>${escapeHtml(item.detail || "")}</small>
+      </div>
+    `).join("") : `<div class="list-item"><b>ไม่มีรายการที่ต้องตรวจ</b><small>ช่วงวันที่นี้ไม่พบความผิดปกติ</small></div>`;
   }
 
   function renderRankings() {
@@ -193,6 +207,7 @@
       detail: form.detail.value,
       note: form.note.value
     };
+    payload.editorName = document.getElementById("editorName").value;
     if (!confirm("ยืนยันบันทึกการใช้รถ")) return;
     setLoading(true);
     google.script.run.withSuccessHandler(afterSave).withFailureHandler(saveFailed).saveDashboardUsageSegment(payload);
@@ -229,6 +244,7 @@
       receiptNo: form.receiptNo.value,
       note: form.note.value
     };
+    payload.editorName = document.getElementById("editorName").value;
     if (!confirm("ยืนยันบันทึกบิลน้ำมัน")) return;
     setLoading(true);
     google.script.run.withSuccessHandler(afterSave).withFailureHandler(saveFailed).saveDashboardFuelBill(payload);
@@ -249,6 +265,59 @@
   function saveFailed(error) {
     setLoading(false);
     toast(error?.message || String(error), true);
+  }
+
+  function refreshSummaries() {
+    if (!confirm("ยืนยัน Refresh Summary")) return;
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler((result) => {
+        setLoading(false);
+        if (!result || result.ok === false) {
+          toast(result?.error || "Refresh Summary ไม่สำเร็จ", true);
+          return;
+        }
+        toast("Refresh Summary สำเร็จ");
+        refreshDashboard();
+      })
+      .withFailureHandler(saveFailed)
+      .refreshWebSummaries();
+  }
+
+  function initDateRange() {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    document.getElementById("dateFrom").value = `${yyyy}-${mm}-01`;
+    document.getElementById("dateTo").value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  function getDateFilters() {
+    return {
+      dateFrom: document.getElementById("dateFrom").value,
+      dateTo: document.getElementById("dateTo").value
+    };
+  }
+
+  function setQuickRange(type) {
+    const today = new Date();
+    const end = formatDateInput(today);
+    let start = end;
+    if (type === "month") {
+      start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+    } else if (type === "30days") {
+      const from = new Date(today);
+      from.setDate(from.getDate() - 29);
+      start = formatDateInput(from);
+    }
+    document.getElementById("dateFrom").value = start;
+    document.getElementById("dateTo").value = end;
+    refreshDashboard();
+  }
+
+  function formatDateInput(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
   function editUsage(id) {
