@@ -220,7 +220,15 @@
             </select>
             <button class="secondary" type="button" onclick="exportSelectedCsv()">ส่งออก CSV</button>
             <button class="secondary quiet-action" type="button" onclick="refreshSummaries()">คำนวณสรุปใหม่จาก Sheet</button>
+            <button class="secondary quiet-action" type="button" onclick="createBackupNow()">สำรองไฟล์ตอนนี้</button>
           </div>
+        </section>
+        <section class="panel system-health-panel">
+          <div class="panel-head">
+            <h3>สถานะระบบ</h3>
+            <span class="pill">ไม่แก้ข้อมูลเดิม</span>
+          </div>
+          <div id="systemHealthPanel" class="system-health-grid"></div>
         </section>
         <div class="grid-two">
           <section class="panel">

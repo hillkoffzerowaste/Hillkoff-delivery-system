@@ -8,7 +8,8 @@
 var CONFIG = {
   spreadsheetName: "Hillkoff Vehicle Usage System",
   spreadsheetIdProperty: "HILLKOFF_VEHICLE_USAGE_SPREADSHEET_ID",
-  fallbackSpreadsheetId: "1jPy3C9LNvttC62piJeWKC8IWIue4i_KDILY-imbRanc"
+  fallbackSpreadsheetId: "1jPy3C9LNvttC62piJeWKC8IWIue4i_KDILY-imbRanc",
+  backupFolderName: "Hillkoff Vehicle Usage Backups"
 };
 
 var SHEET_NAMES = {
@@ -168,6 +169,8 @@ function doPost(e) {
       result = appendUsageSegment(ss, payload);
     } else if (payload.action === "replaceUsageSegments") {
       result = replaceUsageSegments(ss, payload);
+    } else if (payload.action === "createBackup") {
+      result = createDailyBackup();
     } else if (payload.action === "setup") {
       result = { spreadsheetUrl: ss.getUrl(), sheets: getSheetNames(ss) };
     } else {
@@ -194,6 +197,9 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Hillkoff")
     .addItem("รีเฟรชสรุป", "refreshSummaries")
+    .addSeparator()
+    .addItem("สำรองไฟล์ตอนนี้", "createDailyBackupFromMenu")
+    .addItem("ติดตั้งสำรองไฟล์รายวัน", "installDailyBackupTrigger")
     .addToUi();
 }
 
@@ -244,7 +250,8 @@ function getWebDashboardData(filters) {
       monthlySummary: monthlyRows.slice().reverse(),
       syncLogs: syncRows.slice().reverse().slice(0, 25),
       alerts: buildWebAlerts(usageRows, fuelRows, syncRows),
-      rankings: buildWebRankings(dailyRows, monthlyRows, fuelRows)
+      rankings: buildWebRankings(dailyRows, monthlyRows, fuelRows),
+      systemHealth: buildSystemHealth(ss, usageRows, fuelRows, dailyRows, monthlyRows, syncRows)
     };
     return result;
   } catch (error) {
@@ -273,6 +280,79 @@ function refreshWebSummaries() {
   }
 }
 
+function buildSystemHealth(ss, usageRows, fuelRows, dailyRows, monthlyRows, syncRows) {
+  var failedSyncs = (syncRows || []).filter(function(row) {
+    return text(row.status).toUpperCase() === "FAILED";
+  });
+  var latestSync = (syncRows || []).length ? syncRows[syncRows.length - 1] : {};
+  var lastBackup = getLastBackupInfo();
+  return {
+    usageRows: (usageRows || []).length,
+    fuelRows: (fuelRows || []).length,
+    dailySummaryRows: (dailyRows || []).length,
+    monthlySummaryRows: (monthlyRows || []).length,
+    failedSyncs: failedSyncs.length,
+    latestSyncAt: latestSync.syncedAt || "",
+    latestSyncAction: latestSync.action || "",
+    latestSyncStatus: latestSync.status || "",
+    lastBackupAt: lastBackup.createdAt || "",
+    lastBackupUrl: lastBackup.backupUrl || "",
+    spreadsheetUrl: ss ? ss.getUrl() : ""
+  };
+}
+
+function getLastBackupInfo() {
+  var raw = PropertiesService.getScriptProperties().getProperty("HILLKOFF_LAST_BACKUP");
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function createDailyBackupFromMenu() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.alert("สำรองไฟล์ตอนนี้", "ยืนยันสำรองไฟล์ Google Sheets ตอนนี้", ui.ButtonSet.OK_CANCEL);
+  if (response !== ui.Button.OK) return { ok: false, cancelled: true };
+  var result = createDailyBackup();
+  ui.alert("สำรองไฟล์สำเร็จ", result.backupUrl || "สำรองไฟล์เรียบร้อยแล้ว", ui.ButtonSet.OK);
+  return result;
+}
+
+function createDailyBackup() {
+  var ss = getOrCreateSpreadsheet();
+  var folder = getOrCreateBackupFolder();
+  var timestamp = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyyMMdd-HHmmss");
+  var file = DriveApp.getFileById(ss.getId());
+  var copy = file.makeCopy("Backup-" + CONFIG.spreadsheetName + "-" + timestamp, folder);
+  var result = {
+    ok: true,
+    backupId: copy.getId(),
+    backupUrl: copy.getUrl(),
+    createdAt: dashboardDateTime(new Date())
+  };
+  PropertiesService.getScriptProperties().setProperty("HILLKOFF_LAST_BACKUP", JSON.stringify(result));
+  return result;
+}
+
+function installDailyBackupTrigger() {
+  var functionName = "createDailyBackup";
+  var exists = ScriptApp.getProjectTriggers().some(function(trigger) {
+    return trigger.getHandlerFunction && trigger.getHandlerFunction() === functionName;
+  });
+  if (!exists) {
+    ScriptApp.newTrigger(functionName).timeBased().everyDays(1).atHour(23).create();
+  }
+  return { ok: true, installed: true, functionName: functionName };
+}
+
+function getOrCreateBackupFolder() {
+  var folders = DriveApp.getFoldersByName(CONFIG.backupFolderName);
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(CONFIG.backupFolderName);
+}
+
 function saveDashboardFuelBill(payload) {
   var lock = LockService.getScriptLock();
   try {
@@ -282,6 +362,9 @@ function saveDashboardFuelBill(payload) {
     var data = payload || {};
     var id = text(data.id) || makeManualId("manual_fuel");
     if (!text(data.serviceDate)) throw new Error("Missing serviceDate");
+    if (!isNumericValue(data.odometer)) throw new Error("Missing odometer");
+    if (!isNumericValue(data.liters) || numeric(data.liters) <= 0) throw new Error("Missing liters");
+    if (!isNumericValue(data.amount) || numeric(data.amount) < 0) throw new Error("Missing amount");
     var vehicle = findDashboardVehicle(ss, data.vehicleId || data.assetCode || data.plate);
     if (!vehicle.assetCode) throw new Error("Vehicle not found");
     var liters = numeric(data.liters);
@@ -340,7 +423,7 @@ function saveDashboardUsageSegment(payload) {
     var data = payload || {};
     if (!text(data.serviceDate)) throw new Error("Missing serviceDate");
     if (!text(data.eventType)) throw new Error("Missing eventType");
-    if (!numeric(data.odometer)) throw new Error("Missing odometer");
+    if (!isNumericValue(data.odometer)) throw new Error("Missing odometer");
     var vehicle = findDashboardVehicle(ss, data.vehicleId || data.assetCode || data.plate);
     if (!vehicle.assetCode) throw new Error("Vehicle not found");
     data.id = text(data.id) || makeManualId("manual_usage");
@@ -1165,6 +1248,11 @@ function numeric(value) {
   return isNaN(n) ? 0 : n;
 }
 
+function isNumericValue(value) {
+  if (value === null || value === undefined || value === "") return false;
+  return !isNaN(Number(value));
+}
+
 function roundNumber(value) {
   var n = numeric(value);
   return Math.round(n * 100) / 100;
@@ -1306,12 +1394,64 @@ function parsePayload(e) {
   return payload || {};
 }
 
+function requireTextField(payload, key, label) {
+  if (!text(payload && payload[key])) throw new Error("Missing " + (label || key));
+}
+
+function requireNumericField(payload, key, label) {
+  if (!isNumericValue(payload && payload[key])) throw new Error("Missing or invalid " + (label || key));
+}
+
+function validateDailyMileagePayload(payload) {
+  payload = payload || {};
+  requireTextField(payload, "serviceDate");
+  requireTextField(payload, "driverId");
+  if (!text(payload.vehicleId || payload.assetCode)) throw new Error("Missing vehicleId");
+  if (payload.odometerStart !== undefined && payload.odometerStart !== "" && !isNumericValue(payload.odometerStart)) {
+    throw new Error("Invalid odometerStart");
+  }
+  if (payload.odometerEnd !== undefined && payload.odometerEnd !== "" && !isNumericValue(payload.odometerEnd)) {
+    throw new Error("Invalid odometerEnd");
+  }
+  if (payload.totalDistance !== undefined && payload.totalDistance !== "" && !isNumericValue(payload.totalDistance)) {
+    throw new Error("Invalid totalDistance");
+  }
+  if (!isNumericValue(payload.odometerStart) && !isNumericValue(payload.odometerEnd) && !isNumericValue(payload.totalDistance)) {
+    throw new Error("Missing mileage value");
+  }
+}
+
+function validateUsageSegmentPayload(payload) {
+  payload = payload || {};
+  requireTextField(payload, "serviceDate");
+  requireTextField(payload, "eventType");
+  if (!text(payload.vehicleId || payload.assetCode || payload.plate)) throw new Error("Missing vehicleId");
+  requireNumericField(payload, "odometer");
+  if (payload.odometerStart !== undefined && payload.odometerStart !== "" && !isNumericValue(payload.odometerStart)) {
+    throw new Error("Invalid odometerStart");
+  }
+}
+
+function validateFuelBillPayload(payload) {
+  payload = payload || {};
+  requireTextField(payload, "serviceDate");
+  if (!text(payload.vehicleId || payload.assetCode || payload.plate)) throw new Error("Missing vehicleId");
+  requireNumericField(payload, "odometer");
+  requireNumericField(payload, "liters");
+  requireNumericField(payload, "amount");
+  if (numeric(payload.liters) <= 0) throw new Error("liters must be greater than zero");
+  if (numeric(payload.amount) < 0) throw new Error("amount must not be negative");
+  if (payload.pricePerLiter !== undefined && payload.pricePerLiter !== "" && !isNumericValue(payload.pricePerLiter)) {
+    throw new Error("Invalid pricePerLiter");
+  }
+}
+
 function upsertDailyMileage(ss, payload) {
   var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.dailyUsage, DAILY_USAGE_HEADERS);
+  validateDailyMileagePayload(payload);
   var serviceDate = text(payload.serviceDate);
   var driverId = text(payload.driverId);
   var vehicleId = text(payload.vehicleId || payload.assetCode);
-  if (!serviceDate || !driverId || !vehicleId) throw new Error("Missing serviceDate, driverId, or vehicleId");
 
   var recordKey = [serviceDate, vehicleId, driverId].join("|");
   var values = sheet.getDataRange().getValues();
@@ -1349,11 +1489,10 @@ function upsertDailyMileage(ss, payload) {
 
 function appendFuelBill(ss, payload) {
   var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.fuelBills, FUEL_BILL_HEADERS);
+  validateFuelBillPayload(payload);
   var id = text(payload.id) || Utilities.getUuid();
   var values = sheet.getDataRange().getValues();
   var existingRow = findRowByColumnValue(values, 0, id);
-  if (existingRow > 0) return { action: "duplicate_skipped", row: existingRow, id: id };
-
   var row = [
     id,
     text(payload.serviceDate),
@@ -1379,12 +1518,20 @@ function appendFuelBill(ss, payload) {
     text(payload.note),
     new Date()
   ];
+  if (existingRow > 0) {
+    if (payload.allowFuelBillUpdate !== true) {
+      return { action: "duplicate_skipped", row: existingRow, id: id };
+    }
+    sheet.getRange(existingRow, 1, 1, FUEL_BILL_HEADERS.length).setValues([row]);
+    return { action: "updated", row: existingRow, id: id };
+  }
   sheet.appendRow(row);
   return { action: "inserted", row: sheet.getLastRow(), id: id };
 }
 
 function appendUsageSegment(ss, payload) {
   var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.usageSegments, USAGE_SEGMENT_HEADERS);
+  validateUsageSegmentPayload(payload);
   var id = text(payload.id) || Utilities.getUuid();
   var values = sheet.getDataRange().getValues();
   var existingRow = findRowByColumnValue(values, 0, id);
@@ -1400,14 +1547,24 @@ function appendUsageSegment(ss, payload) {
 function replaceUsageSegments(ss, payload) {
   var rows = Array.isArray(payload.rows) ? payload.rows : [];
   if (!Array.isArray(payload.rows)) throw new Error("rows must be an array");
-  var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.usageSegments, USAGE_SEGMENT_HEADERS);
-  if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(sheet.getLastColumn(), USAGE_SEGMENT_HEADERS.length)).clearContent();
+  if (payload.confirmReplace !== "YES_REPLACE_USAGE_SEGMENTS" && payload.allowReplaceUsageSegments !== true) {
+    throw new Error("replaceUsageSegments requires explicit confirmation");
+  }
+  if (!rows.length && payload.allowEmptyReplace !== true) {
+    throw new Error("replaceUsageSegments refused empty rows");
   }
   var output = rows.map(function(row) {
+    validateUsageSegmentPayload(row);
     var id = text(row.id) || Utilities.getUuid();
     return buildUsageSegmentRow(row, id);
   });
+  var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.usageSegments, USAGE_SEGMENT_HEADERS);
+  if (payload.skipBackupBeforeReplace !== true) {
+    createDailyBackup();
+  }
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(sheet.getLastColumn(), USAGE_SEGMENT_HEADERS.length)).clearContent();
+  }
   if (output.length) {
     sheet.getRange(2, 1, output.length, USAGE_SEGMENT_HEADERS.length).setValues(output);
   }

@@ -394,6 +394,16 @@
     margin-bottom: 12px;
   }
 
+  .system-health-panel {
+    margin-bottom: 14px;
+  }
+
+  .system-health-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
   .summary-card {
     border: 1px solid var(--line);
     border-radius: var(--radius);
@@ -420,6 +430,16 @@
     display: block;
     margin-top: 4px;
     color: var(--muted);
+  }
+
+  .health-card {
+    min-height: 96px;
+  }
+
+  .health-card a {
+    color: var(--green);
+    font-weight: 800;
+    text-decoration: none;
   }
 
   .quiet-action {
@@ -560,6 +580,7 @@
     .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .filters input[type="search"] { grid-column: 1 / -1; }
     .report-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .system-health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 640px) {
@@ -578,6 +599,7 @@
     .report-actions button { width: 100%; white-space: normal; }
     .report-actions select { width: 100%; }
     .report-summary-grid { grid-template-columns: 1fr; }
+    .system-health-grid { grid-template-columns: 1fr; }
     .kpi-grid { grid-template-columns: 1fr; }
     .section-head, .panel-head { align-items: flex-start; flex-direction: column; }
     table { min-width: 760px; }

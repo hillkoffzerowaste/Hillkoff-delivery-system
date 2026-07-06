@@ -8,6 +8,7 @@
     monthlySummary: [],
     rankings: {},
     alerts: [],
+    systemHealth: {},
     kpis: { today: {}, month: {} }
   };
   let chartMode = "daily";
@@ -68,6 +69,7 @@
     renderUsageTable();
     renderFuelTable();
     renderReports();
+    renderSystemHealth();
     renderOverviewCharts();
   }
 
@@ -559,6 +561,50 @@
         <small>${escapeHtml(unit)}</small>
       </div>
     `).join("");
+  }
+
+  function renderSystemHealth() {
+    const target = document.getElementById("systemHealthPanel");
+    if (!target) return;
+    const health = dashboard.systemHealth || {};
+    const syncStatus = health.failedSyncs ? "มีรายการล้มเหลว" : "ปกติ";
+    const backupLink = health.lastBackupUrl
+      ? `<a href="${escapeAttr(health.lastBackupUrl)}" target="_blank" rel="noopener">เปิดไฟล์สำรอง</a>`
+      : "-";
+    const cards = [
+      ["ข้อมูลการใช้รถ", formatNumber(health.usageRows), "รายการจาก Usage Segments"],
+      ["บิลน้ำมัน", formatNumber(health.fuelRows), "รายการจาก Fuel Bills"],
+      ["สรุปรายวัน/เดือน", `${formatNumber(health.dailySummaryRows)} / ${formatNumber(health.monthlySummaryRows)}`, "แถวสรุปที่พร้อมใช้งาน"],
+      ["ซิงก์ล่าสุด", health.latestSyncAt || "-", `${syncStatus} (${formatNumber(health.failedSyncs)} failed)`],
+      ["สำรองล่าสุด", health.lastBackupAt || "-", backupLink]
+    ];
+    target.innerHTML = cards.map(([label, value, detail]) => `
+      <div class="summary-card health-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+        <small>${detail && String(detail).indexOf("<a ") === 0 ? detail : escapeHtml(detail || "-")}</small>
+      </div>
+    `).join("");
+  }
+
+  function createBackupNow() {
+    if (!confirm("ยืนยันสำรองไฟล์ Google Sheets ตอนนี้")) return;
+    updateWorkflowStatus("กำลังสำรองไฟล์ Google Sheets...");
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler((result) => {
+        setLoading(false);
+        if (!result || result.ok === false) {
+          toast(result?.error || "สำรองไฟล์ไม่สำเร็จ", true);
+          updateWorkflowStatus("สำรองไฟล์ไม่สำเร็จ");
+          return;
+        }
+        toast("สำรองไฟล์สำเร็จ");
+        updateWorkflowStatus("สำรองไฟล์สำเร็จ กำลังโหลดสถานะล่าสุด...");
+        refreshDashboard();
+      })
+      .withFailureHandler(saveFailed)
+      .createDailyBackup();
   }
 
   function exportCsv(type) {
