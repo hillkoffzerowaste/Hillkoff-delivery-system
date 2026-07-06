@@ -205,20 +205,7 @@ function onOpen() {
 }
 
 function openDashboardWebApp() {
-  var url = "";
-  try {
-    url = ScriptApp.getService().getUrl();
-  } catch (error) {
-    url = "";
-  }
-  if (!url) {
-    var errorHtml = '<div style="font-family:Arial,sans-serif;padding:12px;text-align:center;">ไม่พบ URL ของ Web App กรุณา Deploy เป็น Web App ก่อน</div>';
-    var errorOutput = HtmlService.createHtmlOutput(errorHtml)
-      .setWidth(360)
-      .setHeight(120);
-    SpreadsheetApp.getUi().showModelessDialog(errorOutput, "เปิดแดชบอร์ด");
-    return;
-  }
+  var url = "https://script.google.com/macros/s/AKfycbwHTkzLQAI-LTEhMvZfAWRSRNy8mN-j0FJae0kT41woCyhXOLzo7t9vcbn0T83sML8Pgw/exec";
   var safeUrl = JSON.stringify(url);
   var html = '<div style="font-family:Arial,sans-serif;padding:14px;text-align:center;">'
     + '<p id="opening" style="margin:0 0 10px;">กำลังเปิดแดชบอร์ดหน้าเว็บ...</p>'
