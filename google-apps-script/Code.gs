@@ -196,7 +196,7 @@ function doPost(e) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("ดูแดชบอร์ด")
-    .addItem("เปิดแดชบอร์ด", "openDashboardModal")
+    .addItem("เปิดแดชบอร์ด", "openDashboardWebApp")
     .addItem("รีเฟรชสรุป", "refreshSummaries")
     .addSeparator()
     .addItem("สำรองไฟล์ตอนนี้", "createDailyBackupFromMenu")
@@ -204,12 +204,20 @@ function onOpen() {
     .addToUi();
 }
 
-function openDashboardModal() {
-  var html = HtmlService.createTemplateFromFile("Index")
-    .evaluate()
-    .setWidth(1200)
-    .setHeight(760);
-  SpreadsheetApp.getUi().showModalDialog(html, "แดชบอร์ดจัดการรถ");
+function openDashboardWebApp() {
+  var url = "";
+  try {
+    url = ScriptApp.getService().getUrl();
+  } catch (error) {
+    url = "";
+  }
+  var html = url
+    ? '<script>window.open(' + JSON.stringify(url) + ', "_blank");google.script.host.close();</script><p>กำลังเปิดแดชบอร์ด...</p>'
+    : '<p>ไม่พบ URL ของ Web App กรุณา Deploy เป็น Web App ก่อน</p>';
+  var output = HtmlService.createHtmlOutput(html)
+    .setWidth(260)
+    .setHeight(80);
+  SpreadsheetApp.getUi().showModelessDialog(output, "เปิดแดชบอร์ด");
 }
 
 function refreshSummaries() {
