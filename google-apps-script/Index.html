@@ -31,12 +31,17 @@
 
     <main>
       <section class="range-bar">
-        <label>จากวันที่<input id="dateFrom" type="date" onchange="refreshDashboard()"></label>
-        <label>ถึงวันที่<input id="dateTo" type="date" onchange="refreshDashboard()"></label>
+        <div class="range-date-group">
+          <label>จากวันที่<input id="dateFrom" type="date" onchange="refreshDashboard()"></label>
+          <label>ถึงวันที่<input id="dateTo" type="date" onchange="refreshDashboard()"></label>
+        </div>
         <div class="range-actions">
+          <span class="range-action-label">ช่วงด่วน</span>
           <button class="secondary" type="button" onclick="setQuickRange('today')">วันนี้</button>
           <button class="secondary" type="button" onclick="setQuickRange('month')">เดือนนี้</button>
           <button class="secondary" type="button" onclick="setQuickRange('30days')">30 วัน</button>
+        </div>
+        <div class="range-submit">
           <button class="primary" type="button" onclick="refreshDashboard()">โหลดข้อมูล</button>
         </div>
       </section>
@@ -115,22 +120,22 @@
           <button class="primary" type="button" onclick="openUsageForm()">เพิ่มรายการ</button>
         </div>
         <div class="filters">
-          <input id="usageSearch" type="search" placeholder="ค้นหา วันที่ ทะเบียน คนขับ สถานะ" oninput="renderUsageTable()">
-          <select id="usageVehicleFilter" onchange="renderUsageTable()">
+          <label class="filter-field">ค้นหา<input id="usageSearch" type="search" placeholder="วันที่ ทะเบียน คนขับ สถานะ" oninput="renderUsageTable()"></label>
+          <label class="filter-field">รถ<select id="usageVehicleFilter" onchange="renderUsageTable()">
             <option value="">รถทุกคัน</option>
-          </select>
-          <select id="usageDriverFilter" onchange="renderUsageTable()">
+          </select></label>
+          <label class="filter-field">คนขับ<select id="usageDriverFilter" onchange="renderUsageTable()">
             <option value="">คนขับทั้งหมด</option>
-          </select>
-          <select id="usageDepartmentFilter" onchange="renderUsageTable()">
+          </select></label>
+          <label class="filter-field">แผนก<select id="usageDepartmentFilter" onchange="renderUsageTable()">
             <option value="">ทุกแผนก</option>
-          </select>
-          <select id="usageStatus" onchange="renderUsageTable()">
+          </select></label>
+          <label class="filter-field">สถานะ<select id="usageStatus" onchange="renderUsageTable()">
             <option value="">ทุกสถานะ</option>
             <option value="start">เริ่มใช้</option>
             <option value="segment">ระหว่างวัน</option>
             <option value="end">จบงาน</option>
-          </select>
+          </select></label>
           <button class="secondary" type="button" onclick="clearUsageFilters()">ล้างตัวกรอง</button>
         </div>
         <div class="table-wrap">
@@ -158,16 +163,16 @@
           <button class="primary" type="button" onclick="openFuelForm()">เพิ่มบิล</button>
         </div>
         <div class="filters">
-          <input id="fuelSearch" type="search" placeholder="ค้นหา วันที่ ทะเบียน คนขับ ปั๊ม เลขบิล" oninput="renderFuelTable()">
-          <select id="fuelVehicleFilter" onchange="renderFuelTable()">
+          <label class="filter-field">ค้นหา<input id="fuelSearch" type="search" placeholder="วันที่ ทะเบียน คนขับ ปั๊ม เลขบิล" oninput="renderFuelTable()"></label>
+          <label class="filter-field">รถ<select id="fuelVehicleFilter" onchange="renderFuelTable()">
             <option value="">รถทุกคัน</option>
-          </select>
-          <select id="fuelDriverFilter" onchange="renderFuelTable()">
+          </select></label>
+          <label class="filter-field">คนขับ<select id="fuelDriverFilter" onchange="renderFuelTable()">
             <option value="">คนขับทั้งหมด</option>
-          </select>
-          <select id="fuelDepartmentFilter" onchange="renderFuelTable()">
+          </select></label>
+          <label class="filter-field">แผนก<select id="fuelDepartmentFilter" onchange="renderFuelTable()">
             <option value="">ทุกแผนก</option>
-          </select>
+          </select></label>
           <button class="secondary" type="button" onclick="clearFuelFilters()">ล้างตัวกรอง</button>
         </div>
         <div class="table-wrap">
@@ -210,17 +215,23 @@
           </div>
           <div id="reportSummaryCards" class="report-summary-grid"></div>
           <div class="report-actions">
-            <button class="primary" type="button" onclick="printReport()">พิมพ์ / PDF</button>
-            <button class="secondary" type="button" onclick="copyLineSummary()">คัดลอกสรุป LINE</button>
-            <select id="csvExportType" aria-label="เลือกประเภทรายงาน CSV">
-              <option value="usage">CSV การใช้รถ</option>
-              <option value="fuel">CSV บิลน้ำมัน</option>
-              <option value="daily">CSV สรุปรายวัน</option>
-              <option value="monthly">CSV สรุปรายเดือน</option>
-            </select>
-            <button class="secondary" type="button" onclick="exportSelectedCsv()">ส่งออก CSV</button>
-            <button class="secondary quiet-action" type="button" onclick="refreshSummaries()">คำนวณสรุปใหม่จาก Sheet</button>
-            <button class="secondary quiet-action" type="button" onclick="createBackupNow()">สำรองไฟล์ตอนนี้</button>
+            <div class="action-group action-group-primary">
+              <span class="action-label">ส่งออกรายงาน</span>
+              <button class="primary" type="button" onclick="printReport()">พิมพ์ / PDF</button>
+              <button class="secondary" type="button" onclick="copyLineSummary()">คัดลอกสรุป LINE</button>
+              <select id="csvExportType" aria-label="เลือกประเภทรายงาน CSV">
+                <option value="usage">CSV การใช้รถ</option>
+                <option value="fuel">CSV บิลน้ำมัน</option>
+                <option value="daily">CSV สรุปรายวัน</option>
+                <option value="monthly">CSV สรุปรายเดือน</option>
+              </select>
+              <button class="secondary" type="button" onclick="exportSelectedCsv()">ส่งออก CSV</button>
+            </div>
+            <div class="action-group action-group-system">
+              <span class="action-label">ดูแลระบบ</span>
+              <button class="secondary quiet-action" type="button" onclick="refreshSummaries()">คำนวณสรุปใหม่จาก Sheet</button>
+              <button class="secondary quiet-action" type="button" onclick="createBackupNow()">สำรองไฟล์ตอนนี้</button>
+            </div>
           </div>
         </section>
         <section class="panel system-health-panel">
