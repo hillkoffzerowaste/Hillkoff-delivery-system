@@ -211,12 +211,32 @@ function openDashboardWebApp() {
   } catch (error) {
     url = "";
   }
-  var html = url
-    ? '<script>window.open(' + JSON.stringify(url) + ', "_blank");google.script.host.close();</script><p>กำลังเปิดแดชบอร์ด...</p>'
-    : '<p>ไม่พบ URL ของ Web App กรุณา Deploy เป็น Web App ก่อน</p>';
+  if (!url) {
+    var errorHtml = '<div style="font-family:Arial,sans-serif;padding:12px;text-align:center;">ไม่พบ URL ของ Web App กรุณา Deploy เป็น Web App ก่อน</div>';
+    var errorOutput = HtmlService.createHtmlOutput(errorHtml)
+      .setWidth(360)
+      .setHeight(120);
+    SpreadsheetApp.getUi().showModelessDialog(errorOutput, "เปิดแดชบอร์ด");
+    return;
+  }
+  var safeUrl = JSON.stringify(url);
+  var html = '<div style="font-family:Arial,sans-serif;padding:14px;text-align:center;">'
+    + '<p id="opening" style="margin:0 0 10px;">กำลังเปิดแดชบอร์ดหน้าเว็บ...</p>'
+    + '<div id="blocked" style="display:none;">'
+    + '<p style="margin:0 0 12px;">เบราว์เซอร์บล็อกการเปิดแท็บใหม่ กรุณากดปุ่มด้านล่าง</p>'
+    + '<a href=' + safeUrl + ' target="_blank" rel="noopener" '
+    + 'style="display:inline-block;padding:10px 16px;background:#14783d;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;">'
+    + 'เปิดแดชบอร์ดหน้าเว็บ</a>'
+    + '</div>'
+    + '</div>'
+    + '<script>'
+    + 'var opened=window.open(' + safeUrl + ',"_blank");'
+    + 'if(opened){setTimeout(function(){google.script.host.close();},900);}'
+    + 'else{document.getElementById("opening").style.display="none";document.getElementById("blocked").style.display="block";}'
+    + '</script>';
   var output = HtmlService.createHtmlOutput(html)
-    .setWidth(260)
-    .setHeight(80);
+    .setWidth(420)
+    .setHeight(170);
   SpreadsheetApp.getUi().showModelessDialog(output, "เปิดแดชบอร์ด");
 }
 
