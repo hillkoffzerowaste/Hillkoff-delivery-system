@@ -195,12 +195,21 @@ function doPost(e) {
 
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu("Hillkoff")
+    .createMenu("ดูแดชบอร์ด")
+    .addItem("เปิดแดชบอร์ด", "openDashboardModal")
     .addItem("รีเฟรชสรุป", "refreshSummaries")
     .addSeparator()
     .addItem("สำรองไฟล์ตอนนี้", "createDailyBackupFromMenu")
     .addItem("ติดตั้งสำรองไฟล์รายวัน", "installDailyBackupTrigger")
     .addToUi();
+}
+
+function openDashboardModal() {
+  var html = HtmlService.createTemplateFromFile("Index")
+    .evaluate()
+    .setWidth(1200)
+    .setHeight(760);
+  SpreadsheetApp.getUi().showModalDialog(html, "แดชบอร์ดจัดการรถ");
 }
 
 function refreshSummaries() {
