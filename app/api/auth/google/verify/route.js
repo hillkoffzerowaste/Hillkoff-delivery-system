@@ -35,7 +35,8 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "OTP_INVALID" }, { status: 401 });
     }
 
-    const role = String(session.role || "");
+    const email = String(decoded.email || "").toLowerCase();
+    const role = email === "online_marketing@hillkoff.com" ? "admin" : String(session.role || "");
     const phoneDigits = normalizePhoneDigits(session.phoneDigits);
     const profileRef = phoneDigits
       ? db.collection("users_by_phone").doc(phoneDigits)

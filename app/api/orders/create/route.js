@@ -1,5 +1,6 @@
 import { getAdminDb, getAdminAuth } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
+import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 
 export const runtime = "nodejs";
 
@@ -67,7 +68,18 @@ export async function POST(request) {
       driverName: String(order.driverName || ""),
       salesName: String(order.salesName || ""),
       salesPhone: String(order.salesPhone || ""),
-      status: String(order.status || "รอคนขับรับ"),
+      status: "รอจัดเตรียมสินค้า",
+      workflowType: order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
+      storeStatus: order.workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: order.workflowType === "direct_pack" ? "pending" : "blocked",
+      queueStatus: "preparing",
+      storePackerName: "",
+      storeCheckerName: "",
+      packPackerName: "",
+      packCheckerName: "",
+      packPhotos: [],
+      missingItems: [],
+      workflowHistory: [{ action: "created", role: "sales", uid: decoded.uid, at: new Date().toISOString() }],
       photo: String(order.photo || ""),
       checkInAt: String(order.checkInAt || ""),
       deliveredAt: String(order.deliveredAt || ""),
@@ -81,8 +93,10 @@ export async function POST(request) {
     };
 
     await db.collection("orders").doc(String(order.id)).set(next, { merge: true });
+    await syncDeliveryOrderToSheet(db, order.id);
 
-    try {
+    // New orders stay out of the driver queue until sales explicitly queues them.
+    if (next.queueStatus === "queued") try {
       const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
       const tokens = snap.docs.map((d) => d.id).filter(Boolean);
       if (tokens.length) {

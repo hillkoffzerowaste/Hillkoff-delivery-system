@@ -12,6 +12,22 @@ var CONFIG = {
   backupFolderName: "Hillkoff Vehicle Usage Backups"
 };
 
+// Daily delivery workbook is intentionally separate from the vehicle workbook.
+// It is created only through setupDeliveryWorkbook and its ID is then locked in
+// Script Properties. Normal sync must never create a replacement file.
+var DELIVERY_CONFIG = {
+  spreadsheetName: "ระบบส่งของเชียงใหม่ประจำวัน",
+  spreadsheetIdProperty: "HILLKOFF_DAILY_DELIVERY_SPREADSHEET_ID"
+};
+
+var DELIVERY_HEADERS = [
+  "เลขออเดอร์", "วันส่ง", "ลูกค้า", "เบอร์โทร", "พื้นที่", "ที่อยู่", "จำนวนกล่อง",
+  "ผู้เปิดออเดอร์", "เส้นทางตรวจ", "สถานะสโตร์", "ผู้จัดสโตร์", "ผู้ตรวจสโตร์",
+  "สถานะห้องแพ็ค", "ผู้แพ็ค", "ผู้ตรวจแพ็ค", "รายการรอ/ขาด", "สถานะรวม",
+  "ผู้เปิดคิว", "เวลาเปิดคิว", "คนขับ", "เวลารับงาน", "เวลาเริ่มส่ง", "เวลาส่งสำเร็จ",
+  "ปัญหา", "หมายเหตุฝ่ายขาย", "อัปเดตล่าสุด"
+];
+
 var SHEET_NAMES = {
   vehicles: "Vehicles",
   dailyUsage: "Daily Usage",
@@ -156,9 +172,18 @@ function doPost(e) {
   try {
     lock.waitLock(30000);
     payload = parsePayload(e);
-    ss = setupWorkbook();
-
     if (!payload.action) throw new Error("Missing action");
+
+    if (payload.action === "setupDeliveryWorkbook") {
+      var deliverySetup = setupDeliveryWorkbook();
+      return jsonResponse({ ok: true, data: deliverySetup, spreadsheetUrl: deliverySetup.spreadsheetUrl });
+    }
+    if (payload.action === "upsertDailyDeliveryOrder") {
+      var deliveryResult = upsertDailyDeliveryOrder(payload);
+      return jsonResponse({ ok: true, data: deliveryResult, spreadsheetUrl: deliveryResult.spreadsheetUrl });
+    }
+
+    ss = setupWorkbook();
 
     var result;
     if (payload.action === "upsertDailyMileage") {
@@ -882,6 +907,104 @@ function openSpreadsheetById(id) {
   } catch (error) {
     return null;
   }
+}
+
+function setupDeliveryWorkbook() {
+  var props = PropertiesService.getScriptProperties();
+  var existingId = props.getProperty(DELIVERY_CONFIG.spreadsheetIdProperty);
+  var existing = existingId ? openSpreadsheetById(existingId) : null;
+  if (existing) {
+    return { spreadsheetId: existing.getId(), spreadsheetUrl: existing.getUrl(), created: false };
+  }
+  if (existingId && !existing) {
+    throw new Error("ไม่พบไฟล์ระบบส่งของที่ล็อกไว้: " + existingId + ". ระบบจะไม่สร้างไฟล์ใหม่อัตโนมัติ");
+  }
+  var ss = SpreadsheetApp.create(DELIVERY_CONFIG.spreadsheetName);
+  props.setProperty(DELIVERY_CONFIG.spreadsheetIdProperty, ss.getId());
+  return { spreadsheetId: ss.getId(), spreadsheetUrl: ss.getUrl(), created: true };
+}
+
+function getLockedDeliverySpreadsheet() {
+  var id = PropertiesService.getScriptProperties().getProperty(DELIVERY_CONFIG.spreadsheetIdProperty);
+  if (!id) throw new Error("ยังไม่ได้สร้างไฟล์ระบบส่งของ กรุณาเรียก setupDeliveryWorkbook เพียงครั้งเดียว");
+  var ss = openSpreadsheetById(id);
+  if (!ss) throw new Error("ไม่พบไฟล์ระบบส่งของที่ล็อกไว้ ระบบจะไม่สร้างไฟล์ใหม่อัตโนมัติ");
+  return ss;
+}
+
+function deliveryStatusColor(status) {
+  var value = String(status || "");
+  var colors = {
+    "รอสโตร์ตรวจสอบ": "#e5e7eb", "รอจัดเตรียมสินค้า": "#e5e7eb",
+    "สโตร์กำลังตรวจสอบ": "#dbeafe", "รอห้องแพ็ค": "#ede9fe",
+    "ห้องแพ็คกำลังตรวจสอบ": "#dbeafe", "รอสินค้า": "#fef3c7",
+    "พร้อมส่งบางส่วน": "#ffedd5", "พร้อมส่ง": "#dcfce7",
+    "รอฝ่ายขายเปิดคิว": "#ccfbf1", "รอคนขับรับ": "#fef3c7",
+    "กำลังส่ง": "#dbeafe", "กำลังจัดส่ง": "#bfdbfe",
+    "ส่งสำเร็จ": "#bbf7d0", "ตีกลับตรวจสอบ": "#fee2e2", "ยกเลิก": "#fecaca"
+  };
+  return colors[value] || "#ffffff";
+}
+
+function deliveryOverallStatus(order) {
+  if (order.status === "ส่งสำเร็จ" || order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง" || order.status === "ยกเลิก") return order.status;
+  if (order.queueStatus === "queued") return "รอคนขับรับ";
+  if (order.packStatus === "checked") return "พร้อมส่ง";
+  if (order.packStatus === "partial") return "พร้อมส่งบางส่วน";
+  if (order.packStatus === "waiting") return "รอสินค้า";
+  if (order.packStatus === "working" || order.packStatus === "pending") return "ห้องแพ็คกำลังตรวจสอบ";
+  if (order.storeStatus === "working") return "สโตร์กำลังตรวจสอบ";
+  if (order.storeStatus === "checked" || order.storeStatus === "partial") return "รอห้องแพ็ค";
+  return "รอสโตร์ตรวจสอบ";
+}
+
+function ensureDeliveryDaySheet(ss, serviceDate) {
+  var name = String(serviceDate || Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd"));
+  var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, DELIVERY_HEADERS.length).setValues([DELIVERY_HEADERS]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, DELIVERY_HEADERS.length).setFontWeight("bold").setBackground("#1f2937").setFontColor("#ffffff");
+    sheet.setColumnWidths(1, DELIVERY_HEADERS.length, 130);
+    sheet.setColumnWidth(3, 190); sheet.setColumnWidth(6, 260); sheet.setColumnWidth(16, 220); sheet.setColumnWidth(26, 180);
+    sheet.getRange(1, 1, 1, DELIVERY_HEADERS.length).createFilter();
+  }
+  return sheet;
+}
+
+function findDeliveryOrderRow(sheet, orderId) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  var values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < values.length; i++) if (String(values[i][0]) === String(orderId)) return i + 2;
+  return 0;
+}
+
+function displayMissingItems(items) {
+  if (!Array.isArray(items)) return "";
+  return items.map(function(item) { return typeof item === "string" ? item : [item.name || item.sku || "สินค้า", item.reason || ""].filter(Boolean).join(": "); }).join(", ");
+}
+
+function upsertDailyDeliveryOrder(payload) {
+  var order = payload.order || {};
+  if (!order.id) throw new Error("Missing order.id");
+  var ss = getLockedDeliverySpreadsheet();
+  var sheet = ensureDeliveryDaySheet(ss, order.serviceDate);
+  var overall = deliveryOverallStatus(order);
+  var rowValues = [[
+    order.id, order.serviceDate || "", order.customerName || "", order.customerPhone || "", order.zone || "", order.address || "", Number(order.boxes || 0),
+    order.salesName || "", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์", order.storeStatus || "", order.storePackerName || "", order.storeCheckerName || "",
+    order.packStatus || "", order.packPackerName || "", order.packCheckerName || "", displayMissingItems(order.missingItems), overall,
+    order.queuedBy || "", order.queuedAt || "", order.driverName || "", order.acceptedAt || "", order.checkInAt || "", order.deliveredAt || "",
+    order.complaint || "", order.salesNote || "", order.updatedAt || new Date().toISOString()
+  ]];
+  var row = findDeliveryOrderRow(sheet, order.id);
+  if (!row) row = sheet.getLastRow() + 1;
+  sheet.getRange(row, 1, 1, DELIVERY_HEADERS.length).setValues(rowValues);
+  var color = deliveryStatusColor(overall);
+  sheet.getRange(row, 1, 1, DELIVERY_HEADERS.length).setBackground("#ffffff");
+  sheet.getRange(row, 17).setBackground(color).setFontWeight("bold");
+  return { spreadsheetId: ss.getId(), spreadsheetUrl: ss.getUrl(), sheetName: sheet.getName(), row: row, status: overall };
 }
 
 function removeDefaultSheetIfSafe(ss) {
