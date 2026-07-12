@@ -19,14 +19,18 @@ export async function POST(request) {
     const db = getAdminDb();
     const snap = await db.collection("users").doc(decoded.uid).get();
     const profile = snap.exists ? snap.data() : null;
+    const email = String(decoded.email || profile?.email || "").toLowerCase();
+    const role = email === "online_marketing@hillkoff.com" ? "admin" : profile?.role || null;
+    if (profile?.active === false) return Response.json({ ok: true, valid: false, error: "ACCOUNT_DISABLED" }, { status: 200 });
     return Response.json({
       ok: true,
       valid: true,
       data: {
         uid: decoded.uid,
         phone: decoded.phone_number || null,
-        role: profile?.role || null,
+        role,
         name: profile?.name || null,
+        email,
         driverId: profile?.driverId || null
       }
     });

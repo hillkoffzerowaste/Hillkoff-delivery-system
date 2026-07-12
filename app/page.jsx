@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, getFcmToken } from "../lib/firebaseClient";
+import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import {
   AlertTriangle,
@@ -360,7 +360,7 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
-  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "" });
+  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "", username: "", password: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [loginStage, setLoginStage] = useState("login"); // login | set_pin
   const [googleOtpStage, setGoogleOtpStage] = useState("idle"); // idle | otp
@@ -390,6 +390,7 @@ export default function App() {
   }, [state.auth?.phone, state.auth?.role]);
   const [fbAuthReady, setFbAuthReady] = useState(false);
   const [pushStatus, setPushStatus] = useState("");
+  const [staffAccountForm, setStaffAccountForm] = useState({ username: "", password: "", name: "", role: "store" });
   const [notificationPermission, setNotificationPermission] = useState("default");
 
   // Sales-only database chatbot sidebar
@@ -447,7 +448,8 @@ export default function App() {
     qty: "",
     paymentType: "COD",
     codAmount: "",
-    salesNote: ""
+    salesNote: "",
+    workflowType: "store_route"
   });
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
@@ -514,7 +516,9 @@ export default function App() {
 
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
-    ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : "driver")
+    ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
+    : state.auth?.role === "store" ? "store-work"
+    : state.auth?.role === "pack" ? "pack-work"
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
@@ -695,7 +699,7 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-	    const needsOrdersRealtime = ["sales", "dispatch", "driver", "reports", "settings"].includes(String(displayTab || ""));
+	    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
@@ -1030,7 +1034,7 @@ export default function App() {
     if (state.auth?.role !== "driver") return;
     const did = state.auth?.driverId || driverId || "";
     if (!did) return;
-    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did) && o.status === "รอคนขับรับ");
+    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did) && o.status === "รอคนขับรับ" && (!o.queueStatus || o.queueStatus === "queued"));
     const count = pending.length;
     setAppBadgeSafe(count);
     if (typeof document === "undefined") return;
@@ -1444,6 +1448,9 @@ export default function App() {
 
   const customers = state.customers;
   const orders = state.orders;
+  const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
+  const storeWorkOrders = preparationOrders.filter(order => order.workflowType === "store_route" && ["pending", "working", "returned"].includes(order.storeStatus));
+  const packWorkOrders = preparationOrders.filter(order => order.packStatus !== "blocked" && ["pending", "working", "waiting", "returned"].includes(order.packStatus));
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
@@ -1556,6 +1563,7 @@ export default function App() {
   const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || null;
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
+    if (order.queueStatus && order.queueStatus !== "queued") return false;
     const isAvailable = !order.driverId || order.driverId === "";
     const isAssignedToMe = order.driverId === driverId;
     return isAvailable || isAssignedToMe;
@@ -1906,6 +1914,20 @@ export default function App() {
     return pinLogin();
   };
 
+  const loginStaff = async () => {
+    try {
+      setSyncStatus("⏳ กำลังเข้าสู่ระบบพนักงาน...");
+      const cred = await signInWithStaffCredentials(loginForm.username, loginForm.password);
+      const idToken = await cred.user.getIdToken(true);
+      const res = await fetch("/api/auth/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+      const json = await res.json();
+      if (!json?.valid || !["store", "pack"].includes(json?.data?.role)) throw new Error(json?.error || "บัญชีไม่มีสิทธิ์สโตร์/ห้องแพ็ค");
+      await applyLoginSession(json.data, idToken);
+      setTab(json.data.role === "store" ? "store-work" : "pack-work");
+      setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
+    } catch (e) { setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
 	  const registerDriver = async () => {
 	    if (!driverForm.firstName.trim() || !driverForm.phone.trim() || !driverForm.plate.trim()) return;
 	    if (!state.auth?.token) {
@@ -1994,7 +2016,11 @@ export default function App() {
       driverName: "",
       salesName: auth.name,
       salesPhone: auth.phone,
-      status: "รอคนขับรับ",
+      status: "รอจัดเตรียมสินค้า",
+      workflowType: orderForm.workflowType,
+      storeStatus: orderForm.workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: orderForm.workflowType === "direct_pack" ? "pending" : "blocked",
+      queueStatus: "preparing",
       photo: "",
       checkInAt: "",
       deliveredAt: "",
@@ -2033,7 +2059,7 @@ export default function App() {
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
-    setOrderForm({ window: "09:00-12:00", boxes: "4", cod: "", salesNote: "" });
+    setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", workflowType: "store_route" });
     setSelectedCustomerId("");
     setOrderCustomerSearch("");
     setShowOrderConfirm(false);
@@ -2214,6 +2240,32 @@ export default function App() {
     } finally {
       setDriverAssessmentSubmitting(false);
     }
+  };
+
+  const updatePreparationWorkflow = async (order, action, patch = {}) => {
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/orders/workflow", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ orderId: order.id, action, ...patch })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...json.data } : item) }));
+      setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
+    } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const createStaffAccount = async () => {
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify(staffAccountForm) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStaffAccountForm({ username: "", password: "", name: "", role: "store" });
+      setSyncStatus(`✅ สร้างบัญชี ${json.data.username} สำเร็จ`);
+    } catch (e) { setSyncStatus(`❌ สร้างบัญชีไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   const submitDailyVehicleStart = async () => {
@@ -3169,7 +3221,17 @@ export default function App() {
               <div className="segmented">
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
+                <button className={["store", "pack"].includes(loginForm.role) ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "store" }))}>สโตร์/ห้องแพ็ค</button>
               </div>
+              {["store", "pack"].includes(loginForm.role) ? (
+                <>
+                  <input value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} placeholder="Username" autoComplete="username" />
+                  <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" autoComplete="current-password" />
+                  <button className="primary wide" onClick={loginStaff}>เข้าสู่ระบบสโตร์/ห้องแพ็ค</button>
+                  <p className="login-note">บัญชีและแผนกกำหนดโดย Admin เท่านั้น</p>
+                </>
+              ) : (
+              <>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
               <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
               {googleOtpStage === "otp" ? (
@@ -3199,6 +3261,8 @@ export default function App() {
                 {loginStage === "set_pin" ? "ตั้ง PIN สำรองและเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขายด้วย PIN สำรอง" : "เข้าใช้งานคนขับด้วย PIN สำรอง")}
               </button>
               <p className="login-note">PIN สำรองยังใช้ Firebase Auth แบบ Anonymous เพื่อผ่าน Firestore Rules ระหว่างย้ายระบบ</p>
+              </>
+              )}
             </>
           ) : (
             <>
@@ -3231,25 +3295,27 @@ export default function App() {
           <div><strong>Hillkoff</strong><span>Delivery System</span></div>
         </div>
         <nav>
-          {auth.role !== "driver" && (
+          {["sales", "admin"].includes(auth.role) && (
             <>
               <button className={displayTab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
               <button className={displayTab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
+              <button className={displayTab === "chiangmai" ? "active" : ""} onClick={() => setTab("chiangmai")}><PackagePlus size={18} /> เตรียมออเดอร์เชียงใหม่</button>
               <button className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => setTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
           )}
           {auth.role === "driver" && (
             <>
               <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+              <button className={displayTab === "driver-prep" ? "active" : ""} onClick={() => setTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
               <button className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => setTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
               <button className={displayTab === "driver-sop" ? "active" : ""} onClick={() => setTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
             </>
           )}
-           {auth.role !== "driver" && (
+           {["sales", "admin"].includes(auth.role) && (
              <>
                <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
                <button className={displayTab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> การตั้งค่า</button>
-               {auth.role === "sales" && (
+               {["sales", "admin"].includes(auth.role) && (
                  <button className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> แชทบอทฐานข้อมูล</button>
                )}
              </>
@@ -3261,10 +3327,10 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-vehicle" ? "บันทึกการใช้รถ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
+            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "chiangmai" ? "เตรียมออเดอร์เชียงใหม่" : displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คออเดอร์เชียงใหม่" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-vehicle" ? "บันทึกการใช้รถ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
           </div>
           <div className="top-actions">
-            <span className="google-status">{auth.role === "driver" ? "คนขับ" : "ฝ่ายขาย"}: {auth.name || auth.phone}</span>
+            <span className="google-status">{{ driver: "คนขับ", sales: "ฝ่ายขาย", admin: "Admin", store: "สโตร์", pack: "ห้องแพ็ค" }[auth.role] || auth.role}: {auth.name || auth.phone || auth.email}</span>
             <button className="secondary" onClick={logout}>ออก</button>
           </div>
         </header>
@@ -3946,6 +4012,13 @@ export default function App() {
                   <div style={{ color: "#6b7280", fontSize: "12px", textAlign: "center" }}>บาท</div>
                 </div>
               </div>
+              <label style={{ display: "grid", gap: "6px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 800 }}>เส้นทางตรวจสอบสินค้า</span>
+                <select value={orderForm.workflowType} onChange={e => setOrderForm(p => ({ ...p, workflowType: e.target.value }))}>
+                  <option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option>
+                  <option value="direct_pack">ส่งตรงห้องแพ็ค</option>
+                </select>
+              </label>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวคนขับ</button>
             </section>
@@ -4097,6 +4170,64 @@ export default function App() {
           </div>
             </>
           )}
+
+        {auth.role === "admin" && displayTab === "settings" && (
+          <section className="panel" style={{ marginBottom: "16px", borderLeft: "4px solid #7c3aed" }}>
+            <div className="panel-head"><h2>จัดการบัญชีสโตร์และห้องแพ็ค</h2><span>Admin</span></div>
+            <div className="form-grid two">
+              <input value={staffAccountForm.username} onChange={e => setStaffAccountForm(p => ({ ...p, username: e.target.value }))} placeholder="Username เช่น store01" />
+              <input value={staffAccountForm.name} onChange={e => setStaffAccountForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อพนักงาน" />
+              <input type="password" value={staffAccountForm.password} onChange={e => setStaffAccountForm(p => ({ ...p, password: e.target.value }))} placeholder="Password อย่างน้อย 8 ตัว" />
+              <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option></select>
+            </div>
+            <button className="primary" style={{ marginTop: "10px" }} onClick={createStaffAccount}>สร้างบัญชี</button>
+          </section>
+        )}
+
+        {["store-work", "pack-work", "chiangmai", "driver-prep"].includes(displayTab) && (
+          <section className="panel">
+            <div className="panel-head">
+              <h2>{displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
+              <span>{(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).length} งาน</span>
+            </div>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).map(order => (
+                <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                    <div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div>
+                    <span className="status-chip">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</span>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#4b5563" }}>
+                    เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์"} · {order.boxes || 0} กล่อง
+                    {order.storePackerName && <> · ผู้จัด: {order.storePackerName}</>}
+                    {order.storeCheckerName && <> · ผู้ตรวจสโตร์: {order.storeCheckerName}</>}
+                    {order.packPackerName && <> · ผู้แพ็ค: {order.packPackerName}</>}
+                    {order.packCheckerName && <> · ผู้ตรวจแพ็ค: {order.packCheckerName}</>}
+                  </div>
+                  {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
+                  {displayTab === "store-work" && (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button className="secondary" onClick={() => updatePreparationWorkflow(order, "store_update", { storeStatus: "working", storePackerName: auth.name })}>รับงาน</button>
+                      <button className="primary" onClick={() => updatePreparationWorkflow(order, "store_update", { storeStatus: "checked", storePackerName: order.storePackerName || auth.name, storeCheckerName: prompt("ชื่อผู้ตรวจสอบ", auth.name) || auth.name, missingItems: [] })}>ยืนยันครบ</button>
+                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (reason) updatePreparationWorkflow(order, "store_update", { storeStatus: "partial", storePackerName: order.storePackerName || auth.name, storeCheckerName: auth.name, missingItems: [reason] }); }}>แจ้งสินค้าไม่ครบ</button>
+                    </div>
+                  )}
+                  {displayTab === "pack-work" && (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button className="secondary" onClick={() => updatePreparationWorkflow(order, "pack_update", { packStatus: "working", packPackerName: auth.name })}>รับงาน</button>
+                      <button className="primary" onClick={() => updatePreparationWorkflow(order, "pack_update", { packStatus: "checked", packPackerName: order.packPackerName || auth.name, packCheckerName: prompt("ชื่อผู้ตรวจสอบ", auth.name) || auth.name, missingItems: [] })}>ยืนยันพร้อมส่ง</button>
+                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (reason) updatePreparationWorkflow(order, "pack_update", { packStatus: "partial", packPackerName: order.packPackerName || auth.name, packCheckerName: auth.name, missingItems: [reason] }); }}>พร้อมส่งบางส่วน</button>
+                    </div>
+                  )}
+                  {displayTab === "chiangmai" && ["checked", "partial"].includes(order.packStatus) && (
+                    <button className="primary" onClick={() => updatePreparationWorkflow(order, "queue")}>ส่งเข้าคิวคนขับ</button>
+                  )}
+                </article>
+              ))}
+              {(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).length === 0 && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
+            </div>
+          </section>
+        )}
 
         {displayTab === "dispatch" && (
           <div className="dispatch-grid">
