@@ -1,5 +1,6 @@
 import { getAdminDb, getAdminAuth } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
+import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,7 @@ export async function POST(request) {
     };
 
     await db.collection("orders").doc(String(order.id)).set(next, { merge: true });
+    await syncDeliveryOrderToSheet(db, order.id);
 
     // New orders stay out of the driver queue until sales explicitly queues them.
     if (next.queueStatus === "queued") try {

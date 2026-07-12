@@ -2127,6 +2127,12 @@ export default function App() {
             console.error(`❌ Failed to sync order ${id}:`, error);
           } else {
             console.log(`✅ Order ${id} synced to Firestore`);
+            try {
+              const idToken = await refreshAuthToken(true);
+              await fetch("/api/orders/sync-sheet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ orderId: id }) });
+            } catch (sheetError) {
+              console.warn(`⚠️ Failed to sync order ${id} to delivery sheet`, sheetError);
+            }
           }
         })();
       }
@@ -2266,6 +2272,17 @@ export default function App() {
       setStaffAccountForm({ username: "", password: "", name: "", role: "store" });
       setSyncStatus(`✅ สร้างบัญชี ${json.data.username} สำเร็จ`);
     } catch (e) { setSyncStatus(`❌ สร้างบัญชีไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const setupDailyDeliverySheet = async () => {
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/admin/delivery-sheet/setup", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setSyncStatus(`✅ ตั้งค่า Google Sheet แล้ว: ${json?.data?.spreadsheetUrl || json?.spreadsheetUrl || ""}`);
+      if (json?.data?.spreadsheetUrl || json?.spreadsheetUrl) window.open(json.data?.spreadsheetUrl || json.spreadsheetUrl, "_blank", "noopener");
+    } catch (e) { setSyncStatus(`❌ ตั้งค่า Google Sheet ไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   const submitDailyVehicleStart = async () => {
@@ -4180,7 +4197,11 @@ export default function App() {
               <input type="password" value={staffAccountForm.password} onChange={e => setStaffAccountForm(p => ({ ...p, password: e.target.value }))} placeholder="Password อย่างน้อย 8 ตัว" />
               <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option></select>
             </div>
-            <button className="primary" style={{ marginTop: "10px" }} onClick={createStaffAccount}>สร้างบัญชี</button>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+              <button className="primary" onClick={createStaffAccount}>สร้างบัญชี</button>
+              <button className="secondary" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่</button>
+            </div>
+            <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ</p>
           </section>
         )}
 

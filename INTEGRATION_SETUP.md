@@ -43,3 +43,19 @@ Endpoints:
 Order creation now sends a best-effort LINE OA push through `LINE_DEFAULT_TO`. If LINE env vars are missing, order creation still succeeds and the notification result is stored as skipped in Firestore `notifications`.
 
 LINE webhook events are verified with `x-line-signature` and stored in Firestore `line_webhook_events`.
+
+## Google Sheets: ระบบส่งของเชียงใหม่ประจำวัน
+
+1. Open the existing Apps Script project and replace its `Code.gs` with [google-apps-script/Code.gs](google-apps-script/Code.gs).
+2. Deploy a new Web App version that runs as the script owner and is accessible to the Next.js server.
+3. Set this production environment variable to the deployed Web App URL:
+
+   ```text
+   GOOGLE_DAILY_DELIVERY_WEB_APP_URL=https://script.google.com/macros/s/.../exec
+   ```
+
+4. Sign in as `online_marketing@hillkoff.com`, open **การตั้งค่า**, and select **ตั้งค่า Sheet ระบบส่งของเชียงใหม่** once.
+
+The setup action creates `ระบบส่งของเชียงใหม่ประจำวัน` only once and saves its Spreadsheet ID in Apps Script properties as `HILLKOFF_DAILY_DELIVERY_SPREADSHEET_ID`. Every later sync opens that locked ID. If it is missing or inaccessible, sync fails instead of creating a replacement file.
+
+Each order is upserted by order number into a tab named by `serviceDate` such as `2026-07-13`. The `สถานะรวม` column is color-coded automatically.

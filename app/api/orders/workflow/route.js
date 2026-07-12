@@ -1,4 +1,5 @@
 import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
+import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,7 @@ export async function PATCH(request) {
       throw Object.assign(new Error("Action not allowed"), { status: 403 });
     }
     await ref.set(patch, { merge: true });
+    await syncDeliveryOrderToSheet(db, orderId);
     if (action === "queue") {
       try {
         const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
