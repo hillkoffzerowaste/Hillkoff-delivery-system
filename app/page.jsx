@@ -4208,15 +4208,15 @@ export default function App() {
                   {displayTab === "store-work" && (
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                       <button className="secondary" onClick={() => updatePreparationWorkflow(order, "store_update", { storeStatus: "working", storePackerName: auth.name })}>รับงาน</button>
-                      <button className="primary" onClick={() => updatePreparationWorkflow(order, "store_update", { storeStatus: "checked", storePackerName: order.storePackerName || auth.name, storeCheckerName: prompt("ชื่อผู้ตรวจสอบ", auth.name) || auth.name, missingItems: [] })}>ยืนยันครบ</button>
-                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (reason) updatePreparationWorkflow(order, "store_update", { storeStatus: "partial", storePackerName: order.storePackerName || auth.name, storeCheckerName: auth.name, missingItems: [reason] }); }}>แจ้งสินค้าไม่ครบ</button>
+                      <button className="primary" onClick={() => { const checker = prompt("กรอกชื่อผู้ตรวจสอบสโตร์"); if (checker?.trim()) updatePreparationWorkflow(order, "store_update", { storeStatus: "checked", storePackerName: order.storePackerName || auth.name, storeCheckerName: checker.trim(), missingItems: [] }); }}>ยืนยันครบ</button>
+                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (!reason) return; const checker = prompt("กรอกชื่อผู้ตรวจสอบสโตร์"); if (checker?.trim()) updatePreparationWorkflow(order, "store_update", { storeStatus: "partial", storePackerName: order.storePackerName || auth.name, storeCheckerName: checker.trim(), missingItems: [reason] }); }}>แจ้งสินค้าไม่ครบ</button>
                     </div>
                   )}
                   {displayTab === "pack-work" && (
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                       <button className="secondary" onClick={() => updatePreparationWorkflow(order, "pack_update", { packStatus: "working", packPackerName: auth.name })}>รับงาน</button>
-                      <button className="primary" onClick={() => updatePreparationWorkflow(order, "pack_update", { packStatus: "checked", packPackerName: order.packPackerName || auth.name, packCheckerName: prompt("ชื่อผู้ตรวจสอบ", auth.name) || auth.name, missingItems: [] })}>ยืนยันพร้อมส่ง</button>
-                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (reason) updatePreparationWorkflow(order, "pack_update", { packStatus: "partial", packPackerName: order.packPackerName || auth.name, packCheckerName: auth.name, missingItems: [reason] }); }}>พร้อมส่งบางส่วน</button>
+                      <button className="primary" onClick={() => { const checker = prompt("กรอกชื่อผู้ตรวจสอบห้องแพ็ค"); if (checker?.trim()) updatePreparationWorkflow(order, "pack_update", { packStatus: "checked", packPackerName: order.packPackerName || auth.name, packCheckerName: checker.trim(), missingItems: [] }); }}>ยืนยันพร้อมส่ง</button>
+                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (!reason) return; const checker = prompt("กรอกชื่อผู้ตรวจสอบห้องแพ็ค"); if (checker?.trim()) updatePreparationWorkflow(order, "pack_update", { packStatus: "partial", packPackerName: order.packPackerName || auth.name, packCheckerName: checker.trim(), missingItems: [reason] }); }}>พร้อมส่งบางส่วน</button>
                     </div>
                   )}
                   {displayTab === "chiangmai" && ["checked", "partial"].includes(order.packStatus) && (

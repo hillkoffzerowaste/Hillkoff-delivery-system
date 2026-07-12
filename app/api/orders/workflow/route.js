@@ -22,10 +22,16 @@ export async function PATCH(request) {
 
     if (profile.role === "store" && action === "store_update") {
       if (!STORE_STATUSES.includes(body.storeStatus)) throw Object.assign(new Error("Invalid store status"), { status: 400 });
+      if (["checked", "partial", "waiting"].includes(body.storeStatus) && !String(body.storeCheckerName || "").trim()) {
+        throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบสโตร์"), { status: 400 });
+      }
       patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name); patch.storeCheckerName = String(body.storeCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems : [];
       if (["checked", "partial", "waiting"].includes(body.storeStatus)) patch.packStatus = "pending";
     } else if (profile.role === "pack" && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
+      if (["checked", "partial", "waiting"].includes(body.packStatus) && !String(body.packCheckerName || "").trim()) {
+        throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบห้องแพ็ค"), { status: 400 });
+      }
       patch.packStatus = body.packStatus; patch.packPackerName = String(body.packPackerName || profile.name); patch.packCheckerName = String(body.packCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems : order.missingItems || []; patch.packPhotos = Array.isArray(body.packPhotos) ? body.packPhotos.slice(0, 20) : order.packPhotos || [];
       if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = "ready";
     } else if (["sales", "admin"].includes(profile.role) && action === "queue") {
