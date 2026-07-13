@@ -730,7 +730,7 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-dashboard", "store-chiangmai-track", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
