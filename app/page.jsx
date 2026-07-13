@@ -456,7 +456,6 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
-  const [storeSubTab, setStoreSubTab] = useState("chiangmai");
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
   const [workPhotoPreview, setWorkPhotoPreview] = useState("");
@@ -527,7 +526,7 @@ export default function App() {
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
-    : state.auth?.role === "store" ? "store-work"
+    : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? "pack-work"
     : (tab === "driver" ? "sales" : tab);
 
@@ -711,7 +710,7 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-	    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-online", "store-dashboard", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
@@ -2393,6 +2392,38 @@ export default function App() {
     }
   };
 
+  const buildStoreSummary = (period) => {
+    const monthKey = todayServiceDate.slice(0, 7);
+    const isInPeriod = (value) => {
+      const dateKey = String(value || "").slice(0, 10);
+      return period === "daily" ? dateKey === todayServiceDate : dateKey.startsWith(monthKey);
+    };
+    const nearby = (orders || []).filter((order) => order.workflowType === "store_route" && isInPeriod(getOrderServiceDate(order)));
+    const reports = storeReports.filter((item) => isInPeriod(item.createdAt));
+    const count = (items, type) => items.filter((item) => item.type === type).length;
+    const waiting = [...nearby, ...reports].filter((item) => item.status === "waiting" || item.status === "partial" || (Array.isArray(item.missingItems) && item.missingItems.length)).length;
+    const title = period === "daily" ? `รายงานสโตร์ประจำวัน ${todayServiceDate}` : `รายงานสโตร์ประจำเดือน ${monthKey}`;
+    return [title, `เชียงใหม่/ใกล้เคียง: ${nearby.length} รายการ`, `ต่างจังหวัด: ${count(reports, "outstation")} รายการ`, `ออนไลน์: ${count(reports, "online")} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`].join("\n");
+  };
+
+  const copyStoreSummary = async (period) => {
+    const text = buildStoreSummary(period);
+    try {
+      await navigator.clipboard?.writeText?.(text);
+      setSyncStatus("✅ คัดลอกรายงานแล้ว");
+    } catch { setSyncStatus("⚠️ คัดลอกรายงานไม่สำเร็จ"); }
+  };
+
+  const shareStoreSummary = async (period) => {
+    const text = buildStoreSummary(period);
+    try {
+      try { await navigator.clipboard?.writeText?.(text); } catch {}
+      if (!navigator?.share) throw new Error("อุปกรณ์นี้ไม่รองรับการแชร์");
+      await navigator.share({ title: "รายงานสโตร์", text });
+      setSyncStatus("✅ เปิดแชร์รายงานแล้ว");
+    } catch (error) { setSyncStatus(`⚠️ ส่งรายงานไม่สำเร็จ: ${error?.message || error}`); }
+  };
+
   const createStaffAccount = async () => {
     try {
       const idToken = await refreshAuthToken(true);
@@ -3458,6 +3489,14 @@ export default function App() {
               <button className={displayTab === "driver-sop" ? "active" : ""} onClick={() => setTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
             </>
           )}
+          {auth.role === "store" && (
+            <>
+              <button className={displayTab === "store-work" ? "active" : ""} onClick={() => setTab("store-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
+              <button className={displayTab === "store-outstation" ? "active" : ""} onClick={() => setTab("store-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+              <button className={displayTab === "store-online" ? "active" : ""} onClick={() => setTab("store-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
+              <button className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => setTab("store-dashboard")}><ClipboardList size={18} /> Dashboard สโตร์</button>
+            </>
+          )}
            {["sales", "admin"].includes(auth.role) && (
              <>
                <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
@@ -4335,15 +4374,10 @@ export default function App() {
           </section>
         )}
 
-        {displayTab === "store-work" && (
+        {["store-work", "store-outstation", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className="panel">
             <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
-              {[ ["chiangmai", "เชียงใหม่/ใกล้เคียง"], ["outstation", "ต่างจังหวัด"], ["online", "ออนไลน์"], ["dashboard", "แดชบอร์ด"] ].map(([id, label]) => (
-                <button key={id} className={storeSubTab === id ? "primary" : "secondary"} onClick={() => setStoreSubTab(id)}>{label}</button>
-              ))}
-            </div>
-            {storeSubTab === "chiangmai" && <div style={{ display: "grid", gap: "10px" }}>
+            {displayTab === "store-work" && <div style={{ display: "grid", gap: "10px" }}>
               {storeWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
@@ -4351,13 +4385,14 @@ export default function App() {
               </article>)}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
-            {["outstation", "online"].includes(storeSubTab) && <div style={{ display: "grid", gap: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{storeSubTab === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><button className="primary" onClick={() => { setReportRows([{ bookingNumber: "", detail: "", note: "", status: "saved" }]); setReportPhotoPreview(""); reportPhotoFileRef.current = null; setReportModal(storeSubTab); }}>เพิ่มรายการ</button></div>
-              {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : storeReports.filter(item => item.type === storeSubTab).map(item => <article key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div><span className="status-chip">{item.status}</span></div></article>)}
-              {!storeReportsLoading && !storeReports.some(item => item.type === storeSubTab) && <p className="muted">ยังไม่มีรายงาน</p>}
+            {["store-outstation", "store-online"].includes(displayTab) && <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{displayTab === "store-outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><button className="primary" onClick={() => { setReportRows([{ bookingNumber: "", detail: "", note: "", status: "saved" }]); setReportPhotoPreview(""); reportPhotoFileRef.current = null; setReportModal(displayTab === "store-outstation" ? "outstation" : "online"); }}>เพิ่มรายการ</button></div>
+              {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : storeReports.filter(item => item.type === (displayTab === "store-outstation" ? "outstation" : "online")).map(item => <article key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div><span className="status-chip">{item.status}</span></div></article>)}
+              {!storeReportsLoading && !storeReports.some(item => item.type === (displayTab === "store-outstation" ? "outstation" : "online")) && <p className="muted">ยังไม่มีรายงาน</p>}
             </div>}
-            {storeSubTab === "dashboard" && <div style={{ display: "grid", gap: "12px" }}>
+            {displayTab === "store-dashboard" && <div style={{ display: "grid", gap: "12px" }}>
               <div className="metrics-grid"><article className="metric"><span>เชียงใหม่/ใกล้เคียง</span><strong>{storeWorkOrders.length}</strong></article><article className="metric"><span>ต่างจังหวัด</span><strong>{storeReports.filter(item => item.type === "outstation").length}</strong></article><article className="metric"><span>ออนไลน์</span><strong>{storeReports.filter(item => item.type === "online").length}</strong></article><article className="metric"><span>ของไม่ครบ/รอของ</span><strong>{[...storeWorkOrders, ...storeReports].filter(item => item.status === "waiting" || item.status === "partial" || (item.missingItems || []).length).length}</strong></article></div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="secondary" onClick={() => copyStoreSummary("daily")}>คัดลอกรายงานวันนี้</button><button className="primary" onClick={() => shareStoreSummary("daily")}>ส่งรายงานวันนี้</button><button className="secondary" onClick={() => copyStoreSummary("monthly")}>คัดลอกรายงานเดือนนี้</button><button className="primary" onClick={() => shareStoreSummary("monthly")}>ส่งรายงานเดือนนี้</button></div>
               <p className="muted">รายงานต่างจังหวัดและออนไลน์บันทึกใน Dashboard นี้เท่านั้น ไม่ส่งต่อห้องแพ็คและไม่ขึ้น Google Sheets</p>
             </div>}
           </section>
