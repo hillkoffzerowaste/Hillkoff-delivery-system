@@ -1,6 +1,7 @@
 import { getAdminDb, getAdminAuth } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
+import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
 
 export const runtime = "nodejs";
 
@@ -93,6 +94,7 @@ export async function POST(request) {
     };
 
     await db.collection("orders").doc(String(order.id)).set(next, { merge: true });
+    await db.collection("customer_search").doc(String(next.customerId || `legacy-${order.id}`)).set(customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
     await syncDeliveryOrderToSheet(db, order.id, next);
 
     // New orders stay out of the driver queue until sales explicitly queues them.

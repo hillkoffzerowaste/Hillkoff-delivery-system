@@ -1,4 +1,5 @@
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
+import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
 
 export const runtime = "nodejs";
 
@@ -34,10 +35,12 @@ export async function POST(request) {
     const auth = getAdminAuth();
     const decoded = await auth.verifyIdToken(idToken, true);
     const db = getAdminDb();
+    const next = cleanCustomer(customer);
     await db.collection("customers").doc(customerId).set({
-      ...cleanCustomer(customer),
+      ...next,
       updatedByUid: decoded.uid
     }, { merge: true });
+    await db.collection("customer_search").doc(customerId).set(customerSearchRecord(next), { merge: true });
 
     return Response.json({ ok: true, data: { id: customerId } });
   } catch (e) {

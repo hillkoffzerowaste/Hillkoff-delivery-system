@@ -1,4 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { normalizeCustomerSearch } from "../../../../lib/customerSearchIndex";
 
 export const runtime = "nodejs";
 
@@ -20,43 +21,15 @@ export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["sales", "admin"]);
     const query = String(new URL(request.url).searchParams.get("q") || "").trim();
-    const normalizedQuery = normalize(query);
+    const normalizedQuery = normalizeCustomerSearch(query);
     if (normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
     const cached = cache.get(normalizedQuery);
     if (cached && Date.now() - cached.at < 5 * 60_000) return Response.json({ ok: true, data: cached.data });
 
     if (pending.has(normalizedQuery)) return Response.json({ ok: true, data: await pending.get(normalizedQuery) });
     const search = (async () => {
-    const [customersSnap, ordersSnap] = await Promise.all([
-      db.collection("customers").get(),
-      db.collection("orders").get()
-    ]);
-    const results = [];
-    const seen = new Set();
-    const add = (item) => {
-      const key = `${normalize(item.name)}|${normalize(item.phone)}`;
-      if (!item.name || seen.has(key) || results.length >= MAX_RESULTS) return;
-      seen.add(key);
-      results.push(item);
-    };
-
-    customersSnap.docs.forEach((doc) => {
-      const data = doc.data() || {};
-      if (matches(data, query)) add({ id: doc.id, ...data });
-    });
-    ordersSnap.docs.forEach((doc) => {
-      const data = doc.data() || {};
-      if (matches(data, query)) add({
-        id: String(data.customerId || `legacy-${doc.id}`),
-        name: String(data.customerName || "").trim(),
-        contact: String(data.customerContact || "").trim(),
-        phone: String(data.customerPhone || "").trim(),
-        zone: String(data.zone || "").trim(),
-        address: String(data.address || "").trim(),
-        mapUrl: String(data.mapUrl || "").trim(),
-        legacy: true
-      });
-    });
+    const snap = await db.collection("customer_search").where("terms", "array-contains", normalizedQuery).limit(MAX_RESULTS).get();
+    const results = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
     cache.set(normalizedQuery, { at: Date.now(), data: results });
     if (cache.size > 100) cache.delete(cache.keys().next().value);
     return results;
