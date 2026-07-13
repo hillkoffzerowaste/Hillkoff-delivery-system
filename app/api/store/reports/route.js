@@ -9,17 +9,40 @@ function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
 }
 
+function reportLog(ref, event, profile, now, before = null, after = null, reason = "") {
+  return {
+    event, at: now, by: profile.name || profile.email, byUid: profile.uid,
+    reason: clean(reason, 1000), before, after
+  };
+}
+
 export async function GET(request) {
   try {
     const { profile, db } = await requireProfile(request, ["store", "admin"]);
-    const type = new URL(request.url).searchParams.get("type");
-    const date = new URL(request.url).searchParams.get("date");
+    const params = new URL(request.url).searchParams;
+    const type = params.get("type");
+    const date = params.get("date");
+    const id = clean(params.get("id"), 200);
+    const queryText = clean(params.get("q"), 200).toLowerCase();
+    const includeDeleted = params.get("includeDeleted") === "true";
+    if (id) {
+      const ref = db.collection("store_reports").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
+      const history = await ref.collection("history").orderBy("at", "desc").limit(100).get();
+      return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
+    }
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
     let query = db.collection("store_reports").orderBy("createdAt", "desc");
     if (date) query = query.startAt(`${date}T23:59:59.999Z`).endAt(`${date}T00:00:00.000Z`);
     const snap = await query.limit(500).get();
-    const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => !type || item.type === type);
+    const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
+      if (type && item.type !== type) return false;
+      if (!includeDeleted && item.deletedAt) return false;
+      if (!queryText) return true;
+      return [item.bookingNumber, item.detail, item.note, item.status, item.createdBy].join(" ").toLowerCase().includes(queryText);
+    });
     return Response.json({ ok: true, data, requestedBy: profile.name || profile.email });
   } catch (error) {
     return errorResponse(error);
@@ -48,6 +71,7 @@ export async function POST(request) {
       const ref = db.collection("store_reports").doc();
       const item = { type, bookingNumber, detail, note, status, confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
       batch.set(ref, item);
+      batch.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, item));
       saved.push({ id: ref.id, ...item });
     }
     if (!saved.length) return Response.json({ ok: false, error: "Enter at least one report row" }, { status: 400 });
@@ -78,7 +102,9 @@ export async function PATCH(request) {
       if (!snap.exists) return;
       const item = snap.data();
       if (item.type !== type || String(item.createdAt || "").slice(0, 10) !== date) return;
-      batch.update(snap.ref, { status: item.status === "draft" ? "saved" : item.status, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email });
+      const after = { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email };
+      batch.update(snap.ref, after);
+      batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "confirmed", profile, now, item, after));
       updated += 1;
       updatedIds.push(snap.id);
     });
@@ -99,11 +125,16 @@ export async function PUT(request) {
     const snap = await ref.get();
     if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
     const item = snap.data();
-    if (!REPORT_TYPES.includes(item.type) || item.confirmedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be edited" }, { status: 403 });
+    if (!REPORT_TYPES.includes(item.type) || item.deletedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be edited" }, { status: 403 });
     const status = REPORT_STATUSES.includes(body?.status) ? body.status : item.status;
     const updatedAt = new Date().toISOString();
+    const reason = clean(body?.reason, 1000);
+    if (item.confirmedAt && !reason) return Response.json({ ok: false, error: "Provide an edit reason for a confirmed report" }, { status: 400 });
     const patch = { bookingNumber: clean(body?.bookingNumber, 100), detail: clean(body?.detail, 1000), note: clean(body?.note, 1000), status, updatedAt, updatedBy: profile.name || profile.email };
-    await ref.set(patch, { merge: true });
+    const batch = db.batch();
+    batch.set(ref, patch, { merge: true });
+    batch.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
+    await batch.commit();
     return Response.json({ ok: true, data: { id, ...item, ...patch } });
   } catch (error) { return errorResponse(error); }
 }
@@ -117,8 +148,15 @@ export async function DELETE(request) {
     const snap = await ref.get();
     if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
     const item = snap.data();
-    if (!REPORT_TYPES.includes(item.type) || item.confirmedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be deleted" }, { status: 403 });
-    await ref.delete();
-    return Response.json({ ok: true, data: { id } });
+    if (!REPORT_TYPES.includes(item.type) || item.deletedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be deleted" }, { status: 403 });
+    const now = new Date().toISOString();
+    const reason = clean(body?.reason, 1000);
+    if (!reason) return Response.json({ ok: false, error: "Provide a deletion reason" }, { status: 400 });
+    const patch = { deletedAt: now, deletedBy: profile.name || profile.email, deleteReason: reason, updatedAt: now };
+    const batch = db.batch();
+    batch.set(ref, patch, { merge: true });
+    batch.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
+    await batch.commit();
+    return Response.json({ ok: true, data: { id, ...item, ...patch } });
   } catch (error) { return errorResponse(error); }
 }

@@ -479,6 +479,9 @@ export default function App() {
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
   const [storeReportDate, setStoreReportDate] = useState(() => toServiceDateKey(new Date()));
+  const [storeReportQuery, setStoreReportQuery] = useState("");
+  const [storeReportSearchActive, setStoreReportSearchActive] = useState(false);
+  const [storeReportIncludeDeleted, setStoreReportIncludeDeleted] = useState(false);
   const [storeDraftRows, setStoreDraftRows] = useState({ outstation: [], online: [] });
   const [showStoreReportConfirm, setShowStoreReportConfirm] = useState("");
   const [storeReportConfirmIds, setStoreReportConfirmIds] = useState([]);
@@ -486,6 +489,7 @@ export default function App() {
   const [reportRows, setReportRows] = useState([{ bookingNumber: "", detail: "", note: "", status: "saved" }]);
   const [reportPhotoPreview, setReportPhotoPreview] = useState("");
   const [editingStoreReport, setEditingStoreReport] = useState(null);
+  const [storeReportDetail, setStoreReportDetail] = useState(null);
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [openReportDate, setOpenReportDate] = useState("");
   const [reportExportMode, setReportExportMode] = useState("single");
@@ -1512,12 +1516,16 @@ export default function App() {
   const backlogUndelivered = (orders || []).filter(isBacklogOrder);
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
-  const fetchStoreReports = async (date = "") => {
+  const fetchStoreReports = async ({ date = "", query = "", includeDeleted = false } = {}) => {
     if (auth.role !== "store") return;
     setStoreReportsLoading(true);
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch(`/api/store/reports${date ? `?date=${encodeURIComponent(date)}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const params = new URLSearchParams();
+      if (date) params.set("date", date);
+      if (query.trim()) params.set("q", query.trim());
+      if (includeDeleted) params.set("includeDeleted", "true");
+      const res = await fetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports(Array.isArray(json.data) ? json.data : []);
@@ -1528,9 +1536,9 @@ export default function App() {
     }
   };
   useEffect(() => {
-    if (auth.role === "store") fetchStoreReports(["store-outstation", "store-online"].includes(displayTab) ? storeReportDate : "");
+    if (auth.role === "store") fetchStoreReports({ date: ["store-outstation", "store-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.role, displayTab, storeReportDate]);
+  }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
 
   useEffect(() => {
     if (auth.role !== "sales" && auth.role !== "admin") return;
@@ -2541,14 +2549,25 @@ export default function App() {
     } catch (error) { setSyncStatus(`❌ แก้ไขรายการไม่สำเร็จ: ${error?.message || error}`); }
   };
 
-  const deleteStoreReport = async (item) => {
-    if (!window.confirm(`ลบรายการ ${item.bookingNumber || "นี้"} หรือไม่?`)) return;
+  const openStoreReportDetail = async (item) => {
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id }) });
+      const res = await fetch(`/api/store/reports?id=${encodeURIComponent(item.id)}`, { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setStoreReports((prev) => prev.filter((report) => report.id !== item.id));
+      setStoreReportDetail(json.data);
+    } catch (error) { setSyncStatus(`❌ เปิดรายละเอียดไม่สำเร็จ: ${error?.message || error}`); }
+  };
+
+  const deleteStoreReport = async (item) => {
+    const reason = window.prompt(`ระบุเหตุผลที่ลบรายการ ${item.bookingNumber || "นี้"}`);
+    if (!reason?.trim()) return setSyncStatus("⚠️ ต้องระบุเหตุผลก่อนลบ เพื่อเก็บประวัติ");
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/store/reports", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, reason }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStoreReports((prev) => prev.map((report) => report.id === item.id ? json.data : report).filter((report) => storeReportIncludeDeleted || !report.deletedAt));
       setSyncStatus("✅ ลบรายการรายงานแล้ว");
     } catch (error) { setSyncStatus(`❌ ลบรายการไม่สำเร็จ: ${error?.message || error}`); }
   };
@@ -3269,6 +3288,13 @@ export default function App() {
     active: todayOrdersOnly.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
     done: todayOrdersOnly.filter(order => order.status === "ส่งสำเร็จ").length
   };
+  const roleScopedTodayOrders = ["store", "pack"].includes(auth.role) ? todayOrdersOnly.filter(order => order.workflowType) : todayOrdersOnly;
+  const visibleTotals = {
+    jobs: roleScopedTodayOrders.length,
+    waiting: roleScopedTodayOrders.filter(order => order.status === "รอคนขับรับ").length,
+    active: roleScopedTodayOrders.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
+    done: roleScopedTodayOrders.filter(order => order.status === "ส่งสำเร็จ").length
+  };
 
   const summarizeOrders = (list = []) => {
     const total = list.length;
@@ -3794,16 +3820,16 @@ export default function App() {
           </div>
         )}
 
-        {!['store', 'pack'].includes(auth.role) && <div className="stats">
-          <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${totals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
-          <Stat icon={UserCheck} label="รอคนขับรับ" value={`${totals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
-          <Stat icon={Navigation} label="กำลังส่ง" value={`${totals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
-          <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
+        <div className="stats">
+          <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${visibleTotals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
+          <Stat icon={UserCheck} label="รอคนขับรับ" value={`${visibleTotals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
+          <Stat icon={Navigation} label="กำลังส่ง" value={`${visibleTotals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
+          <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${visibleTotals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
           <Stat icon={MapPinned} label="งานวิ่งวันนี้" value={`${todayRouteTasks.length} งาน`} sub="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
           {auth.role === "driver" && (
             <Stat icon={Star} label="ส่งสำเร็จของฉัน" value={`${orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} งาน`} sub="งานของคุณทั้งหมด" tone="#22c55e" />
           )}
-        </div>}
+        </div>
 
         {displayTab === "sales" && (
           <>
@@ -4549,13 +4575,14 @@ export default function App() {
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
             {["store-outstation", "store-online"].includes(displayTab) && <div style={{ display: "grid", gap: "10px" }}>
-              {(() => { const type = displayTab === "store-outstation" ? "outstation" : "online"; const selectedRows = storeReports.filter(item => item.type === type && String(item.createdAt || "").slice(0, 10) === storeReportDate); const overdue = storeReports.filter(item => item.type === type && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.createdAt || "").slice(0, 10) < todayServiceDate); return <>
+              {(() => { const type = displayTab === "store-outstation" ? "outstation" : "online"; const selectedRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.createdAt || "").slice(0, 10) === storeReportDate)); const overdue = storeReports.filter(item => item.type === type && !item.confirmedAt && !item.deletedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.createdAt || "").slice(0, 10) < todayServiceDate); return <>
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt || "").slice(0, 10)}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{type === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="date" value={storeReportDate} onChange={e => setStoreReportDate(e.target.value)} /><button className="secondary" onClick={() => setStoreReportDate(todayServiceDate)}>วันนี้</button></div></div>
-                {storeReportDate !== todayServiceDate && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>ดูข้อมูลย้อนหลังได้ แต่เพิ่มหรือแก้ไขรายการใหม่ได้เฉพาะวันนี้</div>}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{type === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div></div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><input value={storeReportQuery} onChange={e => setStoreReportQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); } }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" style={{ flex: "1 1 280px" }} /><button className="secondary" onClick={() => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); }}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); }}>ล้างค้นหา</button><label className="muted" style={{ display: "flex", gap: "5px", alignItems: "center" }}><input type="checkbox" checked={storeReportIncludeDeleted} onChange={e => setStoreReportIncludeDeleted(e.target.checked)} /> รวมรายการลบแล้ว</label></div>
+                {storeReportSearchActive && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>ผลค้นหาย้อนหลัง: “{storeReportQuery}”</div>}
                 <div style={{ display: "grid", gap: "8px" }}>{(storeDraftRows[type] || []).map((row) => <div key={row.draftId} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 130px auto", gap: "8px", alignItems: "center", border: "1px solid #dbe4d6", padding: "8px", borderRadius: "8px" }}><input value={row.bookingNumber} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, bookingNumber: e.target.value } : item) }))} placeholder="เลขใบสั่งจอง" /><input value={row.detail} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, detail: e.target.value } : item) }))} placeholder="รายละเอียด" /><input value={row.note} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, note: e.target.value } : item) }))} placeholder="หมายเหตุ/รอของ" /><select value={row.status} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, status: e.target.value } : item) }))}><option value="draft">ร่าง</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><button className="secondary" onClick={() => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].filter((item) => item.draftId !== row.draftId) }))}>ลบ</button></div>)}</div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate} onClick={() => addStoreDraftRow(type)}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate || !(storeDraftRows[type] || []).length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" disabled={storeReportDate !== todayServiceDate} onClick={() => startStoreReportConfirmation(type)}>บันทึกยืนยัน</button></div></div>
-                {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : selectedRows.map(item => { const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt).slice(0, 10)}T00:00:00`)) / 86400000)); const overdueColor = age > 1 ? "#ef4444" : age === 1 ? "#eab308" : "#e5e7eb"; return <article key={item.id} style={{ border: `1px solid ${!item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) ? overdueColor : "#e5e7eb"}`, borderLeft: `5px solid ${{ draft: "#6b7280", waiting: "#eab308", partial: "#f97316", saved: "#16a34a" }[item.status] || "#6b7280"}`, borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><span className="status-chip">{item.status === "draft" ? "ร่าง/ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"}</span>{!item.confirmedAt && <><span style={{ color: age > 1 ? "#dc2626" : "#a16207", fontWeight: 700 }}>ค้าง {age} วัน</span><button className="secondary" onClick={() => setEditingStoreReport(item)}>แก้ไข</button><button className="secondary" onClick={() => deleteStoreReport(item)}>ลบ</button></>}</div></article>})}
+                {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : selectedRows.map(item => { const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt).slice(0, 10)}T00:00:00`)) / 86400000)); const overdueColor = age > 1 ? "#ef4444" : age === 1 ? "#eab308" : "#e5e7eb"; return <article key={item.id} style={{ opacity: item.deletedAt ? .62 : 1, border: `1px solid ${!item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) ? overdueColor : "#e5e7eb"}`, borderLeft: `5px solid ${item.deletedAt ? "#991b1b" : ({ draft: "#6b7280", waiting: "#eab308", partial: "#f97316", saved: "#16a34a" }[item.status] || "#6b7280")}`, borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><span className="status-chip">{item.deletedAt ? "ลบแล้ว" : item.status === "draft" ? "ร่าง/ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"}</span>{!item.confirmedAt && !item.deletedAt && <span style={{ color: age > 1 ? "#dc2626" : "#a16207", fontWeight: 700 }}>ค้าง {age} วัน</span>}<button className="secondary" onClick={() => openStoreReportDetail(item)}>ดู</button>{!item.deletedAt && <><button className="secondary" onClick={() => setEditingStoreReport({ ...item, reason: "" })}>แก้ไข</button><button className="secondary" onClick={() => deleteStoreReport(item)}>ลบ</button></>}</div></article>})}
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
             </div>}
@@ -4684,6 +4711,16 @@ export default function App() {
           </div>
         )}
 
+        {storeReportDetail && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+            <section className="panel" style={{ width: "min(760px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
+              <div className="panel-head"><h2>รายละเอียดรายงาน</h2><button className="secondary" onClick={() => setStoreReportDetail(null)}>ปิด</button></div>
+              <div style={{ display: "grid", gap: "7px" }}><b>{storeReportDetail.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{storeReportDetail.detail || "-"}</div>{storeReportDetail.note && <div className="muted">หมายเหตุ: {storeReportDetail.note}</div>}<div className="muted">สร้างโดย {storeReportDetail.createdBy || "-"} · {storeReportDetail.createdAt || "-"}</div>{storeReportDetail.confirmedAt && <div className="muted">ยืนยัน: {storeReportDetail.confirmedAt} โดย {storeReportDetail.confirmedBy || "-"}</div>}{storeReportDetail.deletedAt && <div style={{ color: "#991b1b" }}>ลบเมื่อ {storeReportDetail.deletedAt} · เหตุผล: {storeReportDetail.deleteReason || "-"}</div>}</div>
+              <h3 style={{ marginTop: "16px" }}>ประวัติการเปลี่ยนแปลง</h3><div style={{ display: "grid", gap: "8px" }}>{(storeReportDetail.history || []).map(log => <article key={log.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{log.event}</b><div className="muted">{log.at} · {log.by || "-"}</div>{log.reason && <div>เหตุผล: {log.reason}</div>}</article>)}{!(storeReportDetail.history || []).length && <p className="muted">รายการเก่าอาจยังไม่มี log ก่อนเริ่มใช้ระบบนี้</p>}</div>
+            </section>
+          </div>
+        )}
+
         {reportModal && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
             <section className="panel" style={{ width: "min(850px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
@@ -4700,7 +4737,7 @@ export default function App() {
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
             <section className="panel" style={{ width: "min(620px, 100%)" }}>
               <div className="panel-head"><h2>แก้ไขรายการรายงาน</h2><span>{editingStoreReport.type === "outstation" ? "ต่างจังหวัด" : "ออนไลน์"}</span></div>
-              <div style={{ display: "grid", gap: "10px" }}><input value={editingStoreReport.bookingNumber || ""} onChange={e => setEditingStoreReport(item => ({ ...item, bookingNumber: e.target.value }))} placeholder="เลขที่ใบสั่งจอง" /><textarea rows={3} value={editingStoreReport.detail || ""} onChange={e => setEditingStoreReport(item => ({ ...item, detail: e.target.value }))} placeholder="รายละเอียด" /><textarea rows={3} value={editingStoreReport.note || ""} onChange={e => setEditingStoreReport(item => ({ ...item, note: e.target.value }))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" /><select value={editingStoreReport.status || "draft"} onChange={e => setEditingStoreReport(item => ({ ...item, status: e.target.value }))}><option value="draft">ร่าง</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setEditingStoreReport(null)}>ยกเลิก</button><button className="primary" onClick={saveEditedStoreReport}>บันทึกการแก้ไข</button></div></div>
+              <div style={{ display: "grid", gap: "10px" }}><input value={editingStoreReport.bookingNumber || ""} onChange={e => setEditingStoreReport(item => ({ ...item, bookingNumber: e.target.value }))} placeholder="เลขที่ใบสั่งจอง" /><textarea rows={3} value={editingStoreReport.detail || ""} onChange={e => setEditingStoreReport(item => ({ ...item, detail: e.target.value }))} placeholder="รายละเอียด" /><textarea rows={3} value={editingStoreReport.note || ""} onChange={e => setEditingStoreReport(item => ({ ...item, note: e.target.value }))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" /><select value={editingStoreReport.status || "draft"} onChange={e => setEditingStoreReport(item => ({ ...item, status: e.target.value }))}><option value="draft">ร่าง</option><option value="saved">ยืนยันแล้ว</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{editingStoreReport.confirmedAt && <textarea rows={2} value={editingStoreReport.reason || ""} onChange={e => setEditingStoreReport(item => ({ ...item, reason: e.target.value }))} placeholder="เหตุผลการแก้ไข (บังคับ เพราะยืนยันแล้ว)" />}<div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setEditingStoreReport(null)}>ยกเลิก</button><button className="primary" onClick={saveEditedStoreReport}>บันทึกการแก้ไข</button></div></div>
             </section>
           </div>
         )}
