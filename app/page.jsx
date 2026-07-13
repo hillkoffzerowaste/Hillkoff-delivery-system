@@ -478,6 +478,7 @@ export default function App() {
   const [storeReportDate, setStoreReportDate] = useState(() => toServiceDateKey(new Date()));
   const [storeDraftRows, setStoreDraftRows] = useState([]);
   const [showStoreReportConfirm, setShowStoreReportConfirm] = useState("");
+  const [storeReportConfirmIds, setStoreReportConfirmIds] = useState([]);
   const [reportModal, setReportModal] = useState(null);
   const [reportRows, setReportRows] = useState([{ bookingNumber: "", detail: "", note: "", status: "saved" }]);
   const [reportPhotoPreview, setReportPhotoPreview] = useState("");
@@ -1476,7 +1477,7 @@ export default function App() {
   const customers = state.customers;
   const orders = state.orders;
   const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
-  const storeWorkOrders = preparationOrders.filter(order => order.workflowType === "store_route" && ["pending", "working", "returned"].includes(order.storeStatus));
+  const storeWorkOrders = preparationOrders.filter(order => order.workflowType === "store_route" && ["pending", "working", "waiting", "returned"].includes(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => order.packStatus !== "blocked" && ["pending", "working", "waiting", "returned"].includes(order.packStatus));
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
@@ -2423,7 +2424,7 @@ export default function App() {
 
   const saveStoreDrafts = async (type) => {
     const rows = storeDraftRows.filter((row) => row.bookingNumber.trim() || row.detail.trim() || row.note.trim());
-    if (!rows.length) return setSyncStatus("❌ กรุณากรอกอย่างน้อยหนึ่งรายการ");
+    if (!rows.length) return [];
     try {
       const idToken = await refreshAuthToken(true);
       const res = await fetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ type, rows, draft: true }) });
@@ -2432,11 +2433,22 @@ export default function App() {
       setStoreReports((prev) => [...json.data, ...prev]);
       setStoreDraftRows([]);
       setSyncStatus(`✅ บันทึกร่าง ${json.data.length} รายการแล้ว`);
-    } catch (error) { setSyncStatus(`❌ บันทึกร่างไม่สำเร็จ: ${error?.message || error}`); }
+      return json.data;
+    } catch (error) { setSyncStatus(`❌ บันทึกร่างไม่สำเร็จ: ${error?.message || error}`); return null; }
+  };
+
+  const startStoreReportConfirmation = async (type) => {
+    const created = await saveStoreDrafts(type);
+    if (created === null) return;
+    const selectedIds = storeReports.filter((item) => item.type === type && String(item.createdAt || "").slice(0, 10) === storeReportDate && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status)).map((item) => item.id);
+    const ids = [...new Set([...selectedIds, ...created.map((item) => item.id)])];
+    if (!ids.length) return setSyncStatus("⚠️ ไม่มีรายการที่รอยืนยันในวันที่เลือก");
+    setStoreReportConfirmIds(ids);
+    setShowStoreReportConfirm(type);
   };
 
   const confirmStoreReports = async () => {
-    const ids = storeReports.filter((item) => item.type === showStoreReportConfirm && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status)).map((item) => item.id);
+    const ids = storeReportConfirmIds;
     if (!ids.length) return setShowStoreReportConfirm(false);
     try {
       const idToken = await refreshAuthToken(true);
@@ -2444,8 +2456,9 @@ export default function App() {
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       const confirmedAt = json.data.confirmedAt;
-      setStoreReports((prev) => prev.map((item) => ids.includes(item.id) ? { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt } : item));
+      setStoreReports((prev) => prev.map((item) => json.data.ids.includes(item.id) ? { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt } : item));
       setShowStoreReportConfirm(false);
+      setStoreReportConfirmIds([]);
       setSyncStatus(`✅ ยืนยันรายงาน ${ids.length} รายการแล้ว`);
     } catch (error) { setSyncStatus(`❌ ยืนยันรายงานไม่สำเร็จ: ${error?.message || error}`); }
   };
@@ -4448,10 +4461,10 @@ export default function App() {
             </div>}
             {["store-outstation", "store-online"].includes(displayTab) && <div style={{ display: "grid", gap: "10px" }}>
               {(() => { const type = displayTab === "store-outstation" ? "outstation" : "online"; const selectedRows = storeReports.filter(item => item.type === type && String(item.createdAt || "").slice(0, 10) === storeReportDate); const overdue = storeReports.filter(item => item.type === type && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.createdAt || "").slice(0, 10) < todayServiceDate); return <>
-                {overdue.length > 0 && <div style={{ background: overdue.some(item => String(item.createdAt || "").slice(0, 10) < todayServiceDate) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">กดบันทึกยืนยันเพื่อปิดรายการ · สีแดง = ค้างเกิน 1 วัน</div></div>}
+                {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt || "").slice(0, 10)}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{type === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="date" value={storeReportDate} onChange={e => setStoreReportDate(e.target.value)} /><button className="secondary" onClick={() => setStoreReportDate(todayServiceDate)}>วันนี้</button></div></div>
                 <div style={{ display: "grid", gap: "8px" }}>{storeDraftRows.map((row, index) => <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 130px auto", gap: "8px", alignItems: "center", border: "1px solid #dbe4d6", padding: "8px", borderRadius: "8px" }}><input value={row.bookingNumber} onChange={e => setStoreDraftRows(rows => rows.map((item, i) => i === index ? { ...item, bookingNumber: e.target.value } : item))} placeholder="เลขใบสั่งจอง" /><input value={row.detail} onChange={e => setStoreDraftRows(rows => rows.map((item, i) => i === index ? { ...item, detail: e.target.value } : item))} placeholder="รายละเอียด" /><input value={row.note} onChange={e => setStoreDraftRows(rows => rows.map((item, i) => i === index ? { ...item, note: e.target.value } : item))} placeholder="หมายเหตุ/รอของ" /><select value={row.status} onChange={e => setStoreDraftRows(rows => rows.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}><option value="draft">ร่าง</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><button className="secondary" onClick={() => setStoreDraftRows(rows => rows.filter((_, i) => i !== index))}>ลบ</button></div>)}</div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button className="secondary" onClick={addStoreDraftRow}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" disabled={!storeDraftRows.length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" onClick={() => setShowStoreReportConfirm(type)}>บันทึกยืนยัน</button></div></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button className="secondary" onClick={addStoreDraftRow}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" disabled={!storeDraftRows.length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" onClick={() => startStoreReportConfirmation(type)}>บันทึกยืนยัน</button></div></div>
                 {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : selectedRows.map(item => <article key={item.id} style={{ border: `1px solid ${!item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.createdAt || "").slice(0, 10) < todayServiceDate ? "#ef4444" : "#e5e7eb"}`, borderLeft: `5px solid ${{ draft: "#6b7280", waiting: "#eab308", partial: "#f97316", saved: "#16a34a" }[item.status] || "#6b7280"}`, borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div><span className="status-chip">{item.status === "draft" ? "ร่าง/ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"}</span>{!item.confirmedAt && <span style={{ color: "#dc2626", marginLeft: "8px", fontWeight: 700 }}>ค้าง {Math.max(0, Math.floor((new Date(todayServiceDate) - new Date(String(item.createdAt).slice(0, 10))) / 86400000))} วัน</span>}</div></article>)}
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
@@ -4546,7 +4559,7 @@ export default function App() {
             <section className="panel" style={{ width: "min(460px, 100%)" }}>
               <div className="panel-head"><h2>ยืนยันบันทึกรายงาน</h2><span>สโตร์</span></div>
               <p>รายการที่ยังไม่ยืนยันทั้งหมดจะถูกปิดสถานะและบันทึกวันเวลายืนยัน</p>
-              <p className="muted">รวม {storeReports.filter(item => item.type === showStoreReportConfirm && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status)).length} รายการ</p>
+              <p className="muted">รวม {storeReportConfirmIds.length} รายการของวันที่เลือก</p>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setShowStoreReportConfirm(false)}>กลับไปแก้ไข</button><button className="primary" onClick={confirmStoreReports}>ยืนยันบันทึก</button></div>
             </section>
           </div>

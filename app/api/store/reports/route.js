@@ -65,15 +65,17 @@ export async function PATCH(request) {
     const now = new Date().toISOString();
     const batch = db.batch();
     let updated = 0;
+    const updatedIds = [];
     snapshots.forEach((snap) => {
       const item = snap.data();
-      if (!snap.exists || item?.createdByUid !== profile.uid) return;
+      if (!snap.exists) return;
       batch.update(snap.ref, { status: item.status === "draft" ? "saved" : item.status, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email });
       updated += 1;
+      updatedIds.push(snap.id);
     });
     if (!updated) return Response.json({ ok: false, error: "No permitted report rows found" }, { status: 403 });
     await batch.commit();
-    return Response.json({ ok: true, data: { ids: ids.slice(0, updated), confirmedAt: now } });
+    return Response.json({ ok: true, data: { ids: updatedIds, confirmedAt: now } });
   } catch (error) {
     return errorResponse(error);
   }
