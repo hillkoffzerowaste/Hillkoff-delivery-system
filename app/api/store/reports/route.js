@@ -13,8 +13,12 @@ export async function GET(request) {
   try {
     const { profile, db } = await requireProfile(request, ["store", "admin"]);
     const type = new URL(request.url).searchParams.get("type");
+    const date = new URL(request.url).searchParams.get("date");
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
-    const snap = await db.collection("store_reports").orderBy("createdAt", "desc").limit(500).get();
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
+    let query = db.collection("store_reports").orderBy("createdAt", "desc");
+    if (date) query = query.startAt(`${date}T23:59:59.999Z`).endAt(`${date}T00:00:00.000Z`);
+    const snap = await query.limit(500).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => !type || item.type === type);
     return Response.json({ ok: true, data, requestedBy: profile.name || profile.email });
   } catch (error) {
