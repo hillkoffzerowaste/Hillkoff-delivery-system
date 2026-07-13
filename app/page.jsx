@@ -6063,7 +6063,12 @@ export default function App() {
         borderRadius: "999px",
         display: "grid",
         placeItems: "center",
-        zIndex: 1200
+        zIndex: 1200,
+        background: unreadChatCount > 0 && !chatOpen ? "linear-gradient(135deg, #f97316, #dc2626)" : "linear-gradient(135deg, #fb923c, #ea580c)",
+        border: "2px solid #fff7ed",
+        boxShadow: unreadChatCount > 0 && !chatOpen ? "0 0 0 5px rgba(249, 115, 22, 0.24), 0 10px 22px rgba(220, 38, 38, 0.42)" : "0 7px 16px rgba(234, 88, 12, 0.34)",
+        transform: unreadChatCount > 0 && !chatOpen ? "scale(1.08)" : "scale(1)",
+        transition: "transform .18s ease, box-shadow .18s ease"
       }}
       title="แชท"
     >
