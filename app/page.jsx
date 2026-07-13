@@ -542,7 +542,7 @@ export default function App() {
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
-    : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
+    : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? "pack-work"
     : (tab === "driver" ? "sales" : tab);
 
@@ -726,7 +726,7 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-online", "store-dashboard", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
@@ -3550,6 +3550,7 @@ export default function App() {
           {auth.role === "store" && (
             <>
               <button className={displayTab === "store-work" ? "active" : ""} onClick={() => setTab("store-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
+              <button className={displayTab === "store-chiangmai-track" ? "active" : ""} onClick={() => setTab("store-chiangmai-track")}><Search size={18} /> ติดตามเตรียมออเดอร์</button>
               <button className={displayTab === "store-outstation" ? "active" : ""} onClick={() => setTab("store-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button className={displayTab === "store-online" ? "active" : ""} onClick={() => setTab("store-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
               <button className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => setTab("store-dashboard")}><ClipboardList size={18} /> Dashboard สโตร์</button>
@@ -4460,6 +4461,21 @@ export default function App() {
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="secondary" onClick={() => copyStoreSummary("daily")}>คัดลอกรายงานวันนี้</button><button className="primary" onClick={() => shareStoreSummary("daily")}>ส่งรายงานวันนี้</button><button className="secondary" onClick={() => copyStoreSummary("monthly")}>คัดลอกรายงานเดือนนี้</button><button className="primary" onClick={() => shareStoreSummary("monthly")}>ส่งรายงานเดือนนี้</button></div>
               <p className="muted">รายงานต่างจังหวัดและออนไลน์บันทึกใน Dashboard นี้เท่านั้น ไม่ส่งต่อห้องแพ็คและไม่ขึ้น Google Sheets</p>
             </div>}
+          </section>
+        )}
+
+        {displayTab === "store-chiangmai-track" && (
+          <section className="panel">
+            <div className="panel-head"><h2>ติดตามเตรียมออเดอร์เชียงใหม่</h2><span>ดูข้อมูลจากฝ่ายขาย · อ่านอย่างเดียว</span></div>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {preparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</span></div>
+                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}</div>
+                {order.salesNote && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>หมายเหตุฝ่ายขาย:</b> {order.salesNote}</div>}
+                {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
+              </article>)}
+              {!preparationOrders.length && <p className="muted">ยังไม่มีออเดอร์ที่อยู่ระหว่างเตรียม</p>}
+            </div>
           </section>
         )}
 
