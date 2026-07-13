@@ -36,7 +36,8 @@ export async function PATCH(request) {
         sharedToLine: Boolean(body.storeWorkDetails.sharedToLine),
         updatedAt: now
       };
-      if (["checked", "partial", "waiting"].includes(body.storeStatus)) patch.packStatus = "pending";
+      if (["checked", "partial"].includes(body.storeStatus)) patch.packStatus = "pending";
+      else if (body.storeStatus === "waiting") patch.packStatus = "waiting";
     } else if (profile.role === "pack" && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
       const storeReady = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);

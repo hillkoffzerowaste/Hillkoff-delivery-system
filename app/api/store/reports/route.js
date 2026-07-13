@@ -63,7 +63,11 @@ export async function PATCH(request) {
     const { profile, db } = await requireProfile(request, ["store"]);
     const body = await request.json();
     const ids = Array.isArray(body?.ids) ? body.ids.slice(0, 50).map((id) => String(id || "").trim()).filter(Boolean) : [];
+    const type = clean(body?.type, 30);
+    const date = clean(body?.date, 10);
     if (!ids.length) return Response.json({ ok: false, error: "No report rows selected" }, { status: 400 });
+    if (!REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
     const refs = ids.map((id) => db.collection("store_reports").doc(id));
     const snapshots = await db.getAll(...refs);
     const now = new Date().toISOString();
@@ -71,8 +75,9 @@ export async function PATCH(request) {
     let updated = 0;
     const updatedIds = [];
     snapshots.forEach((snap) => {
-      const item = snap.data();
       if (!snap.exists) return;
+      const item = snap.data();
+      if (item.type !== type || String(item.createdAt || "").slice(0, 10) !== date) return;
       batch.update(snap.ref, { status: item.status === "draft" ? "saved" : item.status, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email });
       updated += 1;
       updatedIds.push(snap.id);

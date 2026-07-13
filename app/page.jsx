@@ -2312,6 +2312,8 @@ export default function App() {
   };
 
   const openWorkModal = (order, role) => {
+    clearWorkPhotos();
+    delete workPhotoFilesRef.current[`${role}:${order.id}`];
     const details = role === "store" ? order.storeWorkDetails : order.packWorkDetails;
     setWorkModal({ order, role });
     setWorkForm({
@@ -2322,6 +2324,12 @@ export default function App() {
     });
     setWorkPhotoPreviews([]);
     setWorkSharedToLine(Boolean(details?.sharedToLine));
+  };
+
+  const clearWorkPhotos = (modal = workModal) => {
+    workPhotoPreviews.forEach((preview) => URL.revokeObjectURL(preview));
+    setWorkPhotoPreviews([]);
+    if (modal?.order?.id && modal?.role) delete workPhotoFilesRef.current[`${modal.role}:${modal.order.id}`];
   };
 
   const captureWorkPhoto = (event) => {
@@ -2382,7 +2390,10 @@ export default function App() {
     const updated = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
       ? { storeStatus: "checked", storePackerName: auth.name, storeCheckerName: auth.name, bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
       : { packStatus: "checked", packPackerName: auth.name, packCheckerName: auth.name, missingItems, packWorkDetails: details });
-    if (updated) setWorkModal(null);
+    if (updated) {
+      clearWorkPhotos();
+      setWorkModal(null);
+    }
   };
 
   const captureReportPhoto = (event) => {
@@ -2457,7 +2468,7 @@ export default function App() {
     if (!ids.length) return setShowStoreReportConfirm(false);
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ids }) });
+      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ids, type: showStoreReportConfirm, date: storeReportDate }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       const confirmedAt = json.data.confirmedAt;
@@ -4590,7 +4601,7 @@ export default function App() {
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
                 {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setWorkModal(null)}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>ยืนยันออเดอร์</button></div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>ยืนยันออเดอร์</button></div>
               </div>
             </section>
           </div>
