@@ -100,13 +100,6 @@ export async function GET(request) {
 
     candidates = phoneSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-    if (!candidates.length) {
-      const recentSnap = await db.collection("orders").orderBy("updatedAt", "desc").limit(300).get();
-      candidates = recentSnap.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((order) => normalizePhoneDigits(order.customerPhone) === phoneDigits);
-    }
-
     candidates.sort((a, b) => {
       const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
       const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();

@@ -492,7 +492,7 @@ export default function App() {
   const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
   const [ordersLimit, setOrdersLimit] = useState(20);
-  const customersLimit = 3000;
+  const customersLimit = 200;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
   const [driverDailyChecks, setDriverDailyChecks] = useState({});
@@ -1529,8 +1529,8 @@ export default function App() {
   useEffect(() => {
     if (auth.role !== "sales" && auth.role !== "admin") return;
     const sequence = ++historicalCustomerSearchSeqRef.current;
-    const query = (customerQuery.trim().length >= 2 ? customerQuery : orderCustomerSearch).trim();
-    if (query.length < 2) return;
+    const query = (customerQuery.trim().length >= 3 ? customerQuery : orderCustomerSearch).trim();
+    if (query.length < 3) return;
     const timer = setTimeout(async () => {
       try {
         const idToken = await refreshAuthToken(true);
@@ -3041,11 +3041,9 @@ export default function App() {
 	        try { await navigator.clipboard?.writeText?.(text); } catch {}
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
 	        setSyncStatus(`✅ ส่งสำเร็จและเปิดแชร์ LINE แล้ว (${order.id})`);
-	      } catch (error) {
-	        if (completedOrder) updateOrder(order.id, completedOrder);
-	        try { await navigator.clipboard?.writeText?.(text); } catch {}
-	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
-	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${order.id})`);
+      } catch (error) {
+        try { await navigator.clipboard?.writeText?.(text); } catch {}
+        setSyncStatus(`⚠️ ยังไม่บันทึกส่งสำเร็จ: แชร์ LINE ถูกยกเลิก/ไม่สำเร็จ (${order.id})`);
 	      }
 	    })();
 	  };

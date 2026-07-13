@@ -3,6 +3,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 export const runtime = "nodejs";
 
 const MAX_RESULTS = 50;
+const cache = new Map();
 
 function normalize(value) {
   return String(value || "").toLowerCase().replace(/\s+/g, "").trim();
@@ -18,7 +19,10 @@ export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["sales", "admin"]);
     const query = String(new URL(request.url).searchParams.get("q") || "").trim();
-    if (normalize(query).length < 2) return Response.json({ ok: false, error: "Enter at least 2 characters" }, { status: 400 });
+    const normalizedQuery = normalize(query);
+    if (normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
+    const cached = cache.get(normalizedQuery);
+    if (cached && Date.now() - cached.at < 5 * 60_000) return Response.json({ ok: true, data: cached.data });
 
     const [customersSnap, ordersSnap] = await Promise.all([
       db.collection("customers").get(),
@@ -50,6 +54,8 @@ export async function GET(request) {
         legacy: true
       });
     });
+    cache.set(normalizedQuery, { at: Date.now(), data: results });
+    if (cache.size > 100) cache.delete(cache.keys().next().value);
     return Response.json({ ok: true, data: results });
   } catch (error) {
     return errorResponse(error);
