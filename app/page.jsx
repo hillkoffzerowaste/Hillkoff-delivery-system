@@ -476,8 +476,7 @@ export default function App() {
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
   const [storeReportDate, setStoreReportDate] = useState(() => toServiceDateKey(new Date()));
-  const [storeDraftRows, setStoreDraftRows] = useState([]);
-  const [storeDraftType, setStoreDraftType] = useState("");
+  const [storeDraftRows, setStoreDraftRows] = useState({ outstation: [], online: [] });
   const [showStoreReportConfirm, setShowStoreReportConfirm] = useState("");
   const [storeReportConfirmIds, setStoreReportConfirmIds] = useState([]);
   const [reportModal, setReportModal] = useState(null);
@@ -2423,13 +2422,12 @@ export default function App() {
 
   const addStoreDraftRow = (type) => {
     if (storeReportDate !== todayServiceDate) return setSyncStatus("⚠️ เพิ่มรายการใหม่ได้เฉพาะวันที่ปัจจุบัน");
-    setStoreDraftType(type);
-    setStoreDraftRows((rows) => [...(rows.filter((row) => row.draftType === type)), { draftId: `${Date.now()}-${Math.random()}`, draftType: type, bookingNumber: "", detail: "", note: "", status: "draft" }]);
+    setStoreDraftRows((rows) => ({ ...rows, [type]: [...(rows[type] || []), { draftId: `${Date.now()}-${Math.random()}`, bookingNumber: "", detail: "", note: "", status: "draft" }] }));
   };
 
   const saveStoreDrafts = async (type) => {
     if (storeReportDate !== todayServiceDate) return [];
-    const rows = storeDraftType === type ? storeDraftRows.filter((row) => row.bookingNumber.trim() || row.detail.trim() || row.note.trim()) : [];
+    const rows = (storeDraftRows[type] || []).filter((row) => row.bookingNumber.trim() || row.detail.trim() || row.note.trim());
     if (!rows.length) return [];
     try {
       const idToken = await refreshAuthToken(true);
@@ -2437,13 +2435,14 @@ export default function App() {
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => [...json.data, ...prev]);
-      setStoreDraftRows([]); setStoreDraftType("");
+      setStoreDraftRows((current) => ({ ...current, [type]: [] }));
       setSyncStatus(`✅ บันทึกร่าง ${json.data.length} รายการแล้ว`);
       return json.data;
     } catch (error) { setSyncStatus(`❌ บันทึกร่างไม่สำเร็จ: ${error?.message || error}`); return null; }
   };
 
   const startStoreReportConfirmation = async (type) => {
+    if (storeReportDate !== todayServiceDate) return setSyncStatus("⚠️ วันที่ย้อนหลังดูข้อมูลได้อย่างเดียว ไม่สามารถยืนยันได้");
     const created = await saveStoreDrafts(type);
     if (created === null) return;
     const selectedIds = storeReports.filter((item) => item.type === type && String(item.createdAt || "").slice(0, 10) === storeReportDate && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status)).map((item) => item.id);
@@ -4470,8 +4469,8 @@ export default function App() {
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt || "").slice(0, 10)}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{type === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="date" value={storeReportDate} onChange={e => setStoreReportDate(e.target.value)} /><button className="secondary" onClick={() => setStoreReportDate(todayServiceDate)}>วันนี้</button></div></div>
                 {storeReportDate !== todayServiceDate && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>ดูข้อมูลย้อนหลังได้ แต่เพิ่มหรือแก้ไขรายการใหม่ได้เฉพาะวันนี้</div>}
-                <div style={{ display: "grid", gap: "8px" }}>{storeDraftType === type && storeDraftRows.map((row) => <div key={row.draftId} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 130px auto", gap: "8px", alignItems: "center", border: "1px solid #dbe4d6", padding: "8px", borderRadius: "8px" }}><input value={row.bookingNumber} onChange={e => setStoreDraftRows(rows => rows.map((item) => item.draftId === row.draftId ? { ...item, bookingNumber: e.target.value } : item))} placeholder="เลขใบสั่งจอง" /><input value={row.detail} onChange={e => setStoreDraftRows(rows => rows.map((item) => item.draftId === row.draftId ? { ...item, detail: e.target.value } : item))} placeholder="รายละเอียด" /><input value={row.note} onChange={e => setStoreDraftRows(rows => rows.map((item) => item.draftId === row.draftId ? { ...item, note: e.target.value } : item))} placeholder="หมายเหตุ/รอของ" /><select value={row.status} onChange={e => setStoreDraftRows(rows => rows.map((item) => item.draftId === row.draftId ? { ...item, status: e.target.value } : item))}><option value="draft">ร่าง</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><button className="secondary" onClick={() => setStoreDraftRows(rows => rows.filter((item) => item.draftId !== row.draftId))}>ลบ</button></div>)}</div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate} onClick={() => addStoreDraftRow(type)}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate || storeDraftType !== type || !storeDraftRows.length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" onClick={() => startStoreReportConfirmation(type)}>บันทึกยืนยัน</button></div></div>
+                <div style={{ display: "grid", gap: "8px" }}>{(storeDraftRows[type] || []).map((row) => <div key={row.draftId} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 130px auto", gap: "8px", alignItems: "center", border: "1px solid #dbe4d6", padding: "8px", borderRadius: "8px" }}><input value={row.bookingNumber} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, bookingNumber: e.target.value } : item) }))} placeholder="เลขใบสั่งจอง" /><input value={row.detail} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, detail: e.target.value } : item) }))} placeholder="รายละเอียด" /><input value={row.note} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, note: e.target.value } : item) }))} placeholder="หมายเหตุ/รอของ" /><select value={row.status} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, status: e.target.value } : item) }))}><option value="draft">ร่าง</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><button className="secondary" onClick={() => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].filter((item) => item.draftId !== row.draftId) }))}>ลบ</button></div>)}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate} onClick={() => addStoreDraftRow(type)}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate || !(storeDraftRows[type] || []).length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" disabled={storeReportDate !== todayServiceDate} onClick={() => startStoreReportConfirmation(type)}>บันทึกยืนยัน</button></div></div>
                 {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : selectedRows.map(item => { const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt).slice(0, 10)}T00:00:00`)) / 86400000)); const overdueColor = age > 1 ? "#ef4444" : age === 1 ? "#eab308" : "#e5e7eb"; return <article key={item.id} style={{ border: `1px solid ${!item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) ? overdueColor : "#e5e7eb"}`, borderLeft: `5px solid ${{ draft: "#6b7280", waiting: "#eab308", partial: "#f97316", saved: "#16a34a" }[item.status] || "#6b7280"}`, borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div><span className="status-chip">{item.status === "draft" ? "ร่าง/ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"}</span>{!item.confirmedAt && <span style={{ color: age > 1 ? "#dc2626" : "#a16207", marginLeft: "8px", fontWeight: 700 }}>ค้าง {age} วัน</span>}</div></article>})}
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
