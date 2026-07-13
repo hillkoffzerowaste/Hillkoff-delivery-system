@@ -37,7 +37,7 @@ export async function PATCH(request) {
         checklist: body.storeWorkDetails.checklist && typeof body.storeWorkDetails.checklist === "object" ? body.storeWorkDetails.checklist : {}, checkResult: String(body.storeWorkDetails.checkResult || "complete"),
         updatedAt: now
       };
-      if (["checked", "partial"].includes(body.storeStatus)) patch.packStatus = "pending";
+      if (["checked", "partial"].includes(body.storeStatus) && !["working", "checked", "partial"].includes(order.packStatus)) patch.packStatus = "pending";
       else if (body.storeStatus === "waiting") patch.packStatus = "waiting";
     } else if (profile.role === "pack" && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });

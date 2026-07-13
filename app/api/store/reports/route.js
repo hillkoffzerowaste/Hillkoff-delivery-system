@@ -151,7 +151,6 @@ export async function DELETE(request) {
     if (!REPORT_TYPES.includes(item.type) || item.deletedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be deleted" }, { status: 403 });
     const now = new Date().toISOString();
     const reason = clean(body?.reason, 1000);
-    if (!reason) return Response.json({ ok: false, error: "Provide a deletion reason" }, { status: 400 });
     const patch = { deletedAt: now, deletedBy: profile.name || profile.email, deleteReason: reason, updatedAt: now };
     const batch = db.batch();
     batch.set(ref, patch, { merge: true });

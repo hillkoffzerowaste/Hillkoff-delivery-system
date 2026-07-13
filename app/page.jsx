@@ -1489,7 +1489,7 @@ export default function App() {
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
   const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
-  const storeWorkOrders = preparationOrders.filter(order => order.workflowType === "store_route" && ["pending", "working", "waiting", "returned"].includes(order.storeStatus));
+  const storeWorkOrders = (orders || []).filter(order => order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => order.packStatus !== "blocked" && ["pending", "working", "waiting", "returned"].includes(order.packStatus));
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
@@ -2560,11 +2560,10 @@ export default function App() {
   };
 
   const deleteStoreReport = async (item) => {
-    const reason = window.prompt(`ระบุเหตุผลที่ลบรายการ ${item.bookingNumber || "นี้"}`);
-    if (!reason?.trim()) return setSyncStatus("⚠️ ต้องระบุเหตุผลก่อนลบ เพื่อเก็บประวัติ");
+    if (!window.confirm(`ยืนยันลบรายการ ${item.bookingNumber || "นี้"} หรือไม่?\nรายการจะถูกซ่อน แต่ประวัติยังคงเก็บในระบบ`)) return;
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, reason }) });
+      const res = await fetch("/api/store/reports", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => prev.map((report) => report.id === item.id ? json.data : report).filter((report) => storeReportIncludeDeleted || !report.deletedAt));
