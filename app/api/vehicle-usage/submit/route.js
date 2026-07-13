@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { after } from "next/server";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
 
@@ -44,7 +45,8 @@ async function syncUsageToGoogle(payload) {
     const response = await fetch(webAppUrl, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "appendUsageSegment", ...payload })
+      body: JSON.stringify({ action: "appendUsageSegment", ...payload }),
+      signal: AbortSignal.timeout(6000)
     });
     const text = await response.text();
     if (!response.ok) return { ok: false, error: text || `HTTP ${response.status}` };
@@ -67,7 +69,7 @@ function timestampMillis(value) {
 }
 
 async function findLatestPreviousVehicleEvent(db, { vehicleId, serviceDate }) {
-  const snap = await db.collection("vehicle_usage_events").where("vehicleId", "==", vehicleId).get();
+  const snap = await db.collection("vehicle_usage_events").where("vehicleId", "==", vehicleId).limit(100).get();
   return snap.docs
     .map((doc) => ({ doc, data: doc.data() || {} }))
     .filter(({ data }) => !data.autoClosed && String(data.serviceDate || "") < serviceDate)
@@ -76,6 +78,22 @@ async function findLatestPreviousVehicleEvent(db, { vehicleId, serviceDate }) {
       if (dateCompare !== 0) return dateCompare;
       return timestampMillis(b.data.createdAt || b.data.updatedAt) - timestampMillis(a.data.createdAt || a.data.updatedAt);
     })[0] || null;
+}
+
+function scheduleGoogleSync(ref, payload) {
+  after(async () => {
+    try {
+      const result = await syncUsageToGoogle(payload);
+      await ref.set({
+        googleSyncStatus: result?.ok === false ? "failed" : (result?.skipped ? "skipped" : "synced"),
+        googleSyncError: result?.ok === false ? String(result.error || "sync failed").slice(0, 500) : "",
+        googleSyncedAt: result?.ok === false || result?.skipped ? null : FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      await ref.set({ googleSyncStatus: "failed", googleSyncError: String(error?.message || error).slice(0, 500), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    }
+  });
 }
 
 function autoCloseDocId({ sourceEventId, startServiceDate }) {
@@ -178,22 +196,16 @@ export async function POST(request) {
             updatedAt: FieldValue.serverTimestamp()
           };
           await autoEndRef.set(autoEnd, { merge: true });
-          const autoGoogleSync = await syncUsageToGoogle({
+          scheduleGoogleSync(autoEndRef, {
             ...autoEnd,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
-          const autoGoogleSyncStatus = autoGoogleSync?.ok === false ? "failed" : (autoGoogleSync?.skipped ? "skipped" : "synced");
-          await autoEndRef.set({
-            googleSyncStatus: autoGoogleSyncStatus,
-            googleSyncError: autoGoogleSync?.ok === false ? String(autoGoogleSync.error || "sync failed").slice(0, 500) : "",
-            googleSyncedAt: autoGoogleSync?.skipped ? null : FieldValue.serverTimestamp()
-          }, { merge: true });
           autoClosed = {
             id: autoEndRef.id,
             serviceDate: autoEnd.serviceDate,
             eventType: "end",
-            googleSyncStatus: autoGoogleSyncStatus,
+            googleSyncStatus: "pending",
             warning
           };
         }
@@ -227,17 +239,11 @@ export async function POST(request) {
     };
 
     await eventRef.set(event, { merge: true });
-    const googleSync = await syncUsageToGoogle({
+    scheduleGoogleSync(eventRef, {
       ...event,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
-    const googleSyncStatus = googleSync?.ok === false ? "failed" : (googleSync?.skipped ? "skipped" : "synced");
-    await eventRef.set({
-      googleSyncStatus,
-      googleSyncError: googleSync?.ok === false ? String(googleSync.error || "sync failed").slice(0, 500) : "",
-      googleSyncedAt: googleSync?.skipped ? null : FieldValue.serverTimestamp()
-    }, { merge: true });
 
     return Response.json({
       ok: true,
@@ -245,7 +251,7 @@ export async function POST(request) {
         id: eventRef.id,
         serviceDate,
         eventType,
-        googleSyncStatus,
+        googleSyncStatus: "pending",
         autoClosed
       }
     });
