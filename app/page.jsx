@@ -2353,7 +2353,8 @@ export default function App() {
       bookingNumber: role === "store" ? (order.bookingNumber || "") : "",
       detail: details?.detail || "",
       note: details?.note || "",
-      missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : ""
+      missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : "",
+      checkerName: role === "store" ? (order.storeCheckerName || auth.name || "") : (order.packCheckerName || auth.name || "")
     });
     setWorkPhotoPreviews([]);
     setWorkSharedToLine(Boolean(details?.sharedToLine));
@@ -2394,7 +2395,8 @@ export default function App() {
       order.customerName ? `ลูกค้า: ${order.customerName}` : "",
       workForm.detail ? `รายละเอียด: ${workForm.detail}` : "",
       workForm.note ? `หมายเหตุ: ${workForm.note}` : "",
-      workForm.missingNote ? `ของไม่ครบ/รอของ: ${workForm.missingNote}` : ""
+      workForm.missingNote ? `ของไม่ครบ/รอของ: ${workForm.missingNote}` : "",
+      workForm.checkerName ? `ผู้ตรวจสินค้า: ${workForm.checkerName}` : ""
     ].filter(Boolean).join("\n");
     try {
       let copied = false;
@@ -2417,12 +2419,16 @@ export default function App() {
       setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจอง");
       return;
     }
+    if (!workForm.checkerName.trim()) {
+      setSyncStatus(`❌ กรุณากรอกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
+      return;
+    }
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
     const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
     const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine: workSharedToLine };
     const updated = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
-      ? { storeStatus: "checked", storePackerName: auth.name, storeCheckerName: auth.name, bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
-      : { packStatus: "checked", packPackerName: auth.name, packCheckerName: auth.name, missingItems, packWorkDetails: details });
+      ? { storeStatus: "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
+      : { packStatus: "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, packWorkDetails: details });
     if (updated) {
       clearWorkPhotos();
       setWorkModal(null);
@@ -4616,6 +4622,7 @@ export default function App() {
                 {workModal.role === "pack" && <PackSalesOrderDetails order={workModal.order} />}
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><input value={workForm.bookingNumber} onChange={e => setWorkForm(p => ({ ...p, bookingNumber: e.target.value }))} placeholder="กรอกเลขที่ใบสั่งจอง" /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
+                <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><input value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))} placeholder={workModal.role === "store" ? "ชื่อผู้ตรวจสโตร์" : "ชื่อผู้ตรวจห้องแพ็ค"} />
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
                 <label className="field-label">หมายเหตุ</label><textarea value={workForm.note} onChange={e => setWorkForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุเพิ่มเติม" rows={2} />
                 <label className="field-label">ของไม่ครบ / รอของ</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder="ระบุรายการและเหตุผล (ถ้ามี)" rows={2} />
