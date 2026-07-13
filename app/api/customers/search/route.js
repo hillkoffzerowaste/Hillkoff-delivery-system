@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 
 const MAX_RESULTS = 50;
 const cache = new Map();
+const pending = new Map();
 
 function normalize(value) {
   return String(value || "").toLowerCase().replace(/\s+/g, "").trim();
@@ -24,6 +25,8 @@ export async function GET(request) {
     const cached = cache.get(normalizedQuery);
     if (cached && Date.now() - cached.at < 5 * 60_000) return Response.json({ ok: true, data: cached.data });
 
+    if (pending.has(normalizedQuery)) return Response.json({ ok: true, data: await pending.get(normalizedQuery) });
+    const search = (async () => {
     const [customersSnap, ordersSnap] = await Promise.all([
       db.collection("customers").get(),
       db.collection("orders").get()
@@ -56,7 +59,11 @@ export async function GET(request) {
     });
     cache.set(normalizedQuery, { at: Date.now(), data: results });
     if (cache.size > 100) cache.delete(cache.keys().next().value);
-    return Response.json({ ok: true, data: results });
+    return results;
+    })();
+    pending.set(normalizedQuery, search);
+    try { return Response.json({ ok: true, data: await search }); }
+    finally { pending.delete(normalizedQuery); }
   } catch (error) {
     return errorResponse(error);
   }
