@@ -2320,7 +2320,7 @@ export default function App() {
       missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : ""
     });
     setWorkPhotoPreview("");
-    setWorkSharedToLine(false);
+    setWorkSharedToLine(Boolean(details?.sharedToLine));
   };
 
   const captureWorkPhoto = (event) => {
@@ -4428,6 +4428,7 @@ export default function App() {
               {storeWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
+                {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 <button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button>
               </article>)}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
@@ -4457,6 +4458,7 @@ export default function App() {
               {packWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
+                {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 <PackSalesOrderDetails order={order} />
                 <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
               </article>)}
@@ -4535,7 +4537,7 @@ export default function App() {
                 <label className="field-label">ของไม่ครบ / รอของ</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder="ระบุรายการและเหตุผล (ถ้ามี)" rows={2} />
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                   <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
-                  <button className="secondary" onClick={shareWorkToLine}>💬 ส่ง LINE</button>
+                  <button className={workSharedToLine ? "secondary" : "primary"} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่งรูป + สถานะ LINE"}</button>
                   {workPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
