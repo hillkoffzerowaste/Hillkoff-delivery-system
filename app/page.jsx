@@ -465,7 +465,7 @@ export default function App() {
     paymentType: "COD",
     codAmount: "",
     salesNote: "",
-    workflowType: "store_route"
+    workflowType: "store_route", deliveryMethod: "company_driver"
   });
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
@@ -2097,7 +2097,7 @@ export default function App() {
       salesName: auth.name,
       salesPhone: auth.phone,
       status: "รอจัดเตรียมสินค้า",
-      workflowType: orderForm.workflowType,
+      workflowType: orderForm.workflowType, deliveryMethod: orderForm.deliveryMethod,
       storeStatus: orderForm.workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: orderForm.workflowType === "direct_pack" ? "pending" : "blocked",
       queueStatus: "preparing",
@@ -2139,7 +2139,7 @@ export default function App() {
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
-    setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", workflowType: "store_route" });
+    setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", workflowType: "store_route", deliveryMethod: "company_driver" });
     setSelectedCustomerId("");
     setOrderCustomerSearch("");
     setShowOrderConfirm(false);
@@ -4326,6 +4326,7 @@ export default function App() {
                   <option value="direct_pack">ส่งตรงห้องแพ็ค</option>
                 </select>
               </label>
+              <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>รูปแบบจัดส่ง</span><select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value }))}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab รับหน้าร้าน</option></select></label>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
@@ -4504,6 +4505,7 @@ export default function App() {
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
+                <PackSalesOrderDetails order={order} />
                 <button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button>
               </article>)}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
@@ -4621,7 +4623,7 @@ export default function App() {
               <div className="panel-head"><h2>{workModal.role === "store" ? "รับงานสโตร์" : "รับงานห้องแพ็ค"}</h2><span>{workModal.order.id}</span></div>
               <div style={{ display: "grid", gap: "10px" }}>
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
-                {workModal.role === "pack" && <PackSalesOrderDetails order={workModal.order} />}
+                <PackSalesOrderDetails order={workModal.order} />
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><input value={workForm.bookingNumber} onChange={e => setWorkForm(p => ({ ...p, bookingNumber: e.target.value }))} placeholder="กรอกเลขที่ใบสั่งจอง" /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><input value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))} placeholder={workModal.role === "store" ? "ชื่อผู้ตรวจสโตร์" : "ชื่อผู้ตรวจห้องแพ็ค"} />

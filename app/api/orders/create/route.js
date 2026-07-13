@@ -71,6 +71,7 @@ export async function POST(request) {
       salesPhone: String(order.salesPhone || ""),
       status: "รอจัดเตรียมสินค้า",
       workflowType: order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
+      deliveryMethod: order.deliveryMethod === "grab_pickup" ? "grab_pickup" : "company_driver",
       storeStatus: order.workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: order.workflowType === "direct_pack" ? "pending" : "blocked",
       queueStatus: "preparing",
