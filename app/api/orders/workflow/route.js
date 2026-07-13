@@ -72,6 +72,7 @@ export async function PATCH(request) {
       throw Object.assign(new Error("Action not allowed"), { status: 403 });
     }
     await ref.set(patch, { merge: true });
+    await ref.collection("activity").doc().set(history);
     await syncDeliveryOrderToSheet(db, orderId, { ...order, ...patch });
     if (action === "queue") {
       try {

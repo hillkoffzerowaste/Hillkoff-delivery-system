@@ -456,6 +456,11 @@ export default function App() {
   };
   const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
   const [orderQuery, setOrderQuery] = useState("");
+  const [chiangmaiHistoryQuery, setChiangmaiHistoryQuery] = useState("");
+  const [chiangmaiHistoryResults, setChiangmaiHistoryResults] = useState([]);
+  const [chiangmaiHistoryLoading, setChiangmaiHistoryLoading] = useState(false);
+  const [chiangmaiHistorySearched, setChiangmaiHistorySearched] = useState(false);
+  const [chiangmaiHistoryOrder, setChiangmaiHistoryOrder] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -2356,6 +2361,43 @@ export default function App() {
       setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
       return true;
     } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); return false; }
+  };
+
+  const searchChiangmaiHistory = async () => {
+    const query = chiangmaiHistoryQuery.trim();
+    if (query.length < 2) return setSyncStatus("⚠️ กรุณากรอกคำค้นหาอย่างน้อย 2 ตัวอักษร");
+    setChiangmaiHistoryLoading(true);
+    setChiangmaiHistorySearched(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch(`/api/orders/search?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setChiangmaiHistoryResults(Array.isArray(json.data) ? json.data : []);
+    } catch (error) { setSyncStatus(`❌ ค้นหาประวัติออเดอร์ไม่สำเร็จ: ${error?.message || error}`); }
+    finally { setChiangmaiHistoryLoading(false); }
+  };
+
+  const openChiangmaiHistoryOrder = async (order) => {
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch(`/api/orders/search?id=${encodeURIComponent(order.id)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setChiangmaiHistoryOrder(json.data);
+    } catch (error) { setSyncStatus(`❌ เปิดประวัติออเดอร์ไม่สำเร็จ: ${error?.message || error}`); }
+  };
+
+  const getOrderTimeline = (order) => {
+    const rawActivity = Array.isArray(order?.activity) && order.activity.length ? order.activity : order?.workflowHistory;
+    const workflow = Array.isArray(rawActivity) ? rawActivity.map((item, index) => ({ id: item.id || `workflow-${index}`, at: item.at, title: `${item.action || "updated"} · ${item.role || "system"}`, note: item.note || item.name || "" })) : [];
+    const delivery = [
+      order?.queuedAt && { id: "queued", at: order.queuedAt, title: "ส่งเข้าคิวจัดส่ง", note: order.queuedBy || "" },
+      order?.grabPickedUpAt && { id: "grab", at: order.grabPickedUpAt, title: "Grab รับสินค้า", note: order.grabPickedUpBy || "" },
+      order?.checkInAt && { id: "checkin", at: order.checkInAt, title: "คนขับเช็กอินหน้างาน", note: order.driverName || "" },
+      order?.deliveredAt && { id: "delivered", at: order.deliveredAt, title: "จัดส่งสำเร็จ", note: order.driverName || "" }
+    ].filter(Boolean);
+    return [...workflow, ...delivery].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
   };
 
   const openWorkModal = (order, role) => {
@@ -4583,6 +4625,7 @@ export default function App() {
           <section className="panel">
             <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>
             {displayTab === "store-work" && <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ border: "1px solid #bfdbfe", background: "#eff6ff", padding: "10px", borderRadius: "9px", display: "grid", gap: "8px" }}><b>ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง</b><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><input value={chiangmaiHistoryQuery} onChange={e => setChiangmaiHistoryQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") searchChiangmaiHistory(); }} placeholder="เลขออเดอร์ / ใบสั่งจอง / ลูกค้า / เบอร์ / พื้นที่" style={{ flex: "1 1 300px" }} /><button className="secondary" onClick={searchChiangmaiHistory} disabled={chiangmaiHistoryLoading}>{chiangmaiHistoryLoading ? "กำลังค้นหา…" : "ค้นหาย้อนหลัง"}</button><button className="secondary" onClick={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }}>ล้าง</button></div>{chiangmaiHistoryResults.length > 0 && <div style={{ display: "grid", gap: "7px" }}>{chiangmaiHistoryResults.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #dbeafe", borderRadius: "7px", padding: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.bookingNumber || "ไม่มีเลขใบสั่งจอง"} · {order.zone || "-"} · {order.status || "-"}</div><small className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</small></div><button className="secondary" onClick={() => openChiangmaiHistoryOrder(order)}>ดูประวัติ</button></article>)}</div>}{chiangmaiHistorySearched && !chiangmaiHistoryLoading && chiangmaiHistoryResults.length === 0 && <p className="muted">ยังไม่พบออเดอร์ที่ตรงกับคำค้นหา</p>}</div>
               <div className="metrics-grid"><article className="metric"><span>งานสโตร์วันนี้</span><strong>{storeTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{storeTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, storeTodayOrders.length - storeTodayCompleted)}</strong></article></div>
               {storeWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
@@ -4727,6 +4770,17 @@ export default function App() {
                 {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>ยืนยันออเดอร์</button></div>
               </div>
+            </section>
+          </div>
+        )}
+
+        {chiangmaiHistoryOrder && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+            <section className="panel" style={{ width: "min(820px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
+              <div className="panel-head"><h2>ประวัติออเดอร์เชียงใหม่/ใกล้เคียง</h2><button className="secondary" onClick={() => setChiangmaiHistoryOrder(null)}>ปิด</button></div>
+              <PackSalesOrderDetails order={chiangmaiHistoryOrder} />
+              <div style={{ display: "grid", gap: "6px", marginTop: "10px" }}><div><b>สถานะล่าสุด:</b> {chiangmaiHistoryOrder.status || "-"}</div><div><b>สโตร์:</b> {chiangmaiHistoryOrder.storeStatus || "-"} · <b>ห้องแพ็ค:</b> {chiangmaiHistoryOrder.packStatus || "-"}</div>{chiangmaiHistoryOrder.missingItems?.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px" }}><b>รอสินค้า/ของไม่ครบ:</b> {chiangmaiHistoryOrder.missingItems.join(", ")}</div>}</div>
+              <h3 style={{ marginTop: "16px" }}>Timeline การดำเนินงาน</h3><div style={{ display: "grid", gap: "8px" }}>{getOrderTimeline(chiangmaiHistoryOrder).map(item => <article key={item.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{item.title}</b><div className="muted">{item.at || "-"}</div>{item.note && <div>{item.note}</div>}</article>)}{!getOrderTimeline(chiangmaiHistoryOrder).length && <p className="muted">ออเดอร์เก่ายังไม่มี Timeline ที่ระบบบันทึกไว้</p>}</div>
             </section>
           </div>
         )}

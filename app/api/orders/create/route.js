@@ -95,6 +95,7 @@ export async function POST(request) {
     };
 
     await db.collection("orders").doc(String(order.id)).set(next, { merge: true });
+    await db.collection("orders").doc(String(order.id)).collection("activity").doc().set(next.workflowHistory[0]);
     await db.collection("customer_search").doc(String(next.customerId || `legacy-${order.id}`)).set(customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
     await syncDeliveryOrderToSheet(db, order.id, next);
 
