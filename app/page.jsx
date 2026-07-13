@@ -353,6 +353,19 @@ function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
   );
 }
 
+function PackSalesOrderDetails({ order }) {
+  const fields = [
+    ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
+    ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} กล่อง` : ""], ["ชำระเงิน", order.paymentType],
+    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["หมายเหตุฝ่ายขาย", order.salesNote]
+  ].filter(([, value]) => String(value || "").trim());
+  return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
+    <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
+    {fields.map(([label, value]) => <div key={label}><b>{label}:</b> {value}</div>)}
+    {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>เปิดแผนที่ลูกค้า</a>}
+  </div>;
+}
+
 export default function App() {
   const [tab, setTab] = useState("sales");
   const [appClock, setAppClock] = useState(() => new Date());
@@ -4444,6 +4457,7 @@ export default function App() {
               {packWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
+                <PackSalesOrderDetails order={order} />
                 <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
               </article>)}
               {!packWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
@@ -4513,6 +4527,7 @@ export default function App() {
               <div className="panel-head"><h2>{workModal.role === "store" ? "รับงานสโตร์" : "รับงานห้องแพ็ค"}</h2><span>{workModal.order.id}</span></div>
               <div style={{ display: "grid", gap: "10px" }}>
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
+                {workModal.role === "pack" && <PackSalesOrderDetails order={workModal.order} />}
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><input value={workForm.bookingNumber} onChange={e => setWorkForm(p => ({ ...p, bookingNumber: e.target.value }))} placeholder="กรอกเลขที่ใบสั่งจอง" /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
