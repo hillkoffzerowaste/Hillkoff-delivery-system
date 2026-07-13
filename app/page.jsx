@@ -471,7 +471,7 @@ export default function App() {
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
-  const [workPhotoPreview, setWorkPhotoPreview] = useState("");
+  const [workPhotoPreviews, setWorkPhotoPreviews] = useState([]);
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
@@ -2319,17 +2319,27 @@ export default function App() {
       note: details?.note || "",
       missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : ""
     });
-    setWorkPhotoPreview("");
+    setWorkPhotoPreviews([]);
     setWorkSharedToLine(Boolean(details?.sharedToLine));
   };
 
   const captureWorkPhoto = (event) => {
-    const file = event.target.files?.[0];
-    if (!file || !workModal) return;
+    const selectedFiles = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
+    if (!selectedFiles.length || !workModal) return;
     const key = `${workModal.role}:${workModal.order.id}`;
-    workPhotoFilesRef.current[key] = file;
-    setWorkPhotoPreview(URL.createObjectURL(file));
+    const existing = workPhotoFilesRef.current[key] || [];
+    const files = [...existing, ...selectedFiles].slice(0, 5);
+    workPhotoFilesRef.current[key] = files;
+    setWorkPhotoPreviews(files.map((file) => URL.createObjectURL(file)));
     event.target.value = "";
+  };
+
+  const removeWorkPhoto = (index) => {
+    if (!workModal) return;
+    const key = `${workModal.role}:${workModal.order.id}`;
+    const files = (workPhotoFilesRef.current[key] || []).filter((_, i) => i !== index);
+    workPhotoFilesRef.current[key] = files;
+    setWorkPhotoPreviews(files.map((file) => URL.createObjectURL(file)));
   };
 
   const shareWorkToLine = async () => {
@@ -2347,9 +2357,9 @@ export default function App() {
     try {
       let copied = false;
       try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
-      const file = workPhotoFilesRef.current[`${role}:${order.id}`];
+      const files = workPhotoFilesRef.current[`${role}:${order.id}`] || [];
       if (!navigator?.share) throw new Error("อุปกรณ์นี้ไม่รองรับการแชร์");
-      if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+      if (files.length && navigator.canShare?.({ files })) await navigator.share({ files, text });
       else await navigator.share({ text });
       setWorkSharedToLine(true);
       setSyncStatus(copied ? "✅ เปิดแชร์ LINE แล้ว" : "✅ เปิดหน้าต่างแชร์แล้ว");
@@ -2366,7 +2376,8 @@ export default function App() {
       return;
     }
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
-    const details = { detail: workForm.detail, note: workForm.note, photoLocal: Boolean(workPhotoPreview), sharedToLine: workSharedToLine };
+    const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
+    const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine: workSharedToLine };
     const updated = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
       ? { storeStatus: "checked", storePackerName: auth.name, storeCheckerName: auth.name, bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
       : { packStatus: "checked", packPackerName: auth.name, packCheckerName: auth.name, missingItems, packWorkDetails: details });
@@ -4429,6 +4440,7 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
+                {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button>
               </article>)}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
@@ -4459,6 +4471,7 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
+                {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <PackSalesOrderDetails order={order} />
                 <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
               </article>)}
@@ -4536,12 +4549,12 @@ export default function App() {
                 <label className="field-label">หมายเหตุ</label><textarea value={workForm.note} onChange={e => setWorkForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุเพิ่มเติม" rows={2} />
                 <label className="field-label">ของไม่ครบ / รอของ</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder="ระบุรายการและเหตุผล (ถ้ามี)" rows={2} />
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                  <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
+                  <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
                   <button className={workSharedToLine ? "secondary" : "primary"} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่งรูป + สถานะ LINE"}</button>
-                  {workPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}
+                  {workPhotoPreviews.length > 0 && <span className="muted">มีรูปในเครื่อง {workPhotoPreviews.length} รูป</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
-                {workPhotoPreview && <img src={workPhotoPreview} alt="รูปที่ถ่าย" style={{ maxWidth: "100%", maxHeight: "260px", objectFit: "contain", borderRadius: "8px" }} />}
+                {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setWorkModal(null)}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>ยืนยันออเดอร์</button></div>
               </div>
             </section>

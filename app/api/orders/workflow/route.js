@@ -32,6 +32,7 @@ export async function PATCH(request) {
         detail: String(body.storeWorkDetails.detail || "").trim().slice(0, 2000),
         note: String(body.storeWorkDetails.note || "").trim().slice(0, 2000),
         photoLocal: Boolean(body.storeWorkDetails.photoLocal),
+        localPhotoCount: Math.max(0, Math.min(5, Number(body.storeWorkDetails.localPhotoCount) || 0)),
         sharedToLine: Boolean(body.storeWorkDetails.sharedToLine),
         updatedAt: now
       };
@@ -48,6 +49,7 @@ export async function PATCH(request) {
         detail: String(body.packWorkDetails.detail || "").trim().slice(0, 2000),
         note: String(body.packWorkDetails.note || "").trim().slice(0, 2000),
         photoLocal: Boolean(body.packWorkDetails.photoLocal),
+        localPhotoCount: Math.max(0, Math.min(5, Number(body.packWorkDetails.localPhotoCount) || 0)),
         sharedToLine: Boolean(body.packWorkDetails.sharedToLine),
         updatedAt: now
       };
