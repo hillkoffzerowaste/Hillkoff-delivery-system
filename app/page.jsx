@@ -2356,7 +2356,7 @@ export default function App() {
       missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : "",
       checkerName: role === "store" ? (order.storeCheckerName || auth.name || "") : (order.packCheckerName || auth.name || ""),
       checkResult: "complete",
-      checklist: { booking: false, customer: false, items: false, quantity: false, condition: false, notes: false }
+      checklist: { verified: false }
     });
     setWorkPhotoPreviews([]);
     setWorkSharedToLine(Boolean(details?.sharedToLine));
@@ -2425,6 +2425,7 @@ export default function App() {
       setSyncStatus(`❌ กรุณากรอกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
       return;
     }
+    if (!workForm.checklist.verified) { setSyncStatus("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว"); return; }
     if (workForm.checkResult === "partial" && !workForm.missingNote.trim()) { setSyncStatus("❌ กรุณาระบุรายการที่ไม่ครบ/รอสินค้า"); return; }
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
     const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
@@ -4624,7 +4625,7 @@ export default function App() {
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><input value={workForm.bookingNumber} onChange={e => setWorkForm(p => ({ ...p, bookingNumber: e.target.value }))} placeholder="กรอกเลขที่ใบสั่งจอง" /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><input value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))} placeholder={workModal.role === "store" ? "ชื่อผู้ตรวจสโตร์" : "ชื่อผู้ตรวจห้องแพ็ค"} />
-                <div style={{ background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "10px", display: "grid", gap: "7px" }}><b>ตรวจสอบก่อนยืนยัน</b>{[["booking","เลขที่ใบสั่งจอง"],["customer","ชื่อลูกค้า/โซน/ที่อยู่"],["items","รายการสินค้าตามฝ่ายขาย"],["quantity","จำนวนสินค้า/กล่อง"],["condition","สภาพและการจัดเตรียม"],["notes","หมายเหตุพิเศษ/ของแถม"]].map(([key,label]) => <label key={key} style={{ display: "flex", gap: "7px" }}><input type="checkbox" checked={workForm.checklist[key]} onChange={e => setWorkForm(p => ({ ...p, checklist: { ...p.checklist, [key]: e.target.checked } }))} />{label}</label>)}</div>
+                <label style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "10px", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
                 <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option></select>
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
                 <label className="field-label">หมายเหตุ</label><textarea value={workForm.note} onChange={e => setWorkForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุเพิ่มเติม" rows={2} />
