@@ -375,6 +375,7 @@ export default function App() {
   const historicalCustomerSearchSeqRef = useRef(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
+  const [driverNoteDrafts, setDriverNoteDrafts] = useState({});
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "", username: "", password: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
   const [loginStage, setLoginStage] = useState("login"); // login | set_pin
@@ -3002,50 +3003,42 @@ export default function App() {
     })();
   };
 
-	  const shareOrderToLine = (order) => {
-	    if (!navigator?.share) {
-	      alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
-	      return;
-	    }
+	  const shareOrderToLine = (order, noteDraft) => {
+	        if (!navigator?.share) {
+	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
+	          return;
+	        }
 
 	    (async () => {
 	      let completedOrder = null;
-	      try {
-          const note = prompt("หมายเหตุจากคนขับ (ถ้ามี):", order.driverNote || "");
-          if (note === null) return;
+	      let text = "";
+      try {
           const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
           completedOrder = {
             ...order,
             status: "ส่งสำเร็จ",
             deliveredAt,
-            driverNote: String(note || "").trim(),
+	            driverNote: String(noteDraft ?? order.driverNote ?? "").trim(),
             driverName: order.driverName || state.auth?.name || "",
             driverId: order.driverId || state.auth?.driverId || driverId || "",
             sharedToLine: false
           };
-	        const text = buildLineMessageForOrder(completedOrder);
+	        text = buildLineMessageForOrder(completedOrder);
 	        const file = podFilesRef.current?.[order.id];
 
-	        // Copy summary text, then immediately open share sheet (single flow)
-	        let copied = false;
-	        try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
-	        if (!copied) {
-	          const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
-	          if (!ok) return;
-	        }
-
 	        if (file && navigator.canShare?.({ files: [file] })) {
-	          // LINE may ignore text when a file is attached, so the text is copied above.
 	          await navigator.share({ files: [file], text });
 	        } else {
 	          await navigator.share({ text });
 	        }
 	        updateOrder(order.id, { ...completedOrder, sharedToLine: true });
-	        if (copied) {
-	          setSyncStatus(`✅ ส่งสำเร็จและคัดลอกสรุปสั้นสำหรับ LINE แล้ว (${order.id})`);
-	        }
+	        try { await navigator.clipboard?.writeText?.(text); } catch {}
+	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
+	        setSyncStatus(`✅ ส่งสำเร็จและเปิดแชร์ LINE แล้ว (${order.id})`);
 	      } catch (error) {
 	        if (completedOrder) updateOrder(order.id, completedOrder);
+	        try { await navigator.clipboard?.writeText?.(text); } catch {}
+	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
 	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${order.id})`);
 	      }
 	    })();
@@ -5075,11 +5068,12 @@ export default function App() {
 	                              }}>❌ ยกเลิก</button>
                           </>
                         )}
+	                        {order.status === "กำลังจัดส่ง" && order.photo && !order.sharedToLine && <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={e => setDriverNoteDrafts((drafts) => ({ ...drafts, [order.id]: e.target.value }))} placeholder="หมายเหตุจากคนขับ (ถ้ามี)" rows={2} style={{ gridColumn: "1 / -1", width: "100%", boxSizing: "border-box", padding: "8px", borderRadius: "8px", border: "1px solid #bfdbfe" }} />}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && !order.sharedToLine && (
 	                          <button
 	                            className="primary"
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
-	                            onClick={() => shareOrderToLine(order)}
+	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
 	                          >✅ ส่งสำเร็จ + แชร์สรุป (LINE)</button>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
