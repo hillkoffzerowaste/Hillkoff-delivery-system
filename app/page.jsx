@@ -371,6 +371,8 @@ export default function App() {
   const [appClock, setAppClock] = useState(() => new Date());
   const [state, setState] = useState(defaultState);
   const [customerQuery, setCustomerQuery] = useState("");
+  const [historicalCustomers, setHistoricalCustomers] = useState([]);
+  const historicalCustomerSearchSeqRef = useRef(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "", username: "", password: "" });
@@ -1474,7 +1476,11 @@ export default function App() {
 	    if (state.auth?.driverId) setDriverId(state.auth.driverId);
 	  }, [state.auth?.driverId]);
 
-  const customers = state.customers;
+  const customers = useMemo(() => {
+    const byId = new Map((state.customers || []).map((customer) => [customer.id, customer]));
+    historicalCustomers.forEach((customer) => { if (!byId.has(customer.id)) byId.set(customer.id, customer); });
+    return Array.from(byId.values());
+  }, [state.customers, historicalCustomers]);
   const orders = state.orders;
   const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
   const storeWorkOrders = preparationOrders.filter(order => order.workflowType === "store_route" && ["pending", "working", "waiting", "returned"].includes(order.storeStatus));
@@ -1518,6 +1524,32 @@ export default function App() {
     if (auth.role === "store") fetchStoreReports(["store-outstation", "store-online"].includes(displayTab) ? storeReportDate : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate]);
+
+  useEffect(() => {
+    if (auth.role !== "sales" && auth.role !== "admin") return;
+    const sequence = ++historicalCustomerSearchSeqRef.current;
+    const query = (customerQuery.trim().length >= 2 ? customerQuery : orderCustomerSearch).trim();
+    if (query.length < 2) return;
+    const timer = setTimeout(async () => {
+      try {
+        const idToken = await refreshAuthToken(true);
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        if (sequence !== historicalCustomerSearchSeqRef.current) return;
+        setHistoricalCustomers((prev) => {
+          const byId = new Map(prev.map((customer) => [customer.id, customer]));
+          (json.data || []).forEach((customer) => {
+            if (!byId.has(customer.id)) byId.set(customer.id, customer);
+          });
+          return Array.from(byId.values());
+        });
+      } catch (error) {
+        if (sequence === historicalCustomerSearchSeqRef.current) setSyncStatus(`⚠️ ค้นหาข้อมูลเก่าไม่สำเร็จ: ${error?.message || error}`);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [auth.role, customerQuery, orderCustomerSearch]);
   const selectedDriverProfile = useMemo(() => {
     return (drivers || []).find(d => d.id === (auth.driverId || driverId)) || {
       id: auth.driverId || driverId || "",
