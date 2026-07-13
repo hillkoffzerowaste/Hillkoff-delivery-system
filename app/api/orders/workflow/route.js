@@ -34,6 +34,7 @@ export async function PATCH(request) {
         photoLocal: Boolean(body.storeWorkDetails.photoLocal),
         localPhotoCount: Math.max(0, Math.min(5, Number(body.storeWorkDetails.localPhotoCount) || 0)),
         sharedToLine: Boolean(body.storeWorkDetails.sharedToLine),
+        checklist: body.storeWorkDetails.checklist && typeof body.storeWorkDetails.checklist === "object" ? body.storeWorkDetails.checklist : {}, checkResult: String(body.storeWorkDetails.checkResult || "complete"),
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.storeStatus)) patch.packStatus = "pending";
@@ -52,6 +53,7 @@ export async function PATCH(request) {
         photoLocal: Boolean(body.packWorkDetails.photoLocal),
         localPhotoCount: Math.max(0, Math.min(5, Number(body.packWorkDetails.localPhotoCount) || 0)),
         sharedToLine: Boolean(body.packWorkDetails.sharedToLine),
+        checklist: body.packWorkDetails.checklist && typeof body.packWorkDetails.checklist === "object" ? body.packWorkDetails.checklist : {}, checkResult: String(body.packWorkDetails.checkResult || "complete"),
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = "ready";
