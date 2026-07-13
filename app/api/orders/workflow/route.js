@@ -57,6 +57,11 @@ export async function PATCH(request) {
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_ready" : "ready";
+    } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
+      if (order.deliveryMethod !== "grab_pickup" || order.queueStatus !== "grab_ready") {
+        throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
+      }
+      patch.queueStatus = "grab_picked_up"; patch.status = "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
     } else if (["sales", "admin"].includes(profile.role) && action === "queue") {
       const storeOk = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       const packOk = ["checked", "partial"].includes(order.packStatus);

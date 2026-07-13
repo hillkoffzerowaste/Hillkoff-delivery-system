@@ -89,3 +89,36 @@ export async function PATCH(request) {
     return errorResponse(error);
   }
 }
+
+export async function PUT(request) {
+  try {
+    const { profile, db } = await requireProfile(request, ["store"]);
+    const body = await request.json();
+    const id = clean(body?.id, 200);
+    const ref = db.collection("store_reports").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
+    const item = snap.data();
+    if (!REPORT_TYPES.includes(item.type) || item.confirmedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be edited" }, { status: 403 });
+    const status = REPORT_STATUSES.includes(body?.status) ? body.status : item.status;
+    const updatedAt = new Date().toISOString();
+    const patch = { bookingNumber: clean(body?.bookingNumber, 100), detail: clean(body?.detail, 1000), note: clean(body?.note, 1000), status, updatedAt, updatedBy: profile.name || profile.email };
+    await ref.set(patch, { merge: true });
+    return Response.json({ ok: true, data: { id, ...item, ...patch } });
+  } catch (error) { return errorResponse(error); }
+}
+
+export async function DELETE(request) {
+  try {
+    const { profile, db } = await requireProfile(request, ["store"]);
+    const body = await request.json();
+    const id = clean(body?.id, 200);
+    const ref = db.collection("store_reports").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
+    const item = snap.data();
+    if (!REPORT_TYPES.includes(item.type) || item.confirmedAt || (item.createdByUid && item.createdByUid !== profile.uid)) return Response.json({ ok: false, error: "This report cannot be deleted" }, { status: 403 });
+    await ref.delete();
+    return Response.json({ ok: true, data: { id } });
+  } catch (error) { return errorResponse(error); }
+}
