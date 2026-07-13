@@ -3288,12 +3288,19 @@ export default function App() {
     active: todayOrdersOnly.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
     done: todayOrdersOnly.filter(order => order.status === "ส่งสำเร็จ").length
   };
-  const roleScopedTodayOrders = ["store", "pack"].includes(auth.role) ? todayOrdersOnly.filter(order => order.workflowType) : todayOrdersOnly;
-  const visibleTotals = {
-    jobs: roleScopedTodayOrders.length,
-    waiting: roleScopedTodayOrders.filter(order => order.status === "รอคนขับรับ").length,
-    active: roleScopedTodayOrders.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
-    done: roleScopedTodayOrders.filter(order => order.status === "ส่งสำเร็จ").length
+  const storeRoleTotals = {
+    total: storeTodayOrders.length,
+    pending: storeTodayOrders.filter(order => ["pending", "returned"].includes(order.storeStatus)).length,
+    working: storeTodayOrders.filter(order => order.storeStatus === "working").length,
+    done: storeTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length,
+    issues: storeTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus)).length
+  };
+  const packRoleTotals = {
+    total: packTodayOrders.length,
+    pending: packTodayOrders.filter(order => ["pending", "returned"].includes(order.packStatus)).length,
+    working: packTodayOrders.filter(order => order.packStatus === "working").length,
+    done: packTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length,
+    issues: packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length
   };
 
   const summarizeOrders = (list = []) => {
@@ -3821,11 +3828,25 @@ export default function App() {
         )}
 
         <div className="stats">
-          <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${visibleTotals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
-          <Stat icon={UserCheck} label="รอคนขับรับ" value={`${visibleTotals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
-          <Stat icon={Navigation} label="กำลังส่ง" value={`${visibleTotals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
-          <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${visibleTotals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
-          <Stat icon={MapPinned} label="งานวิ่งวันนี้" value={`${todayRouteTasks.length} งาน`} sub="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
+          {auth.role === "store" ? <>
+            <Stat icon={PackagePlus} label="ออเดอร์สโตร์วันนี้" value={`${storeRoleTotals.total} งาน`} sub="งานที่ฝ่ายขายส่งให้สโตร์" />
+            <Stat icon={UserCheck} label="รอตรวจสโตร์" value={`${storeRoleTotals.pending} งาน`} sub="ยังไม่ได้รับหรือเริ่มตรวจ" tone="#92400e" />
+            <Stat icon={Navigation} label="กำลังตรวจสินค้า" value={`${storeRoleTotals.working} งาน`} sub="สโตร์กำลังดำเนินการ" tone="#1d4ed8" />
+            <Stat icon={CheckCircle2} label="ตรวจสโตร์เสร็จ" value={`${storeRoleTotals.done} งาน`} sub="พร้อมส่งต่อห้องแพ็ค" tone="#166534" />
+            <Stat icon={MapPinned} label="รอของ / ของไม่ครบ" value={`${storeRoleTotals.issues} งาน`} sub="ต้องติดตามสินค้า" tone="#b45309" />
+          </> : auth.role === "pack" ? <>
+            <Stat icon={PackagePlus} label="ออเดอร์ห้องแพ็ควันนี้" value={`${packRoleTotals.total} งาน`} sub="งานที่เข้าสู่ห้องแพ็ค" />
+            <Stat icon={UserCheck} label="รอแพ็ค" value={`${packRoleTotals.pending} งาน`} sub="ยังไม่ได้รับหรือเริ่มแพ็ค" tone="#92400e" />
+            <Stat icon={Navigation} label="กำลังแพ็ค" value={`${packRoleTotals.working} งาน`} sub="ห้องแพ็คกำลังดำเนินการ" tone="#1d4ed8" />
+            <Stat icon={CheckCircle2} label="แพ็คเสร็จ" value={`${packRoleTotals.done} งาน`} sub="พร้อมส่งต่อขั้นตอนจัดส่ง" tone="#166534" />
+            <Stat icon={MapPinned} label="รอของ / ของไม่ครบ" value={`${packRoleTotals.issues} งาน`} sub="ต้องติดตามสินค้า" tone="#b45309" />
+          </> : <>
+            <Stat icon={PackagePlus} label="ออเดอร์วันนี้" value={`${totals.jobs} งาน`} sub="ฝ่ายขายเปิดงานส่ง" />
+            <Stat icon={UserCheck} label="รอคนขับรับ" value={`${totals.waiting} งาน`} sub="เด้งเข้าหน้าคนขับ" tone="#92400e" />
+            <Stat icon={Navigation} label="กำลังส่ง" value={`${totals.active} งาน`} sub="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
+            <Stat icon={CheckCircle2} label="ส่งสำเร็จ" value={`${totals.done} งาน`} sub="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
+            <Stat icon={MapPinned} label="งานวิ่งวันนี้" value={`${todayRouteTasks.length} งาน`} sub="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
+          </>}
           {auth.role === "driver" && (
             <Stat icon={Star} label="ส่งสำเร็จของฉัน" value={`${orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} งาน`} sub="งานของคุณทั้งหมด" tone="#22c55e" />
           )}
