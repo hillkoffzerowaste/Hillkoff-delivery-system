@@ -26,14 +26,31 @@ export async function PATCH(request) {
       if (["checked", "partial", "waiting"].includes(body.storeStatus) && !String(body.storeCheckerName || "").trim()) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบสโตร์"), { status: 400 });
       }
-      patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name); patch.storeCheckerName = String(body.storeCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems : [];
+      patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name); patch.storeCheckerName = String(body.storeCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : [];
+      if (body.bookingNumber !== undefined) patch.bookingNumber = String(body.bookingNumber || "").trim().slice(0, 100);
+      if (body.storeWorkDetails && typeof body.storeWorkDetails === "object") patch.storeWorkDetails = {
+        detail: String(body.storeWorkDetails.detail || "").trim().slice(0, 2000),
+        note: String(body.storeWorkDetails.note || "").trim().slice(0, 2000),
+        photoLocal: Boolean(body.storeWorkDetails.photoLocal),
+        sharedToLine: Boolean(body.storeWorkDetails.sharedToLine),
+        updatedAt: now
+      };
       if (["checked", "partial", "waiting"].includes(body.storeStatus)) patch.packStatus = "pending";
     } else if (profile.role === "pack" && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
+      const storeReady = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
+      if (!storeReady) throw Object.assign(new Error("ออเดอร์ยังไม่ได้รับการยืนยันจากสโตร์"), { status: 409 });
       if (["checked", "partial", "waiting"].includes(body.packStatus) && !String(body.packCheckerName || "").trim()) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบห้องแพ็ค"), { status: 400 });
       }
-      patch.packStatus = body.packStatus; patch.packPackerName = String(body.packPackerName || profile.name); patch.packCheckerName = String(body.packCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems : order.missingItems || []; patch.packPhotos = Array.isArray(body.packPhotos) ? body.packPhotos.slice(0, 20) : order.packPhotos || [];
+      patch.packStatus = body.packStatus; patch.packPackerName = String(body.packPackerName || profile.name); patch.packCheckerName = String(body.packCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : order.missingItems || []; patch.packPhotos = Array.isArray(body.packPhotos) ? body.packPhotos.slice(0, 20) : order.packPhotos || [];
+      if (body.packWorkDetails && typeof body.packWorkDetails === "object") patch.packWorkDetails = {
+        detail: String(body.packWorkDetails.detail || "").trim().slice(0, 2000),
+        note: String(body.packWorkDetails.note || "").trim().slice(0, 2000),
+        photoLocal: Boolean(body.packWorkDetails.photoLocal),
+        sharedToLine: Boolean(body.packWorkDetails.sharedToLine),
+        updatedAt: now
+      };
       if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = "ready";
     } else if (["sales", "admin"].includes(profile.role) && action === "queue") {
       const storeOk = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);

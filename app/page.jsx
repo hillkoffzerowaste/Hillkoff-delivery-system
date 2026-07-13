@@ -456,6 +456,16 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
+  const [storeSubTab, setStoreSubTab] = useState("chiangmai");
+  const [workModal, setWorkModal] = useState(null);
+  const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
+  const [workPhotoPreview, setWorkPhotoPreview] = useState("");
+  const [workSharedToLine, setWorkSharedToLine] = useState(false);
+  const [storeReports, setStoreReports] = useState([]);
+  const [storeReportsLoading, setStoreReportsLoading] = useState(false);
+  const [reportModal, setReportModal] = useState(null);
+  const [reportRows, setReportRows] = useState([{ bookingNumber: "", detail: "", note: "", status: "saved" }]);
+  const [reportPhotoPreview, setReportPhotoPreview] = useState("");
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [openReportDate, setOpenReportDate] = useState("");
   const [reportExportMode, setReportExportMode] = useState("single");
@@ -537,6 +547,8 @@ export default function App() {
   const [showDriverDailyReport, setShowDriverDailyReport] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
+  const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
+  const reportPhotoFileRef = useRef(null);
   const routeTaskFilesRef = useRef({}); // { [taskId_stopId]: File } kept on-device only (not synced)
   const lastOrdersPullRef = useRef(null);
   const lastCustomersPullRef = useRef(null);
@@ -1471,6 +1483,25 @@ export default function App() {
   const backlogUndelivered = (orders || []).filter(isBacklogOrder);
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
+  const fetchStoreReports = async () => {
+    if (auth.role !== "store") return;
+    setStoreReportsLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/store/reports", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStoreReports(Array.isArray(json.data) ? json.data : []);
+    } catch (error) {
+      setSyncStatus(`❌ โหลดรายงานสโตร์ไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setStoreReportsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (auth.role === "store") fetchStoreReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.role]);
   const selectedDriverProfile = useMemo(() => {
     return (drivers || []).find(d => d.id === (auth.driverId || driverId)) || {
       id: auth.driverId || driverId || "",
@@ -2260,7 +2291,106 @@ export default function App() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...json.data } : item) }));
       setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
-    } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+      return true;
+    } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); return false; }
+  };
+
+  const openWorkModal = (order, role) => {
+    const details = role === "store" ? order.storeWorkDetails : order.packWorkDetails;
+    setWorkModal({ order, role });
+    setWorkForm({
+      bookingNumber: role === "store" ? (order.bookingNumber || "") : "",
+      detail: details?.detail || "",
+      note: details?.note || "",
+      missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : ""
+    });
+    setWorkPhotoPreview("");
+    setWorkSharedToLine(false);
+  };
+
+  const captureWorkPhoto = (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !workModal) return;
+    const key = `${workModal.role}:${workModal.order.id}`;
+    workPhotoFilesRef.current[key] = file;
+    setWorkPhotoPreview(URL.createObjectURL(file));
+    event.target.value = "";
+  };
+
+  const shareWorkToLine = async () => {
+    if (!workModal) return;
+    const { order, role } = workModal;
+    const text = [
+      role === "store" ? "📦 สโตร์ยืนยันออเดอร์" : "📦 ห้องแพ็คยืนยันออเดอร์",
+      `งาน: ${order.id}`,
+      `เลขที่ใบสั่งจอง: ${role === "store" ? workForm.bookingNumber : (order.bookingNumber || "-")}`,
+      order.customerName ? `ลูกค้า: ${order.customerName}` : "",
+      workForm.detail ? `รายละเอียด: ${workForm.detail}` : "",
+      workForm.note ? `หมายเหตุ: ${workForm.note}` : "",
+      workForm.missingNote ? `ของไม่ครบ/รอของ: ${workForm.missingNote}` : ""
+    ].filter(Boolean).join("\n");
+    try {
+      let copied = false;
+      try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+      const file = workPhotoFilesRef.current[`${role}:${order.id}`];
+      if (!navigator?.share) throw new Error("อุปกรณ์นี้ไม่รองรับการแชร์");
+      if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+      else await navigator.share({ text });
+      setWorkSharedToLine(true);
+      setSyncStatus(copied ? "✅ เปิดแชร์ LINE แล้ว" : "✅ เปิดหน้าต่างแชร์แล้ว");
+    } catch (error) {
+      setSyncStatus(`⚠️ ส่ง LINE ไม่สำเร็จ: ${error?.message || error}`);
+    }
+  };
+
+  const confirmWorkModal = async () => {
+    if (!workModal) return;
+    const { order, role } = workModal;
+    if (role === "store" && !workForm.bookingNumber.trim()) {
+      setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจอง");
+      return;
+    }
+    const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
+    const details = { detail: workForm.detail, note: workForm.note, photoLocal: Boolean(workPhotoPreview), sharedToLine: workSharedToLine };
+    const updated = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
+      ? { storeStatus: "checked", storePackerName: auth.name, storeCheckerName: auth.name, bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
+      : { packStatus: "checked", packPackerName: auth.name, packCheckerName: auth.name, missingItems, packWorkDetails: details });
+    if (updated) setWorkModal(null);
+  };
+
+  const captureReportPhoto = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    reportPhotoFileRef.current = file;
+    setReportPhotoPreview(URL.createObjectURL(file));
+    event.target.value = "";
+  };
+
+  const shareReportToLine = async () => {
+    const text = [`📋 รายงานสโตร์${reportModal === "outstation" ? "ต่างจังหวัด" : "ออนไลน์"}`, ...reportRows.map((row, index) => `${index + 1}. ${row.bookingNumber || "ไม่มีเลขใบสั่งจอง"}${row.detail ? ` · ${row.detail}` : ""}${row.note ? ` · ${row.note}` : ""}`)].join("\n");
+    try {
+      try { await navigator.clipboard?.writeText?.(text); } catch {}
+      if (!navigator?.share) throw new Error("อุปกรณ์นี้ไม่รองรับการแชร์");
+      const file = reportPhotoFileRef.current;
+      if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+      else await navigator.share({ text });
+      setSyncStatus("✅ เปิดแชร์ LINE สำหรับรายงานแล้ว");
+    } catch (error) { setSyncStatus(`⚠️ ส่ง LINE ไม่สำเร็จ: ${error?.message || error}`); }
+  };
+
+  const saveStoreReports = async () => {
+    if (!reportModal) return;
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ type: reportModal, rows: reportRows }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStoreReports((prev) => [...json.data, ...prev]);
+      setReportModal(null);
+      setSyncStatus(`✅ บันทึกรายงาน ${json.data.length} รายการแล้ว`);
+    } catch (error) {
+      setSyncStatus(`❌ บันทึกรายงานไม่สำเร็จ: ${error?.message || error}`);
+    }
   };
 
   const createStaffAccount = async () => {
@@ -4205,7 +4335,49 @@ export default function App() {
           </section>
         )}
 
-        {["store-work", "pack-work", "chiangmai", "driver-prep"].includes(displayTab) && (
+        {displayTab === "store-work" && (
+          <section className="panel">
+            <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
+              {[ ["chiangmai", "เชียงใหม่/ใกล้เคียง"], ["outstation", "ต่างจังหวัด"], ["online", "ออนไลน์"], ["dashboard", "แดชบอร์ด"] ].map(([id, label]) => (
+                <button key={id} className={storeSubTab === id ? "primary" : "secondary"} onClick={() => setStoreSubTab(id)}>{label}</button>
+              ))}
+            </div>
+            {storeSubTab === "chiangmai" && <div style={{ display: "grid", gap: "10px" }}>
+              {storeWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
+                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
+                <button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button>
+              </article>)}
+              {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
+            </div>}
+            {["outstation", "online"].includes(storeSubTab) && <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{storeSubTab === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><button className="primary" onClick={() => { setReportRows([{ bookingNumber: "", detail: "", note: "", status: "saved" }]); setReportPhotoPreview(""); reportPhotoFileRef.current = null; setReportModal(storeSubTab); }}>เพิ่มรายการ</button></div>
+              {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : storeReports.filter(item => item.type === storeSubTab).map(item => <article key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div><span className="status-chip">{item.status}</span></div></article>)}
+              {!storeReportsLoading && !storeReports.some(item => item.type === storeSubTab) && <p className="muted">ยังไม่มีรายงาน</p>}
+            </div>}
+            {storeSubTab === "dashboard" && <div style={{ display: "grid", gap: "12px" }}>
+              <div className="metrics-grid"><article className="metric"><span>เชียงใหม่/ใกล้เคียง</span><strong>{storeWorkOrders.length}</strong></article><article className="metric"><span>ต่างจังหวัด</span><strong>{storeReports.filter(item => item.type === "outstation").length}</strong></article><article className="metric"><span>ออนไลน์</span><strong>{storeReports.filter(item => item.type === "online").length}</strong></article><article className="metric"><span>ของไม่ครบ/รอของ</span><strong>{[...storeWorkOrders, ...storeReports].filter(item => item.status === "waiting" || item.status === "partial" || (item.missingItems || []).length).length}</strong></article></div>
+              <p className="muted">รายงานต่างจังหวัดและออนไลน์บันทึกใน Dashboard นี้เท่านั้น ไม่ส่งต่อห้องแพ็คและไม่ขึ้น Google Sheets</p>
+            </div>}
+          </section>
+        )}
+
+        {displayTab === "pack-work" && (
+          <section className="panel">
+            <div className="panel-head"><h2>งานห้องแพ็ค</h2><span>{packWorkOrders.length} งาน</span></div>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {packWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
+                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
+                <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
+              </article>)}
+              {!packWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
+            </div>
+          </section>
+        )}
+
+        {["chiangmai", "driver-prep"].includes(displayTab) && (
           <section className="panel">
             <div className="panel-head">
               <h2>{displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
@@ -4248,6 +4420,42 @@ export default function App() {
               {(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).length === 0 && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
           </section>
+        )}
+
+        {workModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+            <section className="panel" style={{ width: "min(620px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
+              <div className="panel-head"><h2>{workModal.role === "store" ? "รับงานสโตร์" : "รับงานห้องแพ็ค"}</h2><span>{workModal.order.id}</span></div>
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
+                {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><input value={workForm.bookingNumber} onChange={e => setWorkForm(p => ({ ...p, bookingNumber: e.target.value }))} placeholder="กรอกเลขที่ใบสั่งจอง" /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
+                {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
+                <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
+                <label className="field-label">หมายเหตุ</label><textarea value={workForm.note} onChange={e => setWorkForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุเพิ่มเติม" rows={2} />
+                <label className="field-label">ของไม่ครบ / รอของ</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder="ระบุรายการและเหตุผล (ถ้ามี)" rows={2} />
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                  <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
+                  <button className="secondary" onClick={shareWorkToLine}>💬 ส่ง LINE</button>
+                  {workPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}
+                  {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
+                </div>
+                {workPhotoPreview && <img src={workPhotoPreview} alt="รูปที่ถ่าย" style={{ maxWidth: "100%", maxHeight: "260px", objectFit: "contain", borderRadius: "8px" }} />}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setWorkModal(null)}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>ยืนยันออเดอร์</button></div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {reportModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+            <section className="panel" style={{ width: "min(850px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
+              <div className="panel-head"><h2>บันทึกรายงาน{reportModal === "outstation" ? "ต่างจังหวัด" : "ออนไลน์"}</h2><span>ไม่ส่ง Sheet / ไม่ส่งห้องแพ็ค</span></div>
+              <div style={{ display: "grid", gap: "10px" }}>{reportRows.map((row, index) => <div key={index} style={{ border: "1px solid #e5e7eb", padding: "10px", borderRadius: "8px", display: "grid", gap: "8px" }}><b>รายการ {index + 1}</b><input value={row.bookingNumber} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, bookingNumber: e.target.value } : item))} placeholder="เลขที่ใบสั่งจอง" /><textarea value={row.detail} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, detail: e.target.value } : item))} placeholder="รายละเอียด" rows={2} /><textarea value={row.note} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, note: e.target.value } : item))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" rows={2} /><select value={row.status} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}><option value="saved">บันทึกแล้ว</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{reportRows.length > 1 && <button className="secondary" onClick={() => setReportRows(rows => rows.filter((_, i) => i !== index))}>ลบรายการนี้</button>}</div>)}</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "12px" }}><label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป (ไม่บังคับ)<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureReportPhoto} /></label><button className="secondary" onClick={shareReportToLine}>💬 ส่ง LINE (ไม่บังคับ)</button>{reportPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}</div>
+              {reportPhotoPreview && <img src={reportPhotoPreview} alt="รูปประกอบรายงาน" style={{ maxWidth: "100%", maxHeight: "220px", objectFit: "contain", borderRadius: "8px", marginTop: "8px" }} />}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}><button className="secondary" onClick={() => setReportRows(rows => [...rows, { bookingNumber: "", detail: "", note: "", status: "saved" }])}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" onClick={() => setReportModal(null)}>ยกเลิก</button><button className="primary" onClick={saveStoreReports}>บันทึกทั้งหมด</button></div></div>
+            </section>
+          </div>
         )}
 
         {displayTab === "dispatch" && (
