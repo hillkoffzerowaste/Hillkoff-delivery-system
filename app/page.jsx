@@ -3868,7 +3868,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="stats">
+        <div className={`stats ${["store", "pack"].includes(auth.role) ? "role-stats" : ""}`}>
           {auth.role === "store" ? <>
             <Stat icon={PackagePlus} label="ออเดอร์สโตร์วันนี้" value={`${storeRoleTotals.total} งาน`} sub="งานที่ฝ่ายขายส่งให้สโตร์" />
             <Stat icon={UserCheck} label="รอตรวจสโตร์" value={`${storeRoleTotals.pending} งาน`} sub="ยังไม่ได้รับหรือเริ่มตรวจ" tone="#92400e" />
@@ -4622,12 +4622,12 @@ export default function App() {
         )}
 
         {["store-work", "store-outstation", "store-online", "store-dashboard"].includes(displayTab) && (
-          <section className="panel">
+          <section className="panel role-workspace">
             <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>
             {displayTab === "store-work" && <div style={{ display: "grid", gap: "10px" }}>
-              <div style={{ border: "1px solid #bfdbfe", background: "#eff6ff", padding: "10px", borderRadius: "9px", display: "grid", gap: "8px" }}><b>ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง</b><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><input value={chiangmaiHistoryQuery} onChange={e => setChiangmaiHistoryQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") searchChiangmaiHistory(); }} placeholder="เลขออเดอร์ / ใบสั่งจอง / ลูกค้า / เบอร์ / พื้นที่" style={{ flex: "1 1 300px" }} /><button className="secondary" onClick={searchChiangmaiHistory} disabled={chiangmaiHistoryLoading}>{chiangmaiHistoryLoading ? "กำลังค้นหา…" : "ค้นหาย้อนหลัง"}</button><button className="secondary" onClick={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }}>ล้าง</button></div>{chiangmaiHistoryResults.length > 0 && <div style={{ display: "grid", gap: "7px" }}>{chiangmaiHistoryResults.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #dbeafe", borderRadius: "7px", padding: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.bookingNumber || "ไม่มีเลขใบสั่งจอง"} · {order.zone || "-"} · {order.status || "-"}</div><small className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</small></div><button className="secondary" onClick={() => openChiangmaiHistoryOrder(order)}>ดูประวัติ</button></article>)}</div>}{chiangmaiHistorySearched && !chiangmaiHistoryLoading && chiangmaiHistoryResults.length === 0 && <p className="muted">ยังไม่พบออเดอร์ที่ตรงกับคำค้นหา</p>}</div>
+              <div className="history-search"><div className="history-search-title"><b>ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง</b><span>ค้นหาได้ทุกสถานะและทุกวัน</span></div><div className="history-search-controls"><input value={chiangmaiHistoryQuery} onChange={e => setChiangmaiHistoryQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") searchChiangmaiHistory(); }} placeholder="เลขออเดอร์ / ใบสั่งจอง / ลูกค้า / เบอร์ / พื้นที่" /><button className="secondary" onClick={searchChiangmaiHistory} disabled={chiangmaiHistoryLoading}>{chiangmaiHistoryLoading ? "กำลังค้นหา…" : "ค้นหาย้อนหลัง"}</button><button className="secondary" onClick={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }}>ล้าง</button></div>{chiangmaiHistoryResults.length > 0 && <div className="history-search-results">{chiangmaiHistoryResults.map(order => <article key={order.id} className="history-result-card"><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.bookingNumber || "ไม่มีเลขใบสั่งจอง"} · {order.zone || "-"} · {order.status || "-"}</div><small className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</small></div><button className="secondary" onClick={() => openChiangmaiHistoryOrder(order)}>ดูประวัติ</button></article>)}</div>}{chiangmaiHistorySearched && !chiangmaiHistoryLoading && chiangmaiHistoryResults.length === 0 && <p className="muted">ยังไม่พบออเดอร์ที่ตรงกับคำค้นหา</p>}</div>
               <div className="metrics-grid"><article className="metric"><span>งานสโตร์วันนี้</span><strong>{storeTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{storeTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, storeTodayOrders.length - storeTodayCompleted)}</strong></article></div>
-              {storeWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
+              {storeWorkOrders.map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -4673,11 +4673,11 @@ export default function App() {
         )}
 
         {displayTab === "pack-work" && (
-          <section className="panel">
+          <section className="panel role-workspace">
             <div className="panel-head"><h2>งานห้องแพ็ค</h2><span>{packWorkOrders.length} งาน</span></div>
             <div style={{ display: "grid", gap: "10px" }}>
               <div className="metrics-grid"><article className="metric"><span>งานแพ็ควันนี้</span><strong>{packTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{packTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, packTodayOrders.length - packTodayCompleted)}</strong></article></div>
-              {packWorkOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
+              {packWorkOrders.map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
