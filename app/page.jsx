@@ -2539,8 +2539,20 @@ export default function App() {
     setWorkPhotoPreviews(files.map((file) => URL.createObjectURL(file)));
   };
 
+  const validateWorkModal = () => {
+    if (!workModal) return false;
+    const { role } = workModal;
+    if (role === "store" && !workForm.bookingNumber.trim()) { setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจอง"); return false; }
+    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็น CSP/CSR ตามด้วยตัวเลข 4 หลัก"); return false; }
+    if (!workForm.checkerName.trim()) { setSyncStatus(`❌ กรุณากรอกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`); return false; }
+    if (!workForm.checklist.verified) { setSyncStatus("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว"); return false; }
+    if (workForm.checkResult === "partial" && !workForm.missingNote.trim()) { setSyncStatus("❌ กรุณาระบุรายการที่ไม่ครบ/รอสินค้า"); return false; }
+    return true;
+  };
+
   const shareWorkToLine = async () => {
     if (!workModal) return;
+    if (!validateWorkModal()) return;
     const { order, role } = workModal;
     const text = [
       role === "store" ? "📦 สโตร์ยืนยันออเดอร์" : "📦 ห้องแพ็คยืนยันออเดอร์",
@@ -2560,39 +2572,29 @@ export default function App() {
       if (files.length && navigator.canShare?.({ files })) await navigator.share({ files, text });
       else await navigator.share({ text });
       setWorkSharedToLine(true);
-      setSyncStatus(copied ? "✅ เปิดแชร์ LINE แล้ว" : "✅ เปิดหน้าต่างแชร์แล้ว");
+      const confirmed = await confirmWorkModal(true);
+      if (confirmed) setSyncStatus(copied ? "✅ แชร์ LINE และยืนยันออเดอร์แล้ว" : "✅ ยืนยันออเดอร์หลังกลับจาก LINE แล้ว");
     } catch (error) {
       setSyncStatus(`⚠️ ส่ง LINE ไม่สำเร็จ: ${error?.message || error}`);
     }
   };
 
-  const confirmWorkModal = async () => {
+  const confirmWorkModal = async (sharedToLine = workSharedToLine) => {
     if (!workModal) return;
     const { order, role } = workModal;
-    if (role === "store" && !workForm.bookingNumber.trim()) {
-      setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจอง");
-      return;
-    }
-    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) {
-      setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็น CSP/CSR ตามด้วยตัวเลข 4 หลัก");
-      return;
-    }
-    if (!workForm.checkerName.trim()) {
-      setSyncStatus(`❌ กรุณากรอกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
-      return;
-    }
-    if (!workForm.checklist.verified) { setSyncStatus("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว"); return; }
-    if (workForm.checkResult === "partial" && !workForm.missingNote.trim()) { setSyncStatus("❌ กรุณาระบุรายการที่ไม่ครบ/รอสินค้า"); return; }
+    if (!validateWorkModal()) return;
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
     const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
-    const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine: workSharedToLine, checklist: workForm.checklist, checkResult: workForm.checkResult };
+    const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine, checklist: workForm.checklist, checkResult: workForm.checkResult };
     const updated = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
       ? { storeStatus: workForm.checkResult === "partial" ? "partial" : "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
       : { packStatus: workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, packWorkDetails: details });
     if (updated) {
       clearWorkPhotos();
       setWorkModal(null);
+      return true;
     }
+    return false;
   };
 
   const captureReportPhoto = (event) => {
@@ -4851,7 +4853,7 @@ export default function App() {
               <div className="panel-head"><h2>{workModal.role === "store" ? "รับงานสโตร์" : "รับงานห้องแพ็ค"}</h2><span>{workModal.order.id}</span></div>
               <div style={{ display: "grid", gap: "10px" }}>
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
-                <PackSalesOrderDetails order={workModal.order} />
+                <details className="prep-order-details"><summary>ดูรายละเอียดลูกค้าและออเดอร์</summary><PackSalesOrderDetails order={workModal.order} /></details>
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><BookingNumberInput value={workForm.bookingNumber} onChange={bookingNumber => setWorkForm(p => ({ ...p, bookingNumber }))} required /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><input value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))} placeholder={workModal.role === "store" ? "ชื่อผู้ตรวจสโตร์" : "ชื่อผู้ตรวจห้องแพ็ค"} />
@@ -4862,7 +4864,7 @@ export default function App() {
                 <label className="field-label">ของไม่ครบ / รอของ</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder="ระบุรายการและเหตุผล (ถ้ามี)" rows={2} />
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                   <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
-                  <button className={workSharedToLine ? "secondary" : "primary"} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่งรูป + สถานะ LINE"}</button>
+                  <button className={workSharedToLine ? "secondary" : "primary"} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่ง LINE + ยืนยันอัตโนมัติ"}</button>
                   {workPhotoPreviews.length > 0 && <span className="muted">มีรูปในเครื่อง {workPhotoPreviews.length} รูป</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
