@@ -437,6 +437,10 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [historicalCustomers, setHistoricalCustomers] = useState([]);
   const historicalCustomerSearchSeqRef = useRef(0);
+  const customerHistorySearchSeqRef = useRef(0);
+  const [customerHistory, setCustomerHistory] = useState([]);
+  const [customerHistoryCustomerId, setCustomerHistoryCustomerId] = useState("");
+  const [customerHistoryLoading, setCustomerHistoryLoading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
   const [driverSequenceDragId, setDriverSequenceDragId] = useState("");
@@ -1517,10 +1521,12 @@ export default function App() {
 		        body: JSON.stringify({ idToken, customer })
 		      });
 		      const json = await res.json().catch(() => null);
-		      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-		      return { ok: true };
+		      if (!res.ok || !json?.ok) {
+		        return { ok: false, error: json?.error || `HTTP ${res.status}`, status: res.status, data: json?.data || null };
+		      }
+		      return { ok: true, data: json.data || null };
 		    } catch (e) {
-		      return { ok: false, error: e?.message || String(e) };
+		      return { ok: false, error: e?.message || String(e), status: e?.status || 0 };
 		    }
 		  };
 
@@ -1641,6 +1647,32 @@ export default function App() {
     }, 350);
     return () => clearTimeout(timer);
   }, [auth.role, customerQuery, orderCustomerSearch]);
+
+  const loadCustomerOrderHistory = async (customer) => {
+    const customerId = String(customer?.id || "");
+    if (!customerId) return;
+    const sequence = ++customerHistorySearchSeqRef.current;
+    setCustomerHistoryCustomerId(customerId);
+    setCustomerHistory([]);
+    setCustomerHistoryLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch(`/api/customers/history?customerId=${encodeURIComponent(customerId)}`, {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      if (sequence !== customerHistorySearchSeqRef.current) return;
+      setCustomerHistory(Array.isArray(json.data?.orders) ? json.data.orders : []);
+    } catch (error) {
+      if (sequence === customerHistorySearchSeqRef.current) {
+        setCustomerHistory([]);
+        setSyncStatus(`⚠️ โหลดประวัติออเดอร์ลูกค้าไม่สำเร็จ: ${error?.message || error}`);
+      }
+    } finally {
+      if (sequence === customerHistorySearchSeqRef.current) setCustomerHistoryLoading(false);
+    }
+  };
   const selectedDriverProfile = useMemo(() => {
     return (drivers || []).find(d => d.id === (auth.driverId || driverId)) || {
       id: auth.driverId || driverId || "",
@@ -1835,7 +1867,13 @@ export default function App() {
 	    setSyncStatus(`⏳ กำลังบันทึกลูกค้า "${nextCustomer.name}"...`);
     const saved = await upsertCustomerToFirestore(nextCustomer);
     if (!saved.ok) {
-      setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
+      if (saved.data?.duplicateId) {
+        setSelectedCustomerId(saved.data.duplicateId);
+        setCustomerQuery(saved.data.duplicateName || normalizedName);
+        setSyncStatus(`⚠️ มีลูกค้าเดิมจาก${saved.data.duplicateField || "ข้อมูลซ้ำ"}แล้ว กรุณาเลือกข้อมูลเดิม`);
+      } else {
+        setSyncStatus(`⚠️ บันทึกลูกค้าไป Firestore ไม่สำเร็จ: ${saved.error}`);
+      }
       return;
     }
 	    setState(prev => ({
@@ -2941,7 +2979,7 @@ export default function App() {
   };
 
 	  const updateCustomer = async (id, patch) => {
-	    const existing = state.customers.find(c => c.id === id);
+	    const existing = customers.find(c => c.id === id);
 	    if (!existing) return;
 	    const nextCustomer = { ...existing, ...patch, name: String(patch.name || existing.name || "").trim() };
 	    if (!nextCustomer.name) {
@@ -2955,6 +2993,7 @@ export default function App() {
 	      return;
 	    }
 	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? nextCustomer : c) }));
+	    setHistoricalCustomers(prev => prev.map(c => c.id === id ? nextCustomer : c));
 	    setEditingCustomerId(null);
 	    setSyncStatus(`✅ แก้ไขข้อมูลลูกค้า "${nextCustomer.name}" สำเร็จ`);
 	  };
@@ -2979,6 +3018,11 @@ export default function App() {
 	        const nextCustomers = (prev.customers || []).filter(c => c.id !== id);
 	        return { ...prev, customers: nextCustomers };
 	      });
+	      setHistoricalCustomers(prev => prev.filter(c => c.id !== id));
+	      if (customerHistoryCustomerId === id) {
+	        setCustomerHistoryCustomerId("");
+	        setCustomerHistory([]);
+	      }
 	      if (selectedCustomerId === id) setSelectedCustomerId("");
 	      if (editingCustomerId === id) setEditingCustomerId(null);
 	      setSyncStatus(`✅ ลบลูกค้า "${name}" สำเร็จ`);
@@ -4349,13 +4393,40 @@ export default function App() {
                       <small style={{ color: "#666" }}>{selectedCustomer.address}</small>
                     </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => {
                       setEditingCustomerId(selectedCustomer.id);
                       setEditCustomerForm(selectedCustomer);
                     }}>✏️ แก้ไขข้อมูล</button>
+                    <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => loadCustomerOrderHistory(selectedCustomer)} disabled={customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id}>
+                      {customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id ? "กำลังโหลด…" : "📚 ดูประวัติออเดอร์"}
+                    </button>
                     <button className="secondary danger" style={{ padding: "8px", fontSize: "12px" }} onClick={() => deleteCustomer(selectedCustomer)}>ลบลูกค้า</button>
                   </div>
+                  {customerHistoryCustomerId === selectedCustomer.id && (
+                    <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #bbf7d0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+                        <b style={{ fontSize: "13px" }}>ประวัติออเดอร์ทั้งหมด</b>
+                        {!customerHistoryLoading && <span className="status-chip">พบ {customerHistory.length} งาน</span>}
+                      </div>
+                      {customerHistoryLoading ? <p className="muted" style={{ margin: 0 }}>กำลังค้นหาออเดอร์เก่าจาก Firestore…</p> : customerHistory.length === 0 ? (
+                        <p className="muted" style={{ margin: 0 }}>ยังไม่พบออเดอร์ของลูกค้ารายนี้</p>
+                      ) : (
+                        <div style={{ display: "grid", gap: "7px", maxHeight: "420px", overflowY: "auto" }}>
+                          {customerHistory.map(order => (
+                            <article key={order.id} style={{ background: "#fff", border: "1px solid #d1fae5", borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+                              <div style={{ minWidth: 0 }}>
+                                <b style={{ fontSize: "12px" }}>{order.id} · {order.customerName || selectedCustomer.name}</b>
+                                <div className="muted" style={{ fontSize: "11px" }}>ใบสั่งจอง: {order.bookingNumber || "-"} · {order.zone || selectedCustomer.zone || "-"}</div>
+                                <div className="muted" style={{ fontSize: "11px" }}>สถานะ: {order.status || "-"} · อัปเดต {order.updatedAt || order.createdAt || "-"}</div>
+                              </div>
+                              <button className="secondary" style={{ padding: "6px 8px", fontSize: "11px", whiteSpace: "nowrap" }} onClick={() => openChiangmaiHistoryOrder(order)}>ดูรายละเอียด</button>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </section>
