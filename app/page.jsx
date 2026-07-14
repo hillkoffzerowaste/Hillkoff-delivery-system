@@ -4925,14 +4925,15 @@ export default function App() {
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
                 <label className="field-label">หมายเหตุ</label><textarea value={workForm.note} onChange={e => setWorkForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุเพิ่มเติม" rows={2} />
                 <label className="field-label">ของไม่ครบ / รอของ</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder="ระบุรายการและเหตุผล (ถ้ามี)" rows={2} />
+                {workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>ออเดอร์ต่างจังหวัด: ถ้าตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — รูปถ่ายและการส่ง LINE เป็นตัวเลือก</div>}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                  <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
+                  <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป{workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" ? " (ไม่บังคับ)" : ""} ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
                   <button className={workSharedToLine ? "secondary" : "primary"} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่ง LINE + ยืนยันอัตโนมัติ"}</button>
                   {workPhotoPreviews.length > 0 && <span className="muted">มีรูปในเครื่อง {workPhotoPreviews.length} รูป</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
                 {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>ยืนยันออเดอร์</button></div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>{workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์"}</button></div>
               </div>
             </section>
           </div>
