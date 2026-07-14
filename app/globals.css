@@ -1912,8 +1912,10 @@ input:focus,select:focus,textarea:focus { border-color:#9bb99f; box-shadow:0 0 0
 .card,.panel { border-color:#e2e7e0; box-shadow:var(--app-shadow); }
 .panel-head span { color:#718075; background:#f0f4ee; }
 .stat-card { border:1px solid #e6ebe4; box-shadow:0 7px 18px rgba(47,61,50,.05); }
-.metric { border-color:#e2e7e0; background:linear-gradient(145deg,#fff,#fafcf9); }
-.metric strong { color:#587a61; }
+.metric { border-color:#dce6d9; background:linear-gradient(145deg,#fff,#f4f8f2); box-shadow:0 8px 20px rgba(47,61,50,.055); min-height:82px; display:grid; align-content:space-between; position:relative; overflow:hidden; }
+.metric::after { content:""; position:absolute; width:54px; height:54px; right:-18px; top:-18px; border-radius:50%; background:rgba(139,174,131,.14); }
+.metric span { color:#68756b; font-size:12px; font-weight:800; position:relative; z-index:1; }
+.metric strong { color:#42684c; font-size:29px; line-height:1; position:relative; z-index:1; }
 .history-search { background:linear-gradient(145deg,#f4f8f2,#fafcf9); border-color:#d5e2d1; }
 .role-order-card { border-left-color:#b6d0b2; background:linear-gradient(90deg,#fff,#fcfdfb); }
 .dispatch-row,.driver-card,.customer-detail,.daily-accordion { border-color:#e2e7e0; }
