@@ -1774,6 +1774,152 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
 [style*="position: fixed"] article[style*="border-left"] { background:#f7fcf5 !important; }
 @media (max-width:720px) { .sidebar { background:#205f43; } }
 
+/* Store and pack operations: compact, high-contrast card columns. */
+.role-workspace .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  padding: 4px 0 14px;
+}
+
+.role-workspace .kpi-grid .metric {
+  min-height: 122px;
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: 0 12px 24px rgba(29, 82, 52, .11);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.role-workspace .kpi-grid .metric:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 30px rgba(29, 82, 52, .16);
+}
+
+.role-workspace .kpi-grid .metric strong {
+  font-size: 31px;
+}
+
+.role-workspace .kpi-grid .metric small {
+  max-width: 18em;
+  line-height: 1.35;
+}
+
+.ops-store-work,
+.ops-pack-work,
+.ops-store-outstation,
+.ops-pack-follow-up {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px !important;
+  align-items: stretch;
+}
+
+.ops-store-work > .history-search,
+.ops-store-work > .metrics-grid,
+.ops-store-work > p,
+.ops-pack-work > .metrics-grid,
+.ops-pack-work > p,
+.ops-store-outstation > .panel-head,
+.ops-store-outstation > p,
+.ops-pack-follow-up > b,
+.ops-pack-follow-up > p {
+  grid-column: 1 / -1;
+}
+
+.ops-store-work > .metrics-grid,
+.ops-pack-work > .metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ops-workspace .role-order-card {
+  min-height: 218px;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid #cfe3c9;
+  border-left: 5px solid #5baf78;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #ffffff 0%, #f1faef 100%);
+  box-shadow: 0 10px 22px rgba(29, 82, 52, .09);
+  position: relative;
+  overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.ops-workspace .role-order-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2f8a60, #9bd27c, #f0c35b);
+}
+
+.ops-workspace .role-order-card:hover {
+  transform: translateY(-3px);
+  border-color: #8fc998;
+  box-shadow: 0 16px 30px rgba(29, 82, 52, .15);
+}
+
+.ops-workspace .role-order-card > button {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+}
+
+.role-workspace .kpi-grid + div:not(.kpi-grid) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px !important;
+}
+
+.role-workspace .kpi-grid + div:not(.kpi-grid) > b,
+.role-workspace .kpi-grid + div:not(.kpi-grid) > p {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1180px) {
+  .role-workspace .kpi-grid,
+  .ops-store-work,
+  .ops-pack-work,
+  .ops-store-outstation,
+  .ops-pack-follow-up,
+  .role-workspace .kpi-grid + div:not(.kpi-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .role-workspace .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .role-workspace .kpi-grid .metric {
+    min-height: 108px;
+    padding: 12px;
+    border-radius: 13px;
+  }
+
+  .role-workspace .kpi-grid .metric strong {
+    font-size: 25px;
+  }
+
+  .ops-store-work,
+  .ops-pack-work,
+  .ops-store-outstation,
+  .ops-pack-follow-up,
+  .role-workspace .kpi-grid + div:not(.kpi-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-workspace .role-order-card {
+    min-height: 0;
+  }
+}
+
 .prep-order-details {
   border: 1px solid #dbe5d8;
   border-radius: 10px;
