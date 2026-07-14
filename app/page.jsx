@@ -16,9 +16,13 @@ import {
   MapPinned,
   MessageSquareWarning,
   Navigation,
+  Clock3,
+  Package,
+  PackageX,
   PackagePlus,
   BellRing,
   Search,
+  SearchCheck,
   Star,
   Store,
   Sparkles,
@@ -394,8 +398,10 @@ function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
 function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, recentOrders, activities, reportActions, information, progressTitle = "ความคืบหน้าการตรวจสินค้า", progressLabel = "ตรวจเสร็จ" }) {
   const progress = total ? Math.round((completed / total) * 100) : 0;
   const remaining = Math.max(0, total - completed);
+  const cardIcons = { "is-primary": Package, "is-amber": Clock3, "is-blue": SearchCheck, "is-green": CheckCircle2, "is-red": PackageX };
+  const cardBadges = { "is-primary": "วันนี้", "is-amber": "รอดำเนินการ", "is-blue": "กำลังทำงาน", "is-green": "สำเร็จ", "is-red": "ติดตาม" };
   return <div className="ops-kpi-dashboard ops-kpi-dashboard-v2">
-    <div className="ops-kpi-cards" aria-label="สรุปงานวันนี้">{cards.map((card) => <article key={card.label} className={`ops-kpi-card ${card.tone}`}><span className="ops-kpi-icon" aria-hidden="true">{card.icon}</span><div><strong>{card.value} งาน</strong><span className="ops-kpi-label">{card.label}</span></div><small>{card.detail}</small></article>)}</div>
+    <div className="ops-kpi-cards" aria-label="สรุปงานวันนี้">{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const badge = card.badge || cardBadges[card.tone]; return <article key={card.label} className={`ops-kpi-card ${card.tone}`}><div className="ops-kpi-card-head"><span className="ops-kpi-icon" aria-hidden="true"><Icon size={21} strokeWidth={2.2} /></span>{badge && <span className="ops-kpi-badge">{badge}</span>}</div><div className="ops-kpi-value"><strong>{card.value}</strong><em>งาน</em></div><h3>{card.label}</h3><small>{card.detail}</small></article>; })}</div>
     <div className="ops-dashboard-main"><section className="ops-progress-card"><div className="ops-section-heading"><div><h3>{progressTitle}</h3><p>{progressLabel} {completed} จาก {total} งาน</p></div><b>{progress}%</b></div><div className="ops-progress-track" role="progressbar" aria-label={progressTitle} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div><div className="ops-progress-foot"><span>{progressLabel} {completed} จาก {total} งาน</span><b>เหลืออีก {remaining} งาน</b></div></section><section className="ops-follow-up-card"><div className="ops-section-heading"><div><h3>งานที่ต้องติดตาม</h3><p>สถานะที่ควรดำเนินการต่อ</p></div></div><div className="ops-follow-up-grid">{followUps.map((item) => <div key={item.label} className={item.value ? "is-alert" : "is-clear"}>{item.value ? <><span>{item.label}</span><b>{item.value} งาน</b></> : <><i aria-hidden="true">✅</i><span>{item.emptyLabel}</span></>}</div>)}</div></section></div>
     <section className="ops-recent-orders"><div className="ops-section-heading"><div><h3>ออเดอร์ล่าสุดวันนี้</h3><p>รายการล่าสุดจากข้อมูลที่มีอยู่ในระบบ</p></div></div><div className="ops-recent-list">{recentOrders.map((order) => <article key={order.id}><div><b>{order.bookingNumber || order.id}</b><span>{order.customerName || "ไม่ระบุลูกค้า"}</span></div><span className={`ops-order-status ${order.statusTone || "is-primary"}`}>{order.statusLabel}</span><small>{order.updatedAt ? formatThaiDateTime(order.updatedAt) : "ยังไม่มีเวลาอัปเดต"}</small></article>)}{!recentOrders.length && <p className="muted">ยังไม่มีออเดอร์ของวันนี้</p>}</div></section>
     <div className="ops-dashboard-footer"><section className="ops-month-summary"><h3>สรุปเดือนนี้</h3><div className="ops-month-summary-grid">{monthly.map((item) => <div key={item.label}><span>{item.label}</span><b>{item.value}{item.suffix || ""}</b></div>)}</div></section><section className="ops-activity-card"><div className="ops-section-heading"><div><h3>Activity วันนี้</h3><p>อ้างอิงจากประวัติการทำงานที่บันทึกไว้</p></div></div><div className="ops-activity-list">{activities.map((activity) => <article key={activity.id}><time>{activity.at ? new Date(activity.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</time><div><b>{activity.title}</b>{activity.note && <span>{activity.note}</span>}</div></article>)}{!activities.length && <p className="muted">ยังไม่มีรายการเคลื่อนไหวของวันนี้</p>}</div></section>{reportActions && <section className="ops-report-actions"><h3>รายงาน</h3><div><button className="secondary" onClick={reportActions.copyDaily}>📋 คัดลอกวันนี้</button><button className="primary" onClick={reportActions.shareDaily}>📤 แชร์ LINE วันนี้</button><button className="secondary" onClick={reportActions.copyMonthly}>📋 คัดลอกเดือนนี้</button><button className="primary" onClick={reportActions.shareMonthly}>📤 แชร์ LINE เดือนนี้</button></div></section>}</div>
