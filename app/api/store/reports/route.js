@@ -18,9 +18,10 @@ function reportLog(ref, event, profile, now, before = null, after = null, reason
 
 export async function GET(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["store", "admin"]);
+    const { profile, db } = await requireProfile(request, ["store", "pack", "admin"]);
     const params = new URL(request.url).searchParams;
     const type = params.get("type");
+    if (profile.role === "pack" && type !== "online") return Response.json({ ok: false, error: "Pack can view online reports only" }, { status: 403 });
     const date = params.get("date");
     const id = clean(params.get("id"), 200);
     const queryText = clean(params.get("q"), 200).toLowerCase();
@@ -69,7 +70,7 @@ export async function POST(request) {
       const status = REPORT_STATUSES.includes(row?.status) ? row.status : (draft ? "draft" : "saved");
       if (!bookingNumber && !detail && !note) continue;
       const ref = db.collection("store_reports").doc();
-      const item = { type, bookingNumber, detail, note, status, confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
+      const item = { type, bookingNumber, detail, note, status, packStatus: type === "online" ? "pending" : "", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
       batch.set(ref, item);
       batch.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, item));
       saved.push({ id: ref.id, ...item });
@@ -84,8 +85,20 @@ export async function POST(request) {
 
 export async function PATCH(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["store"]);
+    const { profile, db } = await requireProfile(request, ["store", "pack"]);
     const body = await request.json();
+    if (profile.role === "pack") {
+      const id = clean(body?.id, 200);
+      const packStatus = ["checked", "partial", "returned"].includes(body?.packStatus) ? body.packStatus : "";
+      if (!id || !packStatus) return Response.json({ ok: false, error: "Invalid online pack update" }, { status: 400 });
+      const ref = db.collection("store_reports").doc(id); const snap = await ref.get();
+      if (!snap.exists || snap.data().type !== "online") return Response.json({ ok: false, error: "Online report not found" }, { status: 404 });
+      const item = snap.data(); const now = new Date().toISOString(); const reason = clean(body?.reason, 1000);
+      if (packStatus === "returned" && !reason) return Response.json({ ok: false, error: "Provide return reason" }, { status: 400 });
+      const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
+      await ref.set(patch, { merge: true }); await ref.collection("history").doc().set(reportLog(ref, `pack_${packStatus}`, profile, now, item, { ...item, ...patch }, reason));
+      return Response.json({ ok: true, data: { id, ...item, ...patch } });
+    }
     const ids = Array.isArray(body?.ids) ? body.ids.slice(0, 50).map((id) => String(id || "").trim()).filter(Boolean) : [];
     const type = clean(body?.type, 30);
     const date = clean(body?.date, 10);

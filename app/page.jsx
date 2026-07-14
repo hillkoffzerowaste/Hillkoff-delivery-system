@@ -590,7 +590,7 @@ export default function App() {
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track"].includes(tab) ? tab : "store-work")
-    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation"].includes(tab) ? tab : "pack-work")
+    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation", "pack-online"].includes(tab) ? tab : "pack-work")
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
@@ -1558,7 +1558,7 @@ export default function App() {
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
   const fetchStoreReports = async ({ date = "", query = "", includeDeleted = false } = {}) => {
-    if (auth.role !== "store") return;
+    if (!["store", "pack"].includes(auth.role)) return;
     setStoreReportsLoading(true);
     try {
       const idToken = await refreshAuthToken(true);
@@ -1566,6 +1566,7 @@ export default function App() {
       if (date) params.set("date", date);
       if (query.trim()) params.set("q", query.trim());
       if (includeDeleted) params.set("includeDeleted", "true");
+      if (auth.role === "pack") params.set("type", "online");
       const res = await fetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
@@ -1577,9 +1578,15 @@ export default function App() {
     }
   };
   useEffect(() => {
-    if (auth.role === "store") fetchStoreReports({ date: ["store-outstation", "store-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted });
+    if (auth.role === "store" || (auth.role === "pack" && displayTab === "pack-online")) fetchStoreReports({ date: ["store-outstation", "store-online", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
+
+  const updateOnlinePackStatus = async (item, packStatus) => {
+    const reason = packStatus === "returned" ? prompt("ระบุของผิด / เหตุผลส่งกลับสโตร์") : "";
+    if (packStatus === "returned" && !reason?.trim()) return;
+    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตสถานะออเดอร์ออนไลน์แล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+  };
 
   useEffect(() => {
     if (auth.role !== "sales" && auth.role !== "admin") return;
@@ -3871,6 +3878,7 @@ export default function App() {
             <>
               <button className={displayTab === "pack-work" ? "active" : ""} onClick={() => setTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
               <button className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => setTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+              <button className={displayTab === "pack-online" ? "active" : ""} onClick={() => setTab("pack-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
             </>
           )}
            {["sales", "admin"].includes(auth.role) && (
@@ -4831,6 +4839,10 @@ export default function App() {
               {!preparationOrders.length && <p className="muted">ยังไม่มีออเดอร์ที่อยู่ระหว่างเตรียม</p>}
             </div>
           </section>
+        )}
+
+        {displayTab === "pack-online" && (
+          <section className="panel role-workspace"><div className="panel-head"><h2>ออเดอร์ออนไลน์ · ห้องแพ็ค</h2><span>{storeReports.filter(item => item.type === "online" && item.packStatus !== "checked").length} งาน</span></div><div style={{ display: "grid", gap: "10px" }}>{storeReports.filter(item => item.type === "online" && item.packStatus !== "checked" && !item.deletedAt).map(item => <article key={item.id} className="role-order-card"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">หมายเหตุสโตร์: {item.note}</small>}<span className="status-chip">แพ็ค: {item.packStatus || "pending"}</span><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" onClick={() => updateOnlinePackStatus(item, "checked")}>ยืนยันครบ</button><button className="secondary" onClick={() => updateOnlinePackStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary" onClick={() => updateOnlinePackStatus(item, "returned")}>ส่งกลับสโตร์</button></div></article>)}{!storeReports.filter(item => item.type === "online" && item.packStatus !== "checked" && !item.deletedAt).length && <p className="muted">ยังไม่มีงานออนไลน์ที่รอห้องแพ็ค</p>}</div></section>
         )}
 
         {["pack-work", "pack-outstation"].includes(displayTab) && (
