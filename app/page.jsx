@@ -4768,8 +4768,7 @@ export default function App() {
                     {order.packPackerName && <> · ผู้แพ็ค: {order.packPackerName}</>}
                     {order.packCheckerName && <> · ผู้ตรวจแพ็ค: {order.packCheckerName}</>}
                   </div>
-                  <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                  {(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div><b>หมายเหตุสโตร์:</b> {order.storeWorkDetails.note}</div>}{order.packWorkDetails?.note && <div><b>หมายเหตุห้องแพ็ค:</b> {order.packWorkDetails.note}</div>}</div>}
+                  {displayTab === "chiangmai" && <><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div><b>หมายเหตุสโตร์:</b> {order.storeWorkDetails.note}</div>}{order.packWorkDetails?.note && <div><b>หมายเหตุห้องแพ็ค:</b> {order.packWorkDetails.note}</div>}</div>}</>}
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
                   {displayTab === "store-work" && (
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
