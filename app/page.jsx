@@ -355,9 +355,9 @@ function Stat({ icon: Icon, label, value, sub, tone = "#166534" }) {
 
 function PackSalesOrderDetails({ order }) {
   const fields = [
-    ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
+    ["เลขที่ใบสั่งจอง", order.bookingNumber], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} กล่อง` : ""], ["ชำระเงิน", order.paymentType],
-    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["หมายเหตุฝ่ายขาย", order.salesNote]
+    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["หมายเหตุฝ่ายขาย", order.salesNote]
   ].filter(([, value]) => String(value || "").trim());
   return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
     <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
@@ -4768,6 +4768,7 @@ export default function App() {
                     {order.packPackerName && <> · ผู้แพ็ค: {order.packPackerName}</>}
                     {order.packCheckerName && <> · ผู้ตรวจแพ็ค: {order.packCheckerName}</>}
                   </div>
+                  <PackSalesOrderDetails order={order} />
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
                   {displayTab === "store-work" && (
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
