@@ -590,7 +590,7 @@ export default function App() {
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track"].includes(tab) ? tab : "store-work")
-    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation", "pack-online"].includes(tab) ? tab : "pack-work")
+    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
@@ -1532,6 +1532,12 @@ export default function App() {
   const salesOutstationStoreOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation");
+  const kpiOrders = (orders || []).filter(order => order.workflowType);
+  const kpiReturned = kpiOrders.filter(order => order.storeStatus === "returned" || order.packStatus === "returned");
+  const kpiPending = kpiOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus) || ["waiting", "partial", "returned"].includes(order.packStatus));
+  const kpiOverdue = kpiPending.filter(order => Date.now() - Date.parse(order.createdAt || 0) >= 86400000);
+  const kpiPackCompleted = kpiOrders.filter(order => order.packStatus === "checked");
+  const kpiStoreCompleted = kpiOrders.filter(order => order.storeStatus === "checked");
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
@@ -3879,6 +3885,7 @@ export default function App() {
               <button className={displayTab === "pack-work" ? "active" : ""} onClick={() => setTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
               <button className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => setTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button className={displayTab === "pack-online" ? "active" : ""} onClick={() => setTab("pack-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
+              <button className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => setTab("pack-dashboard")}><ClipboardList size={18} /> Dashboard ห้องแพ็ค</button>
             </>
           )}
            {["sales", "admin"].includes(auth.role) && (
@@ -4820,6 +4827,7 @@ export default function App() {
             </div>}
             {displayTab === "store-dashboard" && <div style={{ display: "grid", gap: "12px" }}>
               <div className="metrics-grid"><article className="metric"><span>สโตร์วันนี้</span><strong>{storeTodayOrders.length}</strong></article><article className="metric"><span>สโตร์เสร็จแล้ว</span><strong>{storeTodayCompleted}</strong></article><article className="metric"><span>ห้องแพ็ควันนี้</span><strong>{packTodayOrders.length}</strong></article><article className="metric"><span>ห้องแพ็คเสร็จแล้ว</span><strong>{packTodayCompleted}</strong></article><article className="metric"><span>ต่างจังหวัด</span><strong>{storeReports.filter(item => item.type === "outstation" && String(item.createdAt || "").slice(0, 10) === storeReportDate).length}</strong></article><article className="metric"><span>ออนไลน์</span><strong>{storeReports.filter(item => item.type === "online" && String(item.createdAt || "").slice(0, 10) === storeReportDate).length}</strong></article><article className="metric"><span>ของไม่ครบ/รอของ</span><strong>{[...storeTodayOrders, ...storeReports].filter(item => item.status === "waiting" || item.status === "partial" || (item.missingItems || []).length).length}</strong></article></div>
+              <div className="metrics-grid"><article className="metric"><span>งานส่งกลับ</span><strong>{kpiReturned.length}</strong></article><article className="metric"><span>งานค้างเกิน 1 วัน</span><strong>{kpiOverdue.length}</strong></article><article className="metric"><span>อัตราสตโร์สำเร็จ</span><strong>{kpiOrders.length ? Math.round((kpiStoreCompleted.length / kpiOrders.length) * 100) : 0}%</strong></article><article className="metric"><span>อัตราแพ็คสำเร็จ</span><strong>{kpiOrders.length ? Math.round((kpiPackCompleted.length / kpiOrders.length) * 100) : 0}%</strong></article></div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="secondary" onClick={() => copyStoreSummary("daily")}>คัดลอกรายงานวันนี้</button><button className="primary" onClick={() => shareStoreSummary("daily")}>ส่งรายงานวันนี้</button><button className="secondary" onClick={() => copyStoreSummary("monthly")}>คัดลอกรายงานเดือนนี้</button><button className="primary" onClick={() => shareStoreSummary("monthly")}>ส่งรายงานเดือนนี้</button></div>
               <p className="muted">รายงานต่างจังหวัดและออนไลน์บันทึกใน Dashboard นี้เท่านั้น ไม่ส่งต่อห้องแพ็คและไม่ขึ้น Google Sheets</p>
             </div>}
@@ -4839,6 +4847,10 @@ export default function App() {
               {!preparationOrders.length && <p className="muted">ยังไม่มีออเดอร์ที่อยู่ระหว่างเตรียม</p>}
             </div>
           </section>
+        )}
+
+        {displayTab === "pack-dashboard" && (
+          <section className="panel role-workspace"><div className="panel-head"><h2>Dashboard ห้องแพ็ค</h2><span>สรุป KPI งานเตรียม</span></div><div className="metrics-grid"><article className="metric"><span>งานทั้งหมด</span><strong>{kpiOrders.length}</strong></article><article className="metric"><span>แพ็คเสร็จ</span><strong>{kpiPackCompleted.length}</strong></article><article className="metric"><span>รอตรวจ/รอของ</span><strong>{kpiPending.length}</strong></article><article className="metric"><span>ส่งกลับสโตร์</span><strong>{kpiReturned.length}</strong></article><article className="metric"><span>ค้างเกิน 1 วัน</span><strong>{kpiOverdue.length}</strong></article><article className="metric"><span>อัตราแพ็คสำเร็จ</span><strong>{kpiOrders.length ? Math.round((kpiPackCompleted.length / kpiOrders.length) * 100) : 0}%</strong></article></div><div style={{ display: "grid", gap: "8px", marginTop: "14px" }}><b>งานต้องติดตาม</b>{kpiPending.slice(0, 20).map(order => <article key={order.id} className="role-order-card"><b>{order.id} · {order.customerName}</b><div className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</div>{order.returnReason && <div style={{ color: "#b91c1c" }}>ส่งกลับ: {order.returnReason}</div>}</article>)}{!kpiPending.length && <p className="muted">ไม่มีงานค้างติดตาม</p>}</div></section>
         )}
 
         {displayTab === "pack-online" && (
