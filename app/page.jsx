@@ -512,6 +512,8 @@ export default function App() {
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
   const [workPhotoPreviews, setWorkPhotoPreviews] = useState([]);
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
+  const [workSubmitting, setWorkSubmitting] = useState(false);
+  const [workSubmitError, setWorkSubmitError] = useState("");
   const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
   const [newCheckerName, setNewCheckerName] = useState("");
   const [storeReports, setStoreReports] = useState([]);
@@ -2484,8 +2486,12 @@ export default function App() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...json.data } : item) }));
       setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
-      return true;
-    } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); return false; }
+      return { ok: true };
+    } catch (e) {
+      const error = e?.message || String(e);
+      setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${error}`);
+      return { ok: false, error };
+    }
   };
 
   const searchChiangmaiHistory = async () => {
@@ -2569,6 +2575,8 @@ export default function App() {
     });
     setWorkPhotoPreviews([]);
     setWorkSharedToLine(Boolean(details?.sharedToLine));
+    setWorkSubmitting(false);
+    setWorkSubmitError("");
   };
 
   const clearWorkPhotos = (modal = workModal) => {
@@ -2638,22 +2646,25 @@ export default function App() {
 
   const confirmWorkModal = async (sharedToLine = workSharedToLine) => {
     sharedToLine = typeof sharedToLine === "boolean" ? sharedToLine : workSharedToLine;
-    if (!workModal) return;
+    if (!workModal || workSubmitting) return false;
+    setWorkSubmitError("");
     const { order, role } = workModal;
     if (!validateWorkModal()) return;
     const modalSnapshot = workModal;
-    setWorkModal(null);
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
     const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
     const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine, checklist: workForm.checklist, checkResult: workForm.checkResult };
-    const updated = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
+    setWorkSubmitting(true);
+    const result = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
       ? { storeStatus: workForm.checkResult === "partial" ? "partial" : "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
       : { packStatus: workForm.checkResult === "returned" ? "returned" : workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, returnReason: workForm.checkResult === "returned" ? workForm.missingNote.trim() : "", packWorkDetails: details });
-    if (updated) {
+    setWorkSubmitting(false);
+    if (result?.ok) {
       clearWorkPhotos(modalSnapshot);
+      setWorkModal(null);
       return true;
     }
-    setWorkModal(modalSnapshot);
+    setWorkSubmitError(result?.error || "ไม่สามารถบันทึกออเดอร์ได้ กรุณาลองใหม่");
     return false;
   };
 
@@ -4956,12 +4967,13 @@ export default function App() {
                 {workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>ออเดอร์ต่างจังหวัด: ถ้าตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — ระบบจะอัปเดตสโตร์เป็นเสร็จและสถานะเป็นพร้อมส่งขนส่งอัตโนมัติ · รูปถ่ายและ LINE เป็นตัวเลือก</div>}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                   <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป{workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? " (ไม่บังคับ)" : ""} ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
-                  <button className={workSharedToLine ? "secondary" : "primary"} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่ง LINE + ยืนยันอัตโนมัติ"}</button>
+                  <button type="button" className={workSharedToLine ? "secondary" : "primary"} disabled={workSubmitting} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่ง LINE + ยืนยันอัตโนมัติ"}</button>
                   {workPhotoPreviews.length > 0 && <span className="muted">มีรูปในเครื่อง {workPhotoPreviews.length} รูป</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
                 {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={() => confirmWorkModal()}>{workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์"}</button></div>
+                {workSubmitError && <div role="alert" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>บันทึกออเดอร์ไม่สำเร็จ: {workSubmitError}</div>}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button type="button" className="secondary" disabled={workSubmitting} onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button type="button" className="primary" disabled={workSubmitting} onClick={() => confirmWorkModal(false)}>{workSubmitting ? "กำลังบันทึก..." : (workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์")}</button></div>
               </div>
             </section>
           </div>
