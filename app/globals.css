@@ -354,6 +354,56 @@ input:focus, select:focus, textarea:focus { border-color: #75ad84; box-shadow: 0
   [style*="position: fixed"] .panel { border-radius: 14px; }
 }
 
+/* Slate + Teal application theme. This layer intentionally contains no behavior rules. */
+:root {
+  --app-ink: #172033;
+  --app-muted: #64748b;
+  --app-canvas: #f6f8fb;
+  --app-surface: #ffffff;
+  --app-line: #e2e8f0;
+  --app-green: #0f766e;
+  --app-green-dark: #115e59;
+  --app-mint: #e6fffb;
+  --app-shadow: 0 12px 28px rgba(15, 23, 42, .07);
+}
+
+body { background: var(--app-canvas); color: var(--app-ink); }
+.sidebar { background: linear-gradient(180deg, #1f2937 0%, #111827 100%); box-shadow: 10px 0 30px rgba(15, 23, 42, .12); }
+.brand { border-bottom-color: rgba(255,255,255,.1); }
+.brand-mark { background: #2dd4bf; }
+nav button { color: rgba(241,245,249,.72); }
+nav button:hover { background: rgba(255,255,255,.08); }
+nav button.active { background: #e6fffb; color: #0f766e; box-shadow: 0 6px 16px rgba(0,0,0,.16); }
+.topbar { border-bottom-color: #e2e8f0; }
+.topbar p, .muted, .small { color: var(--app-muted); }
+.google-status, .sync-banner { border-color: #dbe7e7; background: #fff; color: #475569; }
+.primary, .add-row button { background: linear-gradient(135deg, #0f766e, #115e59); box-shadow: 0 6px 14px rgba(15,118,110,.2); }
+.primary:hover, .add-row button:hover { background: linear-gradient(135deg, #0d9488, #0f766e); box-shadow: 0 9px 20px rgba(15,118,110,.24); }
+.secondary { color: #334155; border-color: #d8e1ea; background: #fff; }
+.secondary:hover { color: #0f766e; background: #f0fdfa; border-color: #99d9d1; }
+.primary:focus-visible, .secondary:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: rgba(20,184,166,.3); }
+input, select, textarea { border-color: #d8e1ea; color: #172033; background: #fff; }
+input:focus, select:focus, textarea:focus { border-color: #2dd4bf; box-shadow: 0 0 0 3px rgba(45,212,191,.18); }
+.card, .panel { border-color: #e2e8f0; box-shadow: var(--app-shadow); }
+.panel-head span { color: #64748b; background: #f1f5f9; }
+.stat-card { border: 1px solid #e7edf3; box-shadow: 0 6px 16px rgba(15,23,42,.045); }
+.metric { border-color: #e2e8f0; background: linear-gradient(145deg,#fff,#f8fafc); }
+.metric strong { color: #0f766e; }
+.history-search { background: linear-gradient(145deg, #f0fdfa, #f8fafc); border-color: #ccebe7; }
+.role-order-card { border-left-color: #94d7ce; background: linear-gradient(90deg,#fff,#fbfefe); }
+.dispatch-row, .driver-card, .customer-detail, .daily-accordion { border-color: #e2e8f0; }
+.dispatch-row:hover, .driver-card:hover { border-color: #a8d9d3; box-shadow: 0 8px 18px rgba(15,23,42,.06); }
+.customer-detail, .daily-accordion-trigger { background: #f8fafc; }
+.customer-detail a, .map-link { color: #0f766e; background: #f0fdfa; border-color: #b9e5df; }
+.secondary.danger { color: #dc2626; border-color: #fecaca; }
+.secondary.danger:hover { background: #fff1f2; border-color: #fca5a5; }
+[style*="position: fixed"] .panel { box-shadow: 0 28px 70px rgba(15,23,42,.28); }
+[style*="position: fixed"] article[style*="border-left"] { background: #f8fafc !important; }
+
+@media (max-width: 720px) {
+  .sidebar { background: #1f2937; }
+}
+
 /* Store and pack workspaces: quieter hierarchy, clearer actions. */
 .role-stats {
   grid-template-columns: repeat(5, minmax(0, 1fr));
