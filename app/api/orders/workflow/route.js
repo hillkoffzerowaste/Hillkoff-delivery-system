@@ -56,7 +56,15 @@ export async function PATCH(request) {
         checklist: body.packWorkDetails.checklist && typeof body.packWorkDetails.checklist === "object" ? body.packWorkDetails.checklist : {}, checkResult: String(body.packWorkDetails.checkResult || "complete"),
         updatedAt: now
       };
-      if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+      if (["checked", "partial"].includes(body.packStatus)) {
+        patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+        if (order.deliveryMethod === "outstation" && body.packStatus === "checked") {
+          patch.storeStatus = "checked";
+          patch.status = "พร้อมส่งขนส่ง";
+          patch.outstationCompletedAt = now;
+          patch.outstationCompletedBy = profile.name || profile.email;
+        }
+      }
     } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
       if (order.deliveryMethod !== "grab_pickup" || order.queueStatus !== "grab_ready") {
         throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
