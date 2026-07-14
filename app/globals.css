@@ -1947,12 +1947,34 @@ input:focus,select:focus,textarea:focus { border-color:#9bb99f; box-shadow:0 0 0
 .prep-work-notes {
   display: grid;
   gap: 5px;
-  border-left: 4px solid #d69a4a;
-  border-radius: 6px;
-  background: #fffaf0;
-  color: #5f4b2d;
-  padding: 9px 10px;
   font-size: 12px;
+}
+
+.prep-note-store,
+.prep-note-pack {
+  display: grid;
+  gap: 3px;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.prep-note-store {
+  border-left: 4px solid #7fa187;
+  background: #eef5eb;
+  color: #405b46;
+}
+
+.prep-note-pack {
+  border-left: 4px solid #6f8fae;
+  background: #edf3f8;
+  color: #3f5970;
+}
+
+.prep-note-store b,
+.prep-note-pack b {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
 }
 
 .driver-sequence-help {
