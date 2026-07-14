@@ -3922,11 +3922,6 @@ export default function App() {
 
   const selectAppTab = (nextTab) => {
     setTab(nextTab);
-    if (typeof window !== "undefined") {
-      window.setTimeout(() => {
-        document.querySelector(".sidebar nav button.active")?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-      }, 0);
-    }
   };
 
   return (

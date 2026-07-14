@@ -1931,30 +1931,26 @@ summary:focus-visible {
   }
 
   .sidebar nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: visible;
     width: 100%;
     max-width: 100%;
     position: relative;
     z-index: 901;
     pointer-events: auto;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-    overscroll-behavior-inline: contain;
-    padding-bottom: 3px;
-    scrollbar-width: thin;
+    padding-bottom: 0;
   }
 
   .sidebar nav button {
-    flex: 0 0 auto;
-    width: auto;
-    min-width: max-content;
-    min-height: 40px;
-    padding: 8px 11px;
-    white-space: nowrap;
-    scroll-snap-align: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 9px 10px;
+    white-space: normal;
+    line-height: 1.25;
+    align-items: center;
     touch-action: manipulation;
     pointer-events: auto;
   }
