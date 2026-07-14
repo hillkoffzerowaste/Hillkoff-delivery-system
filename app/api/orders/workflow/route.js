@@ -56,7 +56,7 @@ export async function PATCH(request) {
         checklist: body.packWorkDetails.checklist && typeof body.packWorkDetails.checklist === "object" ? body.packWorkDetails.checklist : {}, checkResult: String(body.packWorkDetails.checkResult || "complete"),
         updatedAt: now
       };
-      if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_ready" : "ready";
+      if (["checked", "partial"].includes(body.packStatus)) patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
     } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
       if (order.deliveryMethod !== "grab_pickup" || order.queueStatus !== "grab_ready") {
         throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
@@ -66,7 +66,7 @@ export async function PATCH(request) {
       const storeOk = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       const packOk = ["checked", "partial"].includes(order.packStatus);
       if (!storeOk || !packOk) throw Object.assign(new Error("Order is not ready for driver queue"), { status: 409 });
-      if (order.deliveryMethod === "grab_pickup") throw Object.assign(new Error("Grab pickup orders do not enter the driver queue"), { status: 409 });
+      if (["grab_pickup", "outstation"].includes(order.deliveryMethod)) throw Object.assign(new Error("Grab pickup and outstation orders do not enter the driver queue"), { status: 409 });
       patch.queueStatus = "queued"; patch.status = "รอคนขับรับ"; patch.queuedAt = now; patch.queuedBy = profile.name || profile.email;
     } else {
       throw Object.assign(new Error("Action not allowed"), { status: 403 });

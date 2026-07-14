@@ -316,7 +316,7 @@ function buildLineMessageForRouteTask(task, stop) {
 
 function buildLineMessageForNewOrder(order) {
   const lines = [];
-  lines.push("📦 มีออเดอร์ใหม่เข้าคิวคนขับ");
+  lines.push("📦 มีออเดอร์ใหม่เข้าคิวเตรียมสินค้า");
   if (order?.id) lines.push(`งาน: ${order.id}`);
   if (order?.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
   if (order?.zone) lines.push(`พื้นที่: ${order.zone}`);
@@ -324,8 +324,10 @@ function buildLineMessageForNewOrder(order) {
   if (order?.window) lines.push(`เวลา: ${order.window}`);
   if (order?.boxes != null) lines.push(`จำนวน: ${order.boxes} กล่อง`);
   if (order?.cod != null) lines.push(`COD: ฿${money(order.cod || 0)}`);
+  if (order?.bookingNumber) lines.push(`ใบสั่งจอง: ${order.bookingNumber}`);
+  if (order?.shippingCarrier) lines.push(`ขนส่งต่างจังหวัด: ${order.shippingCarrier}`);
   if (order?.salesNote) lines.push(`หมายเหตุ: ${order.salesNote}`);
-  lines.push("กรุณาเปิดแอพเพื่อรับงาน");
+  lines.push("กรุณาเปิดแอพเพื่อตรวจสอบงาน");
   return lines.join("\n");
 }
 
@@ -357,7 +359,7 @@ function PackSalesOrderDetails({ order }) {
   const fields = [
     ["เลขที่ใบสั่งจอง", order.bookingNumber], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} กล่อง` : ""], ["ชำระเงิน", order.paymentType],
-    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["หมายเหตุฝ่ายขาย", order.salesNote]
+    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
   ].filter(([, value]) => String(value || "").trim());
   return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
     <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
@@ -471,6 +473,7 @@ export default function App() {
     paymentType: "COD",
     codAmount: "",
     salesNote: "",
+    bookingPrefix: "CSP", bookingDigits: "", shippingCarrier: "", shippingCarrierOther: "",
     workflowType: "store_route", deliveryMethod: "company_driver"
   });
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
@@ -478,6 +481,7 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
+  const [showOutstationCarrierModal, setShowOutstationCarrierModal] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
   const [workPhotoPreviews, setWorkPhotoPreviews] = useState([]);
@@ -2108,6 +2112,16 @@ export default function App() {
       setSyncStatus("❌ ไม่พบลูกค้าที่เลือก กรุณาเลือกใหม่");
       return;
     }
+    const bookingDigits = digitsOnly(orderForm.bookingDigits).slice(0, 4);
+    if (bookingDigits && bookingDigits.length !== 4) {
+      setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็นตัวเลข 4 หลัก");
+      return;
+    }
+    if (orderForm.deliveryMethod === "outstation" && !String(orderForm.shippingCarrier || "").trim()) {
+      setSyncStatus("❌ กรุณาเลือกบริษัทขนส่งสำหรับออเดอร์ต่างจังหวัด");
+      setShowOutstationCarrierModal(true);
+      return;
+    }
     
     const id = generateOrderId();
     const serviceDate = toServiceDateKey(new Date());
@@ -2130,6 +2144,8 @@ export default function App() {
       salesPhone: auth.phone,
       status: "รอจัดเตรียมสินค้า",
       workflowType: orderForm.workflowType, deliveryMethod: orderForm.deliveryMethod,
+      bookingNumber: bookingDigits ? `${orderForm.bookingPrefix}${bookingDigits}` : "",
+      shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
       storeStatus: orderForm.workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: orderForm.workflowType === "direct_pack" ? "pending" : "blocked",
       queueStatus: "preparing",
@@ -2171,7 +2187,7 @@ export default function App() {
     
     console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
 	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
-    setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", workflowType: "store_route", deliveryMethod: "company_driver" });
+    setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingDigits: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
     setSelectedCustomerId("");
     setOrderCustomerSearch("");
     setShowOrderConfirm(false);
@@ -4509,7 +4525,8 @@ export default function App() {
                   <option value="direct_pack">ส่งตรงห้องแพ็ค</option>
                 </select>
               </label>
-              <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>รูปแบบจัดส่ง</span><select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value }))}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab รับหน้าร้าน</option></select></label>
+              <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง <small className="muted">(ฝ่ายขายใส่ได้ หรือให้สโตร์ใส่ภายหลัง)</small></span><div style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value }))}><option value="CSP">CSP</option><option value="CSR">CSR</option></select><input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /></div></label>
+              <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>รูปแบบจัดส่ง</span><select value={orderForm.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setOrderForm(p => ({ ...p, deliveryMethod })); if (deliveryMethod === "outstation") setShowOutstationCarrierModal(true); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab รับหน้าร้าน</option><option value="outstation">ออเดอร์ต่างจังหวัด</option></select>{orderForm.deliveryMethod === "outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationCarrierModal(true)}>{orderForm.shippingCarrier ? `ขนส่ง: ${orderForm.shippingCarrier}` : "เลือกบริษัทขนส่ง"}</button>}</label>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
@@ -4721,7 +4738,7 @@ export default function App() {
             <div style={{ display: "grid", gap: "10px" }}>
               {preparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</span></div>
-                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}</div>
+                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}{order.shippingCarrier ? ` · ขนส่ง: ${order.shippingCarrier}` : ""}</div>
                 {order.salesNote && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>หมายเหตุฝ่ายขาย:</b> {order.salesNote}</div>}
                 {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
               </article>)}
@@ -4737,7 +4754,7 @@ export default function App() {
               <div className="metrics-grid"><article className="metric"><span>งานแพ็ควันนี้</span><strong>{packTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{packTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, packTodayOrders.length - packTodayCompleted)}</strong></article></div>
               {packWorkOrders.map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
-                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
+                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
@@ -6414,6 +6431,8 @@ export default function App() {
             <p><b>หน้าต่างเวลา:</b> {pendingOrder.window}</p>
             <p><b>จำนวนกล่อง:</b> {pendingOrder.boxes} กล่อง</p>
             <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
+            <p><b>เลขที่ใบสั่งจอง:</b> {pendingOrder.bookingNumber || "ให้สโตร์กรอกภายหลัง"}</p>
+            {pendingOrder.shippingCarrier && <p><b>ขนส่งต่างจังหวัด:</b> {pendingOrder.shippingCarrier}</p>}
             {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
           </div>
           <label style={{ display: "flex", gap: "8px", alignItems: "flex-start", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px", color: "#1d4ed8", fontSize: "13px", fontWeight: 800 }}>
@@ -6430,6 +6449,21 @@ export default function App() {
             <button className="primary" style={{ flex: 1 }} onClick={confirmOrder}>✅ ยืนยันส่ง</button>
           </div>
         </div>
+      </div>
+    )}
+    {showOutstationCarrierModal && (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 1600, display: "grid", placeItems: "center", padding: "16px" }}>
+        <section className="panel" style={{ width: "min(520px, 100%)" }}>
+          <div className="panel-head"><h2>เลือกขนส่งต่างจังหวัด</h2><span>จำเป็นสำหรับออเดอร์นี้</span></div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            <select value={orderForm.shippingCarrier} onChange={e => setOrderForm(p => ({ ...p, shippingCarrier: e.target.value }))}>
+              <option value="">-- เลือกบริษัทขนส่ง --</option>
+              {["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}
+            </select>
+            {orderForm.shippingCarrier === "อื่นๆ" && <input value={orderForm.shippingCarrierOther} onChange={e => setOrderForm(p => ({ ...p, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" autoFocus />}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { setShowOutstationCarrierModal(false); if (!orderForm.shippingCarrier) setOrderForm(p => ({ ...p, deliveryMethod: "company_driver" })); }}>ยกเลิก</button><button className="primary" onClick={() => { const carrier = orderForm.shippingCarrier === "อื่นๆ" ? orderForm.shippingCarrierOther.trim() : orderForm.shippingCarrier; if (!carrier) return setSyncStatus("❌ กรุณาระบุบริษัทขนส่ง"); setOrderForm(p => ({ ...p, shippingCarrier: carrier })); setShowOutstationCarrierModal(false); }}>ยืนยันขนส่ง</button></div>
+          </div>
+        </section>
       </div>
     )}
     </>
