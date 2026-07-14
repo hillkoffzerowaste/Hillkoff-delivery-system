@@ -372,6 +372,11 @@ function isValidBookingNumber(value) {
   return /^(CSP|CSR)\d{4}$/i.test(String(value || "").trim());
 }
 
+const DEFAULT_PREPARATION_CHECKERS = {
+  store: ["เล็ก", "ณัฐ", "สุภาพ", "ลืน", "โจ้", "สมนึก"],
+  pack: ["กิต", "มาย", "ยุทธ", "หล้า", "มุก"]
+};
+
 function BookingNumberInput({ value, onChange, required = false }) {
   const rawValue = String(value || "").trim();
   const matchesStandard = !rawValue || /^(CSP|CSR)\d{0,4}$/i.test(rawValue);
@@ -502,6 +507,8 @@ export default function App() {
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
   const [workPhotoPreviews, setWorkPhotoPreviews] = useState([]);
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
+  const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
+  const [newCheckerName, setNewCheckerName] = useState("");
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
   const [storeReportDate, setStoreReportDate] = useState(() => toServiceDateKey(new Date()));
@@ -2495,6 +2502,34 @@ export default function App() {
     ].filter(Boolean);
     return [...workflow, ...delivery].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
   };
+
+  const loadCheckerLists = async () => {
+    if (!["store", "pack", "admin"].includes(auth.role)) return;
+    try {
+      const idToken = await refreshAuthToken();
+      const res = await fetch("/api/preparation/checkers", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (res.ok && json?.ok) setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
+    } catch {}
+  };
+
+  const saveCheckerList = async (role, names) => {
+    const clean = [...new Set(names.map(name => String(name || "").trim()).filter(Boolean))];
+    const next = { ...checkerLists, [role]: clean };
+    setCheckerLists(next);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/preparation/checkers", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify(next) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "บันทึกรายชื่อไม่สำเร็จ");
+      setCheckerLists(json.data);
+    } catch (error) {
+      setCheckerLists(checkerLists);
+      setSyncStatus(`❌ บันทึกรายชื่อผู้ตรวจไม่สำเร็จ: ${error?.message || error}`);
+    }
+  };
+
+  useEffect(() => { loadCheckerLists(); }, [auth.role]);
 
   const openWorkModal = (order, role) => {
     clearWorkPhotos();
@@ -4856,7 +4891,8 @@ export default function App() {
                 <details className="prep-order-details"><summary>ดูรายละเอียดลูกค้าและออเดอร์</summary><PackSalesOrderDetails order={workModal.order} /></details>
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><BookingNumberInput value={workForm.bookingNumber} onChange={bookingNumber => setWorkForm(p => ({ ...p, bookingNumber }))} required /></> : <div><b>เลขที่ใบสั่งจอง:</b> {workModal.order.bookingNumber || "ยังไม่ระบุจากสโตร์"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
-                <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><input value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))} placeholder={workModal.role === "store" ? "ชื่อผู้ตรวจสโตร์" : "ชื่อผู้ตรวจห้องแพ็ค"} />
+                <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
+                <details style={{ border: "1px solid #dbe4d6", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
                 <label style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "10px", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
                 <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option></select>
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
