@@ -585,7 +585,7 @@ export default function App() {
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track"].includes(tab) ? tab : "store-work")
-    : state.auth?.role === "pack" ? "pack-work"
+    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation"].includes(tab) ? tab : "pack-work")
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
@@ -768,7 +768,7 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-dashboard", "store-chiangmai-track", "pack-work", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-dashboard", "store-chiangmai-track", "pack-work", "pack-outstation", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
@@ -1522,8 +1522,10 @@ export default function App() {
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
   const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
-  const storeWorkOrders = (orders || []).filter(order => order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
-  const packWorkOrders = preparationOrders.filter(order => order.packStatus !== "blocked" && ["pending", "working", "waiting", "returned"].includes(order.packStatus));
+  const storeWorkOrders = (orders || []).filter(order => order.deliveryMethod !== "outstation" && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
+  const packWorkOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation" && order.packStatus !== "blocked" && ["pending", "working", "waiting", "returned"].includes(order.packStatus));
+  const salesOutstationStoreOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.workflowType === "store_route" && order.queueStatus !== "outstation_ready");
+  const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && order.packStatus !== "blocked" && ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus));
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
@@ -2145,6 +2147,7 @@ export default function App() {
       setShowOutstationCarrierModal(true);
       return;
     }
+    const workflowType = orderForm.deliveryMethod === "outstation" ? "store_route" : orderForm.workflowType;
     
     const id = generateOrderId();
     const serviceDate = toServiceDateKey(new Date());
@@ -2166,11 +2169,11 @@ export default function App() {
       salesName: auth.name,
       salesPhone: auth.phone,
       status: "รอจัดเตรียมสินค้า",
-      workflowType: orderForm.workflowType, deliveryMethod: orderForm.deliveryMethod,
+      workflowType, deliveryMethod: orderForm.deliveryMethod,
       bookingNumber: bookingDigits ? `${orderForm.bookingPrefix}${bookingDigits}` : "",
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
-      storeStatus: orderForm.workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: orderForm.workflowType === "direct_pack" ? "pending" : "blocked",
+      storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
       queueStatus: "preparing",
       photo: "",
       checkInAt: "",
@@ -3857,6 +3860,12 @@ export default function App() {
               <button className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => setTab("store-dashboard")}><ClipboardList size={18} /> Dashboard สโตร์</button>
             </>
           )}
+          {auth.role === "pack" && (
+            <>
+              <button className={displayTab === "pack-work" ? "active" : ""} onClick={() => setTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
+              <button className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => setTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+            </>
+          )}
            {["sales", "admin"].includes(auth.role) && (
              <>
                <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
@@ -3873,7 +3882,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "chiangmai" ? "เตรียมออเดอร์เชียงใหม่" : displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คออเดอร์เชียงใหม่" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-vehicle" ? "บันทึกการใช้รถ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
+            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "chiangmai" ? "เตรียมออเดอร์เชียงใหม่" : displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คออเดอร์เชียงใหม่" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-vehicle" ? "บันทึกการใช้รถ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
           </div>
           <div className="top-actions">
             <span className="google-status">{{ driver: "คนขับ", sales: "ฝ่ายขาย", admin: "Admin", store: "สโตร์", pack: "ห้องแพ็ค" }[auth.role] || auth.role}: {auth.name || auth.phone || auth.email}</span>
@@ -4774,6 +4783,7 @@ export default function App() {
             </div>}
             {["store-outstation", "store-online"].includes(displayTab) && <div style={{ display: "grid", gap: "10px" }}>
               {(() => { const type = displayTab === "store-outstation" ? "outstation" : "online"; const selectedRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.createdAt || "").slice(0, 10) === storeReportDate)); const overdue = storeReports.filter(item => item.type === type && !item.confirmedAt && !item.deletedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.createdAt || "").slice(0, 10) < todayServiceDate); return <>
+                {type === "outstation" && <section style={{ display: "grid", gap: "8px", border: "1px solid #bae6c8", background: "#f4fbf5", borderRadius: "10px", padding: "12px" }}><div className="panel-head"><h3>งานต่างจังหวัดจากฝ่ายขาย</h3><span>{salesOutstationStoreOrders.length} งาน</span></div>{salesOutstationStoreOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><b>{order.id} · {order.customerName}</b><span className="status-chip">สโตร์: {order.storeStatus || "pending"}</span></div><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดจากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกสโตร์</button></article>)}{!salesOutstationStoreOrders.length && <p className="muted">ยังไม่มีงานต่างจังหวัดจากฝ่ายขายที่รอดำเนินการ</p>}</section>}
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt || "").slice(0, 10)}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{type === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div></div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><input value={storeReportQuery} onChange={e => setStoreReportQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); } }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" style={{ flex: "1 1 280px" }} /><button className="secondary" onClick={() => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); }}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); }}>ล้างค้นหา</button><label className="muted" style={{ display: "flex", gap: "5px", alignItems: "center" }}><input type="checkbox" checked={storeReportIncludeDeleted} onChange={e => setStoreReportIncludeDeleted(e.target.checked)} /> รวมรายการลบแล้ว</label></div>
@@ -4807,12 +4817,12 @@ export default function App() {
           </section>
         )}
 
-        {displayTab === "pack-work" && (
+        {["pack-work", "pack-outstation"].includes(displayTab) && (
           <section className="panel role-workspace">
-            <div className="panel-head"><h2>งานห้องแพ็ค</h2><span>{packWorkOrders.length} งาน</span></div>
+            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : "งานห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : packWorkOrders).length} งาน</span></div>
             <div style={{ display: "grid", gap: "10px" }}>
-              <div className="metrics-grid"><article className="metric"><span>งานแพ็ควันนี้</span><strong>{packTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{packTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, packTodayOrders.length - packTodayCompleted)}</strong></article></div>
-              {packWorkOrders.map(order => <article key={order.id} className="role-order-card">
+              {displayTab === "pack-work" && <div className="metrics-grid"><article className="metric"><span>งานแพ็ควันนี้</span><strong>{packTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{packTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, packTodayOrders.length - packTodayCompleted)}</strong></article></div>}
+              {(displayTab === "pack-outstation" ? salesOutstationPackOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -4820,7 +4830,7 @@ export default function App() {
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
               </article>)}
-              {!packWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
+              {!(displayTab === "pack-outstation" ? salesOutstationPackOrders : packWorkOrders).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
           </section>
         )}

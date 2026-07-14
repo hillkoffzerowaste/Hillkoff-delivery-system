@@ -70,7 +70,7 @@ export async function POST(request) {
       salesName: String(order.salesName || ""),
       salesPhone: String(order.salesPhone || ""),
       status: "รอจัดเตรียมสินค้า",
-      workflowType: order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
+      workflowType: order.deliveryMethod === "outstation" ? "store_route" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
       deliveryMethod: ["grab_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver",
       bookingNumber: String(order.bookingNumber || "").trim().slice(0, 100),
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
