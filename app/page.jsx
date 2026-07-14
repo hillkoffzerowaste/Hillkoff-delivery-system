@@ -375,6 +375,7 @@ export default function App() {
   const historicalCustomerSearchSeqRef = useRef(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
+  const [driverSequenceDragId, setDriverSequenceDragId] = useState("");
   const [driverNoteDrafts, setDriverNoteDrafts] = useState({});
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "", username: "", password: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
@@ -1677,6 +1678,18 @@ export default function App() {
       return String(b.id || "").localeCompare(String(a.id || ""));
     });
   const driverTodayCompletedOrders = driverTodayOrders.filter(order => order.status === "ส่งสำเร็จ");
+  const driverCurrentDeliveryOrders = (orders || []).filter(order => order.driverId === driverId && order.status === "กำลังจัดส่ง");
+  const driverReorderableOrders = (orders || []).filter(order => order.driverId === driverId && order.status === "กำลังส่ง")
+    .slice()
+    .sort((a, b) => {
+      const av = Number(a.driverSequence);
+      const bv = Number(b.driverSequence);
+      if (Number.isFinite(av) && Number.isFinite(bv) && av !== bv) return av - bv;
+      if (Number.isFinite(av) && !Number.isFinite(bv)) return -1;
+      if (!Number.isFinite(av) && Number.isFinite(bv)) return 1;
+      return new Date(a.acceptedAt || a.updatedAt || a.createdAt || 0).getTime() - new Date(b.acceptedAt || b.updatedAt || b.createdAt || 0).getTime();
+    });
+  const driverDeliveryOrders = [...driverCurrentDeliveryOrders, ...driverReorderableOrders];
   const driverTodayRouteTasks = (routeTasks || [])
     .filter(task => task.driverId === driverId && String(task?.serviceDate || "") === todayServiceDate)
     .slice()
@@ -2242,6 +2255,57 @@ export default function App() {
 	      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
 	    }, 250);
 	  };
+
+  const saveDriverSequence = (nextOrders) => {
+    const now = new Date().toISOString();
+    nextOrders.forEach((order, index) => {
+      updateOrder(order.id, {
+        driverSequence: index + 1,
+        driverSequenceServiceDate: todayServiceDate,
+        driverSequenceUpdatedAt: now,
+        driverSequenceUpdatedBy: state.auth?.name || driverId || "driver"
+      });
+    });
+    setSyncStatus("✅ บันทึกลำดับส่งของแล้ว");
+  };
+
+  const moveDriverSequence = (orderId, direction) => {
+    const currentIndex = driverReorderableOrders.findIndex((order) => order.id === orderId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= driverReorderableOrders.length) return;
+    const next = driverReorderableOrders.slice();
+    [next[currentIndex], next[nextIndex]] = [next[nextIndex], next[currentIndex]];
+    saveDriverSequence(next);
+  };
+
+  const dropDriverSequence = (targetId) => {
+    if (!driverSequenceDragId || driverSequenceDragId === targetId) return setDriverSequenceDragId("");
+    const next = driverReorderableOrders.slice();
+    const sourceIndex = next.findIndex((order) => order.id === driverSequenceDragId);
+    const targetIndex = next.findIndex((order) => order.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return setDriverSequenceDragId("");
+    const [moved] = next.splice(sourceIndex, 1);
+    next.splice(targetIndex, 0, moved);
+    setDriverSequenceDragId("");
+    saveDriverSequence(next);
+  };
+
+  const acceptDriverDeliveryOrder = (order) => {
+    if (!driverId) return setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
+    const nextSequence = driverReorderableOrders.reduce((max, item) => Math.max(max, Number(item.driverSequence) || 0), 0) + 1;
+    const driverName = drivers.find((driver) => driver.id === driverId)?.name || state.auth?.name || "";
+    updateOrder(order.id, {
+      driverId,
+      driverName,
+      status: "กำลังส่ง",
+      acceptedAt: new Date().toISOString(),
+      driverSequence: nextSequence,
+      driverSequenceServiceDate: todayServiceDate,
+      driverSequenceUpdatedAt: new Date().toISOString(),
+      driverSequenceUpdatedBy: driverName || driverId
+    });
+    setSyncStatus(`✅ รับออเดอร์ "${order.id}" และเพิ่มท้ายลำดับส่งแล้ว`);
+  };
 
   const submitDriverDailyAssessment = async () => {
     if (driverAssessmentSubmitting) return;
@@ -3144,14 +3208,8 @@ export default function App() {
 	  };
 
 	  const acceptOrder = async (id) => {
-	    // Check if driver is logged in
-	    if (!driverId) {
-      setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
-      return;
-    }
-
-    const driverName = state.auth?.name || "";
-    updateOrder(id, { driverId, driverName, status: "กำลังส่ง" });
+    const order = orders.find((item) => item.id === id);
+    if (order) acceptDriverDeliveryOrder(order);
   };
   const checkIn = id => {
     if (!driverId) {
@@ -5153,9 +5211,7 @@ export default function App() {
                           disabled={pendingOrderUpdatesRef.current.has(order.id)}
                           onClick={() => {
                             pendingOrderUpdatesRef.current.add(order.id);
-                            const driverName = drivers.find(d => d.id === driverId)?.name || state.auth?.name || "";
-                            updateOrder(order.id, { driverId, driverName, status: "กำลังส่ง" });
-                            setSyncStatus(`✅ รับออเดอร์ "${order.id}" เรียบร้อย`);
+                            acceptDriverDeliveryOrder(order);
                           }}>✓ รับออเดอร์นี้</button>
                       </div>
                     );
@@ -5166,12 +5222,14 @@ export default function App() {
             })()}
 
 	            {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
-	            {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).length > 0 && (
+	            {driverDeliveryOrders.length > 0 && (
 	              <section className="panel">
-	                <div className="panel-head"><h2>🚗 ออเดอร์ที่กำลังส่ง</h2><span>{orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).length} งาน</span></div>
+	                <div className="panel-head"><h2>🚗 ลำดับส่งของฉัน</h2><span>{driverDeliveryOrders.length} งาน</span></div>
+	                <div className="driver-sequence-help">ลากการ์ดเพื่อจัดลำดับได้ · งานที่กำลังจัดส่งจะถูกตรึงบนสุด · งานใหม่จะต่อท้ายอัตโนมัติ</div>
 	                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
-	                  {orders.filter(o => o.driverId === driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง")).map(order => (
-	                    <div key={order.id} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
+	                  {driverDeliveryOrders.map((order, sequenceIndex) => (
+	                    <div key={order.id} className={`driver-sequence-card ${order.status === "กำลังจัดส่ง" ? "locked" : ""}`} draggable={order.status === "กำลังส่ง"} onDragStart={() => setDriverSequenceDragId(order.id)} onDragOver={(event) => { if (order.status === "กำลังส่ง") event.preventDefault(); }} onDrop={() => { if (order.status === "กำลังส่ง") dropDriverSequence(order.id); }} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div className="driver-sequence-bar">{order.status === "กำลังจัดส่ง" ? <span>📍 กำลังนำส่ง · ตรึงลำดับ</span> : <><span>☰ ลำดับ {sequenceIndex - driverCurrentDeliveryOrders.length + 1}</span><div><button className="secondary" disabled={sequenceIndex === driverCurrentDeliveryOrders.length} onClick={() => moveDriverSequence(order.id, -1)}>↑</button><button className="secondary" disabled={sequenceIndex === driverDeliveryOrders.length - 1} onClick={() => moveDriverSequence(order.id, 1)}>↓</button></div></>}</div>
                       <div>
                         <b style={{ fontSize: "14px", display: "block", marginBottom: "4px", color: statusColor[order.status] }}>{order.id}</b>
                         <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>

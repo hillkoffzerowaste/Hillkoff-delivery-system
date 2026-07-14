@@ -1925,3 +1925,43 @@ input:focus,select:focus,textarea:focus { border-color:#9bb99f; box-shadow:0 0 0
 [style*="position: fixed"] .panel { box-shadow:0 30px 80px rgba(38,52,43,.28); }
 [style*="position: fixed"] article[style*="border-left"] { background:#fafcf9 !important; }
 @media (max-width:720px) { .sidebar { background:#617465; } }
+
+.driver-sequence-help {
+  margin: -4px 0 12px;
+  padding: 9px 11px;
+  color: #617168;
+  background: #f3f7f1;
+  border: 1px solid #dce8d8;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.driver-sequence-card {
+  cursor: grab;
+  transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+}
+
+.driver-sequence-card:active { cursor: grabbing; }
+.driver-sequence-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(47, 61, 50, .12); }
+.driver-sequence-card.locked { cursor: default; background: #f7faf7 !important; }
+
+.driver-sequence-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dce8d8;
+  color: #587a61;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.driver-sequence-bar > div { display: flex; gap: 5px; }
+.driver-sequence-bar .secondary { min-height: 30px; min-width: 32px; padding: 3px 8px; }
+
+@media (max-width: 720px) {
+  .driver-sequence-card { cursor: default; }
+  .driver-sequence-bar .secondary { min-height: 36px; min-width: 38px; }
+}
