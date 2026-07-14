@@ -1529,8 +1529,8 @@ export default function App() {
   const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
   const storeWorkOrders = (orders || []).filter(order => order.deliveryMethod !== "outstation" && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation" && order.packStatus !== "blocked" && ["pending", "working", "waiting"].includes(order.packStatus));
-  const salesOutstationStoreOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.workflowType === "store_route");
-  const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && order.packStatus !== "returned");
+  const salesOutstationStoreOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
+  const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation");
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
