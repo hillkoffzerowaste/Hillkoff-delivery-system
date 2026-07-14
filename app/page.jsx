@@ -31,20 +31,56 @@ import {
 const STORE_KEY = "hillkoff-delivery-ops:v2";
 const DRIVER_ORDERS_HISTORY_LIMIT = 1000;
 
-// Supabase removed: Firebase (Auth+Firestore) is used instead
-let supabase = null;
-function initSupabase() { return null; }
-
 const initialDrivers = [];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
 const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
+const WORKFLOW_STATUS_META = {
+  pending: { label: "รอรับงาน", tone: "waiting" },
+  blocked: { label: "รอสโตร์ตรวจ", tone: "neutral" },
+  working: { label: "กำลังดำเนินการ", tone: "active" },
+  waiting: { label: "รอสินค้า", tone: "waiting" },
+  partial: { label: "สินค้าไม่ครบ", tone: "warning" },
+  returned: { label: "ส่งกลับตรวจสอบ", tone: "danger" },
+  checked: { label: "ตรวจครบแล้ว", tone: "done" },
+  skipped: { label: "ไม่ผ่านขั้นตอนนี้", tone: "neutral" },
+  draft: { label: "ฉบับร่าง", tone: "neutral" },
+  saved: { label: "บันทึกแล้ว", tone: "done" }
+};
+
+function WorkflowStatus({ role, status }) {
+  const meta = WORKFLOW_STATUS_META[status] || { label: status || "ยังไม่ระบุ", tone: "neutral" };
+  const prefix = role === "store" ? "สโตร์: " : role === "pack" ? "ห้องแพ็ค: " : "";
+  return <span className={`status-chip status-${meta.tone}`}>{prefix}{meta.label}</span>;
+}
 
 const BRANCH_ROUTE_STOPS = ["สาขาช้างเผือก", "สาขาโรงงานป่าแพ่ง", "สาขาสำนักงานใหญ่", "สาขามหิดล", "สาขาทับเดื่อ"];
 const LONG_ROUTE_STOPS = ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"];
 const LONG_ROUTE_RETURN_STOPS = ["สาขาราติก้า จ.กรุงเทพมหานคร", "เชียงใหม่"];
 const routeTaskStatusColor = { "กำลังวิ่ง": "#1d4ed8", "เช็คอินแล้ว": "#92400e", "เสร็จงาน": "#166534", "ยกเลิก": "#dc2626" };
+const TAB_TITLES = {
+  sales: "แดชบอร์ดการขาย",
+  "sales-outstation": "ออเดอร์ต่างจังหวัด · ฝ่ายขาย",
+  dispatch: "แดชบอร์ดการจัดส่ง",
+  chiangmai: "เตรียมออเดอร์เชียงใหม่",
+  "store-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · สโตร์",
+  "store-chiangmai-track": "ติดตามออเดอร์จากฝ่ายขาย · สโตร์",
+  "store-outstation": "ออเดอร์ต่างจังหวัด · สโตร์",
+  "store-online": "ออเดอร์ออนไลน์ · สโตร์",
+  "store-dashboard": "Dashboard KPI · สโตร์",
+  "pack-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค",
+  "pack-outstation": "ออเดอร์ต่างจังหวัด · ห้องแพ็ค",
+  "pack-online": "ออเดอร์ออนไลน์ · ห้องแพ็ค",
+  "pack-dashboard": "Dashboard KPI · ห้องแพ็ค",
+  "driver-prep": "เช็คออเดอร์เชียงใหม่",
+  driver: "แอปคนขับ",
+  "driver-vehicle": "บันทึกการใช้รถ",
+  "driver-sop": "ตรวจรถประจำวัน",
+  "driver-sop-report": "รายงานตรวจรถ",
+  reports: "รายงานประจำวัน",
+  settings: "การตั้งค่า"
+};
 
 const DRIVER_DAILY_CHECK_ITEMS = [
   { id: "coolant", label: "ระดับน้ำหม้อพักน้ำอยู่ที่ Full ตอนเครื่องเย็น", detail: "ห้ามเปิดฝาหม้อน้ำเมื่อเครื่องร้อน" },
@@ -506,6 +542,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("⏳ Connecting to Firestore...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
+  const [orderConfirmSubmitting, setOrderConfirmSubmitting] = useState(false);
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
   const [showOutstationCarrierModal, setShowOutstationCarrierModal] = useState(false);
   const [workModal, setWorkModal] = useState(null);
@@ -530,6 +567,8 @@ export default function App() {
   const [reportPhotoPreview, setReportPhotoPreview] = useState("");
   const [editingStoreReport, setEditingStoreReport] = useState(null);
   const [storeReportDetail, setStoreReportDetail] = useState(null);
+  const [onlineReturnTarget, setOnlineReturnTarget] = useState(null);
+  const [onlineReturnReason, setOnlineReturnReason] = useState("");
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
   const [openReportDate, setOpenReportDate] = useState("");
   const [reportExportMode, setReportExportMode] = useState("single");
@@ -619,9 +658,6 @@ export default function App() {
   const lastDriverLocationsPullRef = useRef(null);
   const refreshInFlightRef = useRef(false);
   
-  // Use useRef instead of useState for isResettingOrders to ensure synchronous updates
-  // useState is async and causes stale closures in sync logic
-  const isResettingOrdersRef = useRef(false);
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
@@ -673,15 +709,12 @@ export default function App() {
         if (showStatus) setPushStatus(`เปิดแจ้งเตือนไม่สำเร็จ: ${tokenRes.error || "ไม่มี token"}`);
         return;
       }
-      const phoneDigits = String(authState.phone || "").replace(/\D/g, "");
       const res = await fetch("/api/push/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authState.token}` },
         body: JSON.stringify({
           token: tokenRes.token,
           role: "driver",
-          phoneDigits,
-          driverId: authState.driverId || "",
           deviceId: getOrCreateDeviceId()
         }),
       });
@@ -759,11 +792,11 @@ export default function App() {
 	  useEffect(() => {
 	    if (typeof window === "undefined") return;
 	    if (!fbAuthReady) {
-	      setSyncStatus("⏳ Waiting for Firebase Auth...");
+	      setSyncStatus("⏳ กำลังตรวจสอบการเข้าสู่ระบบ...");
 	      return;
 	    }
 	    if (!state.auth?.token) {
-	      setSyncStatus("Please login");
+	      setSyncStatus("กรุณาเข้าสู่ระบบ");
 	      return;
 	    }
 	    const db = getFirestoreDb();
@@ -775,7 +808,7 @@ export default function App() {
 	      setSyncStatus("🟢 Firestore realtime connected");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-dashboard", "store-chiangmai-track", "pack-work", "pack-outstation", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track", "pack-work", "pack-outstation", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
@@ -970,20 +1003,7 @@ export default function App() {
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
 	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate]);
 
-  // (Supabase removed) no forced polling needed
-
   // Driver location: record only on "check-in" events (no continuous tracking)
-  
-  // Helper function to convert snake_case from Supabase to camelCase
-  const convertToCamelCase = (obj) => {
-    if (!obj) return obj;
-    const converted = {};
-    for (const key in obj) {
-      const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-      converted[camelKey] = obj[key];
-    }
-    return converted;
-  };
 
   // Function to play notification sound when new orders arrive
   const playNotificationSound = () => {
@@ -1016,13 +1036,6 @@ export default function App() {
       console.error("❌ Error playing notification sound:", e);
     }
   };
-
-  // Polling mechanism for real-time sync (fallback if Realtime fails)
-  useEffect(() => {
-    // Initialize Supabase on component mount
-    supabase = initSupabase();
-    console.log("Component mounted, supabase:", !!supabase);
-  }, []);
 
   useEffect(() => {
     if (!chatOpen) return;
@@ -1337,11 +1350,6 @@ export default function App() {
     } catch {}
   }, [chatMessages, state.auth?.phone, lastEmergencySeenIdFromStorage]);
 
-		  // Legacy Supabase refresh (disabled). Firestore onSnapshot is used instead.
-		  const refreshFromSupabase = async () => {};
-
-  // Supabase realtime subscription removed (Firestore handles realtime).
-  
 	  const upsertOrderToFirestore = async (order) => {
 	    try {
 	      const db = getFirestoreDb();
@@ -1516,8 +1524,7 @@ export default function App() {
 		    }
 		  };
 
-	  // NOTE: Do not bulk sync state to Supabase on change.
-	  // Supabase is the source of truth; we only upsert on explicit user actions (create/update).
+	  // Keep the selected driver identity synchronized with the authenticated profile.
 	  useEffect(() => {
 	    if (state.auth?.driverId) setDriverId(state.auth.driverId);
 	  }, [state.auth?.driverId]);
@@ -1535,12 +1542,20 @@ export default function App() {
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus !== "outstation_ready");
   const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
-  const kpiOrders = (orders || []).filter(order => order.workflowType);
-  const kpiReturned = kpiOrders.filter(order => order.storeStatus === "returned" || order.packStatus === "returned");
-  const kpiPending = kpiOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus) || ["waiting", "partial", "returned"].includes(order.packStatus));
-  const kpiOverdue = kpiPending.filter(order => Date.now() - Date.parse(order.createdAt || 0) >= 86400000);
-  const kpiPackCompleted = kpiOrders.filter(order => order.packStatus === "checked");
-  const kpiStoreCompleted = kpiOrders.filter(order => order.storeStatus === "checked");
+  const storeKpiOrders = (orders || []).filter(order => order.workflowType === "store_route");
+  const packKpiOrders = (orders || []).filter(order => order.workflowType && order.packStatus !== "blocked");
+  const storeKpiReturned = storeKpiOrders.filter(order => order.storeStatus === "returned");
+  const packKpiReturned = packKpiOrders.filter(order => order.packStatus === "returned");
+  const storeKpiPending = storeKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
+  const packKpiPending = packKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus));
+  const isOverdueWorkflowOrder = order => {
+    const createdAt = Date.parse(order.createdAt || "");
+    return Number.isFinite(createdAt) && Date.now() - createdAt >= 86400000;
+  };
+  const storeKpiOverdue = storeKpiPending.filter(isOverdueWorkflowOrder);
+  const packKpiOverdue = packKpiPending.filter(isOverdueWorkflowOrder);
+  const storeKpiCompleted = storeKpiOrders.filter(order => order.storeStatus === "checked");
+  const packKpiCompleted = packKpiOrders.filter(order => order.packStatus === "checked");
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
@@ -1591,9 +1606,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
 
-  const updateOnlinePackStatus = async (item, packStatus) => {
-    const reason = packStatus === "returned" ? prompt("ระบุของผิด / เหตุผลส่งกลับสโตร์") : "";
-    if (packStatus === "returned" && !reason?.trim()) return;
+  const updateOnlinePackStatus = async (item, packStatus, returnReason = "") => {
+    if (packStatus === "returned" && !returnReason.trim()) {
+      setOnlineReturnTarget(item);
+      setOnlineReturnReason("");
+      return;
+    }
+    const reason = packStatus === "returned" ? returnReason.trim() : "";
     try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตสถานะออเดอร์ออนไลน์แล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
   };
 
@@ -2209,68 +2228,58 @@ export default function App() {
   };
 
 	  const confirmOrder = async () => {
-	    if (!pendingOrder) return;
+	    if (!pendingOrder || orderConfirmSubmitting) return;
+    const orderToCreate = pendingOrder;
     const shouldShareLine = shareNewOrderToLine;
-    const orderForLine = pendingOrder;
-    const text = buildLineMessageForNewOrder(orderForLine);
-    let copied = false;
-    let shareOpened = false;
-    try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
-    if (shouldShareLine) {
+    setOrderConfirmSubmitting(true);
+    setSyncStatus(`⏳ กำลังบันทึกออเดอร์ "${orderToCreate.id}"...`);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/orders/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ order: orderToCreate })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+
+      setState(prev => {
+        const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
+        return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
+      });
+      setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingDigits: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
+      setSelectedCustomerId("");
+      setOrderCustomerSearch("");
+      setShowOrderConfirm(false);
+      setPendingOrder(null);
+      setShareNewOrderToLine(false);
+
+      if (!shouldShareLine) {
+        setSyncStatus(`✅ บันทึกออเดอร์ "${orderToCreate.id}" สำเร็จ`);
+        return;
+      }
+
+      const text = buildLineMessageForNewOrder(orderToCreate);
+      let copied = false;
+      try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
       if (!navigator?.share) {
         setSyncStatus(copied
-          ? `⏳ คัดลอกข้อความคิวงานแล้ว กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`
-          : `⏳ กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`);
-      } else {
-        try {
-          if (!copied) {
-            const ok = confirm(`ไม่สามารถคัดลอกอัตโนมัติได้\n\nกรุณาก็อปข้อความนี้ไว้ก่อน แล้วกด OK เพื่อเปิดแชร์:\n\n${text}`);
-            if (!ok) return;
-          }
-          await navigator.share({ text });
-          shareOpened = true;
-        } catch {}
+          ? `✅ บันทึกออเดอร์แล้ว และคัดลอกข้อความสำหรับ LINE แล้ว`
+          : `✅ บันทึกออเดอร์แล้ว แต่อุปกรณ์นี้ไม่รองรับการแชร์`);
+        return;
       }
-    }
-    
-    console.log("📤 confirmOrder: Adding order to state", pendingOrder.id);
-	    setState(prev => ({ ...prev, orders: [pendingOrder, ...(prev.orders || [])] }));
-    setOrderForm({ pickupWaitMinutes: "5", qty: "", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingDigits: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
-    setSelectedCustomerId("");
-    setOrderCustomerSearch("");
-    setShowOrderConfirm(false);
-    setPendingOrder(null);
-    setShareNewOrderToLine(false);
-    setTab("driver");
-    setSyncStatus(copied
-      ? `⏳ คัดลอกข้อความคิวงานแล้ว กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`
-      : `⏳ กำลังส่งออเดอร์ "${orderForLine.id}" เข้าคิว...`);
-	    // Create via server so it can trigger Web Push notifications (FCM)
-	    const idToken = await refreshAuthToken(true);
-	    const res = await fetch("/api/orders/create", {
-	      method: "POST",
-	      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-	      body: JSON.stringify({ idToken, order: pendingOrder })
-	    });
-	    const json = await res.json();
-	    if (!json?.ok) {
-	      setSyncStatus(`⚠️ ส่งออเดอร์ไป Firestore ไม่สำเร็จ: ${json?.error || "create failed"}`);
-	      return;
-	    }
-    if (shouldShareLine) {
-      if (!navigator?.share) {
+      try {
+        await navigator.share({ text });
+        setSyncStatus(`✅ บันทึกออเดอร์และเปิดแชร์ LINE แล้ว`);
+      } catch {
         setSyncStatus(copied
-          ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และคัดลอกข้อความคิวงานแล้ว`
-          : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว แต่อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์`);
-      } else {
-        setSyncStatus(shareOpened
-          ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และเปิดแชร์ LINE แล้ว`
-          : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้`);
+          ? `✅ บันทึกออเดอร์แล้ว การแชร์ถูกยกเลิก แต่ข้อความถูกคัดลอกไว้แล้ว`
+          : `✅ บันทึกออเดอร์แล้ว แต่ยังไม่ได้แชร์ LINE`);
       }
-    } else {
-	    setSyncStatus(copied
-        ? `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวแล้ว และคัดลอกข้อความคิวงานแล้ว`
-        : `✅ ส่งออเดอร์ "${orderForLine.id}" เข้าคิวสำเร็จ (Firestore)`);
+    } catch (error) {
+      setSyncStatus(`❌ บันทึกออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setOrderConfirmSubmitting(false);
     }
 	  };
 
@@ -2280,8 +2289,14 @@ export default function App() {
     setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== orderId) }));
     setSyncStatus(`⏳ กำลังลบออเดอร์ "${orderId}" จาก Firestore...`);
     try {
-      const db = getFirestoreDb();
-      await fb.deleteDoc(fb.doc(db, "orders", String(orderId)));
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/orders/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ orderId })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setSyncStatus(`✅ ลบออเดอร์ "${orderId}" สำเร็จ`);
     } catch (error) {
       setState(prev => ({ ...prev, orders: previousOrders }));
@@ -2294,7 +2309,7 @@ export default function App() {
     setState(prev => {
       const updated = { ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) };
       
-      // Auto-sync to Supabase immediately
+      // Preserve the existing driver workflow: update Firestore immediately.
       const order = updated.orders.find(o => o.id === id);
       if (order) {
         (async () => {
@@ -2979,7 +2994,7 @@ export default function App() {
   const uploadPod = async (order, file) => {
     if (!file) return;
     try {
-      // Keep file on-device only (no Supabase upload). Use objectURL for instant UI; keep File in ref for sharing.
+      // Keep the POD file on-device. Use an object URL for preview and retain the File for sharing.
       podFilesRef.current[order.id] = file;
       const previewUrl = URL.createObjectURL(file);
       updateOrder(order.id, { photo: previewUrl, sharedToLine: false });
@@ -3338,10 +3353,6 @@ export default function App() {
 	    })();
 	  };
 
-	  const acceptOrder = async (id) => {
-    const order = orders.find((item) => item.id === id);
-    if (order) acceptDriverDeliveryOrder(order);
-  };
   const checkIn = id => {
     if (!driverId) {
       setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
@@ -3379,20 +3390,6 @@ export default function App() {
       }));
     }
   };
-  const confirmPhoto = id => updateOrder(id, { photo: `POD-${id}.jpg` });
-  const completeOrder = id => {
-    const order = orders.find(o => o.id === id);
-    if (!order) return;
-    
-    // Update status to completed
-    updateOrder(id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
-    
-    // Show order summary alert
-    const summaryText = `✅ ส่งสำเร็จ!\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ${order.photo ? "✅ มี" : "❌ ไม่มี"}\n\nออเดอร์ถูกลงทะเบียนในระบบแล้ว`;
-    alert(summaryText);
-  };
-
-
   const generateDailyReport = () => {
     const today = new Date().toLocaleDateString("th-TH");
     const todayOrders = todayOrdersOnly;
@@ -3817,8 +3814,8 @@ export default function App() {
               </div>
               {["store", "pack"].includes(loginForm.role) ? (
                 <>
-                  <input value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} placeholder="Username" autoComplete="username" />
-                  <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" autoComplete="current-password" />
+                  <input value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} placeholder="ชื่อผู้ใช้" autoComplete="username" />
+                  <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="รหัสผ่าน" autoComplete="current-password" />
                   <button className="primary wide" onClick={loginStaff}>เข้าสู่ระบบสโตร์/ห้องแพ็ค</button>
                   <p className="login-note">บัญชีและแผนกกำหนดโดย Admin เท่านั้น</p>
                 </>
@@ -3852,7 +3849,7 @@ export default function App() {
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
                 {loginStage === "set_pin" ? "ตั้ง PIN สำรองและเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขายด้วย PIN สำรอง" : "เข้าใช้งานคนขับด้วย PIN สำรอง")}
               </button>
-              <p className="login-note">PIN สำรองยังใช้ Firebase Auth แบบ Anonymous เพื่อผ่าน Firestore Rules ระหว่างย้ายระบบ</p>
+              <p className="login-note">PIN สำรองใช้เมื่อไม่สะดวกเข้าสู่ระบบด้วย Google และควรเก็บเป็นความลับ</p>
               </>
               )}
             </>
@@ -3898,7 +3895,7 @@ export default function App() {
           )}
           {auth.role === "driver" && (
             <>
-              <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> Driver App</button>
+              <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> งานจัดส่ง</button>
               <button className={displayTab === "driver-prep" ? "active" : ""} onClick={() => setTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
               <button className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => setTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
               <button className={displayTab === "driver-sop" ? "active" : ""} onClick={() => setTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
@@ -3910,7 +3907,7 @@ export default function App() {
               <button className={displayTab === "store-chiangmai-track" ? "active" : ""} onClick={() => setTab("store-chiangmai-track")}><Search size={18} /> ติดตามเตรียมออเดอร์</button>
               <button className={displayTab === "store-outstation" ? "active" : ""} onClick={() => setTab("store-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button className={displayTab === "store-online" ? "active" : ""} onClick={() => setTab("store-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
-              <button className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => setTab("store-dashboard")}><ClipboardList size={18} /> Dashboard สโตร์</button>
+              <button className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => setTab("store-dashboard")}><ClipboardList size={18} /> รายงาน KPI สโตร์</button>
             </>
           )}
           {auth.role === "pack" && (
@@ -3918,7 +3915,7 @@ export default function App() {
               <button className={displayTab === "pack-work" ? "active" : ""} onClick={() => setTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
               <button className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => setTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button className={displayTab === "pack-online" ? "active" : ""} onClick={() => setTab("pack-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
-              <button className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => setTab("pack-dashboard")}><ClipboardList size={18} /> Dashboard ห้องแพ็ค</button>
+              <button className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => setTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
             </>
           )}
            {["sales", "admin"].includes(auth.role) && (
@@ -3937,14 +3934,14 @@ export default function App() {
         <header className="topbar">
           <div>
             <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
-            <h1>{displayTab === "sales" ? "แดชบอร์ดการขาย" : displayTab === "sales-outstation" ? "ออเดอร์ต่างจังหวัด · ฝ่ายขาย" : displayTab === "dispatch" ? "แดชบอร์ดการจัดส่ง" : displayTab === "chiangmai" ? "เตรียมออเดอร์เชียงใหม่" : displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คออเดอร์เชียงใหม่" : displayTab === "driver" ? "แอปคนขับ" : displayTab === "driver-vehicle" ? "บันทึกการใช้รถ" : displayTab === "driver-sop" ? "ตรวจรถประจำวัน" : displayTab === "driver-sop-report" ? "รายงานตรวจรถ" : displayTab === "settings" ? "การตั้งค่า" : "รายงานประจำวัน"}</h1>
+            <h1>{TAB_TITLES[displayTab] || "ระบบจัดการงาน"}</h1>
           </div>
           <div className="top-actions">
             <span className="google-status">{{ driver: "คนขับ", sales: "ฝ่ายขาย", admin: "Admin", store: "สโตร์", pack: "ห้องแพ็ค" }[auth.role] || auth.role}: {auth.name || auth.phone || auth.email}</span>
             <button className="secondary" onClick={logout}>ออก</button>
           </div>
         </header>
-        <div className="sync-banner">{syncStatus}</div>
+        <div className="sync-banner" role="status" aria-live="polite">{syncStatus}</div>
         {auth.role === "driver" && needsDailyVehicleStart && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1400, display: "grid", placeItems: "center", padding: "16px" }}>
             <section className="panel" style={{ width: "min(520px, 100%)", borderLeft: "4px solid #2563eb", boxShadow: "0 16px 40px rgba(0,0,0,0.25)" }}>
@@ -4011,7 +4008,7 @@ export default function App() {
             >
               <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
                 <b>แชทบอทฐานข้อมูล</b>
-                <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setAiOpen(false)}>✕</button>
+                <button className="secondary" aria-label="ปิดแชทบอท" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setAiOpen(false)}>✕</button>
               </div>
 
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", flexWrap: "wrap", gap: "6px" }}>
@@ -4099,168 +4096,6 @@ export default function App() {
                 {grabCompletedOrders.map(order => <article key={order.id} style={{ border: "1px solid #99f6e4", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone || "-"} · ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}</div><small className="muted">ห้องแพ็คยืนยัน: {order.packCheckerName || "-"} · {order.grabCompletedAt ? new Date(order.grabCompletedAt).toLocaleString("th-TH") : "-"}</small></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>แพ็คเสร็จ · รอ Grab รับสินค้า</span></article>)}
               </div>
             </section>}
-            <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
-              <button className="secondary" onClick={() => {
-                const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตออเดอร์:");
-                if (pwd === null) return; // User cancelled
-                if (pwd !== "2532") {
-                  alert("❌ รหัสไม่ถูกต้อง");
-                  return;
-                }
-                if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
-
-                (async () => {
-                  try {
-                    // Disable polling during reset to prevent race condition
-                    isResettingOrdersRef.current = true;
-                    
-                    if (!supabase) supabase = initSupabase();
-                    if (!supabase) {
-                      alert("❌ ยังเชื่อมต่อ Supabase ไม่ได้");
-                      isResettingOrdersRef.current = false;
-                      return;
-                    }
-
-                    setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด (Supabase)...");
-                    console.log("🔍 [RESET] Starting complete order reset process...");
-                      
-                      // STEP 1: Clear React state
-                      console.log("🧹 [RESET] Step 1: Clearing React state (orders = [])...");
-                      const emptyState = JSON.parse(JSON.stringify(state)); // Deep copy
-                      emptyState.orders = [];
-                      emptyState.customers = [];
-                      setState(emptyState);
-                      console.log("✅ [RESET] React state cleared", { orders: emptyState.orders.length, customers: emptyState.customers.length });
-                      
-                      // Wait for state update
-                      await new Promise(resolve => setTimeout(resolve, 200));
-                      console.log("✅ [RESET] State update delay completed");
-                      
-                      // STEP 2: Delete from Supabase
-                      console.log("🗑️ [RESET] Step 2: Deleting from Supabase...");
-                      
-                      try {
-                        // Fetch all order IDs
-                        console.log("📋 [RESET] Fetching all order IDs...");
-                        const { data: allOrders, error: fetchError } = await supabase
-                          .from("orders")
-                          .select("id");
-                        
-                        console.log("📋 [RESET] Fetch result:", { 
-                          ordersCount: allOrders?.length || 0, 
-                          hasError: !!fetchError,
-                          errorMsg: fetchError?.message || "none"
-                        });
-                        
-                        if (fetchError) {
-                          console.error("❌ [RESET] Fetch failed:", fetchError);
-                          throw new Error(`Fetch failed: ${fetchError.message}`);
-                        }
-                        
-                        // Delete orders
-                        if (allOrders && allOrders.length > 0) {
-                          const orderIds = allOrders.map(o => o.id);
-                          console.log(`🗑️ [RESET] Deleting ${orderIds.length} orders...`);
-                          console.log("🗑️ [RESET] Order IDs:", orderIds);
-                          
-                          const { error: deleteError, count, status } = await supabase
-                            .from("orders")
-                            .delete()
-                            .in("id", orderIds);
-                          
-                          console.log("🗑️ [RESET] Delete response:", { 
-                            totalRequested: orderIds.length,
-                            deletedCount: count, 
-                            httpStatus: status,
-                            hasError: !!deleteError,
-                            errorMsg: deleteError?.message || "none"
-                          });
-                          
-                          if (deleteError) {
-                            console.error("❌ [RESET] Delete query failed:", deleteError);
-                            throw new Error(`Delete failed: ${deleteError.message}`);
-                          }
-                          
-                          if (count !== orderIds.length) {
-                            console.warn(`⚠️ [RESET] WARNING: Only ${count} of ${orderIds.length} orders were deleted!`);
-                          }
-                          
-                          // Verify deletion
-                          console.log("✅ [RESET] Delete query completed, verifying...");
-                          await new Promise(resolve => setTimeout(resolve, 1000));
-                          
-                          const { data: afterDelete, error: verifyError } = await supabase
-                            .from("orders")
-                            .select("id");
-                          
-                          console.log("✅ [RESET] Verification:", { 
-                            ordersRemaining: afterDelete?.length || 0,
-                            verifyError: verifyError?.message || "none"
-                          });
-                          
-                          if (afterDelete && afterDelete.length > 0) {
-                            console.warn("⚠️ [RESET] WARNING: Orders still exist after delete:", afterDelete.map(o => o.id));
-                            console.warn("⚠️ [RESET] Remaining order IDs should be:", afterDelete.map(o => o.id).join(", "));
-                          }
-                        } else {
-                          console.log("ℹ️ [RESET] No orders to delete");
-                        }
-                      } catch (e) {
-                        console.error("❌ [RESET] Delete step failed:", e);
-                        throw e;
-                      }
-                      
-                      // STEP 3: Wait to ensure everything is synced
-                      console.log("⏳ [RESET] Step 3: Waiting 5 seconds to ensure deletion is complete...");
-                      await new Promise(resolve => setTimeout(resolve, 5000));
-                      
-                      // STEP 4: Final verification: fetching from Supabase
-                      console.log("🔄 [RESET] Step 4: Final verification: fetching from Supabase...");
-                      const { data: finalCheck, error: finalCheckError } = await supabase
-                        .from("orders")
-                        .select("id");
-                      
-                      console.log("🔄 [RESET] Final Supabase check:", {
-                        ordersRemaining: finalCheck?.length || 0,
-                        error: finalCheckError?.message || "none"
-                      });
-                      
-                      if (finalCheck && finalCheck.length > 0) {
-                        console.warn("⚠️ [RESET] WARNING: Orders still in Supabase after delete:", finalCheck.map(o => o.id));
-                        console.log("🔄 [RESET] Attempting second delete round...");
-                        
-                        // Try delete again
-                        const remainingIds = finalCheck.map(o => o.id);
-                        const { error: deleteRetryError, count: retryCount } = await supabase
-                          .from("orders")
-                          .delete()
-                          .in("id", remainingIds);
-                        
-                        console.log("🗑️ [RESET] Second delete attempt:", { 
-                          retryCount, 
-                          retryError: deleteRetryError?.message || "none"
-                        });
-                        
-                        // Verify again
-                        console.log("🔄 [RESET] After retry");
-                      }
-                      
-                      // STEP 5: Re-enable sync
-                      console.log("🔄 [RESET] Step 5: Re-enabling polling and sync...");
-                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!");
-                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ!\n\n✓ ลบออเดอร์ทั้งหมดจาก Supabase\n✓ รีเซ็ตสถานะทั้งระบบ");
-                      isResettingOrdersRef.current = false;
-                      
-                      console.log("✅ [RESET] Process completed successfully!");
-                    } catch (e) {
-                      console.error("❌ [RESET] Process failed:", e);
-                      setSyncStatus(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
-                      alert(`❌ รีเซ็ตไม่สำเร็จ:\n${e?.message || String(e)}\n\n(ตรวจสอบ console สำหรับรายละเอียด)`);
-                      isResettingOrdersRef.current = false;
-                    }
-                  })();
-              }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
-            </div>
             <div className="sales-grid">
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
@@ -4734,7 +4569,7 @@ export default function App() {
                       </div>
                       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="primary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => sharePendingOrderQueueToLine(order)}>💬 คัดลอก/แชร์</button>
-                        <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️ ลบ</button>
+                        <button className="secondary danger" aria-label={`ลบออเดอร์ ${order.id}`} style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>ลบ</button>
                       </div>
                     </div>
                   ))}
@@ -4836,7 +4671,7 @@ export default function App() {
               <div className="history-search"><div className="history-search-title"><b>ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง</b><span>ค้นหาได้ทุกสถานะและทุกวัน</span></div><div className="history-search-controls"><input value={chiangmaiHistoryQuery} onChange={e => setChiangmaiHistoryQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") searchChiangmaiHistory(); }} placeholder="เลขออเดอร์ / ใบสั่งจอง / ลูกค้า / เบอร์ / พื้นที่" /><button className="secondary" onClick={searchChiangmaiHistory} disabled={chiangmaiHistoryLoading}>{chiangmaiHistoryLoading ? "กำลังค้นหา…" : "ค้นหาย้อนหลัง"}</button><button className="secondary" onClick={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }}>ล้าง</button></div>{chiangmaiHistoryResults.length > 0 && <div className="history-search-results">{chiangmaiHistoryResults.map(order => <article key={order.id} className="history-result-card"><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.bookingNumber || "ไม่มีเลขใบสั่งจอง"} · {order.zone || "-"} · {order.status || "-"}</div><small className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</small></div><button className="secondary" onClick={() => openChiangmaiHistoryOrder(order)}>ดูประวัติ</button></article>)}</div>}{chiangmaiHistorySearched && !chiangmaiHistoryLoading && chiangmaiHistoryResults.length === 0 && <p className="muted">ยังไม่พบออเดอร์ที่ตรงกับคำค้นหา</p>}</div>
               <div className="metrics-grid"><article className="metric"><span>งานสโตร์วันนี้</span><strong>{storeTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{storeTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, storeTodayOrders.length - storeTodayCompleted)}</strong></article></div>
               {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "#ef4444" : order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "returned" ? "#dc2626" : order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "returned" ? "#fef2f2" : order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -4861,9 +4696,9 @@ export default function App() {
             </div>}
             {displayTab === "store-dashboard" && <div style={{ display: "grid", gap: "12px" }}>
               <div className="metrics-grid kpi-grid"><article className="metric"><span>ออเดอร์สโตร์วันนี้</span><strong>{storeTodayOrders.length} งาน</strong><small>งานที่ฝ่ายขายส่งให้สโตร์</small></article><article className="metric"><span>รอตรวจสโตร์</span><strong>{storeTodayOrders.filter(order => order.storeStatus === "pending").length} งาน</strong><small>ยังไม่ได้รับหรือเริ่มตรวจ</small></article><article className="metric"><span>กำลังตรวจสินค้า</span><strong>{storeTodayOrders.filter(order => order.storeStatus === "working").length} งาน</strong><small>สโตร์กำลังดำเนินการ</small></article><article className="metric"><span>ตรวจสโตร์เสร็จ</span><strong>{storeTodayCompleted} งาน</strong><small>พร้อมส่งต่อห้องแพ็ค</small></article><article className="metric"><span>รอของ / ของไม่ครบ</span><strong>{storeTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus)).length} งาน</strong><small>ต้องติดตามสินค้า</small></article></div>
-              <div className="metrics-grid kpi-grid"><article className="metric"><span>งานส่งกลับ</span><strong>{kpiReturned.length}</strong></article><article className="metric"><span>งานค้างเกิน 1 วัน</span><strong>{kpiOverdue.length}</strong></article><article className="metric"><span>อัตราสตโร์สำเร็จ</span><strong>{kpiOrders.length ? Math.round((kpiStoreCompleted.length / kpiOrders.length) * 100) : 0}%</strong></article><article className="metric"><span>อัตราแพ็คสำเร็จ</span><strong>{kpiOrders.length ? Math.round((kpiPackCompleted.length / kpiOrders.length) * 100) : 0}%</strong></article></div>
+              <div className="metrics-grid kpi-grid"><article className="metric"><span>งานส่งกลับให้สโตร์ตรวจ</span><strong>{storeKpiReturned.length}</strong></article><article className="metric"><span>งานสโตร์ค้างเกิน 1 วัน</span><strong>{storeKpiOverdue.length}</strong></article><article className="metric"><span>อัตราสโตร์ตรวจครบ</span><strong>{storeKpiOrders.length ? Math.round((storeKpiCompleted.length / storeKpiOrders.length) * 100) : 0}%</strong></article><article className="metric"><span>งานสโตร์สะสม</span><strong>{storeKpiOrders.length}</strong></article></div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="secondary" onClick={() => copyStoreSummary("daily")}>คัดลอกรายงานวันนี้</button><button className="primary" onClick={() => shareStoreSummary("daily")}>ส่งรายงานวันนี้</button><button className="secondary" onClick={() => copyStoreSummary("monthly")}>คัดลอกรายงานเดือนนี้</button><button className="primary" onClick={() => shareStoreSummary("monthly")}>ส่งรายงานเดือนนี้</button></div>
-              <p className="muted">รายงานต่างจังหวัดและออนไลน์บันทึกใน Dashboard นี้เท่านั้น ไม่ส่งต่อห้องแพ็คและไม่ขึ้น Google Sheets</p>
+              <p className="muted">ออเดอร์ออนไลน์ส่งต่อให้ห้องแพ็คติดตาม ส่วนรายงานต่างจังหวัดแบบบันทึกใช้เก็บประวัติสโตร์ และทั้งสองส่วนไม่ขึ้น Google Sheets</p>
             </div>}
           </section>
         )}
@@ -4873,7 +4708,7 @@ export default function App() {
             <div className="panel-head"><h2>ติดตามเตรียมออเดอร์เชียงใหม่</h2><span>ดูข้อมูลจากฝ่ายขาย · อ่านอย่างเดียว</span></div>
             <div style={{ display: "grid", gap: "10px" }}>
               {preparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}{order.shippingCarrier ? ` · ขนส่ง: ${order.shippingCarrier}` : ""}</div>
                 {order.salesNote && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>หมายเหตุฝ่ายขาย:</b> {order.salesNote}</div>}
                 {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
@@ -4884,7 +4719,7 @@ export default function App() {
         )}
 
         {displayTab === "pack-dashboard" && (
-          <section className="panel role-workspace"><div className="panel-head"><h2>Dashboard ห้องแพ็ค</h2><span>สรุป KPI งานเตรียม</span></div><div className="metrics-grid kpi-grid"><article className="metric"><span>งานทั้งหมด</span><strong>{kpiOrders.length}</strong></article><article className="metric"><span>แพ็คเสร็จ</span><strong>{kpiPackCompleted.length}</strong></article><article className="metric"><span>รอตรวจ/รอของ</span><strong>{kpiPending.length}</strong></article><article className="metric"><span>ส่งกลับสโตร์</span><strong>{kpiReturned.length}</strong></article><article className="metric"><span>ค้างเกิน 1 วัน</span><strong>{kpiOverdue.length}</strong></article><article className="metric"><span>อัตราแพ็คสำเร็จ</span><strong>{kpiOrders.length ? Math.round((kpiPackCompleted.length / kpiOrders.length) * 100) : 0}%</strong></article></div><div style={{ display: "grid", gap: "8px", marginTop: "14px" }}><b>งานต้องติดตาม</b>{kpiPending.slice(0, 20).map(order => <article key={order.id} className="role-order-card"><b>{order.id} · {order.customerName}</b><div className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</div>{order.returnReason && <div style={{ color: "#b91c1c" }}>ส่งกลับ: {order.returnReason}</div>}</article>)}{!kpiPending.length && <p className="muted">ไม่มีงานค้างติดตาม</p>}</div></section>
+          <section className="panel role-workspace"><div className="panel-head"><h2>Dashboard ห้องแพ็ค</h2><span>สรุป KPI เฉพาะงานห้องแพ็ค</span></div><div className="metrics-grid kpi-grid"><article className="metric"><span>งานห้องแพ็คทั้งหมด</span><strong>{packKpiOrders.length}</strong></article><article className="metric"><span>แพ็คเสร็จ</span><strong>{packKpiCompleted.length}</strong></article><article className="metric"><span>รอดำเนินการ/รอของ</span><strong>{packKpiPending.length}</strong></article><article className="metric"><span>ส่งกลับสโตร์</span><strong>{packKpiReturned.length}</strong></article><article className="metric"><span>ค้างเกิน 1 วัน</span><strong>{packKpiOverdue.length}</strong></article><article className="metric"><span>อัตราแพ็คสำเร็จ</span><strong>{packKpiOrders.length ? Math.round((packKpiCompleted.length / packKpiOrders.length) * 100) : 0}%</strong></article></div><div style={{ display: "grid", gap: "8px", marginTop: "14px" }}><b>งานห้องแพ็คที่ต้องติดตาม</b>{packKpiPending.slice(0, 20).map(order => <article key={order.id} className="role-order-card"><b>{order.id} · {order.customerName}</b><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div>{order.returnReason && <div className="danger-text">ส่งกลับ: {order.returnReason}</div>}</article>)}{!packKpiPending.length && <p className="muted">ไม่มีงานค้างติดตาม</p>}</div></section>
         )}
 
         {displayTab === "pack-online" && (
@@ -4897,7 +4732,7 @@ export default function App() {
             <div style={{ display: "grid", gap: "10px" }}>
               {displayTab === "pack-work" && <div className="metrics-grid"><article className="metric"><span>งานแพ็ควันนี้</span><strong>{packTodayOrders.length}</strong></article><article className="metric"><span>เสร็จแล้ว</span><strong>{packTodayCompleted}</strong></article><article className="metric"><span>รอดำเนินการ</span><strong>{Math.max(0, packTodayOrders.length - packTodayCompleted)}</strong></article></div>}
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">แพ็ค: {order.packStatus || "-"}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: ["checked", "partial"].includes(order.storeStatus) ? "#166534" : "#a16207", background: ["checked", "partial"].includes(order.storeStatus) ? "#dcfce7" : "#fef3c7" }}>สโตร์: {order.storeStatus === "checked" ? "ตรวจครบแล้ว" : order.storeStatus === "partial" ? "ตรวจบางส่วน" : "รอสโตร์ตรวจ"}</span>}
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -4913,15 +4748,15 @@ export default function App() {
         {["chiangmai", "driver-prep"].includes(displayTab) && (
           <section className="panel">
             <div className="panel-head">
-              <h2>{displayTab === "store-work" ? "งานสโตร์" : displayTab === "pack-work" ? "งานห้องแพ็ค" : displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
-              <span>{(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).length} งาน</span>
+              <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
+              <span>{preparationOrders.length} งาน</span>
             </div>
             <div style={{ display: "grid", gap: "10px" }}>
-              {(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).map(order => (
+              {preparationOrders.map(order => (
                 <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                     <div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div>
-                    <span className="status-chip">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</span>
+                    <div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div>
                   </div>
                   <div style={{ fontSize: "12px", color: "#4b5563" }}>
                     เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์"} · {order.boxes || 0} กล่อง
@@ -4932,26 +4767,12 @@ export default function App() {
                   </div>
                   {displayTab === "chiangmai" && <><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div className="prep-note-store"><b>หมายเหตุสโตร์</b><span>{order.storeWorkDetails.note}</span></div>}{order.packWorkDetails?.note && <div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div>}</div>}</>}
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
-                  {displayTab === "store-work" && (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <button className="secondary" onClick={() => updatePreparationWorkflow(order, "store_update", { storeStatus: "working", storePackerName: auth.name })}>รับงาน</button>
-                      <button className="primary" onClick={() => { const checker = prompt("กรอกชื่อผู้ตรวจสอบสโตร์"); if (checker?.trim()) updatePreparationWorkflow(order, "store_update", { storeStatus: "checked", storePackerName: order.storePackerName || auth.name, storeCheckerName: checker.trim(), missingItems: [] }); }}>ยืนยันครบ</button>
-                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (!reason) return; const checker = prompt("กรอกชื่อผู้ตรวจสอบสโตร์"); if (checker?.trim()) updatePreparationWorkflow(order, "store_update", { storeStatus: "partial", storePackerName: order.storePackerName || auth.name, storeCheckerName: checker.trim(), missingItems: [reason] }); }}>แจ้งสินค้าไม่ครบ</button>
-                    </div>
-                  )}
-                  {displayTab === "pack-work" && (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <button className="secondary" onClick={() => updatePreparationWorkflow(order, "pack_update", { packStatus: "working", packPackerName: auth.name })}>รับงาน</button>
-                      <button className="primary" onClick={() => { const checker = prompt("กรอกชื่อผู้ตรวจสอบห้องแพ็ค"); if (checker?.trim()) updatePreparationWorkflow(order, "pack_update", { packStatus: "checked", packPackerName: order.packPackerName || auth.name, packCheckerName: checker.trim(), missingItems: [] }); }}>ยืนยันพร้อมส่ง</button>
-                      <button className="secondary" onClick={() => { const reason = prompt("ระบุรายการและเหตุผลที่รอ"); if (!reason) return; const checker = prompt("กรอกชื่อผู้ตรวจสอบห้องแพ็ค"); if (checker?.trim()) updatePreparationWorkflow(order, "pack_update", { packStatus: "partial", packPackerName: order.packPackerName || auth.name, packCheckerName: checker.trim(), missingItems: [reason] }); }}>พร้อมส่งบางส่วน</button>
-                    </div>
-                  )}
                   {displayTab === "chiangmai" && ["checked", "partial"].includes(order.packStatus) && (
                     <button className="primary" onClick={() => updatePreparationWorkflow(order, "queue")}>ส่งเข้าคิวคนขับ</button>
                   )}
                 </article>
               ))}
-              {(displayTab === "store-work" ? storeWorkOrders : displayTab === "pack-work" ? packWorkOrders : preparationOrders).length === 0 && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
+              {preparationOrders.length === 0 && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
           </section>
         )}
@@ -4991,10 +4812,21 @@ export default function App() {
                   {workPhotoPreviews.length > 0 && <span className="muted">มีรูปในเครื่อง {workPhotoPreviews.length} รูป</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
-                {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
+                {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" aria-label={`ลบรูปที่ ${index + 1}`} style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
                 {workSubmitError && <div role="alert" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>บันทึกออเดอร์ไม่สำเร็จ: {workSubmitError}</div>}
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button type="button" className="secondary" disabled={workSubmitting} onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button type="button" className="primary" disabled={workSubmitting} onClick={() => confirmWorkModal(false)}>{workSubmitting ? "กำลังบันทึก..." : (workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์")}</button></div>
               </div>
+            </section>
+          </div>
+        )}
+
+        {onlineReturnTarget && (
+          <div className="modal-backdrop" role="presentation">
+            <section className="panel modal-card" role="dialog" aria-modal="true" aria-labelledby="online-return-title">
+              <div className="panel-head"><h2 id="online-return-title">ส่งออเดอร์ออนไลน์กลับสโตร์</h2><span>{onlineReturnTarget.bookingNumber || "ไม่ระบุเลขใบสั่งจอง"}</span></div>
+              <label className="field-label" htmlFor="online-return-reason">ของผิด / เหตุผลที่ต้องตรวจสอบใหม่ *</label>
+              <textarea id="online-return-reason" rows={4} value={onlineReturnReason} onChange={event => setOnlineReturnReason(event.target.value)} placeholder="ระบุรายการที่ผิดและสิ่งที่สโตร์ต้องตรวจสอบ" autoFocus />
+              <div className="modal-actions"><button className="secondary" onClick={() => { setOnlineReturnTarget(null); setOnlineReturnReason(""); }}>ยกเลิก</button><button className="primary" disabled={!onlineReturnReason.trim()} onClick={async () => { const target = onlineReturnTarget; const reason = onlineReturnReason; setOnlineReturnTarget(null); setOnlineReturnReason(""); await updateOnlinePackStatus(target, "returned", reason); }}>ยืนยันส่งกลับสโตร์</button></div>
             </section>
           </div>
         )}
@@ -5023,7 +4855,7 @@ export default function App() {
         {reportModal && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
             <section className="panel" style={{ width: "min(850px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
-              <div className="panel-head"><h2>บันทึกรายงาน{reportModal === "outstation" ? "ต่างจังหวัด" : "ออนไลน์"}</h2><span>ไม่ส่ง Sheet / ไม่ส่งห้องแพ็ค</span></div>
+              <div className="panel-head"><h2>บันทึกรายงาน{reportModal === "outstation" ? "ต่างจังหวัด" : "ออนไลน์"}</h2><span>{reportModal === "online" ? "ส่งต่อห้องแพ็ค · ไม่ขึ้น Sheet" : "บันทึกประวัติสโตร์ · ไม่ขึ้น Sheet"}</span></div>
               <div style={{ display: "grid", gap: "10px" }}>{reportRows.map((row, index) => <div key={index} style={{ border: "1px solid #e5e7eb", padding: "10px", borderRadius: "8px", display: "grid", gap: "8px" }}><b>รายการ {index + 1}</b><BookingNumberInput value={row.bookingNumber} onChange={bookingNumber => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, bookingNumber } : item))} /><textarea value={row.detail} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, detail: e.target.value } : item))} placeholder="รายละเอียด" rows={2} /><textarea value={row.note} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, note: e.target.value } : item))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" rows={2} /><select value={row.status} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}><option value="saved">บันทึกแล้ว</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{reportRows.length > 1 && <button className="secondary" onClick={() => setReportRows(rows => rows.filter((_, i) => i !== index))}>ลบรายการนี้</button>}</div>)}</div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "12px" }}><label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป (ไม่บังคับ)<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureReportPhoto} /></label><button className="secondary" onClick={shareReportToLine}>💬 ส่ง LINE (ไม่บังคับ)</button>{reportPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}</div>
               {reportPhotoPreview && <img src={reportPhotoPreview} alt="รูปประกอบรายงาน" style={{ maxWidth: "100%", maxHeight: "220px", objectFit: "contain", borderRadius: "8px", marginTop: "8px" }} />}
@@ -5085,7 +4917,7 @@ export default function App() {
                         <small>{driverName || "ยังไม่รับงาน"}</small>
                       </div>
                       <strong>{money(order.cod)} บาท</strong>
-                      <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>🗑️</button>
+                      <button className="secondary danger" aria-label={`ลบออเดอร์ ${order.id}`} style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>ลบ</button>
                     </article>
                   );
                 })}
@@ -6379,7 +6211,7 @@ export default function App() {
             </section>
 
 	            <section className="panel">
-	              <div className="panel-head"><h2>📋 Login History</h2><span>{(state.loginHistory || []).length} entries</span></div>
+	              <div className="panel-head"><h2>ประวัติการเข้าสู่ระบบ</h2><span>{(state.loginHistory || []).length} รายการ</span></div>
 	              <div className="report-lines" style={{ maxHeight: "400px", overflowY: "auto" }}>
 	                {(state.loginHistory || []).length === 0 ? (
                   <p className="muted">ยังไม่มีการล็อกอิน</p>
@@ -6546,8 +6378,8 @@ export default function App() {
             <span>แชร์ข้อความคิวงานหลังส่งเข้าคิว</span>
           </label>
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
-            <button className="secondary" style={{ flex: 1 }} onClick={() => { setShowOrderConfirm(false); setShareNewOrderToLine(false); }}>❌ ยกเลิก</button>
-            <button className="primary" style={{ flex: 1 }} onClick={confirmOrder}>✅ ยืนยันส่ง</button>
+            <button className="secondary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={() => { setShowOrderConfirm(false); setShareNewOrderToLine(false); }}>ยกเลิก</button>
+            <button className="primary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={confirmOrder}>{orderConfirmSubmitting ? "กำลังบันทึก..." : "ยืนยันและบันทึกออเดอร์"}</button>
           </div>
         </div>
       </div>

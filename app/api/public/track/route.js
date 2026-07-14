@@ -2,6 +2,30 @@ import { getAdminDb } from "../../../../lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
+const TRACK_WINDOW_MS = 10 * 60 * 1000;
+const TRACK_MAX_REQUESTS = 20;
+const trackAttempts = globalThis.__hillkoffTrackAttempts || new Map();
+globalThis.__hillkoffTrackAttempts = trackAttempts;
+
+function requestClientKey(request) {
+  const forwarded = String(request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  return forwarded || String(request.headers.get("x-real-ip") || "unknown").trim();
+}
+
+function isRateLimited(request) {
+  const key = requestClientKey(request);
+  const now = Date.now();
+  const recent = (trackAttempts.get(key) || []).filter((at) => now - at < TRACK_WINDOW_MS);
+  recent.push(now);
+  trackAttempts.set(key, recent);
+  if (trackAttempts.size > 2000) {
+    for (const [entryKey, attempts] of trackAttempts) {
+      if (!attempts.some((at) => now - at < TRACK_WINDOW_MS)) trackAttempts.delete(entryKey);
+    }
+  }
+  return recent.length > TRACK_MAX_REQUESTS;
+}
+
 function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
@@ -81,11 +105,17 @@ function serializeOrder(order, driver) {
 }
 
 export async function GET(request) {
+  if (isRateLimited(request)) {
+    return Response.json(
+      { ok: false, error: "ค้นหาถี่เกินไป กรุณารอสักครู่แล้วลองใหม่" },
+      { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "600" } }
+    );
+  }
   const { searchParams } = new URL(request.url);
   const phoneDigits = normalizePhoneDigits(searchParams.get("phone"));
 
   if (phoneDigits.length < 8) {
-    return Response.json({ ok: false, error: "กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง" }, { status: 400 });
+    return Response.json({ ok: false, error: "กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
 
   try {
@@ -108,11 +138,11 @@ export async function GET(request) {
 
     const order = candidates[0];
     if (!order) {
-      return Response.json({ ok: true, data: null });
+      return Response.json({ ok: true, data: null }, { headers: { "Cache-Control": "no-store" } });
     }
 
     const driver = await findDriver(db, order);
-    return Response.json({ ok: true, data: serializeOrder(order, driver) });
+    return Response.json({ ok: true, data: serializeOrder(order, driver) }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return Response.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
   }

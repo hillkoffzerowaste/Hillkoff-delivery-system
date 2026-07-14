@@ -1,4 +1,4 @@
-import { getAdminDb } from "../../../../lib/firebaseAdmin";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -10,30 +10,34 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const token = String(payload?.token || "").trim();
+  const token = String(payload?.token || "").trim().slice(0, 4096);
   const role = String(payload?.role || "").trim();
-  const phoneDigits = String(payload?.phoneDigits || "").trim();
-  const driverId = String(payload?.driverId || "").trim();
-  const deviceId = String(payload?.deviceId || "").trim();
+  const deviceId = String(payload?.deviceId || "").trim().slice(0, 200);
 
   if (!token) return Response.json({ ok: false, error: "Missing token" }, { status: 400 });
   if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
-  if (!phoneDigits) return Response.json({ ok: false, error: "Missing phoneDigits" }, { status: 400 });
-
-  const db = getAdminDb();
-  await db.collection("push_tokens").doc(token).set(
-    {
+  try {
+    const { profile, db } = await requireProfile(request, ["driver", "sales"]);
+    if (profile.role !== role) return Response.json({ ok: false, error: "Role mismatch" }, { status: 403 });
+    const phoneDigits = String(profile.phoneDigits || profile.phone || "").replace(/\D/g, "");
+    const driverId = profile.role === "driver" ? String(profile.driverId || "").trim() : "";
+    if (!phoneDigits) return Response.json({ ok: false, error: "Profile phone is missing" }, { status: 400 });
+    const ref = db.collection("push_tokens").doc(token);
+    const current = await ref.get();
+    const now = new Date().toISOString();
+    await ref.set({
       token,
-      role,
+      role: profile.role,
       phoneDigits,
       driverId,
       deviceId,
-      userAgent: request.headers.get("user-agent") || "",
-      updatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
-
-  return Response.json({ ok: true });
+      userAgent: String(request.headers.get("user-agent") || "").slice(0, 500),
+      ownerUid: profile.uid,
+      updatedAt: now,
+      ...(!current.exists ? { createdAt: now } : {})
+    }, { merge: true });
+    return Response.json({ ok: true });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
