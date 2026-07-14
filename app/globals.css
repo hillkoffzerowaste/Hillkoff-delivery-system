@@ -1916,6 +1916,10 @@ input:focus,select:focus,textarea:focus { border-color:#9bb99f; box-shadow:0 0 0
 .metric::after { content:""; position:absolute; width:54px; height:54px; right:-18px; top:-18px; border-radius:50%; background:rgba(139,174,131,.14); }
 .metric span { color:#68756b; font-size:12px; font-weight:800; position:relative; z-index:1; }
 .metric strong { color:#42684c; font-size:29px; line-height:1; position:relative; z-index:1; }
+.kpi-grid { grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; }
+.kpi-grid .metric:nth-child(3n+1) { border-top:4px solid #5d8a68; }
+.kpi-grid .metric:nth-child(3n+2) { border-top:4px solid #d59a35; background:linear-gradient(145deg,#fff,#fff9ed); }
+.kpi-grid .metric:nth-child(3n) { border-top:4px solid #5c9bbb; background:linear-gradient(145deg,#fff,#f1f8fb); }
 .history-search { background:linear-gradient(145deg,#f4f8f2,#fafcf9); border-color:#d5e2d1; }
 .role-order-card { border-left-color:#b6d0b2; background:linear-gradient(90deg,#fff,#fcfdfb); }
 .dispatch-row,.driver-card,.customer-detail,.daily-accordion { border-color:#e2e7e0; }
