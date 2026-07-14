@@ -1849,6 +1849,8 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
 
 /* Dashboard V2: dense operational overview for store and packing teams. */
 .ops-kpi-dashboard-v2 { gap: 18px; }
+.ops-kpi-cards-standard .stat-card { min-height: 108px; height: 100%; margin: 0; }
+.ops-kpi-cards-standard .stat-value { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
 .ops-kpi-dashboard-v2 .ops-kpi-card { grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; align-items: center; min-height: 154px; }
 .ops-kpi-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: color-mix(in srgb, var(--kpi-accent) 15%, white); font-size: 21px; }
 .ops-kpi-card > div { display: grid; gap: 5px; }
