@@ -369,7 +369,7 @@ function PackSalesOrderDetails({ order }) {
 }
 
 function isValidBookingNumber(value) {
-  return /^(CSP|CSR)\d{4}$/i.test(String(value || "").trim());
+  return /^\S+\d{4}$/.test(String(value || "").trim());
 }
 
 const DEFAULT_PREPARATION_CHECKERS = {
@@ -379,13 +379,18 @@ const DEFAULT_PREPARATION_CHECKERS = {
 
 function BookingNumberInput({ value, onChange, required = false }) {
   const rawValue = String(value || "").trim();
-  const matchesStandard = !rawValue || /^(CSP|CSR)\d{0,4}$/i.test(rawValue);
-  const prefix = rawValue.toUpperCase().startsWith("CSR") ? "CSR" : "CSP";
-  const digits = rawValue.replace(/^(CSP|CSR)/i, "").replace(/\D/g, "").slice(0, 4);
-  if (!matchesStandard) return <input value={value || ""} onChange={e => onChange(e.target.value)} placeholder="เลขใบสั่งจองเดิม" aria-label="เลขที่ใบสั่งจอง" />;
-  return <div style={{ display: "grid", gridTemplateColumns: "76px minmax(0, 1fr)", gap: "7px" }}>
-    <select value={prefix} onChange={e => onChange(digits ? `${e.target.value}${digits}` : "")} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option></select>
-    <input value={digits} onChange={e => { const nextDigits = digitsOnly(e.target.value).slice(0, 4); onChange(nextDigits ? `${prefix}${nextDigits}` : ""); }} inputMode="numeric" maxLength={4} placeholder={required ? "เลข 4 หลัก *" : "เลข 4 หลัก"} aria-label="เลข 4 หลักของใบสั่งจอง" />
+  const knownPrefixes = ["CSP", "CSR", "AS7", "AS1", "AS6"];
+  const knownPrefix = knownPrefixes.find(item => rawValue.toUpperCase().startsWith(item));
+  const customMatch = knownPrefix ? null : rawValue.match(/^([^\d]+)(\d{0,4})$/);
+  const prefix = knownPrefix || (rawValue ? "other" : "CSP");
+  const customPrefix = customMatch?.[1] || "";
+  const digits = knownPrefix ? rawValue.slice(knownPrefix.length).replace(/\D/g, "").slice(0, 4) : (customMatch?.[2] || "").replace(/\D/g, "").slice(0, 4);
+  const activePrefix = prefix === "other" ? customPrefix : prefix;
+  const setBooking = (nextPrefix, nextDigits) => onChange(nextPrefix ? `${nextPrefix}${nextDigits}` : "");
+  return <div style={{ display: "grid", gridTemplateColumns: prefix === "other" ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "7px" }}>
+    <select value={prefix} onChange={e => { const next = e.target.value; setBooking(next === "other" ? "OTHER" : next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="AS7">AS7</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="other">อื่นๆ</option></select>
+    {prefix === "other" && <input value={customPrefix} onChange={e => setBooking(e.target.value.trim().toUpperCase(), digits)} placeholder="คำนำหน้า" aria-label="คำนำหน้าอื่น" />}
+    <input value={digits} onChange={e => setBooking(activePrefix, digitsOnly(e.target.value).slice(0, 4))} inputMode="numeric" maxLength={4} placeholder={required ? "เลข 4 หลัก *" : "เลข 4 หลัก"} aria-label="เลข 4 หลักของใบสั่งจอง" />
   </div>;
 }
 
@@ -2581,7 +2586,7 @@ export default function App() {
     if (!workModal) return false;
     const { role } = workModal;
     if (role === "store" && !workForm.bookingNumber.trim()) { setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจอง"); return false; }
-    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็น CSP/CSR ตามด้วยตัวเลข 4 หลัก"); return false; }
+    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก"); return false; }
     if (!workForm.checkerName.trim()) { setSyncStatus(`❌ กรุณากรอกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`); return false; }
     if (!workForm.checklist.verified) { setSyncStatus("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว"); return false; }
     if (workForm.checkResult === "partial" && !workForm.missingNote.trim()) { setSyncStatus("❌ กรุณาระบุรายการที่ไม่ครบ/รอสินค้า"); return false; }
@@ -2657,7 +2662,7 @@ export default function App() {
 
   const saveStoreReports = async () => {
     if (!reportModal) return;
-    if (reportRows.some((row) => row.bookingNumber.trim() && !isValidBookingNumber(row.bookingNumber))) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็น CSP/CSR ตามด้วยตัวเลข 4 หลัก");
+    if (reportRows.some((row) => row.bookingNumber.trim() && !isValidBookingNumber(row.bookingNumber))) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
     try {
       const idToken = await refreshAuthToken(true);
       const res = await fetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ type: reportModal, rows: reportRows }) });
@@ -2680,7 +2685,7 @@ export default function App() {
     if (storeReportDate !== todayServiceDate) return [];
     const rows = (storeDraftRows[type] || []).filter((row) => row.bookingNumber.trim() || row.detail.trim() || row.note.trim());
     if (!rows.length) return [];
-    if (rows.some((row) => row.bookingNumber.trim() && !isValidBookingNumber(row.bookingNumber))) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็น CSP/CSR ตามด้วยตัวเลข 4 หลัก"); return null; }
+    if (rows.some((row) => row.bookingNumber.trim() && !isValidBookingNumber(row.bookingNumber))) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก"); return null; }
     try {
       const idToken = await refreshAuthToken(true);
       const res = await fetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ type, rows, draft: true }) });
@@ -2722,7 +2727,7 @@ export default function App() {
 
   const saveEditedStoreReport = async () => {
     if (!editingStoreReport) return;
-    if (editingStoreReport.bookingNumber?.trim() && !isValidBookingNumber(editingStoreReport.bookingNumber)) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องเป็น CSP/CSR ตามด้วยตัวเลข 4 หลัก");
+    if (editingStoreReport.bookingNumber?.trim() && !isValidBookingNumber(editingStoreReport.bookingNumber)) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
     try {
       const idToken = await refreshAuthToken(true);
       const res = await fetch("/api/store/reports", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify(editingStoreReport) });
