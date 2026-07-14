@@ -2641,6 +2641,8 @@ export default function App() {
     if (!workModal) return;
     const { order, role } = workModal;
     if (!validateWorkModal()) return;
+    const modalSnapshot = workModal;
+    setWorkModal(null);
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
     const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
     const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine, checklist: workForm.checklist, checkResult: workForm.checkResult };
@@ -2648,10 +2650,10 @@ export default function App() {
       ? { storeStatus: workForm.checkResult === "partial" ? "partial" : "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
       : { packStatus: workForm.checkResult === "returned" ? "returned" : workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, returnReason: workForm.checkResult === "returned" ? workForm.missingNote.trim() : "", packWorkDetails: details });
     if (updated) {
-      clearWorkPhotos();
-      setWorkModal(null);
+      clearWorkPhotos(modalSnapshot);
       return true;
     }
+    setWorkModal(modalSnapshot);
     return false;
   };
 
