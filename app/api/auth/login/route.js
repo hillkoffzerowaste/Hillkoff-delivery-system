@@ -1,5 +1,6 @@
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import crypto from "node:crypto";
+import { driverIdentityPatch } from "../../../../lib/driverIdentity";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,13 @@ export async function POST(request) {
     const isDeviceTrusted = !!deviceId && trusted.includes(deviceId);
     const hasPin = !!existing?.pinHash && !!existing?.pinSalt;
 
+    if (existing?.role && existing.role !== role) {
+      return Response.json({ ok: false, error: "ROLE_MISMATCH" }, { status: 403 });
+    }
+    if (setPin && existing && hasPin) {
+      return Response.json({ ok: false, error: "PIN_ALREADY_SET" }, { status: 403 });
+    }
+
     if (!existing && !setPin) {
       return Response.json({ ok: false, error: "PIN_NOT_SET" }, { status: 401 });
     }
@@ -95,6 +103,7 @@ export async function POST(request) {
       updatedAt: new Date().toISOString(),
       createdAt: existing?.createdAt || new Date().toISOString()
     };
+    if (role === "driver") Object.assign(next, driverIdentityPatch(existing, uid));
 
     await userRef.set(next, { merge: true });
 

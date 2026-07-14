@@ -6345,6 +6345,18 @@ export default function App() {
 		              <section className="panel">
 	                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
 	                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
+	                <button type="button" className="secondary" style={{ width: "100%", padding: "10px", marginBottom: "8px" }} onClick={async () => {
+	                  if (!window.confirm("ยืนยันย้าย UID คนขับเข้าสู่ระบบใหม่? ประวัติงานจะยังใช้ driverId เดิมทั้งหมด")) return;
+	                  try {
+	                    const idToken = await refreshAuthToken(true);
+	                    const res = await fetch("/api/admin/driver-identities", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ dryRun: false }) });
+	                    const json = await res.json().catch(() => null);
+	                    if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+	                    const data = json.data || {};
+	                    setSyncStatus(`✅ ย้ายตัวตนคนขับแล้ว ${data.migrated || 0} คน · ข้าม ${data.skipped || 0} คน`);
+	                    alert(`✅ ย้ายตัวตนคนขับแล้ว ${data.migrated || 0} คน\nประวัติเดิมยังเชื่อมด้วย driverId เดิม`);
+	                  } catch (error) { setSyncStatus(`❌ ย้ายตัวตนคนขับไม่สำเร็จ: ${error?.message || error}`); }
+	                }}>🔐 ย้ายตัวตนคนขับ (เก็บประวัติเดิม)</button>
 	                <button type="button" className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={resetAllOrders}>🔄 รีเซ็ตแดชบอร์ด</button>
               </section>
             )}

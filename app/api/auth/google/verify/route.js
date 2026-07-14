@@ -1,5 +1,6 @@
 import { getAdminAuth, getAdminDb } from "../../../../../lib/firebaseAdmin";
 import { hashOtp, isOtpExpired, normalizePhoneDigits } from "../../../../../lib/otp";
+import { driverIdentityPatch } from "../../../../../lib/driverIdentity";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,7 @@ export async function POST(request) {
       updatedAt: new Date().toISOString(),
       createdAt: existing?.createdAt || new Date().toISOString()
     };
+    if (role === "driver") Object.assign(profile, driverIdentityPatch(existing, decoded.uid));
 
     await profileRef.set(profile, { merge: true });
     await db.collection("users").doc(decoded.uid).set(profile, { merge: true });

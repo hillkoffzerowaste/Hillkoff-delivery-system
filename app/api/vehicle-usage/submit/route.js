@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { after } from "next/server";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
+import { resolveVerifiedDriver } from "../../../../lib/driverIdentity";
 
 export const runtime = "nodejs";
 
@@ -17,25 +18,6 @@ function toServiceDateKey(dateLike) {
   const m = parts.find((p) => p.type === "month")?.value || "01";
   const d = parts.find((p) => p.type === "day")?.value || "01";
   return `${y}-${m}-${d}`;
-}
-
-async function findDriverUser(db, decoded, payload) {
-  let snap = await db.collection("users_by_phone").where("uidLast", "==", decoded.uid).limit(1).get();
-  let doc = snap.docs[0] || null;
-  let user = doc?.data() || null;
-  const phoneDigits = String(payload?.phoneDigits || payload?.driverPhone || "").replace(/\D/g, "");
-  const driverId = String(payload?.driverId || "").trim();
-
-  if ((!user || user.role !== "driver") && phoneDigits) {
-    doc = await db.collection("users_by_phone").doc(phoneDigits).get();
-    user = doc.exists ? doc.data() || null : null;
-  }
-  if ((!user || user.role !== "driver") && driverId) {
-    snap = await db.collection("users_by_phone").where("driverId", "==", driverId).limit(1).get();
-    doc = snap.docs[0] || null;
-    user = doc?.data() || null;
-  }
-  return { doc, user };
 }
 
 async function syncUsageToGoogle(payload) {
@@ -114,7 +96,8 @@ export async function POST(request) {
   try {
     const decoded = await getAdminAuth().verifyIdToken(idToken, true);
     const db = getAdminDb();
-    const { doc, user } = await findDriverUser(db, decoded, payload);
+    const identity = await resolveVerifiedDriver(db, decoded);
+    const { doc, user } = identity || {};
     if (!user || user.role !== "driver") {
       return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
     }
