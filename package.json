@@ -4,6 +4,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "customers:backfill-search": "node scripts/backfill-customer-phone-digits.mjs",
     "backup": "node lib/backup/cli.js backup",
     "backup:list": "node lib/backup/cli.js list",
     "backup:restore": "node lib/backup/cli.js restore",

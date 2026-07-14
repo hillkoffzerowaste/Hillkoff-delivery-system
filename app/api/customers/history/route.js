@@ -31,8 +31,10 @@ export async function GET(request) {
 
     const customerRef = db.collection("customers").doc(customerId);
     const customerSnap = await customerRef.get();
-    if (!customerSnap.exists) return Response.json({ ok: false, error: "Customer not found" }, { status: 404 });
-    const customer = { id: customerSnap.id, ...(customerSnap.data() || {}) };
+    const indexedCustomerSnap = customerSnap.exists ? null : await db.collection("customer_search").doc(customerId).get();
+    if (!customerSnap.exists && !indexedCustomerSnap?.exists) return Response.json({ ok: false, error: "Customer not found" }, { status: 404 });
+    const customerSource = customerSnap.exists ? customerSnap : indexedCustomerSnap;
+    const customer = { id: customerSource.id, ...(customerSource.data() || {}) };
     const name = clean(customer.name);
     const phone = clean(customer.phone);
     const phoneDigits = String(customer.phoneDigits || phone.replace(/\D/g, ""));

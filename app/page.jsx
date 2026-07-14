@@ -4494,7 +4494,7 @@ export default function App() {
             )}
 
             <section className="panel" style={{ order: -10 }}>
-              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>เลือกลูกค้าจากรายชื่อ</span></div>
+              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>ค้นหารายชื่อลูกค้าทั้งหมดจาก Firestore</span></div>
               {(() => {
                 const q = (orderCustomerSearch || "").trim();
                 const matches = customers
