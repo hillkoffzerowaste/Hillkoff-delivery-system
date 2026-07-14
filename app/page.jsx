@@ -2637,6 +2637,7 @@ export default function App() {
   };
 
   const confirmWorkModal = async (sharedToLine = workSharedToLine) => {
+    sharedToLine = typeof sharedToLine === "boolean" ? sharedToLine : workSharedToLine;
     if (!workModal) return;
     const { order, role } = workModal;
     if (!validateWorkModal()) return;
@@ -4958,7 +4959,7 @@ export default function App() {
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
                 {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={confirmWorkModal}>{workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์"}</button></div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button className="primary" onClick={() => confirmWorkModal()}>{workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์"}</button></div>
               </div>
             </section>
           </div>
