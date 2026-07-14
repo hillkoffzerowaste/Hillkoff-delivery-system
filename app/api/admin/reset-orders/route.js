@@ -1,4 +1,4 @@
-import { getAdminDb } from "../../../../lib/firebaseAdmin";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -13,18 +13,8 @@ async function deleteCollectionBatch(db, collectionPath, batchSize = 300) {
 }
 
 export async function POST(request) {
-  let payload;
   try {
-    payload = await request.json();
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const password = String(payload?.password || "");
-  if (password !== "2532") return Response.json({ ok: false, error: "Invalid password" }, { status: 401 });
-
-  try {
-    const db = getAdminDb();
+    const { db } = await requireProfile(request, ["admin"]);
     let deleted = 0;
     // Loop batches until empty
     for (let i = 0; i < 50; i++) {
@@ -33,7 +23,5 @@ export async function POST(request) {
       if (n === 0) break;
     }
     return Response.json({ ok: true, deleted });
-  } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
-  }
+  } catch (error) { return errorResponse(error); }
 }

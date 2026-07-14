@@ -6,9 +6,11 @@
 
 import { getBackupTableData } from "@/lib/backup/backupService";
 import { restoreFromBackup } from "@/lib/backup/supabaseBackup";
+import { requireProfile } from "@/lib/workflowAuth";
 
 export async function POST(request) {
   try {
+    await requireProfile(request, ["admin"]);
     const body = await request.json();
     const { backupDate, tables, confirm } = body;
 

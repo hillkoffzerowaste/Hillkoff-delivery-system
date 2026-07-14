@@ -1,4 +1,4 @@
-import { getAdminDb, getAdminAuth } from "../../../../lib/firebaseAdmin";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
@@ -42,16 +42,14 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const idToken = String(payload?.idToken || "").trim();
   const order = payload?.order && typeof payload.order === "object" ? payload.order : null;
 
-  if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!order?.id) return Response.json({ ok: false, error: "Missing order" }, { status: 400 });
 
   try {
-    const auth = getAdminAuth();
-    const decoded = await auth.verifyIdToken(idToken, true);
-    const db = getAdminDb();
+    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin"]);
+    const orderRef = db.collection("orders").doc(String(order.id));
+    if ((await orderRef.get()).exists) return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });
 
     const next = {
       customerId: String(order.customerId || ""),
@@ -67,7 +65,7 @@ export async function POST(request) {
       cod: Number(order.cod || 0),
       driverId: String(order.driverId || ""),
       driverName: String(order.driverName || ""),
-      salesName: String(order.salesName || ""),
+      salesName: String(profile.name || order.salesName || ""),
       salesPhone: String(order.salesPhone || ""),
       status: "รอจัดเตรียมสินค้า",
       workflowType: order.deliveryMethod === "outstation" ? "store_route" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
@@ -96,8 +94,8 @@ export async function POST(request) {
       createdByUid: decoded.uid
     };
 
-    await db.collection("orders").doc(String(order.id)).set(next, { merge: true });
-    await db.collection("orders").doc(String(order.id)).collection("activity").doc().set(next.workflowHistory[0]);
+    await orderRef.set(next, { merge: true });
+    await orderRef.collection("activity").doc().set(next.workflowHistory[0]);
     await db.collection("customer_search").doc(String(next.customerId || `legacy-${order.id}`)).set(customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
     await syncDeliveryOrderToSheet(db, order.id, next);
 
@@ -156,7 +154,5 @@ export async function POST(request) {
     }
 
     return Response.json({ ok: true, data: { id: String(order.id) } });
-  } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
-  }
+  } catch (error) { return errorResponse(error); }
 }

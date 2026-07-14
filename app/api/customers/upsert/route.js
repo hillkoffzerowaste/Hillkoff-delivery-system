@@ -1,5 +1,5 @@
-import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -24,26 +24,20 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const idToken = String(payload?.idToken || "").trim();
   const customer = payload?.customer && typeof payload.customer === "object" ? payload.customer : null;
   const customerId = String(customer?.id || "").trim();
 
-  if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!customerId) return Response.json({ ok: false, error: "Missing customer id" }, { status: 400 });
 
   try {
-    const auth = getAdminAuth();
-    const decoded = await auth.verifyIdToken(idToken, true);
-    const db = getAdminDb();
+    const { profile, db } = await requireProfile(request, ["sales", "admin"]);
     const next = cleanCustomer(customer);
     await db.collection("customers").doc(customerId).set({
       ...next,
-      updatedByUid: decoded.uid
+      updatedByUid: profile.uid
     }, { merge: true });
     await db.collection("customer_search").doc(customerId).set(customerSearchRecord(next), { merge: true });
 
     return Response.json({ ok: true, data: { id: customerId } });
-  } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
-  }
+  } catch (error) { return errorResponse(error); }
 }

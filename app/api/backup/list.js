@@ -5,9 +5,11 @@
 
 import { listBackups, getBackupMetadata, formatBytes } from "@/lib/backup/backupService";
 import { createBackupSummary } from "@/lib/utils/backupUtils";
+import { requireProfile } from "@/lib/workflowAuth";
 
 export async function GET(request) {
   try {
+    await requireProfile(request, ["admin"]);
     const backups = await listBackups();
     const summary = createBackupSummary(backups);
 

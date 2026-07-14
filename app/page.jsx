@@ -1505,7 +1505,7 @@ export default function App() {
 		      const idToken = await refreshAuthToken(true);
 		      const res = await fetch("/api/customers/upsert", {
 		        method: "POST",
-		        headers: { "Content-Type": "application/json" },
+		        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
 		        body: JSON.stringify({ idToken, customer })
 		      });
 		      const json = await res.json().catch(() => null);
@@ -2249,7 +2249,7 @@ export default function App() {
 	    const idToken = await refreshAuthToken(true);
 	    const res = await fetch("/api/orders/create", {
 	      method: "POST",
-	      headers: { "Content-Type": "application/json" },
+	      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
 	      body: JSON.stringify({ idToken, order: pendingOrder })
 	    });
 	    const json = await res.json();
@@ -2331,6 +2331,24 @@ export default function App() {
       });
     });
     setSyncStatus("✅ บันทึกลำดับส่งของแล้ว");
+  };
+
+  const resetAllOrders = async () => {
+    if (auth.role !== "admin") return setSyncStatus("❌ เฉพาะแอดมินเท่านั้นที่รีเซ็ตออเดอร์ได้");
+    if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? ข้อมูลออเดอร์จะถูกลบ")) return;
+    try {
+      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด...");
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/admin/reset-orders", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setState(prev => ({ ...prev, orders: [] }));
+      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
+    } catch (error) {
+      setSyncStatus(`❌ รีเซ็ตออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
+      alert(`❌ รีเซ็ตไม่สำเร็จ: ${error?.message || error}`);
+    }
   };
 
   const moveDriverSequence = (orderId, direction) => {
@@ -2937,7 +2955,7 @@ export default function App() {
 	      const idToken = await refreshAuthToken(true);
 	      const res = await fetch("/api/customers/delete", {
 	        method: "POST",
-	        headers: { "Content-Type": "application/json" },
+	        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
 	        body: JSON.stringify({ idToken, customerId: id })
 	      });
 	      const json = await res.json().catch(() => null);
@@ -5026,42 +5044,9 @@ export default function App() {
         {displayTab === "dispatch" && (
           <div className="dispatch-grid">
             <section className="panel">
-              <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
-                <button className="secondary" onClick={() => {
-                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตออเดอร์:");
-                  if (pwd === null) return; // User cancelled
-                  if (pwd !== "2532") {
-                    alert("❌ รหัสไม่ถูกต้อง");
-                    return;
-                  }
-                  if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
-
-	                  (async () => {
-	                    try {
-	                      setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด...");
-	                      const res = await fetch("/api/admin/reset-orders", {
-	                        method: "POST",
-	                        headers: { "Content-Type": "application/json" },
-	                        body: JSON.stringify({ password: pwd })
-	                      });
-	                      const json = await res.json();
-	                      if (!json?.ok) {
-	                        alert(`❌ ลบออเดอร์ไม่สำเร็จ: ${json?.error || "unknown error"}`);
-	                        setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${json?.error || "unknown error"}`);
-	                        return;
-	                      }
-
-	                      // Clear local state
-	                      setState(prev => ({ ...prev, orders: [] }));
-	                      
-	                      setSyncStatus("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-	                      alert("✅ รีเซ็ตออเดอร์ทั้งหมดสำเร็จ");
-	                    } catch (e) {
-	                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
-	                    }
-	                    })();
-                }} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
-              </div>
+              {auth.role === "admin" && <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
+                <button type="button" className="secondary" onClick={resetAllOrders} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
+              </div>}
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "10px" }}>
                 <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setOrdersLimit((n) => n + 20)}>
@@ -6360,34 +6345,7 @@ export default function App() {
 		              <section className="panel">
 	                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
 	                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
-	                <button className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={() => {
-	                  const pwd = prompt("🔐 กรุณากรอกรหัสเพื่อรีเซ็ตแดชบอร์ด:");
-	                  if (pwd === null) return; // User cancelled
-	                  if (pwd !== "2532") {
-	                    alert("❌ รหัสไม่ถูกต้อง");
-                    return;
-                  }
-                  if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตแดชบอร์ดทั้งหมดหรือไม่? (ข้อมูลทั้งหมดจะถูกลบ)")) return;
-                  
-	                  (async () => {
-	                    try {
-	                      const res = await fetch("/api/admin/reset-orders", {
-	                        method: "POST",
-	                        headers: { "Content-Type": "application/json" },
-	                        body: JSON.stringify({ password: pwd })
-	                      });
-	                      const json = await res.json();
-	                      if (!json?.ok) {
-	                        alert(`❌ ลบไม่สำเร็จ: ${json?.error || "unknown error"}`);
-	                        return;
-	                      }
-	                      setState(prev => ({ ...prev, orders: [] }));
-	                      alert("✅ รีเซ็ตแดชบอร์ดสำเร็จ!");
-	                    } catch (e) {
-	                      alert(`❌ รีเซ็ตไม่สำเร็จ: ${e?.message || String(e)}`);
-	                    }
-	                  })();
-                }}>🔄 รีเซ็ตแดชบอร์ด</button>
+	                <button type="button" className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={resetAllOrders}>🔄 รีเซ็ตแดชบอร์ด</button>
               </section>
             )}
             

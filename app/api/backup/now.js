@@ -4,9 +4,11 @@
  */
 
 import { createBackup } from "@/lib/backup/backupService";
+import { requireProfile } from "@/lib/workflowAuth";
 
 export async function POST(request) {
   try {
+    await requireProfile(request, ["admin"]);
     const body = await request.json().catch(() => ({}));
     const reason = body.reason || "manual";
 

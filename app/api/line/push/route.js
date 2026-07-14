@@ -1,5 +1,5 @@
-import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -11,25 +11,22 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const idToken = String(payload?.idToken || "").trim();
   const text = String(payload?.text || "").trim();
-  const to = String(payload?.to || "").trim();
-  if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!text) return Response.json({ ok: false, error: "Missing text" }, { status: 400 });
 
   try {
-    const decoded = await getAdminAuth().verifyIdToken(idToken, true);
-    const result = await pushLineText({ to, text, metadata: { uid: decoded.uid, source: "api" } });
-    await getAdminDb().collection("notifications").add({
+    const { profile, db } = await requireProfile(request, ["sales", "admin"]);
+    const to = String(process.env.LINE_DEFAULT_TO || "").trim();
+    if (!to) return Response.json({ ok: false, error: "LINE_DEFAULT_TO is not configured" }, { status: 503 });
+    const result = await pushLineText({ to, text, metadata: { uid: profile.uid, source: "api" } });
+    await db.collection("notifications").add({
       channel: "line",
       to: to || process.env.LINE_DEFAULT_TO || "",
       text,
       result,
-      createdByUid: decoded.uid,
+      createdByUid: profile.uid,
       createdAt: new Date().toISOString()
     });
     return Response.json({ ok: result.ok, data: result });
-  } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
-  }
+  } catch (error) { return errorResponse(error); }
 }

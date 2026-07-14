@@ -2,9 +2,11 @@
  * GET /api/backup/[date]/metadata
  * Get metadata for a specific backup
  */
+import { requireProfile } from "@/lib/workflowAuth";
 
 export async function GET(request, { params }) {
   try {
+    await requireProfile(request, ["admin"]);
     const { date } = params;
 
     if (!date) {

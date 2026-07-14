@@ -30,13 +30,14 @@ export async function GET(request) {
       const ref = db.collection("store_reports").doc(id);
       const snap = await ref.get();
       if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
+      if (profile.role === "pack" && snap.data()?.type !== "online") return Response.json({ ok: false, error: "Pack can view online reports only" }, { status: 403 });
       const history = await ref.collection("history").orderBy("at", "desc").limit(100).get();
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
     let query = db.collection("store_reports").orderBy("createdAt", "desc");
-    if (date) query = query.startAt(`${date}T23:59:59.999Z`).endAt(`${date}T00:00:00.000Z`);
+    if (date) query = query.startAt(`${date}T00:00:00.000Z`).endAt(`${date}T23:59:59.999Z`);
     const snap = await query.limit(500).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
