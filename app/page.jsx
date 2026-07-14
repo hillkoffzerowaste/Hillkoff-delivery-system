@@ -4690,7 +4690,7 @@ export default function App() {
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
-                <PackSalesOrderDetails order={order} />
+                <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button>
               </article>)}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
@@ -4740,7 +4740,7 @@ export default function App() {
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
-                <PackSalesOrderDetails order={order} />
+                <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
               </article>)}
               {!packWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
