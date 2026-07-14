@@ -1926,6 +1926,35 @@ input:focus,select:focus,textarea:focus { border-color:#9bb99f; box-shadow:0 0 0
 [style*="position: fixed"] article[style*="border-left"] { background:#fafcf9 !important; }
 @media (max-width:720px) { .sidebar { background:#617465; } }
 
+.prep-order-details {
+  border: 1px solid #dbe5d8;
+  border-radius: 10px;
+  background: #fbfdfb;
+  padding: 0 10px;
+}
+
+.prep-order-details summary {
+  cursor: pointer;
+  color: #587a61;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 9px 0;
+}
+
+.prep-order-details[open] { padding-bottom: 10px; }
+.prep-order-details[open] summary { margin-bottom: 8px; border-bottom: 1px solid #e5ece2; }
+
+.prep-work-notes {
+  display: grid;
+  gap: 5px;
+  border-left: 4px solid #d69a4a;
+  border-radius: 6px;
+  background: #fffaf0;
+  color: #5f4b2d;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
 .driver-sequence-help {
   margin: -4px 0 12px;
   padding: 9px 11px;
