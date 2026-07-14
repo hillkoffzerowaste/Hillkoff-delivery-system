@@ -5,6 +5,8 @@ import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
 
 export const runtime = "nodejs";
 
+const BOOKING_NUMBER_PATTERN = /^\S+-\d{4}$/;
+
 function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
@@ -48,6 +50,10 @@ export async function POST(request) {
 
   try {
     const { profile, db, decoded } = await requireProfile(request, ["sales", "admin"]);
+    const bookingNumber = String(order.bookingNumber || "").trim();
+    if (bookingNumber && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) {
+      return Response.json({ ok: false, error: "Booking number must use PREFIX-1234 format" }, { status: 400 });
+    }
     const orderRef = db.collection("orders").doc(String(order.id));
     if ((await orderRef.get()).exists) return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });
 
@@ -70,7 +76,7 @@ export async function POST(request) {
       status: "รอจัดเตรียมสินค้า",
       workflowType: order.deliveryMethod === "outstation" ? "store_route" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
       deliveryMethod: ["grab_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver",
-      bookingNumber: String(order.bookingNumber || "").trim().slice(0, 100),
+      bookingNumber: bookingNumber.slice(0, 100),
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
       storeStatus: order.workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: order.workflowType === "direct_pack" ? "pending" : "blocked",

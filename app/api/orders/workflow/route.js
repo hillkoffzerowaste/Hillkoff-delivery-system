@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 const STORE_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
 const PACK_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
+const BOOKING_NUMBER_PATTERN = /^\S+-\d{4}$/;
 
 export async function PATCH(request) {
   try {
@@ -27,7 +28,11 @@ export async function PATCH(request) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบสโตร์"), { status: 400 });
       }
       patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name); patch.storeCheckerName = String(body.storeCheckerName || ""); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : [];
-      if (body.bookingNumber !== undefined) patch.bookingNumber = String(body.bookingNumber || "").trim().slice(0, 100);
+      if (body.bookingNumber !== undefined) {
+        const bookingNumber = String(body.bookingNumber || "").trim().slice(0, 100);
+        if (!BOOKING_NUMBER_PATTERN.test(bookingNumber)) throw Object.assign(new Error("Booking number must use PREFIX-1234 format"), { status: 400 });
+        patch.bookingNumber = bookingNumber;
+      }
       if (body.storeWorkDetails && typeof body.storeWorkDetails === "object") patch.storeWorkDetails = {
         detail: String(body.storeWorkDetails.detail || "").trim().slice(0, 2000),
         note: String(body.storeWorkDetails.note || "").trim().slice(0, 2000),

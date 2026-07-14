@@ -405,7 +405,14 @@ function PackSalesOrderDetails({ order }) {
 }
 
 function isValidBookingNumber(value) {
-  return /^\S+\d{4}$/.test(String(value || "").trim());
+  return /^\S+-\d{4}$/.test(String(value || "").trim());
+}
+
+function normalizeBookingNumber(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (isValidBookingNumber(raw)) return raw;
+  const legacy = raw.match(/^(.+?)-?(\d{4})$/);
+  return legacy ? `${legacy[1].replace(/-+$/, "").trim()}-${legacy[2]}` : raw;
 }
 
 const DEFAULT_PREPARATION_CHECKERS = {
@@ -414,15 +421,22 @@ const DEFAULT_PREPARATION_CHECKERS = {
 };
 
 function BookingNumberInput({ value, onChange, required = false }) {
-  const rawValue = String(value || "").trim();
+  const rawValue = String(value || "").trim().toUpperCase();
   const knownPrefixes = ["CSP", "CSR", "AS7", "AS1", "AS6"];
-  const knownPrefix = knownPrefixes.find(item => rawValue.toUpperCase().startsWith(item));
-  const customMatch = knownPrefix ? null : rawValue.match(/^([^\d]+)(\d{0,4})$/);
-  const prefix = knownPrefix || (rawValue ? "other" : "CSP");
+  const knownPrefix = knownPrefixes.find(item => rawValue === item || rawValue.startsWith(`${item}-`) || (rawValue.startsWith(item) && /^\d/.test(rawValue.slice(item.length))));
+  const customMatch = knownPrefix ? null : rawValue.match(/^([^\-\d\s]+)(?:-)?\d*$/);
+  const prefix = knownPrefix || (customMatch?.[1] ? "other" : "CSP");
   const customPrefix = customMatch?.[1] || "";
-  const digits = knownPrefix ? rawValue.slice(knownPrefix.length).replace(/\D/g, "").slice(0, 4) : (customMatch?.[2] || "").replace(/\D/g, "").slice(0, 4);
+  const digitsSource = knownPrefix
+    ? rawValue.slice(knownPrefix.length).replace(/^-/, "")
+    : customMatch?.[1] ? rawValue.slice(customMatch[1].length).replace(/^-/, "") : "";
+  const digits = digitsSource.replace(/\D/g, "").slice(0, 4);
   const activePrefix = prefix === "other" ? customPrefix : prefix;
-  const setBooking = (nextPrefix, nextDigits) => onChange(nextPrefix ? `${nextPrefix}${nextDigits}` : "");
+  const setBooking = (nextPrefix, nextDigits) => {
+    const cleanPrefix = String(nextPrefix || "").replace(/-/g, "").trim().toUpperCase();
+    const cleanDigits = digitsOnly(nextDigits).slice(0, 4);
+    onChange(cleanPrefix ? `${cleanPrefix}-${cleanDigits}` : "");
+  };
   return <div style={{ display: "grid", gridTemplateColumns: prefix === "other" ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "7px" }}>
     <select value={prefix} onChange={e => { const next = e.target.value; setBooking(next === "other" ? "OTHER" : next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="AS7">AS7</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="other">อื่นๆ</option></select>
     {prefix === "other" && <input value={customPrefix} onChange={e => setBooking(e.target.value.trim().toUpperCase(), digits)} placeholder="คำนำหน้า" aria-label="คำนำหน้าอื่น" />}
@@ -455,6 +469,7 @@ export default function App() {
   const [pinConfirm, setPinConfirm] = useState("");
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [lastCheckerNames, setLastCheckerNames] = useState({ store: "", pack: "" });
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatMeta, setChatMeta] = useState(null);
@@ -498,6 +513,13 @@ export default function App() {
     }
     const savedSalesName = localStorage.getItem("hillkoff-last-sales-name");
     if (savedSalesName) setLoginForm(p => ({ ...p, name: savedSalesName }));
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("hillkoff-last-checker-names") || "{}");
+      setLastCheckerNames({ store: String(saved.store || ""), pack: String(saved.pack || "") });
+    } catch {}
   }, []);
 
   // Keep driver "online" in local state for UI filtering (no server writes)
@@ -2249,7 +2271,7 @@ export default function App() {
       salesPhone: auth.phone,
       status: "รอจัดเตรียมสินค้า",
       workflowType, deliveryMethod: orderForm.deliveryMethod,
-      bookingNumber: bookingDigits ? `${orderForm.bookingPrefix}${bookingDigits}` : "",
+      bookingNumber: bookingDigits ? `${orderForm.bookingPrefix}-${bookingDigits}` : "",
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
       storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
@@ -2554,7 +2576,11 @@ export default function App() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ orderId: order.id, action, ...patch })
       });
-      const json = await res.json();
+      const responseText = await res.text();
+      let json = null;
+      try { json = responseText ? JSON.parse(responseText) : null; } catch {
+        throw new Error(`เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (HTTP ${res.status})`);
+      }
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...json.data } : item) }));
       setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
@@ -2637,11 +2663,11 @@ export default function App() {
     const details = role === "store" ? order.storeWorkDetails : order.packWorkDetails;
     setWorkModal({ order, role });
     setWorkForm({
-      bookingNumber: role === "store" ? (order.bookingNumber || "") : "",
+      bookingNumber: role === "store" ? normalizeBookingNumber(order.bookingNumber || "") : "",
       detail: details?.detail || "",
       note: details?.note || "",
       missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : "",
-      checkerName: role === "store" ? (order.storeCheckerName || auth.name || "") : (order.packCheckerName || auth.name || ""),
+      checkerName: role === "store" ? (order.storeCheckerName || lastCheckerNames.store || auth.name || "") : (order.packCheckerName || lastCheckerNames.pack || auth.name || ""),
       checkResult: "complete",
       checklist: { verified: false }
     });
@@ -2681,7 +2707,7 @@ export default function App() {
     const { role } = workModal;
     const fail = (message) => { setWorkSubmitError(message); setSyncStatus(message); return false; };
     if (role === "store" && !workForm.bookingNumber.trim()) return fail("❌ กรุณากรอกเลขที่ใบสั่งจอง");
-    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) return fail("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
+    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) return fail("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้า ตามด้วย - และตัวเลข 4 หลัก เช่น CSP-1234");
     if (!workForm.checkerName.trim()) return fail(`❌ กรุณาเลือกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
     if (!workForm.checklist.verified) return fail("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว");
     if (["partial", "returned"].includes(workForm.checkResult) && !workForm.missingNote.trim()) return fail("❌ กรุณาระบุรายการและเหตุผล");
@@ -2733,6 +2759,17 @@ export default function App() {
       : { packStatus: workForm.checkResult === "returned" ? "returned" : workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, returnReason: workForm.checkResult === "returned" ? workForm.missingNote.trim() : "", packWorkDetails: details });
     setWorkSubmitting(false);
     if (result?.ok) {
+      const checkerName = String(workForm.checkerName || "").trim();
+      if (checkerName) {
+        try {
+          const saved = JSON.parse(localStorage.getItem("hillkoff-last-checker-names") || "{}");
+          const nextCheckers = { store: String(saved.store || ""), pack: String(saved.pack || ""), [role]: checkerName };
+          localStorage.setItem("hillkoff-last-checker-names", JSON.stringify(nextCheckers));
+          setLastCheckerNames(nextCheckers);
+        } catch {
+          setLastCheckerNames(prev => ({ ...prev, [role]: checkerName }));
+        }
+      }
       clearWorkPhotos(modalSnapshot);
       setWorkModal(null);
       return true;
@@ -2828,10 +2865,11 @@ export default function App() {
 
   const saveEditedStoreReport = async () => {
     if (!editingStoreReport) return;
-    if (editingStoreReport.bookingNumber?.trim() && !isValidBookingNumber(editingStoreReport.bookingNumber)) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
+    const normalizedBookingNumber = normalizeBookingNumber(editingStoreReport.bookingNumber || "");
+    if (normalizedBookingNumber && !isValidBookingNumber(normalizedBookingNumber)) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้า ตามด้วย - และตัวเลข 4 หลัก");
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify(editingStoreReport) });
+      const res = await fetch("/api/store/reports", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ...editingStoreReport, bookingNumber: normalizedBookingNumber }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => prev.map((item) => item.id === json.data.id ? json.data : item));
@@ -4560,7 +4598,7 @@ export default function App() {
                   <option value="direct_pack">ส่งตรงห้องแพ็ค</option>
                 </select>
               </label>
-              <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง <small className="muted">(ฝ่ายขายใส่ได้ หรือให้สโตร์ใส่ภายหลัง)</small></span><div style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value }))}><option value="CSP">CSP</option><option value="CSR">CSR</option></select><input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /></div></label>
+              <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง <small className="muted">(รูปแบบ CSP-1234 · ฝ่ายขายใส่ได้ หรือให้สโตร์ใส่ภายหลัง)</small></span><div style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value }))}><option value="CSP">CSP</option><option value="CSR">CSR</option></select><input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /></div></label>
               <label style={{ display: "grid", gap: "6px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>รูปแบบจัดส่ง</span><select value={orderForm.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setOrderForm(p => ({ ...p, deliveryMethod })); if (deliveryMethod === "outstation") setShowOutstationCarrierModal(true); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab รับหน้าร้าน</option><option value="outstation">ออเดอร์ต่างจังหวัด</option></select>{orderForm.deliveryMethod === "outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationCarrierModal(true)}>{orderForm.shippingCarrier ? `ขนส่ง: ${orderForm.shippingCarrier}` : "เลือกบริษัทขนส่ง"}</button>}</label>
               <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} placeholder="รายละเอียดสินค้า / หมายเหตุฝ่ายขาย" rows={3} />
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
@@ -4876,10 +4914,9 @@ export default function App() {
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
                 <details style={{ border: "1px solid #dbe4d6", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
                 <label style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "10px", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
-                <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option>{workModal.role === "pack" && <option value="returned">ของผิด — ส่งกลับสโตร์ตรวจสอบ</option>}</select>
+                <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value, missingNote: ["partial", "returned"].includes(e.target.value) ? p.missingNote : "" }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option>{workModal.role === "pack" && <option value="returned">ของผิด — ส่งกลับสโตร์ตรวจสอบ</option>}</select>
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
-                <label className="field-label">หมายเหตุ</label><textarea value={workForm.note} onChange={e => setWorkForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุเพิ่มเติม" rows={2} />
-                <label className="field-label">{workForm.checkResult === "returned" ? "รายการผิด / เหตุผลส่งกลับสโตร์ *" : "ของไม่ครบ / รอของ"}</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder={workForm.checkResult === "returned" ? "ระบุของผิดและเหตุผลเพื่อส่งกลับสโตร์" : "ระบุรายการและเหตุผล (ถ้ามี)"} rows={2} />
+                {["partial", "returned"].includes(workForm.checkResult) && <><label className="field-label">{workForm.checkResult === "returned" ? "รายการผิด / เหตุผลส่งกลับสโตร์ *" : "ของไม่ครบ / รอของ *"}</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder={workForm.checkResult === "returned" ? "ระบุของผิดและเหตุผลเพื่อส่งกลับสโตร์" : "ระบุรายการและเหตุผล"} rows={2} /></>}
                 {workModal.role === "store" && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>สโตร์: เมื่อตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — รูปถ่ายและการส่ง LINE เป็นตัวเลือก</div>}
                 {workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>ออเดอร์ต่างจังหวัด: ถ้าตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — ระบบจะอัปเดตสโตร์เป็นเสร็จและสถานะเป็นพร้อมส่งขนส่งอัตโนมัติ · รูปถ่ายและ LINE เป็นตัวเลือก</div>}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
