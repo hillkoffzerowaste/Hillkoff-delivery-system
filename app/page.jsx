@@ -4296,7 +4296,7 @@ export default function App() {
               )}
             </section>
 
-            <section className="panel" style={{ gridColumn: "1 / -1" }}>
+            <section className="panel" style={{ gridColumn: "1 / -1", order: 99 }}>
               {(() => {
                 const locs = state.driverLocations || {};
                 // Show markers based on last check-in location (not "online" heartbeat),
@@ -4395,7 +4395,7 @@ export default function App() {
               })()}
             </section>
 
-            <section className="panel">
+            <section className="panel" style={{ order: -10 }}>
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
               {customers.length === 0 ? (
                 <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
@@ -4480,7 +4480,7 @@ export default function App() {
               </section>
             )}
 
-            <section className="panel">
+            <section className="panel" style={{ order: -10 }}>
               <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2><span>เลือกลูกค้าจากรายชื่อ</span></div>
               {(() => {
                 const q = (orderCustomerSearch || "").trim();
@@ -4591,7 +4591,7 @@ export default function App() {
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
 
-            <section className="panel">
+            <section className="panel" style={{ order: -10 }}>
               <div className="panel-head"><h2>เพิ่มลูกค้าใหม่</h2><span>บันทึกไว้ใช้ครั้งถัดไป</span></div>
               <div className="form-grid two">
                 <input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อร้าน/ลูกค้า" />
