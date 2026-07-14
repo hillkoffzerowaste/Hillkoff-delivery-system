@@ -2679,11 +2679,12 @@ export default function App() {
   const validateWorkModal = () => {
     if (!workModal) return false;
     const { role } = workModal;
-    if (role === "store" && !workForm.bookingNumber.trim()) { setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจอง"); return false; }
-    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก"); return false; }
-    if (!workForm.checkerName.trim()) { setSyncStatus(`❌ กรุณากรอกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`); return false; }
-    if (!workForm.checklist.verified) { setSyncStatus("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว"); return false; }
-    if (["partial", "returned"].includes(workForm.checkResult) && !workForm.missingNote.trim()) { setSyncStatus("❌ กรุณาระบุรายการและเหตุผล"); return false; }
+    const fail = (message) => { setWorkSubmitError(message); setSyncStatus(message); return false; };
+    if (role === "store" && !workForm.bookingNumber.trim()) return fail("❌ กรุณากรอกเลขที่ใบสั่งจอง");
+    if (role === "store" && !isValidBookingNumber(workForm.bookingNumber)) return fail("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
+    if (!workForm.checkerName.trim()) return fail(`❌ กรุณาเลือกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
+    if (!workForm.checklist.verified) return fail("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว");
+    if (["partial", "returned"].includes(workForm.checkResult) && !workForm.missingNote.trim()) return fail("❌ กรุณาระบุรายการและเหตุผล");
     return true;
   };
 
@@ -3919,6 +3920,15 @@ export default function App() {
 
   // (displayTab is defined near the top for subscription logic)
 
+  const selectAppTab = (nextTab) => {
+    setTab(nextTab);
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        document.querySelector(".sidebar nav button.active")?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }, 0);
+    }
+  };
+
   return (
     <>
       <main>
@@ -3927,47 +3937,47 @@ export default function App() {
           <img className="brand-mark" src="/delivery-logo.svg" alt="Hillkoff Delivery" />
           <div><strong>Hillkoff</strong><span>Delivery System</span></div>
         </div>
-        <nav>
+        <nav className="app-nav" aria-label="เมนูหลัก">
           {["sales", "admin"].includes(auth.role) && (
             <>
-              <button className={displayTab === "sales" ? "active" : ""} onClick={() => setTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
-              <button className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => setTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
-              <button className={displayTab === "dispatch" ? "active" : ""} onClick={() => setTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
-              <button className={displayTab === "chiangmai" ? "active" : ""} onClick={() => setTab("chiangmai")}><PackagePlus size={18} /> เตรียมออเดอร์เชียงใหม่</button>
-              <button className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => setTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
+              <button type="button" className={displayTab === "sales" ? "active" : ""} onClick={() => selectAppTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
+              <button type="button" className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => selectAppTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+              <button type="button" className={displayTab === "dispatch" ? "active" : ""} onClick={() => selectAppTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
+              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> เตรียมออเดอร์เชียงใหม่</button>
+              <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
           )}
           {auth.role === "driver" && (
             <>
-              <button className={displayTab === "driver" ? "active" : ""} onClick={() => setTab("driver")}><Truck size={18} /> งานจัดส่ง</button>
-              <button className={displayTab === "driver-prep" ? "active" : ""} onClick={() => setTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
-              <button className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => setTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
-              <button className={displayTab === "driver-sop" ? "active" : ""} onClick={() => setTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
+              <button type="button" className={displayTab === "driver" ? "active" : ""} onClick={() => selectAppTab("driver")}><Truck size={18} /> งานจัดส่ง</button>
+              <button type="button" className={displayTab === "driver-prep" ? "active" : ""} onClick={() => selectAppTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
+              <button type="button" className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => selectAppTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
+              <button type="button" className={displayTab === "driver-sop" ? "active" : ""} onClick={() => selectAppTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
             </>
           )}
           {auth.role === "store" && (
             <>
-              <button className={displayTab === "store-work" ? "active" : ""} onClick={() => setTab("store-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
-              <button className={displayTab === "store-chiangmai-track" ? "active" : ""} onClick={() => setTab("store-chiangmai-track")}><Search size={18} /> ติดตามเตรียมออเดอร์</button>
-              <button className={displayTab === "store-outstation" ? "active" : ""} onClick={() => setTab("store-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
-              <button className={displayTab === "store-online" ? "active" : ""} onClick={() => setTab("store-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
-              <button className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => setTab("store-dashboard")}><ClipboardList size={18} /> รายงาน KPI สโตร์</button>
+              <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
+              <button type="button" className={displayTab === "store-chiangmai-track" ? "active" : ""} onClick={() => selectAppTab("store-chiangmai-track")}><Search size={18} /> ติดตามเตรียมออเดอร์</button>
+              <button type="button" className={displayTab === "store-outstation" ? "active" : ""} onClick={() => selectAppTab("store-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+              <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
+              <button type="button" className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => selectAppTab("store-dashboard")}><ClipboardList size={18} /> รายงาน KPI สโตร์</button>
             </>
           )}
           {auth.role === "pack" && (
             <>
-              <button className={displayTab === "pack-work" ? "active" : ""} onClick={() => setTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
-              <button className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => setTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
-              <button className={displayTab === "pack-online" ? "active" : ""} onClick={() => setTab("pack-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
-              <button className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => setTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
+              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
+              <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+              <button type="button" className={displayTab === "pack-online" ? "active" : ""} onClick={() => selectAppTab("pack-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
+              <button type="button" className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => selectAppTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
             </>
           )}
            {["sales", "admin"].includes(auth.role) && (
              <>
-               <button className={displayTab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
-               <button className={displayTab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings size={18} /> การตั้งค่า</button>
+               <button type="button" className={displayTab === "reports" ? "active" : ""} onClick={() => selectAppTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
+               <button type="button" className={displayTab === "settings" ? "active" : ""} onClick={() => selectAppTab("settings")}><Settings size={18} /> การตั้งค่า</button>
                {["sales", "admin"].includes(auth.role) && (
-                 <button className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> แชทบอทฐานข้อมูล</button>
+                 <button type="button" className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> แชทบอทฐานข้อมูล</button>
                )}
              </>
            )}

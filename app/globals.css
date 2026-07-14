@@ -1934,6 +1934,14 @@ summary:focus-visible {
     display: flex;
     gap: 7px;
     overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+    z-index: 901;
+    pointer-events: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
     overscroll-behavior-inline: contain;
     padding-bottom: 3px;
     scrollbar-width: thin;
@@ -1941,9 +1949,14 @@ summary:focus-visible {
 
   .sidebar nav button {
     flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
     min-height: 40px;
     padding: 8px 11px;
     white-space: nowrap;
+    scroll-snap-align: center;
+    touch-action: manipulation;
+    pointer-events: auto;
   }
 
   .status-chip { font-size: 13px; }
