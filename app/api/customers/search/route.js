@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 const MAX_RESULTS = 50;
 const MAX_CANDIDATES = 250;
+const MAX_ALL_RESULTS = 1000;
 const cache = new Map();
 const pending = new Map();
 
@@ -23,14 +24,24 @@ function matches(data, query) {
 export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["sales", "admin"]);
-    const query = String(new URL(request.url).searchParams.get("q") || "").trim();
+    const params = new URL(request.url).searchParams;
+    const loadAll = params.get("all") === "true";
+    const query = String(params.get("q") || "").trim();
     const normalizedQuery = normalizeCustomerSearch(query);
-    if (normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
-    const cached = cache.get(normalizedQuery);
+    if (!loadAll && normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
+    const cacheKey = loadAll ? "__all_customers__" : normalizedQuery;
+    const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.at < 5 * 60_000) return Response.json({ ok: true, data: cached.data });
 
-    if (pending.has(normalizedQuery)) return Response.json({ ok: true, data: await pending.get(normalizedQuery) });
+    if (pending.has(cacheKey)) return Response.json({ ok: true, data: await pending.get(cacheKey) });
     const search = (async () => {
+    if (loadAll) {
+      const snap = await db.collection("customer_search").orderBy("updatedAt", "desc").limit(MAX_ALL_RESULTS).get();
+      const data = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+      cache.set(cacheKey, { at: Date.now(), data });
+      if (cache.size > 100) cache.delete(cache.keys().next().value);
+      return data;
+    }
     const toMatches = (docs) => docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })).filter((data) => matches(data, query));
     const prefixSnap = await db.collection("customer_search").where("terms", "array-contains", normalizedQuery).limit(MAX_RESULTS).get();
     let results = toMatches(prefixSnap.docs);
@@ -42,13 +53,13 @@ export async function GET(request) {
     results = results
       .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
       .slice(0, MAX_RESULTS);
-    cache.set(normalizedQuery, { at: Date.now(), data: results });
+    cache.set(cacheKey, { at: Date.now(), data: results });
     if (cache.size > 100) cache.delete(cache.keys().next().value);
     return results;
     })();
-    pending.set(normalizedQuery, search);
+    pending.set(cacheKey, search);
     try { return Response.json({ ok: true, data: await search }); }
-    finally { pending.delete(normalizedQuery); }
+    finally { pending.delete(cacheKey); }
   } catch (error) {
     return errorResponse(error);
   }

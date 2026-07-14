@@ -450,6 +450,8 @@ export default function App() {
   const [state, setState] = useState(defaultState);
   const [customerQuery, setCustomerQuery] = useState("");
   const [historicalCustomers, setHistoricalCustomers] = useState([]);
+  const [allHistoricalCustomersLoading, setAllHistoricalCustomersLoading] = useState(false);
+  const [allHistoricalCustomersLoaded, setAllHistoricalCustomersLoaded] = useState(false);
   const historicalCustomerSearchSeqRef = useRef(0);
   const customerHistorySearchSeqRef = useRef(0);
   const [customerHistory, setCustomerHistory] = useState([]);
@@ -1669,6 +1671,29 @@ export default function App() {
     }, 350);
     return () => clearTimeout(timer);
   }, [auth.role, customerQuery, orderCustomerSearch]);
+
+  const loadAllHistoricalCustomers = async () => {
+    if (allHistoricalCustomersLoading || allHistoricalCustomersLoaded) return;
+    setAllHistoricalCustomersLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/customers/search?all=true", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      const loaded = Array.isArray(json.data) ? json.data : [];
+      setHistoricalCustomers((prev) => {
+        const byId = new Map(prev.map((customer) => [customer.id, customer]));
+        loaded.forEach((customer) => byId.set(customer.id, { ...(byId.get(customer.id) || {}), ...customer }));
+        return Array.from(byId.values());
+      });
+      setAllHistoricalCustomersLoaded(true);
+      setSyncStatus(`✅ โหลดรายชื่อลูกค้าเก่าจาก Firestore ${loaded.length} รายแล้ว`);
+    } catch (error) {
+      setSyncStatus(`⚠️ โหลดรายชื่อลูกค้าเก่าไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setAllHistoricalCustomersLoading(false);
+    }
+  };
 
   const loadCustomerOrderHistory = async (customer) => {
     const customerId = String(customer?.id || "");
@@ -4514,6 +4539,12 @@ export default function App() {
                         placeholder="ค้นหาชื่อลูกค้า / เบอร์ / พื้นที่ แล้วเลือกจากรายการ"
                       />
                     </label>
+                    {q && matches.length === 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "8px", padding: "8px 10px", border: "1px dashed #9ac7a4", borderRadius: "9px", background: "#f5fbf4", fontSize: "12px" }}>
+                        <span>{allHistoricalCustomersLoaded ? "ยังไม่พบชื่อลูกค้าที่ตรงกันในข้อมูลที่โหลดแล้ว" : "ยังไม่พบในรายชื่อที่แสดงอยู่"}</span>
+                        <button type="button" className="secondary" disabled={allHistoricalCustomersLoading || allHistoricalCustomersLoaded} onClick={loadAllHistoricalCustomers}>{allHistoricalCustomersLoading ? "กำลังโหลด…" : allHistoricalCustomersLoaded ? "โหลดข้อมูลแล้ว" : "โหลดข้อมูลลูกค้าเก่าทั้งหมด"}</button>
+                      </div>
+                    )}
                     {q && matches.length > 0 && (
                       <div style={{ position: "absolute", top: "44px", left: 0, right: 0, zIndex: 20, background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.08)", overflow: "hidden" }}>
                         {matches.map(c => (
