@@ -88,7 +88,11 @@ export async function PATCH(request) {
     }
     await ref.set(patch, { merge: true });
     await ref.collection("activity").doc().set(history);
-    await syncDeliveryOrderToSheet(db, orderId, { ...order, ...patch });
+    try {
+      await syncDeliveryOrderToSheet(db, orderId, { ...order, ...patch });
+    } catch (syncError) {
+      console.warn("Delivery sheet sync failed after workflow update", syncError?.message || syncError);
+    }
     if (action === "queue") {
       try {
         const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
