@@ -1528,12 +1528,13 @@ export default function App() {
     return Array.from(byId.values());
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
-  const preparationOrders = (orders || []).filter(order => order.workflowType && order.queueStatus !== "queued");
+  const preparationOrders = (orders || []).filter(order => order.workflowType && !["queued", "outstation_ready", "grab_completed"].includes(order.queueStatus));
   const storeWorkOrders = (orders || []).filter(order => order.deliveryMethod !== "outstation" && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation" && order.packStatus !== "blocked" && ["pending", "working", "waiting"].includes(order.packStatus));
   const salesOutstationStoreOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
-  const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation");
+  const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus !== "outstation_ready");
+  const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
   const kpiOrders = (orders || []).filter(order => order.workflowType);
   const kpiReturned = kpiOrders.filter(order => order.storeStatus === "returned" || order.packStatus === "returned");
   const kpiPending = kpiOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus) || ["waiting", "partial", "returned"].includes(order.packStatus));
@@ -1544,7 +1545,7 @@ export default function App() {
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
   const packTodayOrders = todayOrdersOnly.filter(order => order.workflowType && order.packStatus !== "blocked");
-  const grabReadyOrders = (orders || []).filter(order => order.deliveryMethod === "grab_pickup" && order.queueStatus === "grab_ready");
+  const grabCompletedOrders = (orders || []).filter(order => order.deliveryMethod === "grab_pickup" && ["grab_completed", "grab_ready", "grab_picked_up"].includes(order.queueStatus));
   const storeTodayCompleted = storeTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
   const packTodayCompleted = packTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
@@ -4074,10 +4075,10 @@ export default function App() {
 
         {displayTab === "sales" && (
           <>
-            {grabReadyOrders.length > 0 && <section className="panel" style={{ marginBottom: "12px", borderColor: "#0f766e" }}>
-              <div className="panel-head"><h2>Grab รับหน้าร้าน พร้อมรับสินค้า</h2><span>{grabReadyOrders.length} งาน</span></div>
+            {grabCompletedOrders.length > 0 && <section className="panel" style={{ marginBottom: "12px", borderColor: "#0f766e" }}>
+              <div className="panel-head"><h2>ประวัติ Grab รับหน้าร้าน</h2><span>{grabCompletedOrders.length} งาน</span></div>
               <div style={{ display: "grid", gap: "8px" }}>
-                {grabReadyOrders.map(order => <article key={order.id} style={{ border: "1px solid #99f6e4", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone || "-"} · ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}</div><small className="muted">แพ็คโดย: {order.packPackerName || "-"} · ผู้ตรวจ: {order.packCheckerName || "-"}</small></div><button className="primary" onClick={() => updatePreparationWorkflow(order, "grab_pickup")}>ยืนยัน Grab รับสินค้า</button></article>)}
+                {grabCompletedOrders.map(order => <article key={order.id} style={{ border: "1px solid #99f6e4", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone || "-"} · ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}</div><small className="muted">ห้องแพ็คยืนยัน: {order.packCheckerName || "-"} · {order.grabCompletedAt ? new Date(order.grabCompletedAt).toLocaleString("th-TH") : "-"}</small></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>แพ็คเสร็จ · รอ Grab รับสินค้า</span></article>)}
               </div>
             </section>}
             <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
@@ -4786,9 +4787,10 @@ export default function App() {
 
         {displayTab === "sales-outstation" && (
           <section className="panel role-workspace">
-            <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งาน</span></div>
+            <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งานที่กำลังเตรียม</span></div>
             <p className="muted">สถานะอัปเดตทันทีเมื่อสโตร์หรือห้องแพ็คยืนยันงาน</p>
             <div style={{ display: "grid", gap: "10px" }}>{salesOutstationOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span></div><div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">สโตร์: {order.storeStatus || "pending"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus || "blocked"}</span>{order.storeCheckerName && <span className="muted">ผู้ตรวจสโตร์: {order.storeCheckerName}</span>}{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div className="prep-note-store"><b>หมายเหตุสโตร์</b><span>{order.storeWorkDetails.note}</span></div>}{order.packWorkDetails?.note && <div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div>}</div>}</article>)}{!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}</div>
+            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>สำเร็จ · พร้อมส่งขนส่ง</span></div><div className="muted">ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 

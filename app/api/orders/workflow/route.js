@@ -57,7 +57,12 @@ export async function PATCH(request) {
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.packStatus)) {
-        patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+        patch.queueStatus = order.deliveryMethod === "grab_pickup" ? "grab_completed" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+        if (order.deliveryMethod === "grab_pickup" && body.packStatus === "checked") {
+          patch.status = "แพ็คเสร็จ · รอ Grab รับสินค้า";
+          patch.grabCompletedAt = now;
+          patch.grabCompletedBy = profile.name || profile.email;
+        }
         if (order.deliveryMethod === "outstation" && body.packStatus === "checked") {
           patch.storeStatus = "checked";
           patch.status = "พร้อมส่งขนส่ง";
