@@ -65,6 +65,13 @@ export async function PATCH(request) {
           patch.outstationCompletedBy = profile.name || profile.email;
         }
       }
+      if (body.packStatus === "returned") {
+        patch.storeStatus = "returned";
+        patch.queueStatus = "preparing";
+        patch.returnedToStoreAt = now;
+        patch.returnedToStoreBy = profile.name || profile.email;
+        patch.returnReason = String(body.returnReason || body.packWorkDetails?.note || "").trim().slice(0, 1000);
+      }
     } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
       if (order.deliveryMethod !== "grab_pickup" || order.queueStatus !== "grab_ready") {
         throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
