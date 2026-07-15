@@ -14,10 +14,12 @@ export async function POST(request) {
     const snap = await ref.get();
     if (!snap.exists) return Response.json({ ok: true, data: { id: orderId, alreadyDeleted: true } });
     const order = snap.data() || {};
-    if (profile.role === "store") {
-      const driverStarted = Boolean(order.driverId) || ["queued", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.queueStatus) || ["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
+    if (profile.role !== "admin") {
+      const driverStarted = Boolean(order.driverId)
+        || !["preparing", "ready"].includes(String(order.queueStatus || ""))
+        || ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(String(order.status || ""));
       if (!order.workflowType || driverStarted) {
-        return Response.json({ ok: false, error: "สโตร์ลบได้เฉพาะงานเตรียมที่ยังไม่เข้าคิวคนขับ" }, { status: 403 });
+        return Response.json({ ok: false, error: "ลบได้เฉพาะงานเตรียมที่ยังไม่เข้าคิวและยังไม่มีคนขับรับ" }, { status: 403 });
       }
     }
 

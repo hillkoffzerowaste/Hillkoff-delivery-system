@@ -1639,6 +1639,7 @@ export default function App() {
   const orders = state.orders;
   const preparationOrders = (orders || []).filter(order => order.workflowType && !["queued", "outstation_ready", "grab_completed"].includes(order.queueStatus));
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
+  const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = preparationOrders.filter(isPreparationReadyForDriver).length;
   const sortedPreparationOrders = preparationOrders.slice().sort((a, b) => {
     const readyDifference = Number(isPreparationReadyForDriver(b)) - Number(isPreparationReadyForDriver(a));
@@ -4968,6 +4969,9 @@ export default function App() {
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
                   {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && (
                     <button className="primary" onClick={() => updatePreparationWorkflow(order, "queue")}>ส่งเข้าคิวคนขับ</button>
+                  )}
+                  {displayTab === "chiangmai" && canDeleteBeforeDriverQueue(order) && (
+                    <button className="secondary danger" onClick={() => deleteOrder(order.id)}>ลบออเดอร์ที่กรอกผิด</button>
                   )}
                 </article>
               ))}
