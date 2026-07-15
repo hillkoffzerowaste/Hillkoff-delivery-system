@@ -133,11 +133,11 @@ export async function POST(request) {
       : [];
     const isDeviceTrusted = Boolean(deviceHash && trustedDeviceHashes.includes(deviceHash));
 
-    const lockedUntilMs = await getLoginLimit(db, phone);
-    if (lockedUntilMs > Date.now()) {
-      return Response.json({ ok: false, error: "TOO_MANY_LOGIN_ATTEMPTS", retryAt: new Date(lockedUntilMs).toISOString() }, { status: 429 });
-    }
     if (!passwordMatches(existing, password)) {
+      const lockedUntilMs = await getLoginLimit(db, phone);
+      if (lockedUntilMs > Date.now()) {
+        return Response.json({ ok: false, error: "TOO_MANY_LOGIN_ATTEMPTS", retryAt: new Date(lockedUntilMs).toISOString() }, { status: 429 });
+      }
       const nextLockedUntilMs = await recordPasswordFailure(db, phone);
       return Response.json({
         ok: false,
