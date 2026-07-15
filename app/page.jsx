@@ -901,8 +901,13 @@ export default function App() {
 	          if (state.auth?.role === "driver" && source !== "all") {
 	            driverOrdersSnapshotsRef.current[source] = incomingRows;
 	            const byId = new Map();
-	            [...driverOrdersSnapshotsRef.current.assigned, ...driverOrdersSnapshotsRef.current.queued]
-	              .forEach((order) => byId.set(order.id, order));
+	            [...driverOrdersSnapshotsRef.current.queued, ...driverOrdersSnapshotsRef.current.assigned]
+	              .forEach((order) => {
+	                const current = byId.get(order.id);
+	                const currentUpdatedAt = Date.parse(current?.updatedAt || 0) || 0;
+	                const nextUpdatedAt = Date.parse(order?.updatedAt || 0) || 0;
+	                if (!current || nextUpdatedAt >= currentUpdatedAt) byId.set(order.id, order);
+	              });
 	            rows = [...byId.values()]
 	              .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
 	              .slice(0, effectiveOrdersLimit);
@@ -2554,21 +2559,38 @@ export default function App() {
     saveDriverSequence(next);
   };
 
-  const acceptDriverDeliveryOrder = (order) => {
-    if (!driverId) return setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
+  const acceptDriverDeliveryOrder = async (order) => {
+    const authenticatedDriverId = state.auth?.driverId || driverId || "";
+    if (!authenticatedDriverId) return setSyncStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกแล้วเข้าระบบใหม่");
+    if (pendingOrderUpdatesRef.current.has(order.id)) return;
+    pendingOrderUpdatesRef.current.add(order.id);
     const nextSequence = driverReorderableOrders.reduce((max, item) => Math.max(max, Number(item.driverSequence) || 0), 0) + 1;
-    const driverName = drivers.find((driver) => driver.id === driverId)?.name || state.auth?.name || "";
-    updateOrder(order.id, {
-      driverId,
+    const driverName = drivers.find((driver) => driver.id === authenticatedDriverId)?.name || state.auth?.name || "";
+    const acceptedAt = new Date().toISOString();
+    const patch = {
+      driverId: authenticatedDriverId,
       driverName,
       status: "กำลังส่ง",
-      acceptedAt: new Date().toISOString(),
+      acceptedAt,
       driverSequence: nextSequence,
       driverSequenceServiceDate: todayServiceDate,
-      driverSequenceUpdatedAt: new Date().toISOString(),
-      driverSequenceUpdatedBy: driverName || driverId
-    });
-    setSyncStatus(`✅ รับออเดอร์ "${order.id}" และเพิ่มท้ายลำดับส่งแล้ว`);
+      driverSequenceUpdatedAt: acceptedAt,
+      driverSequenceUpdatedBy: driverName || authenticatedDriverId,
+      updatedAt: acceptedAt
+    };
+    setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...patch } : item) }));
+    setSyncStatus(`⏳ กำลังรับออเดอร์ "${order.id}"...`);
+    try {
+      const db = getFirestoreDb();
+      await fb.updateDoc(fb.doc(db, "orders", String(order.id)), patch);
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...patch } : item) }));
+      setSyncStatus(`✅ รับออเดอร์ "${order.id}" และเพิ่มท้ายลำดับส่งแล้ว`);
+    } catch (error) {
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
+      setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      pendingOrderUpdatesRef.current.delete(order.id);
+    }
   };
 
   const submitDriverDailyAssessment = async () => {
@@ -5370,7 +5392,7 @@ export default function App() {
 
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
-              const pending = orders.filter(o => o.status === "รอคนขับรับ" && o.queueStatus === "queued" && !o.driverId);
+              const pending = orders.filter(o => o.status === "รอคนขับรับ" && o.queueStatus === "queued" && !o.driverId && !pendingOrderUpdatesRef.current.has(o.id));
               console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
               return (
                 <section className="panel">
@@ -5417,7 +5439,6 @@ export default function App() {
                           style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
                           disabled={pendingOrderUpdatesRef.current.has(order.id)}
                           onClick={() => {
-                            pendingOrderUpdatesRef.current.add(order.id);
                             acceptDriverDeliveryOrder(order);
                           }}>✓ รับออเดอร์นี้</button>
                       </div>
