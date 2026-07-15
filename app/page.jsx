@@ -334,21 +334,11 @@ function privacySafeName(name) {
 function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
-  lines.push(`ออเดอร์: ${order.id}`);
+  lines.push(`งาน: ${order.id}`);
   if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
-  if (order.customerPhone) lines.push(`โทร: ${order.customerPhone}`);
-  if (order.address) lines.push(`ที่อยู่: ${order.address}`);
   if (order.zone) lines.push(`โซน: ${order.zone}`);
-  if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
-  if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}`);
-  if (order.salesName) lines.push(`ฝ่ายขาย: ${order.salesName}`);
-  if (order.salesPhone) lines.push(`ฝ่ายขายโทร: ${order.salesPhone}`);
-  if (order.salesNote) lines.push(`หมายเหตุฝ่ายขาย: ${order.salesNote}`);
-  lines.push(`COD: ฿${money(order.cod || 0)}`);
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
   if (order.driverNote) lines.push(`หมายเหตุคนขับ: ${order.driverNote}`);
-  if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
-  lines.push(`POD: แนบรูป ${Math.max(1, Number(order.podPhotoCount) || 1)} รูป`);
   return lines.join("\n");
 }
 
