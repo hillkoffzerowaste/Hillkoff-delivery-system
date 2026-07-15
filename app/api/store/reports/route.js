@@ -71,7 +71,7 @@ export async function GET(request) {
     const { profile, db } = await requireProfile(request, ["store", "pack", "admin"]);
     const params = new URL(request.url).searchParams;
     const type = params.get("type");
-    if (profile.role === "pack" && type !== "online") return Response.json({ ok: false, error: "Pack can view online reports only" }, { status: 403 });
+    if (profile.role === "pack" && type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Pack can view preparation reports only" }, { status: 403 });
     const date = params.get("date");
     const id = clean(params.get("id"), 200);
     const queryText = clean(params.get("q"), 200).toLowerCase();
@@ -82,7 +82,7 @@ export async function GET(request) {
       const ref = db.collection("store_reports").doc(id);
       const snap = await ref.get();
       if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
-      if (profile.role === "pack" && snap.data()?.type !== "online") return Response.json({ ok: false, error: "Pack can view online reports only" }, { status: 403 });
+      if (profile.role === "pack" && !REPORT_TYPES.includes(snap.data()?.type)) return Response.json({ ok: false, error: "Pack can view preparation reports only" }, { status: 403 });
       const history = await ref.collection("history").orderBy("at", "desc").limit(1000).get();
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
@@ -130,7 +130,7 @@ export async function POST(request) {
       if (bookingKey && bookingKeys.has(bookingKey)) return Response.json({ ok: false, error: `เลขที่ใบสั่งจอง ${bookingNumber} ซ้ำกันในรายการที่กำลังบันทึก` }, { status: 409 });
       if (bookingKey) bookingKeys.add(bookingKey);
       const ref = db.collection("store_reports").doc();
-      const base = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: type === "online" ? "pending" : "", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
+      const base = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: draft ? "blocked" : "pending", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
       const item = { ...base, workflowHistory: [reportKpiEvent(draft ? "created_draft" : "created", profile, now, base)] };
       saved.push({ id: ref.id, ref, bookingKey, ...item });
     }
@@ -166,7 +166,7 @@ export async function PATCH(request) {
       const packStatus = ["checked", "partial", "returned"].includes(body?.packStatus) ? body.packStatus : "";
       if (!validDocId(id) || !packStatus) return Response.json({ ok: false, error: "Invalid online pack update" }, { status: 400 });
       const ref = db.collection("store_reports").doc(id); const snap = await ref.get();
-      if (!snap.exists || snap.data().type !== "online") return Response.json({ ok: false, error: "Online report not found" }, { status: 404 });
+      if (!snap.exists || !REPORT_TYPES.includes(snap.data().type)) return Response.json({ ok: false, error: "Preparation report not found" }, { status: 404 });
       const item = snap.data(); const now = new Date().toISOString(); const reason = clean(body?.reason, 1000);
       if (packStatus === "returned" && !reason) return Response.json({ ok: false, error: "Provide return reason" }, { status: 400 });
       const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
@@ -174,6 +174,23 @@ export async function PATCH(request) {
       const batch = db.batch();
       batch.set(ref, patch, { merge: true });
       batch.set(ref.collection("history").doc(), reportLog(ref, `pack_${packStatus}`, profile, now, item, { ...item, ...patch }, reason));
+      await batch.commit();
+      return Response.json({ ok: true, data: { id, ...item, ...patch } });
+    }
+    if (body?.action === "resubmit") {
+      const id = clean(body?.id, 200);
+      if (!validDocId(id)) return Response.json({ ok: false, error: "Invalid report id" }, { status: 400 });
+      const ref = db.collection("store_reports").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists || !REPORT_TYPES.includes(snap.data().type)) return Response.json({ ok: false, error: "Preparation report not found" }, { status: 404 });
+      const item = snap.data();
+      if (item.deletedAt || !["returned", "partial"].includes(item.packStatus)) return Response.json({ ok: false, error: "Report is not waiting for store correction" }, { status: 409 });
+      const now = new Date().toISOString();
+      const patch = { status: "saved", packStatus: "pending", returnReason: "", resubmittedAt: now, resubmittedBy: profile.name || profile.email, updatedAt: now };
+      patch.workflowHistory = appendReportHistory(item, reportKpiEvent("store_resubmitted", profile, now, { ...item, ...patch }, clean(body?.reason, 1000)));
+      const batch = db.batch();
+      batch.set(ref, patch, { merge: true });
+      batch.set(ref.collection("history").doc(), reportLog(ref, "store_resubmitted", profile, now, item, { ...item, ...patch }, clean(body?.reason, 1000)));
       await batch.commit();
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }
@@ -193,7 +210,7 @@ export async function PATCH(request) {
       if (!snap.exists) return;
       const item = snap.data();
       if (item.type !== type || String(item.serviceDate || bangkokDateKey(item.createdAt)) !== date) return;
-      const after = { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email };
+      const after = { ...item, status: item.status === "draft" ? "saved" : item.status, packStatus: item.packStatus === "blocked" || !item.packStatus ? "pending" : item.packStatus, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email };
       after.workflowHistory = appendReportHistory(item, reportKpiEvent("confirmed", profile, now, after));
       batch.update(snap.ref, after);
       batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "confirmed", profile, now, item, after));

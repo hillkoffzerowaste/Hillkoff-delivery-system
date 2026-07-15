@@ -76,6 +76,7 @@ const TAB_TITLES = {
   "store-dashboard": "รายงาน KPI สโตร์",
   "pack-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค",
   "pack-outstation": "ออเดอร์ต่างจังหวัด · ห้องแพ็ค",
+  "pack-booking": "ใบสั่งจอง · ห้องแพ็ค",
   "pack-online": "ออเดอร์ออนไลน์ · ห้องแพ็ค",
   "pack-dashboard": "รายงาน KPI ห้องแพ็ค",
   "driver-prep": "เช็คออเดอร์เชียงใหม่",
@@ -704,7 +705,7 @@ export default function App() {
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : tab === "driver-dashboard" ? "driver-dashboard" : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
-    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
+    : state.auth?.role === "pack" ? (["pack-work", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
@@ -885,7 +886,7 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-outstation", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
     const isKpiDashboard = ["store-dashboard", "pack-dashboard"].includes(String(displayTab || ""));
 	    const needsCompleteOperationalQueue = ["sales", "sales-outstation", "chiangmai", "store-work", "store-pickup", "pack-work", "pack-outstation"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
@@ -1694,7 +1695,7 @@ export default function App() {
     sourceType: report.type === "online" ? "ใบขายออนไลน์" : "ใบสั่งจอง"
   });
   const storeKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "store"));
-  const packKpiReportOrders = (storeReports || []).filter(report => report.type === "online").map(report => reportToKpiOrder(report, "pack"));
+  const packKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "pack"));
   const storeKpiOrders = [...(orders || []).filter(order => order.workflowType === "store_route"), ...storeKpiReportOrders];
   const packKpiOrders = [...(orders || []).filter(order => order.workflowType && order.packStatus !== "blocked"), ...packKpiReportOrders];
   const activeStoreKpiOrders = storeKpiOrders.filter(order => !["archived"].includes(order.storeStatus));
@@ -1743,8 +1744,8 @@ export default function App() {
       else if (item.action === "confirmed") title = `${order.sourceType || "สโตร์"}ยืนยันรายการ`;
       else if (item.action === "updated") title = `${order.sourceType || "สโตร์"}แก้ไขรายการ`;
       else if (item.action === "deleted" || item.action === "pack_archive") title = "นำรายการออกจากคิว (เก็บประวัติ)";
-      else if (item.action === "pack_checked") title = "ห้องแพ็คยืนยันใบขายออนไลน์ครบ";
-      else if (item.action === "pack_partial") title = "ห้องแพ็คพบใบขายออนไลน์ของไม่ครบ";
+      else if (item.action === "pack_checked") title = `ห้องแพ็คยืนยัน${order.sourceType || "รายการ"}ครบ`;
+      else if (item.action === "pack_partial") title = `ห้องแพ็คพบ${order.sourceType || "รายการ"}ของไม่ครบ`;
       else if (item.action === "store_update") title = "สโตร์อัปเดตการตรวจสินค้า";
       else if (item.action === "pack_update") title = "ห้องแพ็คอัปเดตการตรวจสินค้า";
       return { id: `${department}-${order.id}-${item.id || item.at || index}`, at: item.at, title, note };
@@ -1776,7 +1777,7 @@ export default function App() {
   const backlogUndelivered = (orders || []).filter(isBacklogOrder);
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
-  const fetchStoreReports = async ({ date = "", query = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
+  const fetchStoreReports = async ({ date = "", query = "", type = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
     if (!["store", "pack"].includes(auth.role)) return;
     if (storeReportsFetchInFlightRef.current) return;
     storeReportsFetchInFlightRef.current = true;
@@ -1788,7 +1789,7 @@ export default function App() {
       if (query.trim()) params.set("q", query.trim());
       if (includeDeleted) params.set("includeDeleted", "true");
       if (kpi) params.set("kpi", "true");
-      if (auth.role === "pack") params.set("type", "online");
+      if (type) params.set("type", type);
       const res = await fetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
@@ -1803,25 +1804,31 @@ export default function App() {
   };
   useEffect(() => {
     const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
-    if (auth.role === "store" || (auth.role === "pack" && ["pack-online", "pack-dashboard"].includes(displayTab))) fetchStoreReports({ date: ["store-booking", "store-online", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
+    const packType = displayTab === "pack-booking" ? "booking" : displayTab === "pack-online" ? "online" : "";
+    if (auth.role === "store" || (auth.role === "pack" && ["pack-booking", "pack-online", "pack-dashboard"].includes(displayTab))) fetchStoreReports({ date: ["store-booking", "store-online", "pack-booking", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", type: packType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
     const isStoreReport = auth.role === "store" && ["store-booking", "store-online"].includes(displayTab);
     if (!isKpi && !isStoreReport) return undefined;
     const timer = window.setInterval(() => {
       if (isKpi) fetchStoreReports({ includeDeleted: true, kpi: true, silent: true });
-      else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted, silent: true });
+      else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type: packType, includeDeleted: storeReportIncludeDeleted, silent: true });
     }, isKpi ? 10000 : 30000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
 
-  const updateOnlinePackStatus = async (item, packStatus, returnReason = "") => {
+  const updateReportPackStatus = async (item, packStatus, returnReason = "") => {
     if (packStatus === "returned" && !returnReason.trim()) {
       setOnlineReturnTarget(item);
       setOnlineReturnReason("");
       return;
     }
     const reason = packStatus === "returned" ? returnReason.trim() : "";
-    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตสถานะออเดอร์ออนไลน์แล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตผลตรวจของห้องแพ็คแล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const resubmitStoreReport = async (item) => {
+    const reason = window.prompt("ระบุสิ่งที่สโตร์แก้ไขแล้ว (ถ้ามี):", "") ?? "";
+    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, action: "resubmit", reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "ส่งตรวจใหม่ไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ สโตร์แก้ไขและส่งให้ห้องแพ็คตรวจใหม่แล้ว"); } catch (e) { setSyncStatus(`❌ ส่งตรวจใหม่ไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   useEffect(() => {
@@ -4303,7 +4310,8 @@ export default function App() {
             <>
               <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
               <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
-              <button type="button" className={displayTab === "pack-online" ? "active" : ""} onClick={() => selectAppTab("pack-online")}><Store size={18} /> ออเดอร์ออนไลน์</button>
+              <button type="button" className={displayTab === "pack-booking" ? "active" : ""} onClick={() => selectAppTab("pack-booking")}><FileText size={18} /> ใบสั่งจอง</button>
+              <button type="button" className={displayTab === "pack-online" ? "active" : ""} onClick={() => selectAppTab("pack-online")}><Store size={18} /> ใบขายออนไลน์</button>
               <button type="button" className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => selectAppTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
             </>
           )}
@@ -5079,6 +5087,7 @@ export default function App() {
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
             {["store-booking", "store-online"].includes(displayTab) && <div className="store-report-workspace">
+              {storeReports.filter(item => item.type === (displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "#991b1b" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
               {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); }; return <>
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
                 <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? "ติดตามเอกสารและงานที่รอยืนยัน" : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน">↻ รีเฟรช</button></div></div></header>
@@ -5112,9 +5121,12 @@ export default function App() {
 
         {displayTab === "pack-dashboard" && (() => { const pending = packTodayOrders.filter(order => order.packStatus === "pending").length; const working = packTodayOrders.filter(order => order.packStatus === "working").length; const waiting = packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length; const monthOrders = packKpiOrders.filter(order => getOrderServiceDate(order).startsWith(currentMonthKey)); const monthCompleted = monthOrders.filter(order => ["checked", "partial"].includes(order.packStatus)); const monthReturned = packKpiOrders.flatMap(getReturnEvents).filter(event => String(event.at || "").startsWith(currentMonthKey)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอแพ็ค", working: "กำลังแพ็ค", checked: "แพ็คเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับสโตร์" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = packTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.packStatus] || "รอแพ็ค", statusTone: statusTones[order.packStatus] })); let activityRows = buildKpiActivityRows(packKpiOrders, "pack"); if (!activityRows.length) activityRows = packTodayOrders.map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "อัปเดตออเดอร์ห้องแพ็ค", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard cards={[{ icon: "📦", value: packTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่เข้าสู่ห้องแพ็ค", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอแพ็ค", detail: "ยังไม่ได้เริ่มแพ็ค", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังแพ็ค", detail: "ห้องแพ็คกำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: packTodayCompleted, label: "แพ็คเสร็จ", detail: "ตรวจและยืนยันแล้ว", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={packTodayCompleted} total={packTodayOrders.length} followUps={[{ label: "งานส่งกลับสโตร์", emptyLabel: "ไม่มีงานส่งกลับ", value: packKpiReturned.length }, { label: "งานค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: packKpiOverdue.length }, { label: "งานรอดำเนินการ / รอของ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "แพ็คเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับสโตร์", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราแพ็คครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows} reportActions={{ copyDaily: () => copyPackSummary("daily"), shareDaily: () => sharePackSummary("daily"), copyMonthly: () => copyPackSummary("monthly"), shareMonthly: () => sharePackSummary("monthly") }} information="KPI ห้องแพ็คอ้างอิง Log การตรวจจริงแบบเรียลไทม์ เคสส่งกลับที่แก้เสร็จแล้วยังคงอยู่ในสถิติย้อนหลัง แต่ไม่แสดงเป็นงานค้าง" progressTitle="ความคืบหน้าการแพ็คสินค้า" progressLabel="แพ็คเสร็จ" />;</section>; })()}
 
-        {displayTab === "pack-online" && (
-          <section className="panel role-workspace ops-workspace"><div className="panel-head"><h2>ออเดอร์ออนไลน์ · ห้องแพ็ค</h2><span>{storeReports.filter(item => item.type === "online" && item.packStatus !== "checked").length} งาน</span></div><div className="ops-pack-work" style={{ display: "grid", gap: "10px" }}>{storeReports.filter(item => item.type === "online" && item.packStatus !== "checked" && !item.deletedAt).map(item => <article key={item.id} className="role-order-card"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">หมายเหตุสโตร์: {item.note}</small>}<span className="status-chip">แพ็ค: {item.packStatus || "pending"}</span><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" onClick={() => updateOnlinePackStatus(item, "checked")}>ยืนยันครบ</button><button className="secondary" onClick={() => updateOnlinePackStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary" onClick={() => updateOnlinePackStatus(item, "returned")}>ส่งกลับสโตร์</button></div></article>)}{!storeReports.filter(item => item.type === "online" && item.packStatus !== "checked" && !item.deletedAt).length && <p className="muted">ยังไม่มีงานออนไลน์ที่รอห้องแพ็ค</p>}</div></section>
-        )}
+        {["pack-booking", "pack-online"].includes(displayTab) && (() => {
+          const type = displayTab === "pack-booking" ? "booking" : "online";
+          const title = type === "booking" ? "ใบสั่งจอง · ห้องแพ็ค" : "ใบขายออนไลน์ · ห้องแพ็ค";
+          const rows = storeReports.filter(item => item.type === type && item.confirmedAt && !["checked", "blocked"].includes(item.packStatus) && !item.deletedAt);
+          return <section className="panel role-workspace ops-workspace"><div className="panel-head"><h2>{title}</h2><span>{rows.length} งานรอตรวจ</span></div><p className="muted">ตรวจยืนยันด้วย Flow เดียวกัน: ครบจึงปิดงาน หากผิดหรือไม่ครบให้ส่งกลับสโตร์แก้ไขและส่งตรวจใหม่</p><div className="ops-pack-work" style={{ display: "grid", gap: "10px" }}>{rows.map(item => <article key={item.id} className="role-order-card" style={["returned", "partial"].includes(item.packStatus) ? { borderLeft: "5px solid #dc2626", background: "#fef2f2" } : undefined}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><span className="status-chip">{item.packStatus === "returned" ? "ส่งกลับสโตร์" : item.packStatus === "partial" ? "ของไม่ครบ" : "รอห้องแพ็คตรวจ"}</span></div><div>{item.detail || "-"}</div>{item.note && <small className="muted">หมายเหตุสโตร์: {item.note}</small>}{item.returnReason && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px", borderRadius: "6px" }}><b>เหตุผลส่งกลับ:</b> {item.returnReason}</div>}<div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" onClick={() => updateReportPackStatus(item, "checked")}>ยืนยันครบ</button><button className="secondary" onClick={() => updateReportPackStatus(item, "partial")}>ของไม่ครบ / รอของ</button><button className="secondary danger" onClick={() => updateReportPackStatus(item, "returned")}>ส่งกลับสโตร์ตรวจซ้ำ</button></div></article>)}{!rows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่รอห้องแพ็คตรวจ</p>}</div></section>;
+        })()}
 
         {["pack-work", "pack-outstation"].includes(displayTab) && (
           <section className="panel role-workspace ops-workspace">
@@ -5218,10 +5230,10 @@ export default function App() {
         {onlineReturnTarget && (
           <div className="modal-backdrop" role="presentation">
             <section className="panel modal-card" role="dialog" aria-modal="true" aria-labelledby="online-return-title">
-              <div className="panel-head"><h2 id="online-return-title">ส่งออเดอร์ออนไลน์กลับสโตร์</h2><span>{onlineReturnTarget.bookingNumber || "ไม่ระบุเลขใบสั่งจอง"}</span></div>
+              <div className="panel-head"><h2 id="online-return-title">ส่งงานกลับสโตร์ตรวจสอบ</h2><span>{onlineReturnTarget.bookingNumber || "ไม่ระบุเลขใบสั่งจอง"}</span></div>
               <label className="field-label" htmlFor="online-return-reason">ของผิด / เหตุผลที่ต้องตรวจสอบใหม่ *</label>
               <textarea id="online-return-reason" rows={4} value={onlineReturnReason} onChange={event => setOnlineReturnReason(event.target.value)} placeholder="ระบุรายการที่ผิดและสิ่งที่สโตร์ต้องตรวจสอบ" autoFocus />
-              <div className="modal-actions"><button className="secondary" onClick={() => { setOnlineReturnTarget(null); setOnlineReturnReason(""); }}>ยกเลิก</button><button className="primary" disabled={!onlineReturnReason.trim()} onClick={async () => { const target = onlineReturnTarget; const reason = onlineReturnReason; setOnlineReturnTarget(null); setOnlineReturnReason(""); await updateOnlinePackStatus(target, "returned", reason); }}>ยืนยันส่งกลับสโตร์</button></div>
+              <div className="modal-actions"><button className="secondary" onClick={() => { setOnlineReturnTarget(null); setOnlineReturnReason(""); }}>ยกเลิก</button><button className="primary" disabled={!onlineReturnReason.trim()} onClick={async () => { const target = onlineReturnTarget; const reason = onlineReturnReason; setOnlineReturnTarget(null); setOnlineReturnReason(""); await updateReportPackStatus(target, "returned", reason); }}>ยืนยันส่งกลับสโตร์</button></div>
             </section>
           </div>
         )}
