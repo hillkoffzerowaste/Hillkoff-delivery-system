@@ -1420,6 +1420,7 @@ export default function App() {
 	        salesName: order.salesName || "",
 	        salesPhone: order.salesPhone || "",
 	        status: order.status || "รอคนขับรับ",
+	        ...(order.queueStatus !== undefined ? { queueStatus: order.queueStatus || "" } : {}),
 	        // POD is stored on-device only; never persist photo/blob URLs to Firestore
 	        sharedToLine: Boolean(order.sharedToLine),
 	        checkInAt: order.checkInAt || "",
@@ -5333,7 +5334,7 @@ export default function App() {
 
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
-              const pending = orders.filter(o => o.status === "รอคนขับรับ");
+              const pending = orders.filter(o => o.status === "รอคนขับรับ" && o.queueStatus === "queued" && !o.driverId);
               console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
               return (
                 <section className="panel">
@@ -5438,7 +5439,7 @@ export default function App() {
 	                              onClick={() => {
 	                                const reason = prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:");
 	                                if (reason) {
-	                                  updateOrder(order.id, { status: "รอคนขับรับ", driverId: "", driverName: "", complaint: reason, sharedToLine: false });
+	                                  updateOrder(order.id, { status: "รอคนขับรับ", queueStatus: "queued", driverId: "", driverName: "", complaint: reason, sharedToLine: false });
 	                                  setSyncStatus(`⏳ ส่งออเดอร์ "${order.id}" กลับเข้าคิวอีกครั้ง`);
 	                                }
 	                              }}>❌ ยกเลิก</button>
@@ -5463,7 +5464,7 @@ export default function App() {
 	                              onClick={() => {
 	                                const reason = prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:");
 	                                if (reason) {
-	                                  updateOrder(order.id, { status: "รอคนขับรับ", driverId: "", driverName: "", complaint: reason, photo: "", sharedToLine: false });
+	                                  updateOrder(order.id, { status: "รอคนขับรับ", queueStatus: "queued", driverId: "", driverName: "", complaint: reason, photo: "", sharedToLine: false });
 	                                }
 	                              }}>❌ ยกเลิก</button>
                           </>
@@ -5482,7 +5483,7 @@ export default function App() {
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} 
 	                            disabled={false}
 	                            onClick={() => {
-	                              updateOrder(order.id, { status: "ส่งสำเร็จ", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
+	                              updateOrder(order.id, { status: "ส่งสำเร็จ", queueStatus: "completed", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
 	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
 	                            }}>✅ ส่งสำเร็จแล้ว</button>
 	                        )}
