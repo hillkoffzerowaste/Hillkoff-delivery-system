@@ -480,6 +480,8 @@ export default function App() {
   const [driverSequenceDragId, setDriverSequenceDragId] = useState("");
   const [driverNoteDrafts, setDriverNoteDrafts] = useState({});
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", username: "", password: "" });
+  const [driverLoginSubmitting, setDriverLoginSubmitting] = useState(false);
+  const driverLoginInFlightRef = useRef(false);
   const [rememberPhone, setRememberPhone] = useState(false);
   const [googleOtpStage, setGoogleOtpStage] = useState("idle"); // idle | otp
   const [googleOtpSession, setGoogleOtpSession] = useState(null);
@@ -2122,14 +2124,18 @@ export default function App() {
   };
 
   const passwordLogin = async () => {
+    if (driverLoginInFlightRef.current) return;
     if (!loginForm.phone.trim()) return;
     const deviceId = getOrCreateDeviceId();
     if (!loginForm.password.trim()) return;
+    driverLoginInFlightRef.current = true;
+    setDriverLoginSubmitting(true);
     try {
       setSyncStatus("⏳ กำลังเข้าสู่ระบบ...");
-      const cred = await signInAnon();
-      const user = cred?.user;
+      const authClient = getFirebaseAuth();
+      const user = authClient.currentUser || (await signInAnon())?.user;
       if (!user) throw new Error("No user");
+      const loginUid = user.uid;
       const idToken = await user.getIdToken(true);
 
       const role = loginForm.role;
@@ -2163,6 +2169,9 @@ export default function App() {
           return;
         }
         throw new Error(json?.error || "Login failed");
+      }
+      if (getFirebaseAuth().currentUser?.uid !== loginUid) {
+        throw new Error("Session เปลี่ยนระหว่างล็อกอิน กรุณากดเข้าสู่ระบบอีกครั้ง");
       }
 
       const d = json.data || {};
@@ -2215,6 +2224,9 @@ export default function App() {
       }
     } catch (e) {
       setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`);
+    } finally {
+      driverLoginInFlightRef.current = false;
+      setDriverLoginSubmitting(false);
     }
   };
 
@@ -3947,7 +3959,9 @@ export default function App() {
                   <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
                   จดจำ Username ในครั้งต่อไป
                 </label>
-                <button className="primary wide" onClick={loginDriver}>เข้าสู่ระบบคนขับ</button>
+                <button className="primary wide" onClick={loginDriver} disabled={driverLoginSubmitting}>
+                  {driverLoginSubmitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบคนขับ"}
+                </button>
                 <p className="login-note">ใช้เบอร์โทรเป็น Username ระบบจะเรียกชื่อและประวัติที่ผูกกับบัญชีให้อัตโนมัติ</p>
               </>}
               </>
