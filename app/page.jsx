@@ -3097,6 +3097,42 @@ export default function App() {
     } catch (error) { setSyncStatus(`❌ ลบรายการไม่สำเร็จ: ${error?.message || error}`); }
   };
 
+  const previousServiceDate = toServiceDateKey(new Date(Date.parse(`${todayServiceDate}T12:00:00+07:00`) - 86400000));
+  const comparisonLine = (todayValue, previousValue) => {
+    const difference = todayValue - previousValue;
+    const percent = previousValue ? Math.round((difference / previousValue) * 100) : todayValue ? 100 : 0;
+    return `เทียบเมื่อวาน (${previousServiceDate}): ${previousValue} รายการ · ${difference >= 0 ? "+" : ""}${difference} (${percent >= 0 ? "+" : ""}${percent}%)`;
+  };
+  const projectedEndOfDay = (currentValue) => {
+    const now = new Date();
+    const bangkokHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }).format(now));
+    const elapsed = Math.max(1, Math.min(10, bangkokHour - 8));
+    return Math.max(currentValue, Math.round((currentValue / elapsed) * 10));
+  };
+  const kpiActivitySummary = (tasks, period, department) => {
+    const monthKey = todayServiceDate.slice(0, 7);
+    const inPeriod = (value) => period === "daily" ? toServiceDateKey(value) === todayServiceDate : String(value || "").slice(0, 7) === monthKey;
+    const events = tasks.flatMap((task) => getWorkflowEvents(task).filter((event) => inPeriod(event.at)).map((event, index) => ({ ...event, task, key: `${task.id}-${event.id || event.at || index}` })));
+    const count = (actions) => events.filter((event) => actions.includes(event.action)).length;
+    const returned = tasks.flatMap((task) => getReturnEvents(task).filter((event) => inPeriod(event.at)).map((event) => ({ ...event, task })));
+    const latest = events.slice().sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)).slice(0, 8);
+    const lines = [
+      `รับเข้า/สร้างรายการ: ${count(["created", "created_draft"])} เหตุการณ์`,
+      department === "store" ? `สโตร์ตรวจหรือแก้ไข: ${count(["store_update", "confirmed", "updated"])} เหตุการณ์` : `ห้องแพ็คตรวจหรืออัปเดต: ${count(["pack_update", "pack_checked", "pack_partial", "pack_returned"])} เหตุการณ์`,
+      `ลบ/นำออกจากคิว: ${count(["deleted", "pack_archive"])} เหตุการณ์`,
+      `ส่งกลับแก้ไข: ${returned.length} เหตุการณ์`
+    ];
+    if (returned.length) {
+      lines.push("รายละเอียดงานส่งกลับ:");
+      returned.forEach((event) => lines.push(`- ${event.task.bookingNumber || event.task.customerName || event.task.id} · ${event.reason || event.task.returnReason || "ไม่ระบุเหตุผล"} · ผู้จัด: ${event.storePackerName || event.task.storePackerName || "ไม่ระบุ"} · ผู้ตรวจสโตร์: ${event.storeCheckerName || event.task.storeCheckerName || "ไม่ระบุ"} · ผู้ตรวจแพ็ค: ${event.checkerName || event.task.packCheckerName || "ไม่ระบุ"} · สถานะปัจจุบัน: ${["checked", "partial"].includes(event.task.packStatus) ? "แก้ไขและตรวจซ้ำแล้ว" : "อยู่ระหว่างแก้ไข"}`));
+    }
+    if (latest.length) {
+      lines.push("Activity ล่าสุด:");
+      latest.forEach((event) => lines.push(`- ${event.at ? new Date(event.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"} ${event.action || "updated"} · ${event.task.bookingNumber || event.task.customerName || event.task.id}`));
+    }
+    return lines;
+  };
+
   const buildStoreSummary = (period) => {
     const monthKey = todayServiceDate.slice(0, 7);
     const isInPeriod = (value) => {
@@ -3113,9 +3149,12 @@ export default function App() {
     const completed = active.filter((item) => ["checked", "partial"].includes(item.storeStatus)).length;
     const waiting = active.filter((item) => ["waiting", "partial", "returned"].includes(item.storeStatus)).length;
     const archived = tasks.length - active.length;
-    const returned = tasks.flatMap(getReturnEvents).filter((event) => isInPeriod(event.at)).length;
+    const activityTasks = storeKpiOrders;
+    const returned = activityTasks.flatMap(getReturnEvents).filter((event) => isInPeriod(event.at)).length;
+    const previousTasks = storeKpiOrders.filter((item) => getOrderServiceDate(item) === previousServiceDate);
     const title = period === "daily" ? `รายงานสโตร์ประจำวัน ${todayServiceDate}` : `รายงานสโตร์ประจำเดือน ${monthKey}`;
-    return [title, `งานทั้งหมด: ${tasks.length} รายการ`, `เชียงใหม่/ใกล้เคียง และ Grab/รับหน้าร้าน: ${nearby} รายการ`, `ใบสั่งจอง: ${booking} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอตรวจ: ${pending} รายการ`, `กำลังตรวจ: ${working} รายการ`, `ตรวจเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`, `ส่งกลับตรวจ: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`].join("\n");
+    const analysis = period === "daily" ? [comparisonLine(tasks.length, previousTasks.length), `คาดการณ์สิ้นวัน: ประมาณ ${projectedEndOfDay(tasks.length)} รายการ`, waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"] : [`ค่าเฉลี่ยต่อวัน: ${(tasks.length / Math.max(1, Number(todayServiceDate.slice(8, 10)))).toFixed(1)} รายการ`];
+    return [title, "", "สรุปยอด", `งานทั้งหมด: ${tasks.length} รายการ`, `เชียงใหม่/ใกล้เคียง และ Grab/รับหน้าร้าน: ${nearby} รายการ`, `ใบสั่งจอง: ${booking} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอตรวจ: ${pending} รายการ`, `กำลังตรวจ: ${working} รายการ`, `ตรวจเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`, `ส่งกลับตรวจ: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`, "", "วิเคราะห์และคาดการณ์", ...analysis, "", "สรุป Activity", ...kpiActivitySummary(activityTasks, period, "store")].join("\n");
   };
 
   const copyStoreSummary = async (period) => {
@@ -3149,10 +3188,13 @@ export default function App() {
     const working = active.filter(order => order.packStatus === "working").length;
     const completed = active.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
     const waiting = active.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length;
-    const returned = packOrders.flatMap(getReturnEvents).filter(event => isInPeriod(event.at)).length;
+    const activityTasks = packKpiOrders;
+    const returned = activityTasks.flatMap(getReturnEvents).filter(event => isInPeriod(event.at)).length;
     const archived = packOrders.length - active.length;
+    const previousTasks = packKpiOrders.filter(order => getOrderServiceDate(order) === previousServiceDate);
     const title = period === "daily" ? `รายงานห้องแพ็คประจำวัน ${todayServiceDate}` : `รายงานห้องแพ็คประจำเดือน ${monthKey}`;
-    return [title, `งานทั้งหมด: ${packOrders.length} รายการ`, `ออเดอร์เตรียมสินค้า: ${preparation} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอแพ็ค: ${pending} รายการ`, `กำลังแพ็ค: ${working} รายการ`, `แพ็คเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `รอของ/ของไม่ครบ: ${waiting} รายการ`, `ส่งกลับสโตร์: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`].join("\n");
+    const analysis = period === "daily" ? [comparisonLine(packOrders.length, previousTasks.length), `คาดการณ์สิ้นวัน: ประมาณ ${projectedEndOfDay(packOrders.length)} รายการ`, waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"] : [`ค่าเฉลี่ยต่อวัน: ${(packOrders.length / Math.max(1, Number(todayServiceDate.slice(8, 10)))).toFixed(1)} รายการ`];
+    return [title, "", "สรุปยอด", `งานทั้งหมด: ${packOrders.length} รายการ`, `ออเดอร์เตรียมสินค้า: ${preparation} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอแพ็ค: ${pending} รายการ`, `กำลังแพ็ค: ${working} รายการ`, `แพ็คเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `รอของ/ของไม่ครบ: ${waiting} รายการ`, `ส่งกลับสโตร์: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`, "", "วิเคราะห์และคาดการณ์", ...analysis, "", "สรุป Activity", ...kpiActivitySummary(activityTasks, period, "pack")].join("\n");
   };
 
   const copyPackSummary = async period => {
