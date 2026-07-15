@@ -3624,21 +3624,6 @@ export default function App() {
     active: todayOrdersOnly.filter(order => order.status === "กำลังส่ง" || order.status === "กำลังจัดส่ง").length,
     done: todayOrdersOnly.filter(order => order.status === "ส่งสำเร็จ").length
   };
-  const storeRoleTotals = {
-    total: storeTodayOrders.length,
-    pending: storeTodayOrders.filter(order => ["pending", "returned"].includes(order.storeStatus)).length,
-    working: storeTodayOrders.filter(order => order.storeStatus === "working").length,
-    done: storeTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length,
-    issues: storeTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus)).length
-  };
-  const packRoleTotals = {
-    total: packTodayOrders.length,
-    pending: packTodayOrders.filter(order => ["pending", "returned"].includes(order.packStatus)).length,
-    working: packTodayOrders.filter(order => order.packStatus === "working").length,
-    done: packTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length,
-    issues: packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length
-  };
-
   const summarizeOrders = (list = []) => {
     const total = list.length;
     const waiting = list.filter(order => order.status === "รอคนขับรับ").length;
@@ -4174,26 +4159,14 @@ export default function App() {
           </div>
         )}
 
-        {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && <div className={`stats ${["store", "pack"].includes(auth.role) ? "role-stats" : ""}`}>
-          {auth.role === "store" ? <>
-            <StoreMetricCard icon={PackagePlus} title="ออเดอร์สโตร์วันนี้" value={storeRoleTotals.total} suffix=" งาน" description="งานที่ฝ่ายขายส่งให้สโตร์" />
-            <StoreMetricCard icon={UserCheck} title="รอตรวจสโตร์" value={storeRoleTotals.pending} suffix=" งาน" description="ยังไม่ได้รับหรือเริ่มตรวจ" tone="#92400e" />
-            <StoreMetricCard icon={Navigation} title="กำลังตรวจสินค้า" value={storeRoleTotals.working} suffix=" งาน" description="สโตร์กำลังดำเนินการ" tone="#1d4ed8" />
-            <StoreMetricCard icon={CheckCircle2} title="ตรวจสโตร์เสร็จ" value={storeRoleTotals.done} suffix=" งาน" description="พร้อมส่งต่อห้องแพ็ค" tone="#166534" />
-            <StoreMetricCard icon={MapPinned} title="รอของ / ของไม่ครบ" value={storeRoleTotals.issues} suffix=" งาน" description="ต้องติดตามสินค้า" tone="#b45309" />
-          </> : auth.role === "pack" ? <>
-            <StoreMetricCard icon={PackagePlus} title="ออเดอร์ห้องแพ็ควันนี้" value={packRoleTotals.total} suffix=" งาน" description="งานที่เข้าสู่ห้องแพ็ค" />
-            <StoreMetricCard icon={UserCheck} title="รอแพ็ค" value={packRoleTotals.pending} suffix=" งาน" description="ยังไม่ได้รับหรือเริ่มแพ็ค" tone="#92400e" />
-            <StoreMetricCard icon={Navigation} title="กำลังแพ็ค" value={packRoleTotals.working} suffix=" งาน" description="ห้องแพ็คกำลังดำเนินการ" tone="#1d4ed8" />
-            <StoreMetricCard icon={CheckCircle2} title="แพ็คเสร็จ" value={packRoleTotals.done} suffix=" งาน" description="พร้อมส่งต่อขั้นตอนจัดส่ง" tone="#166534" />
-            <StoreMetricCard icon={MapPinned} title="รอของ / ของไม่ครบ" value={packRoleTotals.issues} suffix=" งาน" description="ต้องติดตามสินค้า" tone="#b45309" />
-          </> : <>
+        {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && !["store", "pack"].includes(auth.role) && <div className="stats">
+          <>
             <StoreMetricCard icon={PackagePlus} title="ออเดอร์วันนี้" value={totals.jobs} suffix=" งาน" description="ฝ่ายขายเปิดงานส่ง" />
             <StoreMetricCard icon={UserCheck} title="รอคนขับรับ" value={totals.waiting} suffix=" งาน" description="เด้งเข้าหน้าคนขับ" tone="#92400e" />
             <StoreMetricCard icon={Navigation} title="กำลังส่ง" value={totals.active} suffix=" งาน" description="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
             <StoreMetricCard icon={CheckCircle2} title="ส่งสำเร็จ" value={totals.done} suffix=" งาน" description="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
             <StoreMetricCard icon={MapPinned} title="งานวิ่งวันนี้" value={todayRouteTasks.length} suffix=" งาน" description="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
-          </>}
+          </>
           {auth.role === "driver" && (
             <StoreMetricCard icon={Star} title="ส่งสำเร็จของฉัน" value={orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} suffix=" งาน" description="งานของคุณทั้งหมด" tone="#22c55e" />
           )}
