@@ -2153,6 +2153,15 @@ export default function App() {
           setSyncStatus("❌ Username หรือ Password ไม่ถูกต้อง");
           return;
         }
+        if (json?.error === "TOO_MANY_LOGIN_ATTEMPTS") {
+          const retryAt = json?.retryAt ? new Date(json.retryAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "อีก 15 นาที";
+          setSyncStatus(`⏳ บัญชีถูกล็อกชั่วคราว กรุณาลองใหม่เวลา ${retryAt}`);
+          return;
+        }
+        if (json?.error === "PASSWORD_NOT_SET") {
+          setSyncStatus("❌ บัญชีนี้ยังไม่มี Password กรุณาติดต่อผู้ดูแลระบบ");
+          return;
+        }
         throw new Error(json?.error || "Login failed");
       }
 

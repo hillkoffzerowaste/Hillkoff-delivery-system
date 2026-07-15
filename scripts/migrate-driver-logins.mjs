@@ -15,9 +15,10 @@ const displayName = (data) => String(data?.name || `${data?.firstName || ""} ${d
 const maskedPhone = (phone) => phone.length >= 7 ? `${phone.slice(0, 3)}***${phone.slice(-4)}` : phone;
 
 const historyCollections = ["orders", "route_tasks", "driver_assessments", "vehicle_usage", "fuel_bills", "driver_locations"];
-const [driversSnap, phoneUsersSnap, ...historySnapshots] = await Promise.all([
+const [driversSnap, phoneUsersSnap, loginLimitsSnap, ...historySnapshots] = await Promise.all([
   db.collection("drivers").get(),
   db.collection("users_by_phone").get(),
+  db.collection("login_rate_limits").get(),
   ...historyCollections.map((collection) => db.collection(collection).get()),
 ]);
 const phoneUsers = new Map(phoneUsersSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
@@ -116,4 +117,8 @@ for (const driver of activeDrivers) {
 }
 
 console.table(rows);
-console.log(JSON.stringify({ mode: apply ? "apply" : "audit", activeDrivers: activeDrivers.length, linked, missingPhone, missingAccount, missingPassword }, null, 2));
+const activeLocks = loginLimitsSnap.docs.filter((doc) => Number(doc.data()?.lockedUntilMs || 0) > Date.now());
+if (process.argv.includes("--clear-locks")) {
+  for (const doc of loginLimitsSnap.docs) await doc.ref.delete();
+}
+console.log(JSON.stringify({ mode: apply ? "apply" : "audit", activeDrivers: activeDrivers.length, linked, missingPhone, missingAccount, missingPassword, activeLocks: activeLocks.length, clearedLocks: process.argv.includes("--clear-locks") ? loginLimitsSnap.size : 0 }, null, 2));
