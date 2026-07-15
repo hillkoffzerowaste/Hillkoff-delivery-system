@@ -413,6 +413,7 @@ function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, r
 
 function PackSalesOrderDetails({ order }) {
   const fields = [
+    ["วันที่และเวลาเปิดออเดอร์", order.createdAt ? formatThaiDateTime(order.createdAt) : ""],
     ["เลขที่ใบสั่งจอง", order.bookingNumber], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}` : ""], ["ชำระเงิน", order.paymentType],
     ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
@@ -422,6 +423,11 @@ function PackSalesOrderDetails({ order }) {
     {fields.map(([label, value]) => <div key={label}><b>{label}:</b> {value}</div>)}
     {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>เปิดแผนที่ลูกค้า</a>}
   </div>;
+}
+
+function OrderCreatedAt({ order }) {
+  if (!order?.createdAt) return null;
+  return <div className="muted" style={{ fontSize: "12px", fontWeight: 700 }}>🕒 ฝ่ายขายเปิดออเดอร์: {formatThaiDateTime(order.createdAt)} น.</div>;
 }
 
 function isValidBookingNumber(value) {
@@ -4898,6 +4904,7 @@ export default function App() {
               <div className="history-search"><div className="history-search-title"><b>ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง</b><span>ค้นหาได้ทุกสถานะและทุกวัน</span></div><div className="history-search-controls"><input value={chiangmaiHistoryQuery} onChange={e => setChiangmaiHistoryQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") searchChiangmaiHistory(); }} placeholder="เลขออเดอร์ / ใบสั่งจอง / ลูกค้า / เบอร์ / พื้นที่" /><button className="secondary" onClick={searchChiangmaiHistory} disabled={chiangmaiHistoryLoading}>{chiangmaiHistoryLoading ? "กำลังค้นหา…" : "ค้นหาย้อนหลัง"}</button><button className="secondary" onClick={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }}>ล้าง</button></div>{chiangmaiHistoryResults.length > 0 && <div className="history-search-results">{chiangmaiHistoryResults.map(order => <article key={order.id} className="history-result-card"><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.bookingNumber || "ไม่มีเลขใบสั่งจอง"} · {order.zone || "-"} · {order.status || "-"}</div><small className="muted">สโตร์: {order.storeStatus || "-"} · แพ็ค: {order.packStatus || "-"}</small></div><button className="secondary" onClick={() => openChiangmaiHistoryOrder(order)}>ดูประวัติ</button></article>)}</div>}{chiangmaiHistorySearched && !chiangmaiHistoryLoading && chiangmaiHistoryResults.length === 0 && <p className="muted">ยังไม่พบออเดอร์ที่ตรงกับคำค้นหา</p>}</div>
               {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "#ef4444" : order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "returned" ? "#dc2626" : order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "returned" ? "#fef2f2" : order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
+                <OrderCreatedAt order={order} />
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -4908,7 +4915,7 @@ export default function App() {
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
-              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
+              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
             {["store-booking", "store-online"].includes(displayTab) && <div style={{ display: "grid", gap: "10px" }}>
@@ -4954,6 +4961,7 @@ export default function App() {
             <div className="ops-pack-work" style={{ display: "grid", gap: "10px" }}>
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
+                <OrderCreatedAt order={order} />
                 {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: ["checked", "partial"].includes(order.storeStatus) ? "#166534" : "#a16207", background: ["checked", "partial"].includes(order.storeStatus) ? "#dcfce7" : "#fef3c7" }}>สโตร์: {order.storeStatus === "checked" ? "ตรวจครบแล้ว" : order.storeStatus === "partial" ? "ตรวจบางส่วน" : "รอสโตร์ตรวจ"}</span>}
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
