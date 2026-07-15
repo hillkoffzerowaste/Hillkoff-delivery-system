@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Camera,
   CheckCircle2,
+  ChartNoAxesCombined,
   ChevronDown,
   ClipboardList,
   Download,
@@ -79,6 +80,7 @@ const TAB_TITLES = {
   "pack-dashboard": "รายงาน KPI ห้องแพ็ค",
   "driver-prep": "เช็คออเดอร์เชียงใหม่",
   driver: "แอปคนขับ",
+  "driver-dashboard": "รายงาน KPI คนขับ",
   "driver-vehicle": "บันทึกการใช้รถ",
   "driver-sop": "ตรวจรถประจำวัน",
   "driver-sop-report": "รายงานตรวจรถ",
@@ -677,7 +679,7 @@ export default function App() {
 
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
-    ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : "driver")
+    ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : tab === "driver-dashboard" ? "driver-dashboard" : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-outstation", "store-online", "store-dashboard", "store-chiangmai-track"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? (["pack-work", "pack-outstation", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : (tab === "driver" ? "sales" : tab);
@@ -4091,6 +4093,7 @@ export default function App() {
               <button type="button" className={displayTab === "driver-prep" ? "active" : ""} onClick={() => selectAppTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
               <button type="button" className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => selectAppTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
               <button type="button" className={displayTab === "driver-sop" ? "active" : ""} onClick={() => selectAppTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
+              <button type="button" className={displayTab === "driver-dashboard" ? "active" : ""} onClick={() => selectAppTab("driver-dashboard")}><ChartNoAxesCombined size={18} /> รายงาน KPI คนขับ</button>
             </>
           )}
           {auth.role === "store" && (
@@ -4256,7 +4259,7 @@ export default function App() {
           </div>
         )}
 
-        {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && !["store", "pack"].includes(auth.role) && <div className="stats">
+        {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && !["store", "pack", "driver"].includes(auth.role) && <div className="stats">
           <>
             <StoreMetricCard icon={PackagePlus} title="ออเดอร์วันนี้" value={totals.jobs} suffix=" งาน" description="ฝ่ายขายเปิดงานส่ง" />
             <StoreMetricCard icon={UserCheck} title="รอคนขับรับ" value={totals.waiting} suffix=" งาน" description="เด้งเข้าหน้าคนขับ" tone="#92400e" />
@@ -4264,9 +4267,6 @@ export default function App() {
             <StoreMetricCard icon={CheckCircle2} title="ส่งสำเร็จ" value={totals.done} suffix=" งาน" description="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
             <StoreMetricCard icon={MapPinned} title="งานวิ่งวันนี้" value={todayRouteTasks.length} suffix=" งาน" description="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
           </>
-          {auth.role === "driver" && (
-            <StoreMetricCard icon={Star} title="ส่งสำเร็จของฉัน" value={orders.filter(o => o.status === "ส่งสำเร็จ" && o.driverId === driverId).length} suffix=" งาน" description="งานของคุณทั้งหมด" tone="#22c55e" />
-          )}
         </div>}
 
         {displayTab === "sales" && (
@@ -5152,6 +5152,51 @@ export default function App() {
           </div>
         )}
 
+        {auth.role === "driver" && displayTab === "driver-dashboard" && (() => {
+          const waiting = driverTodayOrders.filter(order => order.status === "กำลังส่ง").length;
+          const delivering = driverTodayOrders.filter(order => order.status === "กำลังจัดส่ง").length;
+          const completedTotal = driverTodayCompletedOrders.length + driverTodayCompletedRouteTasks.length;
+          const workTotal = driverTodayOrders.length + driverTodayRouteTasks.length;
+          const driverMonthOrders = (orders || []).filter(order => order.driverId === driverId && getOrderServiceDate(order).startsWith(currentMonthKey));
+          const driverMonthRouteTasks = (routeTasks || []).filter(task => task.driverId === driverId && String(task.serviceDate || "").startsWith(currentMonthKey));
+          const driverMonthCompletedOrders = driverMonthOrders.filter(order => order.status === "ส่งสำเร็จ");
+          const driverMonthCompletedRoutes = driverMonthRouteTasks.filter(task => task.status === "เสร็จงาน");
+          const backlog = (orders || []).filter(order => order.driverId === driverId && getOrderServiceDate(order) < todayServiceDate && ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status));
+          const issues = (orders || []).filter(order => order.driverId === driverId && order.status === "ติดปัญหา");
+          const statusTones = { "กำลังส่ง": "is-amber", "กำลังจัดส่ง": "is-blue", "ส่งสำเร็จ": "is-green", "ติดปัญหา": "is-red" };
+          const recentOrders = driverTodayOrders.slice(0, 6).map(order => ({ ...order, statusLabel: order.status || "รอจัดส่ง", statusTone: statusTones[order.status] || "is-primary" }));
+          const activities = driverTodayOrders.flatMap(order => [
+            order.acceptedAt && { id: `${order.id}-accepted`, at: order.acceptedAt, title: "รับออเดอร์", note: order.customerName || order.id },
+            order.checkInAt && { id: `${order.id}-checkin`, at: order.checkInAt, title: "ถึงจุดจัดส่ง", note: order.customerName || order.id },
+            order.deliveredAt && { id: `${order.id}-delivered`, at: order.updatedAt || order.deliveredAt, title: "จัดส่งสำเร็จ", note: order.customerName || order.id }
+          ].filter(Boolean)).sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)).slice(0, 12);
+          return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard
+            cards={[
+              { value: driverTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่รับไว้วันนี้", tone: "is-primary" },
+              { value: waiting, label: "รอจัดส่ง", detail: "รับงานแล้วและรอออกส่ง", tone: "is-amber" },
+              { value: delivering, label: "กำลังจัดส่ง", detail: "เช็กอินถึงจุดหมายแล้ว", tone: "is-blue" },
+              { value: driverTodayCompletedOrders.length, label: "ส่งสำเร็จ", detail: "ออเดอร์ที่ส่งเสร็จวันนี้", tone: "is-green" },
+              { value: driverTodayRouteTasks.length, label: "งานวิ่ง", detail: "งานสาขาและงานวิ่งไกล", tone: "is-red" }
+            ]}
+            completed={completedTotal} total={workTotal}
+            followUps={[
+              { label: "งานค้างจากวันก่อน", emptyLabel: "ไม่มีงานค้างจากวันก่อน", value: backlog.length },
+              { label: "งานติดปัญหา", emptyLabel: "ไม่มีงานติดปัญหา", value: issues.length },
+              { label: "งานวันนี้ที่ยังไม่เสร็จ", emptyLabel: "งานวันนี้เสร็จครบแล้ว", value: Math.max(0, workTotal - completedTotal) }
+            ]}
+            monthly={[
+              { label: "ออเดอร์ทั้งหมด", value: driverMonthOrders.length },
+              { label: "ส่งสำเร็จ", value: driverMonthCompletedOrders.length },
+              { label: "งานวิ่ง", value: driverMonthRouteTasks.length },
+              { label: "วิ่งเสร็จ", value: driverMonthCompletedRoutes.length },
+              { label: "อัตราสำเร็จ", value: (driverMonthOrders.length + driverMonthRouteTasks.length) ? Math.round(((driverMonthCompletedOrders.length + driverMonthCompletedRoutes.length) / (driverMonthOrders.length + driverMonthRouteTasks.length)) * 100) : 0, suffix: "%" }
+            ]}
+            recentOrders={recentOrders} activities={activities}
+            information="KPI คนขับคำนวณจากออเดอร์และงานวิ่งที่ผูกกับบัญชีคนขับปัจจุบันแบบเรียลไทม์ โดยไม่เปลี่ยนขั้นตอนรับงานหรือจัดส่ง"
+            progressTitle="ความคืบหน้างานจัดส่งวันนี้" progressLabel="เสร็จแล้ว"
+          /></section>;
+        })()}
+
         {auth.role === "driver" && displayTab === "driver" && (
           <div style={{ display: "grid", gap: "16px" }}>
             {/* ส่วนข้อมูลคนขับ */}
@@ -5198,12 +5243,6 @@ export default function App() {
                     <ClipboardList size={14} /> คัดลอก
                   </button>
                 </div>
-              </div>
-              <div className="analytics-cards" style={{ marginTop: "12px" }}>
-                <div><span>ออเดอร์ปกติ</span><b>{driverTodayWorkSummary.orders}</b></div>
-                <div><span>ส่งสำเร็จ</span><b>{driverTodayWorkSummary.completedOrders}</b></div>
-                <div><span>งานวิ่ง</span><b>{driverTodayWorkSummary.routeTasks}</b></div>
-                <div><span>วิ่งเสร็จ</span><b>{driverTodayWorkSummary.completedRouteTasks}</b></div>
               </div>
               <p className="muted" style={{ margin: "10px 0 0" }}>
                 COD วันนี้ ฿{money(driverTodayWorkSummary.cod)} · COD ส่งสำเร็จ ฿{money(driverTodayWorkSummary.codDone)}
