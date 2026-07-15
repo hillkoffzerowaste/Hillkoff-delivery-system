@@ -97,9 +97,9 @@ export async function POST(request) {
 
   const idToken = String(payload?.idToken || "").trim();
   const role = String(payload?.role || "").trim();
-  const phoneRaw = String(payload?.phone || "").trim().slice(0, 40);
+  const phoneRaw = String(payload?.username || payload?.phone || "").trim().slice(0, 40);
   const phone = normalizePhoneDigits(phoneRaw);
-  const pin = String(payload?.pin || "").trim();
+  const pin = String(payload?.password || payload?.pin || "").trim();
   const setPin = payload?.setPin === true;
   const rawDeviceId = String(payload?.deviceId || "").trim();
   const deviceId = rawDeviceId.length >= 20 && rawDeviceId.length <= 200 ? rawDeviceId : "";

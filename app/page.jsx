@@ -2154,6 +2154,8 @@ export default function App() {
           idToken,
           role,
           name: loginForm.name.trim(),
+          username: loginForm.phone.trim(),
+          password: loginForm.pin.trim(),
           phone: loginForm.phone.trim(),
           pin: loginForm.pin.trim(),
           setPin: loginStage === "set_pin",
@@ -3946,7 +3948,7 @@ export default function App() {
           </div>
           {auth.role !== "driver-register" ? (
             <>
-              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>Google + OTP</span></div>
+              <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>{loginForm.role === "driver" ? "Username + Password" : "บัญชีพนักงาน"}</span></div>
               <div className="segmented">
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
@@ -3962,8 +3964,8 @@ export default function App() {
               ) : (
               <>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
-              <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
-              {googleOtpStage === "otp" ? (
+              <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder={loginForm.role === "driver" ? "Username (เบอร์โทร)" : "เบอร์โทร"} inputMode="tel" autoComplete="username" />
+              {loginForm.role === "sales" && (googleOtpStage === "otp" ? (
                 <>
                   <input value={googleOtpCode} onChange={e => setGoogleOtpCode(e.target.value)} placeholder="OTP 6 หลัก" inputMode="numeric" />
                   {googleOtpDevCode && (
@@ -3976,20 +3978,20 @@ export default function App() {
                 <button className="primary wide" onClick={startGoogleOtpLogin}>
                   เข้าใช้งานด้วย Google + OTP
                 </button>
-              )}
-              <p className="login-note">ฝ่ายขายต้องใช้ Google อีเมล @hillkoff.com ส่วนคนขับใช้ Google ส่วนตัวได้และต้องผูกเบอร์กับโปรไฟล์</p>
-              <input value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder={loginStage === "set_pin" ? "ตั้ง PIN (อย่างน้อย 4 ตัว)" : "PIN"} inputMode="numeric" />
+              ))}
+              {loginForm.role === "sales" && <p className="login-note">ฝ่ายขายสามารถใช้ Google อีเมล @hillkoff.com หรือ PIN สำรอง</p>}
+              <input type="password" value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder={loginStage === "set_pin" ? "ตั้งรหัสผ่าน PIN (อย่างน้อย 4 ตัว)" : (loginForm.role === "driver" ? "Password (PIN เดิม)" : "PIN")} inputMode="numeric" autoComplete="current-password" />
               {loginStage === "set_pin" && (
                 <input value={pinConfirm} onChange={e => setPinConfirm(e.target.value)} placeholder="ยืนยัน PIN" inputMode="numeric" />
               )}
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
                 <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
-                จดจำเบอร์โทรในครั้งต่อไป
+                จดจำ Username ในครั้งต่อไป
               </label>
               <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {loginStage === "set_pin" ? "ตั้ง PIN สำรองและเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขายด้วย PIN สำรอง" : "เข้าใช้งานคนขับด้วย PIN สำรอง")}
+                {loginStage === "set_pin" ? "ตั้ง Password และเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขายด้วย PIN สำรอง" : "เข้าสู่ระบบคนขับ")}
               </button>
-              <p className="login-note">PIN สำรองใช้เมื่อไม่สะดวกเข้าสู่ระบบด้วย Google และควรเก็บเป็นความลับ</p>
+              <p className="login-note">{loginForm.role === "driver" ? "ใช้เบอร์โทรเป็น Username และใช้ PIN เดิมเป็น Password ระบบจะเรียกชื่อที่ผูกกับบัญชีให้อัตโนมัติ" : "PIN สำรองควรเก็บเป็นความลับ"}</p>
               </>
               )}
             </>

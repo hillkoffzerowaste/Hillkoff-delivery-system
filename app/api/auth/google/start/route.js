@@ -65,6 +65,7 @@ export async function POST(request) {
   const name = String(payload?.name || "").trim().slice(0, 160);
   if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
   if (!["sales", "driver", "admin"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
+  if (role === "driver") return Response.json({ ok: false, error: "DRIVER_GOOGLE_LOGIN_DISABLED" }, { status: 403 });
   if (role === "driver" && (phoneDigits.length < 9 || phoneDigits.length > 15)) {
     return Response.json({ ok: false, error: "Invalid driver phone" }, { status: 400 });
   }
