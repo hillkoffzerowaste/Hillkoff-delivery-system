@@ -13,6 +13,7 @@ export async function POST(request) {
 
   const text = String(payload?.text || "").trim();
   if (!text) return Response.json({ ok: false, error: "Missing text" }, { status: 400 });
+  if (text.length > 5000) return Response.json({ ok: false, error: "LINE text exceeds 5000 characters" }, { status: 400 });
 
   try {
     const { profile, db } = await requireProfile(request, ["sales", "admin"]);
@@ -27,6 +28,6 @@ export async function POST(request) {
       createdByUid: profile.uid,
       createdAt: new Date().toISOString()
     });
-    return Response.json({ ok: result.ok, data: result });
+    return Response.json({ ok: result.ok, data: result }, { status: result.ok ? 200 : 502 });
   } catch (error) { return errorResponse(error); }
 }

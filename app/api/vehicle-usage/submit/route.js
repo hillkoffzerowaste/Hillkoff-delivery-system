@@ -3,6 +3,8 @@ import { after } from "next/server";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
 import { resolveVerifiedDriver } from "../../../../lib/driverIdentity";
+import { getMileageSheetUrl, postToGoogleAppsScript } from "../../../../lib/googleAppsScript";
+import { errorResponse } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -21,25 +23,7 @@ function toServiceDateKey(dateLike) {
 }
 
 async function syncUsageToGoogle(payload) {
-  const webAppUrl = process.env.GOOGLE_MILEAGE_WEB_APP_URL || process.env.GOOGLE_SHEETS_WEB_APP_URL || "";
-  if (!webAppUrl) return { ok: true, skipped: true };
-  try {
-    const response = await fetch(webAppUrl, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "appendUsageSegment", ...payload }),
-      signal: AbortSignal.timeout(6000)
-    });
-    const text = await response.text();
-    if (!response.ok) return { ok: false, error: text || `HTTP ${response.status}` };
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { ok: true, raw: text };
-    }
-  } catch (error) {
-    return { ok: false, error: error?.message || String(error) };
-  }
+  return postToGoogleAppsScript(getMileageSheetUrl(), { action: "appendUsageSegment", ...payload }, { timeoutMs: 6000 });
 }
 
 function timestampMillis(value) {
@@ -111,11 +95,14 @@ export async function POST(request) {
     }
 
     const odometer = Number(payload?.odometer || 0);
-    if (!Number.isFinite(odometer) || odometer <= 0) {
+    if (!Number.isFinite(odometer) || odometer <= 0 || odometer > 10_000_000) {
       return Response.json({ ok: false, error: "Odometer required" }, { status: 400 });
     }
 
     const odometerStart = Number(payload?.odometerStart || (eventType === "start" ? odometer : 0));
+    if (!Number.isFinite(odometerStart) || odometerStart < 0 || odometerStart > 10_000_000) {
+      return Response.json({ ok: false, error: "Invalid start odometer" }, { status: 400 });
+    }
     if (eventType === "end" && odometerStart > 0 && odometer < odometerStart) {
       return Response.json({ ok: false, error: "End odometer must not be less than start odometer" }, { status: 400 });
     }
@@ -123,10 +110,8 @@ export async function POST(request) {
     const serviceDate = toServiceDateKey(new Date());
     const driverId = String(user.driverId || `driver_${user.phoneDigits || doc?.id || ""}`).trim();
     const profile = user.driverProfile || {};
-    const driverName = String(
-      payload?.driverName || user.name || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || ""
-    ).trim();
-    const driverPhone = String(payload?.driverPhone || user.phone || user.phoneDigits || "").trim();
+    const driverName = String(user.name || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "").trim().slice(0, 160);
+    const driverPhone = String(user.phone || user.phoneDigits || "").trim().slice(0, 40);
 
     let autoClosed = null;
     if (eventType === "start") {
@@ -213,9 +198,9 @@ export async function POST(request) {
       department: vehicle.department,
       odometer,
       odometerStart,
-      usageType: String(payload?.usageType || "").trim(),
-      detail: String(payload?.detail || "").trim(),
-      note: String(payload?.note || "").trim(),
+      usageType: String(payload?.usageType || "").trim().slice(0, 160),
+      detail: String(payload?.detail || "").trim().slice(0, 2000),
+      note: String(payload?.note || "").trim().slice(0, 2000),
       googleSyncStatus: "pending",
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
@@ -239,6 +224,9 @@ export async function POST(request) {
       }
     });
   } catch (error) {
-    return Response.json({ ok: false, error: error?.message || String(error) }, { status: 401 });
+    if (String(error?.code || "").startsWith("auth/")) {
+      return Response.json({ ok: false, error: "Invalid or expired authentication token" }, { status: 401 });
+    }
+    return errorResponse(error);
   }
 }

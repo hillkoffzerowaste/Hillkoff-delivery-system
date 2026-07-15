@@ -1,5 +1,5 @@
-import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { buildAnswer } from "../../../../lib/chatbotEngine";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -14,28 +14,6 @@ function toServiceDateKeyBangkok(dateLike) {
   const m = parts.find((p) => p.type === "month")?.value || "01";
   const d = parts.find((p) => p.type === "day")?.value || "01";
   return `${y}-${m}-${d}`;
-}
-
-async function verifySales(payload) {
-  const idToken = String(payload?.idToken || "").trim();
-  const phoneDigits = String(payload?.phoneDigits || "").replace(/\D/g, "");
-  if (!idToken) return { ok: false, status: 400, error: "Missing idToken" };
-  if (!phoneDigits) return { ok: false, status: 400, error: "Missing phoneDigits" };
-
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(idToken, true);
-    const db = getAdminDb();
-    const userSnap = await db.collection("users_by_phone").doc(phoneDigits).get();
-    const user = userSnap.exists ? userSnap.data() : null;
-    const role = String(user?.role || "");
-    const uid = String(user?.uid || user?.uidLast || "");
-    if (!user || role !== "sales" || !uid || uid !== decoded.uid) {
-      return { ok: false, status: 403, error: "Forbidden" };
-    }
-    return { ok: true, db, user, phoneDigits };
-  } catch (e) {
-    return { ok: false, status: 401, error: e?.message || "Unauthorized" };
-  }
 }
 
 async function safeGetDocs(query) {
@@ -66,39 +44,45 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const question = String(payload?.question || "").trim();
+  const question = String(payload?.question || "").trim().slice(0, 1000);
   if (!question) return Response.json({ ok: false, error: "Missing question" }, { status: 400 });
 
-  const auth = await verifySales(payload);
-  if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
-
-  const todayKey = toServiceDateKeyBangkok();
-  const context = await loadContext(auth.db, todayKey);
-  context.history = Array.isArray(payload?.history) ? payload.history.slice(-8) : [];
-  const answer = buildAnswer(question, todayKey, context);
-
   try {
-    await auth.db.collection("chatbot_sessions").add({
-      phoneDigits: auth.phoneDigits,
+    const { profile, db } = await requireProfile(request, ["sales", "admin"]);
+    const todayKey = toServiceDateKeyBangkok();
+    const context = await loadContext(db, todayKey);
+    context.history = Array.isArray(payload?.history)
+      ? payload.history.slice(-8).map((item) => ({
+          role: ["user", "model"].includes(item?.role) ? item.role : "user",
+          text: String(item?.text || "").slice(0, 1000)
+        }))
+      : [];
+    const answer = buildAnswer(question, todayKey, context);
+
+    await db.collection("chatbot_sessions").add({
+      ownerUid: profile.uid,
+      phoneDigits: String(profile.phoneDigits || profile.phone || "").replace(/\D/g, ""),
       question,
       answer,
       source: "code_trained_bot",
       createdAt: new Date().toISOString(),
-    });
-  } catch {}
+    }).catch((error) => console.warn("Could not save chatbot session", error?.message || error));
 
-  return Response.json({
-    ok: true,
-    data: {
-      answer,
-      source: "code_trained_bot",
-      counts: {
-        orders: context.orders.length,
-        customers: context.customers.length,
-        users: context.drivers.length,
-        assessments: context.assessments.length,
-        sessions: context.sessions.length,
+    return Response.json({
+      ok: true,
+      data: {
+        answer,
+        source: "code_trained_bot",
+        counts: {
+          orders: context.orders.length,
+          customers: context.customers.length,
+          users: context.drivers.length,
+          assessments: context.assessments.length,
+          sessions: context.sessions.length,
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

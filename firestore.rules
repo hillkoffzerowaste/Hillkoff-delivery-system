@@ -1,0 +1,182 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(profilePath());
+    }
+
+    function profile() {
+      return get(profilePath()).data;
+    }
+
+    function role() {
+      return profile().role;
+    }
+
+    function hasCurrentPhoneSession() {
+      let p = profile();
+      return !(p.role in ["driver", "sales"]) || !("phoneDigits" in p) || p.phoneDigits == "" ||
+        (exists(/databases/$(database)/documents/users_by_phone/$(p.phoneDigits)) &&
+          get(/databases/$(database)/documents/users_by_phone/$(p.phoneDigits)).data.uidLast == request.auth.uid);
+    }
+
+    function activeProfile() {
+      let p = profile();
+      return hasProfile() &&
+        (!("active" in p) || p.active != false) &&
+        (!("status" in p) || !(p.status in ["disabled", "rejected"])) &&
+        hasCurrentPhoneSession();
+    }
+
+    function hasRole(roles) {
+      return activeProfile() && role() in roles;
+    }
+
+    function driverId() {
+      return profile().driverId;
+    }
+
+    function salesOrderUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return hasRole(["sales", "admin"]) && changed.hasOnly([
+        "driverId", "driverName", "status", "updatedAt"
+      ]);
+    }
+
+    function driverOrderUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let ownExisting = resource.data.driverId == driverId();
+      let validClaim = resource.data.driverId == "" &&
+        resource.data.queueStatus == "queued" &&
+        request.resource.data.driverId == driverId();
+      return hasRole(["driver"]) &&
+        changed.hasOnly([
+          "driverId", "driverName", "status", "sharedToLine", "checkInAt",
+          "deliveredAt", "complaint", "driverNote", "driverSequence",
+          "driverSequenceServiceDate", "driverSequenceUpdatedAt",
+          "driverSequenceUpdatedBy", "acceptedAt", "updatedAt"
+        ]) &&
+        (ownExisting || validClaim) &&
+        request.resource.data.driverId in [driverId(), ""] &&
+        request.resource.data.status is string &&
+        request.resource.data.status.size() <= 40;
+    }
+
+    match /orders/{orderId} {
+      allow read: if hasRole(["sales", "admin", "store", "pack"]) ||
+        (hasRole(["driver"]) && (
+          resource.data.driverId == driverId() ||
+          (resource.data.driverId == "" && resource.data.queueStatus == "queued")
+        ));
+      allow update: if salesOrderUpdate() || driverOrderUpdate();
+      allow create, delete: if false;
+
+      match /activity/{activityId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /customers/{customerId} {
+      allow read: if hasRole(["sales", "admin"]);
+      allow write: if false;
+    }
+
+    match /driver_locations/{locationId} {
+      allow read: if hasRole(["sales", "admin"]) ||
+        (hasRole(["driver"]) && locationId == driverId());
+      allow create, update: if hasRole(["driver"]) &&
+        locationId == driverId() &&
+        request.resource.data.driverId == driverId() &&
+        request.resource.data.lat is number &&
+        request.resource.data.lng is number &&
+        request.resource.data.lat >= -90 && request.resource.data.lat <= 90 &&
+        request.resource.data.lng >= -180 && request.resource.data.lng <= 180;
+      allow delete: if false;
+    }
+
+    match /route_tasks/{taskId} {
+      allow read: if hasRole(["sales", "admin"]) ||
+        (hasRole(["driver"]) && resource.data.driverId == driverId());
+      allow create: if hasRole(["driver"]) &&
+        request.resource.data.driverId == driverId() &&
+        request.resource.data.stops is list &&
+        request.resource.data.stops.size() <= 50;
+      allow update: if hasRole(["driver"]) &&
+        resource.data.driverId == driverId() &&
+        request.resource.data.driverId == driverId() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "note", "stops", "completedAt", "updatedAt"
+        ]) &&
+        request.resource.data.stops is list &&
+        request.resource.data.stops.size() <= 50;
+      allow delete: if false;
+    }
+
+    match /chat_messages/{messageId} {
+      allow read: if hasRole(["sales", "admin", "driver", "store", "pack"]);
+      allow create: if hasRole(["sales", "admin", "driver", "store", "pack"]) &&
+        request.resource.data.keys().hasOnly([
+          "sender_role", "sender_name", "sender_phone", "type", "message",
+          "createdAt", "updatedAt"
+        ]) &&
+        request.resource.data.sender_role == role() &&
+        request.resource.data.sender_name == profile().name &&
+        request.resource.data.sender_phone == profile().phone &&
+        request.resource.data.type in ["chat", "emergency"] &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() > 0 &&
+        request.resource.data.message.size() <= 2000;
+      allow update, delete: if false;
+    }
+
+    match /chat_meta/{metaId} {
+      allow read: if hasRole(["sales", "admin", "driver", "store", "pack"]);
+      allow create: if metaId == "team" && activeProfile() &&
+        request.resource.data.keys().hasOnly([
+          "lastMessageId", "lastMessageAt", "lastMessageText", "lastMessageType",
+          "lastSenderRole", "lastSenderName", "lastSenderPhone", "messageCount", "updatedAt"
+        ]) &&
+        request.resource.data.messageCount == 1 &&
+        request.resource.data.lastMessageText is string &&
+        request.resource.data.lastMessageText.size() <= 160 &&
+        request.resource.data.lastMessageType in ["chat", "emergency"] &&
+        request.resource.data.lastSenderRole == role() &&
+        request.resource.data.lastSenderName == profile().name &&
+        request.resource.data.lastSenderPhone == profile().phone;
+      allow update: if metaId == "team" && activeProfile() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "lastMessageId", "lastMessageAt", "lastMessageText", "lastMessageType",
+          "lastSenderRole", "lastSenderName", "lastSenderPhone", "messageCount", "updatedAt"
+        ]) &&
+        request.resource.data.messageCount == resource.data.messageCount + 1 &&
+        request.resource.data.lastMessageText is string &&
+        request.resource.data.lastMessageText.size() <= 160 &&
+        request.resource.data.lastMessageType in ["chat", "emergency"] &&
+        request.resource.data.lastSenderRole == role() &&
+        request.resource.data.lastSenderName == profile().name &&
+        request.resource.data.lastSenderPhone == profile().phone;
+      allow delete: if false;
+    }
+
+    match /users/{uid} {
+      allow read, write: if false;
+    }
+
+    match /users_by_phone/{phone} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

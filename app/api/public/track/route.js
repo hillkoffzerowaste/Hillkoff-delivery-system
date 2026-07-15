@@ -46,29 +46,9 @@ function maskCustomerName(name) {
   return `คุณ ${visible} ******`;
 }
 
-function maskAddress(address, zone) {
-  const clean = String(address || zone || "").trim();
-  if (!clean) return "";
-  const compact = clean.replace(/\s+/g, " ");
-  const houseMatch = compact.match(/(\d+)\s*\/\s*([0-9A-Za-zก-๙]+)/);
-  if (houseMatch) {
-    return compact.replace(houseMatch[0], `${houseMatch[1]}/x`).slice(0, 42) + (compact.length > 42 ? "..." : "");
-  }
-  return compact.slice(0, 42) + (compact.length > 42 ? "..." : "");
-}
-
 function summarizeItems(order) {
-  const note = String(order?.salesNote || "").trim();
-  if (note) {
-    const items = note
-      .split(/[\n,;]+/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 3);
-    if (items.length) return items;
-  }
   const boxes = Number(order?.boxes || 0);
-  return boxes ? [`สินค้า ${boxes} ชิ้น`] : ["รายการสินค้าตามออเดอร์"];
+  return boxes ? [`สินค้า ${boxes} กล่อง`] : ["รายการสินค้าตามออเดอร์"];
 }
 
 async function findDriver(db, order) {
@@ -92,11 +72,10 @@ function serializeOrder(order, driver) {
   return {
     orderId: String(order.id || ""),
     status: publicStatus(order.status),
-    rawStatus: String(order.status || ""),
     customerName: maskCustomerName(order.customerName),
-    customerAddress: maskAddress(order.address, order.zone),
-    driverName: driverName || "กำลังจัดคนขับ",
-    driverPhone: String(driver?.phone || driver?.phoneDigits || ""),
+    customerAddress: String(order.zone || "").trim().slice(0, 80),
+    driverName: driverName ? driverName.split(/\s+/)[0] : "กำลังจัดคนขับ",
+    driverPhone: "",
     items: summarizeItems(order),
     updatedAt: String(order.updatedAt || order.deliveredAt || order.checkInAt || order.createdAt || ""),
     deliveredAt: String(order.deliveredAt || ""),
@@ -114,7 +93,7 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const phoneDigits = normalizePhoneDigits(searchParams.get("phone"));
 
-  if (phoneDigits.length < 8) {
+  if (phoneDigits.length < 8 || phoneDigits.length > 15) {
     return Response.json({ ok: false, error: "กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
 
@@ -125,7 +104,8 @@ export async function GET(request) {
     const phoneSnap = await db
       .collection("orders")
       .where("customerPhoneDigits", "==", phoneDigits)
-      .limit(20)
+      .orderBy("updatedAt", "desc")
+      .limit(10)
       .get();
 
     candidates = phoneSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -144,6 +124,7 @@ export async function GET(request) {
     const driver = await findDriver(db, order);
     return Response.json({ ok: true, data: serializeOrder(order, driver) }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
+    console.error("Public tracking lookup failed", { code: e?.code, message: e?.message });
+    return Response.json({ ok: false, error: "ระบบติดตามขัดข้องชั่วคราว" }, { status: 500, headers: { "Cache-Control": "no-store" } });
   }
 }

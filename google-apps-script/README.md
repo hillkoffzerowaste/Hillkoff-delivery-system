@@ -104,10 +104,13 @@ Reserved for syncing in-day usage segments if the app later sends them to Apps S
 9. Set **Execute as** to `Me`.
 10. Set **Who has access** to `Anyone with the link`.
 11. Deploy and copy the Web App URL.
-12. Add the Web App URL to Vercel as:
+12. Open **Project Settings > Script Properties** and add a long random value as
+    `HILLKOFF_SYNC_SHARED_SECRET`.
+13. Add the Web App URL and the same secret to the Next.js environment:
 
 ```text
 GOOGLE_MILEAGE_WEB_APP_URL=https://script.google.com/macros/s/.../exec
+GOOGLE_SHEETS_SHARED_SECRET=replace-with-the-same-long-random-secret
 ```
 
 The app also supports this fallback variable:
@@ -118,16 +121,8 @@ GOOGLE_SHEETS_WEB_APP_URL=https://script.google.com/macros/s/.../exec
 
 ## Test GET
 
-Open the Web App URL in a browser. It should return JSON similar to:
-
-```json
-{
-  "ok": true,
-  "spreadsheetId": "...",
-  "spreadsheetUrl": "https://docs.google.com/spreadsheets/d/...",
-  "sheets": ["Vehicles", "Daily Usage", "Usage Segments", "Fuel Bills", "Daily Summary", "Monthly Summary", "Dashboard", "Sync Logs"]
-}
-```
+Opening the Web App URL shows the dashboard. Public GET-based setup is disabled;
+all setup and sync operations must use an authenticated POST request.
 
 ## Test POST
 
@@ -137,6 +132,7 @@ Use PowerShell:
 $url = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
 $body = @{
   action = "upsertDailyMileage"
+  sharedSecret = "the-same-secret-from-script-properties"
   serviceDate = "2026-07-04"
   driverId = "driver_test"
   driverName = "Test Driver"
@@ -160,6 +156,6 @@ Invoke-RestMethod -Method Post -Uri $url -ContentType "text/plain;charset=utf-8"
 
 ## Notes
 
-- The script does not store secrets.
+- The shared secret is stored only in Apps Script Properties and server-side environment variables.
 - Deploying a new Apps Script version may require updating the Web App deployment if you do not use "Manage deployments".
 - The Next.js app will mark Google sync as `skipped` when no Apps Script URL is configured.

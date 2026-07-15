@@ -1,5 +1,5 @@
-import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { HILLKOFF_VEHICLES } from "../../../../lib/vehicleMaster";
+import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -20,18 +20,13 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const idToken = String(payload?.idToken || "").trim();
   const serviceDate = String(payload?.serviceDate || toServiceDateKey(new Date()));
-  if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
+    return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
+  }
 
   try {
-    const decoded = await getAdminAuth().verifyIdToken(idToken, true);
-    const db = getAdminDb();
-    const salesSnap = await db.collection("users_by_phone").where("uidLast", "==", decoded.uid).limit(1).get();
-    const salesUser = salesSnap.docs[0]?.data() || null;
-    if (!salesUser || salesUser.role !== "sales") {
-      return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
-    }
+    const { db } = await requireProfile(request, ["sales", "admin"]);
 
     const [driversSnap, assessmentsSnap] = await Promise.all([
       db.collection("users_by_phone").where("role", "==", "driver").get(),
@@ -55,7 +50,5 @@ export async function POST(request) {
     const assessments = assessmentsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
 
     return Response.json({ ok: true, data: { serviceDate, drivers, assessments, vehicles: HILLKOFF_VEHICLES } });
-  } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
-  }
+  } catch (error) { return errorResponse(error); }
 }

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import {
@@ -557,11 +557,13 @@ export default function App() {
     try {
       const existing = localStorage.getItem("hillkoff-device-id");
       if (existing) return existing;
-      const id = `dev_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+      const id = globalThis.crypto?.randomUUID
+        ? `dev_${globalThis.crypto.randomUUID()}`
+        : `dev_${Array.from(globalThis.crypto.getRandomValues(new Uint8Array(24)), (value) => value.toString(16).padStart(2, "0")).join("")}`;
       localStorage.setItem("hillkoff-device-id", id);
       return id;
     } catch {
-      return `dev_${Date.now()}`;
+      return "";
     }
   };
   const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
@@ -702,8 +704,11 @@ export default function App() {
   const lastCustomersPullRef = useRef(null);
   const lastDriverLocationsPullRef = useRef(null);
   const refreshInFlightRef = useRef(false);
+  const driverOrdersSnapshotsRef = useRef({ assigned: [], queued: [] });
   
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
+  const ordersToSyncRef = useRef(new Set());
+  const routeTasksToSyncRef = useRef(new Set());
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
 
@@ -884,30 +889,17 @@ export default function App() {
 	    // Orders: keep realtime (core UX), but limit results.
 	    if (needsOrdersRealtime) {
 	      try {
-	        let ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
-	        if (state.auth?.role === "driver") {
-	          const did = state.auth?.driverId || driverId || "";
-	          if (did) {
-	            ordersQ = fb.query(
-	              fb.collection(db, "orders"),
-	              fb.where("driverId", "in", ["", did]),
-	              fb.orderBy("updatedAt", "desc"),
-	              fb.limit(effectiveOrdersLimit)
-	            );
-	          } else {
-	            ordersQ = fb.query(
-	              fb.collection(db, "orders"),
-	              fb.where("driverId", "==", ""),
-	              fb.orderBy("updatedAt", "desc"),
-	              fb.limit(effectiveOrdersLimit)
-	            );
+	        const applyOrderRows = (incomingRows, source = "all") => {
+	          let rows = incomingRows;
+	          if (state.auth?.role === "driver" && source !== "all") {
+	            driverOrdersSnapshotsRef.current[source] = incomingRows;
+	            const byId = new Map();
+	            [...driverOrdersSnapshotsRef.current.assigned, ...driverOrdersSnapshotsRef.current.queued]
+	              .forEach((order) => byId.set(order.id, order));
+	            rows = [...byId.values()]
+	              .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+	              .slice(0, effectiveOrdersLimit);
 	          }
-	        }
-	        unsubs.push(
-	          fb.onSnapshot(
-	            ordersQ,
-	            (snap) => {
-	              const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 	              setState((prev) => {
 	                const prevById = {};
 	                (prev.orders || []).forEach((o) => { prevById[o.id] = o; });
@@ -921,10 +913,21 @@ export default function App() {
 	                return { ...prev, orders: merged };
 	              });
 	              markConnected();
-	            },
-	            (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`)
-	          )
-	        );
+	        };
+	        const onOrderError = (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`);
+	        if (state.auth?.role === "driver") {
+	          const did = state.auth?.driverId || driverId || "";
+	          driverOrdersSnapshotsRef.current = { assigned: [], queued: [] };
+	          if (did) {
+	            const assignedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", did), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
+	            unsubs.push(fb.onSnapshot(assignedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "assigned"), onOrderError));
+	          }
+	          const queuedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", ""), fb.where("queueStatus", "==", "queued"), fb.limit(effectiveOrdersLimit));
+	          unsubs.push(fb.onSnapshot(queuedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "queued"), onOrderError));
+	        } else {
+	          const ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
+	          unsubs.push(fb.onSnapshot(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }))), onOrderError));
+	        }
 	      } catch (e) {
 	        console.warn("orders onSnapshot error", e);
 	      }
@@ -932,7 +935,11 @@ export default function App() {
 
 	    if (needsRouteTasksRealtime) {
 	      try {
-	        const routeTasksQ = fb.query(fb.collection(db, "route_tasks"), fb.orderBy("updatedAt", "desc"), fb.limit(100));
+	        const routeDriverId = state.auth?.driverId || driverId || "";
+	        if (state.auth?.role === "driver" && !routeDriverId) throw new Error("Missing driver identity");
+	        const routeTasksQ = state.auth?.role === "driver"
+	          ? fb.query(fb.collection(db, "route_tasks"), fb.where("driverId", "==", routeDriverId), fb.orderBy("updatedAt", "desc"), fb.limit(100))
+	          : fb.query(fb.collection(db, "route_tasks"), fb.orderBy("updatedAt", "desc"), fb.limit(100));
 	        unsubs.push(
 	          fb.onSnapshot(
 	            routeTasksQ,
@@ -1008,8 +1015,8 @@ export default function App() {
 	          const idToken = await refreshAuthToken(true);
 	          const res = await fetch("/api/driver-assessments/today", {
 	            method: "POST",
-	            headers: { "Content-Type": "application/json" },
-	            body: JSON.stringify({ idToken, serviceDate: todayServiceDate })
+	            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+	            body: JSON.stringify({ serviceDate: todayServiceDate })
 	          });
 	          const json = await res.json();
 	          if (!json?.ok) throw new Error(json?.error || "load failed");
@@ -1214,7 +1221,7 @@ export default function App() {
     setTimeout(scrollAiToBottom, 0);
   }, [aiOpen, aiMessages]);
 
-  const refreshAuthToken = async (forceRefresh = true) => {
+  const refreshAuthToken = useCallback(async (forceRefresh = true) => {
     const authClient = getFirebaseAuth();
     const user = authClient.currentUser;
     if (!user) {
@@ -1222,11 +1229,13 @@ export default function App() {
     }
 
     const token = await user.getIdToken(forceRefresh);
-    const nextAuth = { ...(state.auth || {}), token };
+    let storedAuth = {};
+    try { storedAuth = JSON.parse(localStorage.getItem("hillkoff_auth") || "{}") || {}; } catch {}
+    const nextAuth = { ...storedAuth, token };
     localStorage.setItem("hillkoff_auth", JSON.stringify(nextAuth));
     setState((prev) => ({ ...prev, auth: { ...(prev.auth || {}), token } }));
     return token;
-  };
+  }, []);
 
   const sendToChatbot = async (text) => {
     const q = String(text || "").trim();
@@ -1238,16 +1247,12 @@ export default function App() {
     setAiInput("");
     setAiMessages((prev) => [...prev, { role: "user", text: q }, { role: "model", text: "" }]);
 
-    const phoneDigits = String(state.auth?.phone || "").replace(/\D/g, "");
-
     try {
       const idToken = await refreshAuthToken();
       const res = await fetch("/api/chat/bot", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
-          idToken,
-          phoneDigits,
           question: q,
           history: aiMessages.slice(-8).map((m) => ({ role: m.role, text: m.text }))
         }),
@@ -1298,7 +1303,6 @@ export default function App() {
   useEffect(() => {
     if (!chatOpen) return;
     scrollChatToBottom();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatOpen]);
 
   const getLastReadChatCount = () => {
@@ -1395,7 +1399,7 @@ export default function App() {
     } catch {}
   }, [chatMessages, state.auth?.phone, lastEmergencySeenIdFromStorage]);
 
-	  const upsertOrderToFirestore = async (order) => {
+	  const upsertOrderToFirestore = useCallback(async (order) => {
 	    try {
 	      const db = getFirestoreDb();
 	      const orderForDB = {
@@ -1420,6 +1424,13 @@ export default function App() {
 	        complaint: order.complaint || "",
 	        salesNote: order.salesNote || "",
 	        driverNote: order.driverNote || "",
+	        ...(order.driverSequence !== undefined ? {
+	          driverSequence: Math.max(0, Number(order.driverSequence) || 0),
+	          driverSequenceServiceDate: order.driverSequenceServiceDate || "",
+	          driverSequenceUpdatedAt: order.driverSequenceUpdatedAt || "",
+	          driverSequenceUpdatedBy: order.driverSequenceUpdatedBy || ""
+	        } : {}),
+	        ...(order.acceptedAt !== undefined ? { acceptedAt: order.acceptedAt || "" } : {}),
 	        createdAt: order.createdAt || new Date().toISOString(),
 	        updatedAt: new Date().toISOString()
 	      };
@@ -1428,7 +1439,7 @@ export default function App() {
 	    } catch (e) {
 	      return { ok: false, error: e?.message || String(e) };
 		    }
-		  };
+		  }, []);
 
 		  const upsertDriverLocationToFirestore = async (payload) => {
 		    try {
@@ -1446,7 +1457,7 @@ export default function App() {
 		    }
 		  };
 
-		  const upsertRouteTaskToFirestore = async (task) => {
+		  const upsertRouteTaskToFirestore = useCallback(async (task) => {
 		    try {
 		      const db = getFirestoreDb();
 		      const taskForDB = {
@@ -1479,7 +1490,42 @@ export default function App() {
 		    } catch (e) {
 		      return { ok: false, error: e?.message || String(e) };
 		    }
-		  };
+		  }, []);
+
+  useEffect(() => {
+    const ids = [...ordersToSyncRef.current];
+    if (!ids.length) return;
+    ids.forEach((id) => ordersToSyncRef.current.delete(id));
+    const orders = ids.map((id) => (state.orders || []).find((order) => order.id === id)).filter(Boolean);
+    void Promise.all(orders.map(async (order) => {
+      const { ok, error } = await upsertOrderToFirestore(order);
+      if (!ok) {
+        console.error(`Failed to sync order ${order.id}:`, error);
+        return;
+      }
+      try {
+        const idToken = await refreshAuthToken(true);
+        await fetch("/api/orders/sync-sheet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ orderId: order.id })
+        });
+      } catch (sheetError) {
+        console.warn(`Failed to sync order ${order.id} to delivery sheet`, sheetError);
+      }
+    }));
+  }, [state.orders, refreshAuthToken, upsertOrderToFirestore]);
+
+  useEffect(() => {
+    const ids = [...routeTasksToSyncRef.current];
+    if (!ids.length) return;
+    ids.forEach((id) => routeTasksToSyncRef.current.delete(id));
+    const tasks = ids.map((id) => (state.routeTasks || []).find((task) => task.id === id)).filter(Boolean);
+    void Promise.all(tasks.map(async (task) => {
+      const saved = await upsertRouteTaskToFirestore(task);
+      if (!saved.ok) console.error(`Failed to sync route task ${task.id}:`, saved.error);
+    }));
+  }, [state.routeTasks, upsertRouteTaskToFirestore]);
 
 		  const getCurrentLocationOnce = () => new Promise((resolve, reject) => {
 		    if (typeof window === "undefined") return reject(new Error("no window"));
@@ -1687,7 +1733,7 @@ export default function App() {
       }
     }, 350);
     return () => clearTimeout(timer);
-  }, [auth.role, customerQuery, orderCustomerSearch]);
+  }, [auth.role, customerQuery, orderCustomerSearch, refreshAuthToken]);
 
   const loadAllHistoricalCustomers = async () => {
     if (allHistoricalCustomersLoading || allHistoricalCustomersLoaded) return;
@@ -2408,30 +2454,8 @@ export default function App() {
 
   const updateOrder = (id, patch) => {
     console.log(`📝 updateOrder: ${id}`, patch);
-    setState(prev => {
-      const updated = { ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) };
-      
-      // Preserve the existing driver workflow: update Firestore immediately.
-      const order = updated.orders.find(o => o.id === id);
-      if (order) {
-        (async () => {
-          const { ok, error } = await upsertOrderToFirestore(order);
-          if (!ok) {
-            console.error(`❌ Failed to sync order ${id}:`, error);
-          } else {
-            console.log(`✅ Order ${id} synced to Firestore`);
-            try {
-              const idToken = await refreshAuthToken(true);
-              await fetch("/api/orders/sync-sheet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ orderId: id }) });
-            } catch (sheetError) {
-              console.warn(`⚠️ Failed to sync order ${id} to delivery sheet`, sheetError);
-            }
-          }
-        })();
-      }
-      
-      return updated;
-    });
+    ordersToSyncRef.current.add(id);
+    setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
 	    setTimeout(() => {
 	      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
 	    }, 250);
@@ -2671,7 +2695,7 @@ export default function App() {
     return [...workflow, ...delivery].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
   };
 
-  const loadCheckerLists = async () => {
+  const loadCheckerLists = useCallback(async () => {
     if (!["store", "pack", "admin"].includes(auth.role)) return;
     try {
       const idToken = await refreshAuthToken();
@@ -2679,7 +2703,7 @@ export default function App() {
       const json = await res.json();
       if (res.ok && json?.ok) setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
     } catch {}
-  };
+  }, [auth.role, refreshAuthToken]);
 
   const saveCheckerList = async (role, names) => {
     const clean = [...new Set(names.map(name => String(name || "").trim()).filter(Boolean))];
@@ -2697,7 +2721,7 @@ export default function App() {
     }
   };
 
-  useEffect(() => { loadCheckerLists(); }, [auth.role]);
+  useEffect(() => { loadCheckerLists(); }, [loadCheckerLists]);
 
   const openWorkModal = (order, role) => {
     clearWorkPhotos();
@@ -2882,7 +2906,7 @@ export default function App() {
     if (storeReportDate !== todayServiceDate) return setSyncStatus("⚠️ วันที่ย้อนหลังดูข้อมูลได้อย่างเดียว ไม่สามารถยืนยันได้");
     const created = await saveStoreDrafts(type);
     if (created === null) return;
-    const selectedIds = storeReports.filter((item) => item.type === type && String(item.createdAt || "").slice(0, 10) === storeReportDate && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status)).map((item) => item.id);
+    const selectedIds = storeReports.filter((item) => item.type === type && String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status)).map((item) => item.id);
     const ids = [...new Set([...selectedIds, ...created.map((item) => item.id)])];
     if (!ids.length) return setSyncStatus("⚠️ ไม่มีรายการที่รอยืนยันในวันที่เลือก");
     setStoreReportConfirmIds(ids);
@@ -3180,17 +3204,8 @@ export default function App() {
   };
 
   const updateRouteTask = (id, patch) => {
-    setState(prev => {
-      const updatedTasks = (prev.routeTasks || []).map(task => task.id === id ? { ...task, ...patch } : task);
-      const task = updatedTasks.find(item => item.id === id);
-      if (task) {
-        (async () => {
-          const saved = await upsertRouteTaskToFirestore(task);
-          if (!saved.ok) console.error(`Failed to sync route task ${id}:`, saved.error);
-        })();
-      }
-      return { ...prev, routeTasks: updatedTasks };
-    });
+    routeTasksToSyncRef.current.add(id);
+    setState(prev => ({ ...prev, routeTasks: (prev.routeTasks || []).map(task => task.id === id ? { ...task, ...patch } : task) }));
   };
 
   const uploadRouteTaskPhoto = (task, stopId, file) => {
@@ -4844,15 +4859,15 @@ export default function App() {
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
             {["store-outstation", "store-online"].includes(displayTab) && <div style={{ display: "grid", gap: "10px" }}>
-              {(() => { const type = displayTab === "store-outstation" ? "outstation" : "online"; const selectedRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.createdAt || "").slice(0, 10) === storeReportDate)); const overdue = storeReports.filter(item => item.type === type && !item.confirmedAt && !item.deletedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.createdAt || "").slice(0, 10) < todayServiceDate); return <>
+              {(() => { const type = displayTab === "store-outstation" ? "outstation" : "online"; const selectedRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const overdue = storeReports.filter(item => item.type === type && !item.confirmedAt && !item.deletedAt && ["draft", "waiting", "partial"].includes(item.status) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); return <>
                 {type === "outstation" && <section className="ops-store-outstation" style={{ display: "grid", gap: "8px", border: "1px solid #bae6c8", background: "#f4fbf5", borderRadius: "10px", padding: "12px" }}><div className="panel-head"><h3>งานต่างจังหวัดจากฝ่ายขาย</h3><span>{salesOutstationStoreOrders.length} งาน</span></div>{salesOutstationStoreOrders.map(order => { const storePending = ["partial", "waiting"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><span className="status-chip">สโตร์: {order.storeStatus || "pending"}</span></div><div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}{order.packWorkDetails?.detail && <> · ห้องแพ็ค: {order.packWorkDetails.detail}</>}</div>{storePending && <b style={{ color: order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า</b>}{order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}{order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}<details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกสโตร์"}</button></article>})}{!salesOutstationStoreOrders.length && <p className="muted">ยังไม่มีงานต่างจังหวัดจากฝ่ายขาย</p>}</section>}
-                {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt || "").slice(0, 10)}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
+                {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><b>{type === "outstation" ? "รายงานออเดอร์ต่างจังหวัด" : "รายงานออเดอร์ออนไลน์"}</b><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div></div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><input value={storeReportQuery} onChange={e => setStoreReportQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); } }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" style={{ flex: "1 1 280px" }} /><button className="secondary" onClick={() => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); }}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); }}>ล้างค้นหา</button><label className="muted" style={{ display: "flex", gap: "5px", alignItems: "center" }}><input type="checkbox" checked={storeReportIncludeDeleted} onChange={e => setStoreReportIncludeDeleted(e.target.checked)} /> รวมรายการลบแล้ว</label></div>
                 {storeReportSearchActive && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>ผลค้นหาย้อนหลัง: “{storeReportQuery}”</div>}
                 <div style={{ display: "grid", gap: "8px" }}>{(storeDraftRows[type] || []).map((row) => <div key={row.draftId} style={{ display: "grid", gridTemplateColumns: "minmax(160px, 1fr) 2fr 2fr 130px auto", gap: "8px", alignItems: "center", border: "1px solid #dbe4d6", padding: "8px", borderRadius: "8px" }}><BookingNumberInput value={row.bookingNumber} onChange={bookingNumber => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, bookingNumber } : item) }))} /><input value={row.detail} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, detail: e.target.value } : item) }))} placeholder="รายละเอียด" /><input value={row.note} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, note: e.target.value } : item) }))} placeholder="หมายเหตุ/รอของ" /><select value={row.status} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, status: e.target.value } : item) }))}><option value="draft">ร่าง</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><button className="secondary" onClick={() => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].filter((item) => item.draftId !== row.draftId) }))}>ลบ</button></div>)}</div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate} onClick={() => addStoreDraftRow(type)}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" disabled={storeReportDate !== todayServiceDate || !(storeDraftRows[type] || []).length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" disabled={storeReportDate !== todayServiceDate} onClick={() => startStoreReportConfirmation(type)}>บันทึกยืนยัน</button></div></div>
-                {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : selectedRows.map(item => { const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.createdAt).slice(0, 10)}T00:00:00`)) / 86400000)); const overdueColor = age > 1 ? "#ef4444" : age === 1 ? "#eab308" : "#e5e7eb"; return <article key={item.id} style={{ opacity: item.deletedAt ? .62 : 1, border: `1px solid ${!item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) ? overdueColor : "#e5e7eb"}`, borderLeft: `5px solid ${item.deletedAt ? "#991b1b" : ({ draft: "#6b7280", waiting: "#eab308", partial: "#f97316", saved: "#16a34a" }[item.status] || "#6b7280")}`, borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><span className="status-chip">{item.deletedAt ? "ลบแล้ว" : item.status === "draft" ? "ร่าง/ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"}</span>{!item.confirmedAt && !item.deletedAt && <span style={{ color: age > 1 ? "#dc2626" : "#a16207", fontWeight: 700 }}>ค้าง {age} วัน</span>}<button className="secondary" onClick={() => openStoreReportDetail(item)}>ดู</button>{!item.deletedAt && <><button className="secondary" onClick={() => setEditingStoreReport({ ...item, reason: "" })}>แก้ไข</button><button className="secondary" onClick={() => deleteStoreReport(item)}>ลบ</button></>}</div></article>})}
+                {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : selectedRows.map(item => { const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000)); const overdueColor = age > 1 ? "#ef4444" : age === 1 ? "#eab308" : "#e5e7eb"; return <article key={item.id} style={{ opacity: item.deletedAt ? .62 : 1, border: `1px solid ${!item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status) ? overdueColor : "#e5e7eb"}`, borderLeft: `5px solid ${item.deletedAt ? "#991b1b" : ({ draft: "#6b7280", waiting: "#eab308", partial: "#f97316", saved: "#16a34a" }[item.status] || "#6b7280")}`, borderRadius: "8px", padding: "10px" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><div>{item.detail || "-"}</div>{item.note && <small className="muted">{item.note}</small>}<div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}><span className="status-chip">{item.deletedAt ? "ลบแล้ว" : item.status === "draft" ? "ร่าง/ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"}</span>{!item.confirmedAt && !item.deletedAt && <span style={{ color: age > 1 ? "#dc2626" : "#a16207", fontWeight: 700 }}>ค้าง {age} วัน</span>}<button className="secondary" onClick={() => openStoreReportDetail(item)}>ดู</button>{!item.deletedAt && <><button className="secondary" onClick={() => setEditingStoreReport({ ...item, reason: "" })}>แก้ไข</button><button className="secondary" onClick={() => deleteStoreReport(item)}>ลบ</button></>}</div></article>})}
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
             </div>}

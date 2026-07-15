@@ -4,20 +4,30 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 export const runtime = "nodejs";
 
 function cleanCustomer(customer) {
-  const name = String(customer.name || "").trim();
-  const phone = String(customer.phone || "").trim();
+  const clean = (value, max) => String(value || "").trim().slice(0, max);
+  const name = clean(customer.name, 200);
+  const phone = clean(customer.phone, 40);
   return {
     name,
     nameKey: normalizeCustomerSearch(name),
-    contact: String(customer.contact || ""),
+    contact: clean(customer.contact, 200),
     phone,
     phoneDigits: phone.replace(/\D/g, ""),
-    zone: String(customer.zone || ""),
-    address: String(customer.address || ""),
-    mapUrl: String(customer.mapUrl || ""),
-    note: String(customer.note || ""),
+    zone: clean(customer.zone, 200),
+    address: clean(customer.address, 1500),
+    mapUrl: clean(customer.mapUrl, 1500),
+    note: clean(customer.note, 3000),
     updatedAt: new Date().toISOString()
   };
+}
+
+function isSafeHttpUrl(value) {
+  if (!value) return true;
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(request) {
@@ -31,21 +41,24 @@ export async function POST(request) {
   const customer = payload?.customer && typeof payload.customer === "object" ? payload.customer : null;
   const customerId = String(customer?.id || "").trim();
 
-  if (!customerId) return Response.json({ ok: false, error: "Missing customer id" }, { status: 400 });
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "Invalid customer id" }, { status: 400 });
 
   try {
     const { profile, db } = await requireProfile(request, ["sales", "admin"]);
     const next = cleanCustomer(customer);
+    if (!next.name) return Response.json({ ok: false, error: "Customer name is required" }, { status: 400 });
+    if (next.phoneDigits && (next.phoneDigits.length < 8 || next.phoneDigits.length > 15)) return Response.json({ ok: false, error: "Invalid customer phone" }, { status: 400 });
+    if (!isSafeHttpUrl(next.mapUrl)) return Response.json({ ok: false, error: "Map URL must use http or https" }, { status: 400 });
     const duplicateQueries = [];
     if (next.nameKey.length >= 3) {
-      duplicateQueries.push(db.collection("customers").where("nameKey", "==", next.nameKey).get());
-      duplicateQueries.push(db.collection("customer_search").where("nameKey", "==", next.nameKey).get());
-      duplicateQueries.push(db.collection("customer_search").where("terms", "array-contains", next.nameKey.slice(0, 40)).get());
+      duplicateQueries.push(db.collection("customers").where("nameKey", "==", next.nameKey).limit(20).get());
+      duplicateQueries.push(db.collection("customer_search").where("nameKey", "==", next.nameKey).limit(20).get());
+      duplicateQueries.push(db.collection("customer_search").where("terms", "array-contains", next.nameKey.slice(0, 40)).limit(20).get());
     }
     if (next.phoneDigits.length >= 8) {
-      duplicateQueries.push(db.collection("customers").where("phoneDigits", "==", next.phoneDigits).get());
-      duplicateQueries.push(db.collection("customer_search").where("phoneDigits", "==", next.phoneDigits).get());
-      duplicateQueries.push(db.collection("customer_search").where("terms", "array-contains", next.phoneDigits.slice(0, 40)).get());
+      duplicateQueries.push(db.collection("customers").where("phoneDigits", "==", next.phoneDigits).limit(20).get());
+      duplicateQueries.push(db.collection("customer_search").where("phoneDigits", "==", next.phoneDigits).limit(20).get());
+      duplicateQueries.push(db.collection("customer_search").where("terms", "array-contains", next.phoneDigits.slice(0, 40)).limit(20).get());
     }
     if (duplicateQueries.length) {
       const duplicateSnapshots = await Promise.all(duplicateQueries);
@@ -70,11 +83,16 @@ export async function POST(request) {
         }, { status: 409 });
       }
     }
-    await db.collection("customers").doc(customerId).set({
+    const customerRef = db.collection("customers").doc(customerId);
+    const current = await customerRef.get();
+    const batch = db.batch();
+    batch.set(customerRef, {
       ...next,
-      updatedByUid: profile.uid
+      updatedByUid: profile.uid,
+      ...(!current.exists ? { createdAt: new Date().toISOString(), createdByUid: profile.uid } : {})
     }, { merge: true });
-    await db.collection("customer_search").doc(customerId).set(customerSearchRecord(next), { merge: true });
+    batch.set(db.collection("customer_search").doc(customerId), customerSearchRecord(next), { merge: true });
+    await batch.commit();
 
     return Response.json({ ok: true, data: { id: customerId } });
   } catch (error) { return errorResponse(error); }

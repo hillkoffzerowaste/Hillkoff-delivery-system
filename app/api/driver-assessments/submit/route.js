@@ -2,11 +2,18 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
 import { resolveVerifiedDriver } from "../../../../lib/driverIdentity";
+import { getMileageSheetUrl, postToGoogleAppsScript } from "../../../../lib/googleAppsScript";
+import { errorResponse } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
 const DAILY_CHECK_IDS = new Set(["coolant", "engineOil", "leakage", "warningLights"]);
 const WEEKLY_CHECK_IDS = new Set(["0", "1", "2", "3", "4", "5", "6"]);
+
+function cleanChecks(value, allowed) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries([...allowed].map((id) => [id, value[id] === true]));
+}
 
 function toServiceDateKey(dateLike) {
   const date = dateLike ? new Date(dateLike) : new Date();
@@ -37,24 +44,7 @@ function toWeekKey(dateLike) {
 }
 
 async function syncMileageToGoogle(payload) {
-  const webAppUrl = process.env.GOOGLE_MILEAGE_WEB_APP_URL || process.env.GOOGLE_SHEETS_WEB_APP_URL || "";
-  if (!webAppUrl) return { ok: true, skipped: true };
-  try {
-    const response = await fetch(webAppUrl, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "upsertDailyMileage", ...payload })
-    });
-    const text = await response.text();
-    if (!response.ok) return { ok: false, error: text || `HTTP ${response.status}` };
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { ok: true, raw: text };
-    }
-  } catch (error) {
-    return { ok: false, error: error?.message || String(error) };
-  }
+  return postToGoogleAppsScript(getMileageSheetUrl(), { action: "upsertDailyMileage", ...payload });
 }
 
 export async function POST(request) {
@@ -85,8 +75,8 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "Invalid assessment type" }, { status: 400 });
     }
 
-    const dailyChecks = payload?.dailyChecks && typeof payload.dailyChecks === "object" ? payload.dailyChecks : {};
-    const weeklyChecks = payload?.weeklyChecks && typeof payload.weeklyChecks === "object" ? payload.weeklyChecks : {};
+    const dailyChecks = cleanChecks(payload?.dailyChecks, DAILY_CHECK_IDS);
+    const weeklyChecks = cleanChecks(payload?.weeklyChecks, WEEKLY_CHECK_IDS);
     const rawVehicle = payload?.vehicle && typeof payload.vehicle === "object" ? payload.vehicle : {};
     const vehicle = findVehicleById(rawVehicle.id || rawVehicle.assetCode) || null;
     const odometerStart = Number(payload?.odometerStart || 0);
@@ -99,7 +89,7 @@ export async function POST(request) {
       if (!vehicle) {
         return Response.json({ ok: false, error: "Vehicle required" }, { status: 400 });
       }
-      if (!Number.isFinite(odometerStart) || odometerStart <= 0) {
+      if (!Number.isFinite(odometerStart) || odometerStart <= 0 || odometerStart > 10_000_000) {
         return Response.json({ ok: false, error: "Odometer start required" }, { status: 400 });
       }
     }
@@ -126,7 +116,7 @@ export async function POST(request) {
       driverId,
       driverName,
       driverPhone: driverUser.phone || driverUser.phoneDigits || "",
-      notes: String(payload?.notes || "").trim(),
+      notes: String(payload?.notes || "").trim().slice(0, 2000),
       readiness: "ready",
       updatedAt: FieldValue.serverTimestamp()
     };
@@ -198,6 +188,9 @@ export async function POST(request) {
       }
     });
   } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 401 });
+    if (String(e?.code || "").startsWith("auth/")) {
+      return Response.json({ ok: false, error: "Invalid or expired authentication token" }, { status: 401 });
+    }
+    return errorResponse(e);
   }
 }

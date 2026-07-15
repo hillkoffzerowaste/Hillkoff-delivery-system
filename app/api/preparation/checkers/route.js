@@ -27,9 +27,11 @@ export async function PUT(request) {
     const body = await request.json();
     const current = await db.collection("app_settings").doc("preparation_checkers").get();
     const saved = current.exists ? current.data() : {};
+    const canEditStore = profile.role === "store" || profile.role === "admin";
+    const canEditPack = profile.role === "pack" || profile.role === "admin";
     const data = {
-      store: cleanNames(body?.store, cleanNames(saved.store, DEFAULT_CHECKERS.store)),
-      pack: cleanNames(body?.pack, cleanNames(saved.pack, DEFAULT_CHECKERS.pack)),
+      store: canEditStore ? cleanNames(body?.store, cleanNames(saved.store, DEFAULT_CHECKERS.store)) : cleanNames(saved.store, DEFAULT_CHECKERS.store),
+      pack: canEditPack ? cleanNames(body?.pack, cleanNames(saved.pack, DEFAULT_CHECKERS.pack)) : cleanNames(saved.pack, DEFAULT_CHECKERS.pack),
       updatedAt: new Date().toISOString(), updatedBy: profile.name || profile.email, updatedByUid: profile.uid
     };
     await db.collection("app_settings").doc("preparation_checkers").set(data, { merge: true });

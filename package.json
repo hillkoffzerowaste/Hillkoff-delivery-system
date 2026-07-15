@@ -7,14 +7,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run tests/unit",
+    "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/firestore.rules.test.js\"",
+    "check": "npm run lint && npm test && npm run build",
     "customers:backfill-search": "node scripts/backfill-customer-phone-digits.mjs",
+    "firebase:backfill-integrity": "node scripts/backfill-firebase-integrity.mjs --apply",
     "backup": "node lib/backup/cli.js backup",
     "backup:list": "node lib/backup/cli.js list",
-    "backup:restore": "node lib/backup/cli.js restore",
-    "backup:export-csv": "node lib/backup/cli.js export-csv"
+    "backup:restore": "node lib/backup/cli.js restore"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.106.1",
     "firebase": "12.16.0",
     "firebase-admin": "13.6.0",
     "lucide-react": "^0.468.0",
@@ -24,6 +27,23 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "dotenv": "^16.0.0"
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "dotenv": "^16.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.10",
+    "firebase-tools": "^15.23.0",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.19",
+    "gaxios": {
+      "uuid": "11.1.1"
+    },
+    "google-gax": {
+      "uuid": "11.1.1"
+    },
+    "teeny-request": {
+      "uuid": "11.1.1"
+    }
   }
 }

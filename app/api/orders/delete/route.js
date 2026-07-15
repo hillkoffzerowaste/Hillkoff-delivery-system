@@ -8,6 +8,7 @@ export async function POST(request) {
     const body = await request.json();
     const orderId = String(body?.orderId || "").trim().slice(0, 200);
     if (!orderId) return Response.json({ ok: false, error: "Missing orderId" }, { status: 400 });
+    if (orderId.includes("/")) return Response.json({ ok: false, error: "Invalid orderId" }, { status: 400 });
 
     const ref = db.collection("orders").doc(orderId);
     const snap = await ref.get();

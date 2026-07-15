@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 // Firebase Messaging service worker for Web Push notifications.
 // Keep this file defensive: if Firebase CDN/config fails, SW registration must still succeed.
 
