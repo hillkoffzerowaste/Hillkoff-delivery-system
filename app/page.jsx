@@ -334,11 +334,21 @@ function privacySafeName(name) {
 function buildLineMessageForOrder(order) {
   const lines = [];
   lines.push("✅ ส่งของสำเร็จ");
-  lines.push(`งาน: ${order.id}`);
+  lines.push(`ออเดอร์: ${order.id}`);
   if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
+  if (order.customerPhone) lines.push(`โทร: ${order.customerPhone}`);
+  if (order.address) lines.push(`ที่อยู่: ${order.address}`);
   if (order.zone) lines.push(`โซน: ${order.zone}`);
+  if (order.window) lines.push(`ช่วงเวลา: ${order.window}`);
+  if (order.boxes != null) lines.push(`จำนวน: ${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}`);
+  if (order.salesName) lines.push(`ฝ่ายขาย: ${order.salesName}`);
+  if (order.salesPhone) lines.push(`ฝ่ายขายโทร: ${order.salesPhone}`);
+  if (order.salesNote) lines.push(`หมายเหตุฝ่ายขาย: ${order.salesNote}`);
+  lines.push(`COD: ฿${money(order.cod || 0)}`);
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
   if (order.driverNote) lines.push(`หมายเหตุคนขับ: ${order.driverNote}`);
+  if (order.mapUrl) lines.push(`แผนที่: ${order.mapUrl}`);
+  lines.push(`POD: แนบรูป ${Math.max(1, Number(order.podPhotoCount) || 1)} รูป`);
   return lines.join("\n");
 }
 
@@ -706,7 +716,8 @@ export default function App() {
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const [showDriverDailyReport, setShowDriverDailyReport] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
-  const podFilesRef = useRef({}); // { [orderId]: File } kept on-device only (not synced)
+  const [podPreviewsByOrder, setPodPreviewsByOrder] = useState({});
+  const podFilesRef = useRef({}); // { [orderId]: File[] } kept on-device only (not synced)
   const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
   const reportPhotoFileRef = useRef(null);
   const routeTaskFilesRef = useRef({}); // { [taskId_stopId]: File } kept on-device only (not synced)
@@ -3253,14 +3264,37 @@ export default function App() {
     status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
   });
 
-  const uploadPod = async (order, file) => {
-    if (!file) return;
+  const persistDriverOrderPatch = async (order, patch) => {
+    if (pendingOrderUpdatesRef.current.has(order.id)) return { ok: false, error: "Order update in progress" };
+    pendingOrderUpdatesRef.current.add(order.id);
+    const nextPatch = { ...patch, updatedAt: new Date().toISOString() };
+    setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...nextPatch } : item) }));
     try {
-      // Keep the POD file on-device. Use an object URL for preview and retain the File for sharing.
-      podFilesRef.current[order.id] = file;
-      const previewUrl = URL.createObjectURL(file);
-      updateOrder(order.id, { photo: previewUrl, sharedToLine: false });
-      setSyncStatus("✅ บันทึกรูป POD แล้ว (เก็บในเครื่อง) — พร้อมกดส่งสำเร็จ + แชร์สรุป LINE");
+      const db = getFirestoreDb();
+      await fb.updateDoc(fb.doc(db, "orders", String(order.id)), nextPatch);
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...nextPatch } : item) }));
+      return { ok: true };
+    } catch (error) {
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
+      return { ok: false, error: error?.message || String(error) };
+    } finally {
+      pendingOrderUpdatesRef.current.delete(order.id);
+    }
+  };
+
+  const uploadPod = async (order, selectedFiles) => {
+    const incoming = Array.from(selectedFiles || []).filter(file => file?.type?.startsWith("image/"));
+    if (!incoming.length) return;
+    try {
+      const existing = Array.isArray(podFilesRef.current[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current[order.id] ? [podFilesRef.current[order.id]] : [];
+      const nextFiles = [...existing, ...incoming].slice(0, 5);
+      podFilesRef.current[order.id] = nextFiles;
+      const previousPreviews = podPreviewsByOrder[order.id] || [];
+      const nextPreviews = [...previousPreviews, ...incoming.slice(0, 5 - existing.length).map(file => URL.createObjectURL(file))].slice(0, 5);
+      setPodPreviewsByOrder(prev => ({ ...prev, [order.id]: nextPreviews }));
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, photo: nextPreviews[0] || item.photo, sharedToLine: false } : item) }));
+      setSyncStatus(`✅ เก็บรูป POD แล้ว ${nextFiles.length}/5 รูป — พร้อมส่งพร้อม LINE`);
+      if (existing.length + incoming.length > 5) setSyncStatus("⚠️ เก็บได้สูงสุด 5 รูป รูปที่เกินไม่ถูกเพิ่ม");
     } catch (error) {
       setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
     }
@@ -3578,27 +3612,37 @@ export default function App() {
 	      let text = "";
       try {
           const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
+          const files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
           completedOrder = {
             ...order,
             status: "ส่งสำเร็จ",
+            queueStatus: "completed",
             deliveredAt,
 	            driverNote: String(noteDraft ?? order.driverNote ?? "").trim(),
             driverName: order.driverName || state.auth?.name || "",
             driverId: order.driverId || state.auth?.driverId || driverId || "",
-            sharedToLine: false
+            sharedToLine: true,
+            podPhotoCount: files.length
           };
 	        text = buildLineMessageForOrder(completedOrder);
-	        const file = podFilesRef.current?.[order.id];
+	        try { await navigator.clipboard?.writeText?.(text); } catch {}
 
-	        if (file && navigator.canShare?.({ files: [file] })) {
-	          await navigator.share({ files: [file], text });
+	        if (files.length && navigator.canShare?.({ files })) {
+	          await navigator.share({ files, text });
 	        } else {
 	          await navigator.share({ text });
 	        }
-	        updateOrder(order.id, { ...completedOrder, sharedToLine: true });
-	        try { await navigator.clipboard?.writeText?.(text); } catch {}
+	        const saved = await persistDriverOrderPatch(order, {
+	          status: completedOrder.status,
+	          deliveredAt: completedOrder.deliveredAt,
+	          driverNote: completedOrder.driverNote,
+	          driverName: completedOrder.driverName,
+	          driverId: completedOrder.driverId,
+	          sharedToLine: true
+	        });
+	        if (!saved.ok) throw new Error(saved.error);
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
-	        setSyncStatus(`✅ ส่งสำเร็จและเปิดแชร์ LINE แล้ว (${order.id})`);
+	        setSyncStatus(`✅ ส่งสำเร็จและส่งพร้อม LINE แล้ว ${files.length} รูป (${order.id})`);
       } catch (error) {
         try { await navigator.clipboard?.writeText?.(text); } catch {}
         setSyncStatus(`⚠️ ยังไม่บันทึกส่งสำเร็จ: แชร์ LINE ถูกยกเลิก/ไม่สำเร็จ (${order.id})`);
@@ -5505,10 +5549,12 @@ export default function App() {
 	                              className="primary" 
 	                              style={{ padding: "8px", fontSize: "12px" }} 
 	                              disabled={false}
-	                              onClick={() => {
-	                                updateOrder(order.id, { status: "กำลังจัดส่ง", checkInAt: new Date().toLocaleString("th-TH") });
-	                                recordDriverCheckInLocation(order);
-	                                setSyncStatus(`✅ ถึงจุดหมายแล้ว ออเดอร์ "${order.id}"`);
+	                              onClick={async () => {
+	                                setSyncStatus(`⏳ กำลังบันทึกว่าถึงจุดหมาย "${order.id}"...`);
+	                                const saved = await persistDriverOrderPatch(order, { status: "กำลังจัดส่ง", checkInAt: new Date().toLocaleString("th-TH") });
+	                                if (!saved.ok) return setSyncStatus(`❌ บันทึกไปถึงแล้วไม่สำเร็จ: ${saved.error}`);
+	                                recordDriverCheckInLocation({ ...order, status: "กำลังจัดส่ง" });
+	                                setSyncStatus(`✅ ถึงจุดหมายแล้ว กรุณาถ่ายรูป POD 1–5 รูป`);
 	                              }}>🚗 ไปถึงแล้ว</button>
 	                            <button 
 	                              className="secondary" 
@@ -5528,10 +5574,9 @@ export default function App() {
 	                            <label 
 	                              className="primary" 
 	                              style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
-	                              📷 ถ่ายรูป
-	                              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={false} onChange={(e) => {
-	                                const file = e.target.files?.[0];
-	                                if (file) uploadPod(order, file);
+	                              📷 ถ่ายรูป ({(podPreviewsByOrder[order.id] || []).length}/5)
+	                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5} onChange={(e) => {
+	                                if (e.target.files?.length) uploadPod(order, e.target.files);
 	                                e.target.value = "";
 	                              }} />
 	                            </label>
@@ -5547,13 +5592,13 @@ export default function App() {
 	                              }}>❌ ยกเลิก</button>
                           </>
                         )}
-	                        {order.status === "กำลังจัดส่ง" && order.photo && !order.sharedToLine && <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={e => setDriverNoteDrafts((drafts) => ({ ...drafts, [order.id]: e.target.value }))} placeholder="หมายเหตุจากคนขับ (ถ้ามี)" rows={2} style={{ gridColumn: "1 / -1", width: "100%", boxSizing: "border-box", padding: "8px", borderRadius: "8px", border: "1px solid #bfdbfe" }} />}
-	                        {order.status === "กำลังจัดส่ง" && order.photo && !order.sharedToLine && (
+	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={e => setDriverNoteDrafts((drafts) => ({ ...drafts, [order.id]: e.target.value }))} placeholder="หมายเหตุจากคนขับ (ถ้ามี)" rows={2} style={{ gridColumn: "1 / -1", width: "100%", boxSizing: "border-box", padding: "8px", borderRadius: "8px", border: "1px solid #bfdbfe" }} />}
+	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && (
 	                          <button
 	                            className="primary"
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
-	                          >✅ ส่งสำเร็จ + แชร์สรุป (LINE)</button>
+	                          >✅ ส่งสำเร็จ + ส่งพร้อม LINE</button>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button 
@@ -5578,10 +5623,8 @@ export default function App() {
                       </div>
 
                       {/* Photo Preview */}
-                      {order.photo && (
-                        <div style={{ marginTop: "8px", borderRadius: "6px", overflow: "hidden", border: "2px solid #22c55e" }}>
-                          <img src={order.photo} alt="proof" style={{ width: "100%", height: "auto" }} />
-                        </div>
+                      {(podPreviewsByOrder[order.id] || []).length > 0 && (
+                        <div style={{ marginTop: "8px" }}><b style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#166534" }}>📷 รูป POD {(podPreviewsByOrder[order.id] || []).length}/5</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "6px" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ borderRadius: "6px", overflow: "hidden", border: "2px solid #22c55e", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>)}</div></div>
                       )}
                       
                       {order.status === "ส่งสำเร็จ" && (
