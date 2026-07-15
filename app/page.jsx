@@ -1637,7 +1637,8 @@ export default function App() {
     return Array.from(byId.values());
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
-  const preparationOrders = (orders || []).filter(order => order.workflowType && !["queued", "outstation_ready", "grab_completed"].includes(order.queueStatus));
+  const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up"];
+  const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const todayPreparationOrders = preparationOrders.filter(isTodayOrder);
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
@@ -1704,7 +1705,6 @@ export default function App() {
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
   const packTodayOrders = todayOrdersOnly.filter(order => order.workflowType && order.packStatus !== "blocked");
-  const grabCompletedOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && ["grab_completed", "grab_ready", "grab_picked_up"].includes(order.queueStatus));
   const storeTodayCompleted = storeTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
   const packTodayCompleted = packTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
@@ -4783,7 +4783,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length} · Grab/หน้าร้าน {grabCompletedOrders.length}</span></div>
+              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
                 <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
                   <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
@@ -4794,7 +4794,6 @@ export default function App() {
                   <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
-              {grabCompletedOrders.length > 0 && <details style={{ marginBottom: "14px", border: "1px solid #99f6e4", borderRadius: "8px", padding: "10px", background: "#f0fdfa" }}><summary style={{ cursor: "pointer", fontWeight: 800, color: "#0f766e" }}>Grab/รับหน้าร้านที่แพ็คเสร็จ ({grabCompletedOrders.length} งาน)</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{grabCompletedOrders.map(order => <article key={order.id} style={{ border: "1px solid #ccfbf1", borderRadius: "7px", padding: "9px", background: "white" }}><b>{order.id} · {order.customerName}</b><div className="muted">{order.bookingNumber || "ยังไม่ระบุใบสั่งจอง"} · {order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "รอ Grab รับสินค้า"}</div><small className="muted">ห้องแพ็คยืนยัน: {order.packCheckerName || "-"} · {order.grabCompletedAt ? new Date(order.grabCompletedAt).toLocaleString("th-TH") : "-"}</small></article>)}</div></details>}
               <div style={{ maxHeight: "400px", overflowY: "auto" }}>
                 {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 && completedTodayRouteTasks.length === 0 ? (
                   <p className="muted">ยังไม่มีการส่ง</p>
