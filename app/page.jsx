@@ -3103,12 +3103,19 @@ export default function App() {
       const dateKey = String(value || "").slice(0, 10);
       return period === "daily" ? dateKey === todayServiceDate : dateKey.startsWith(monthKey);
     };
-    const nearby = (orders || []).filter((order) => order.workflowType === "store_route" && isInPeriod(getOrderServiceDate(order)));
-    const reports = storeReports.filter((item) => isInPeriod(item.createdAt));
-    const count = (items, type) => items.filter((item) => item.type === type).length;
-    const waiting = [...nearby, ...reports].filter((item) => item.status === "waiting" || item.status === "partial" || (Array.isArray(item.missingItems) && item.missingItems.length)).length;
+    const tasks = storeKpiOrders.filter((item) => isInPeriod(getOrderServiceDate(item)));
+    const active = tasks.filter((item) => item.storeStatus !== "archived");
+    const nearby = tasks.filter((item) => item.workflowType === "store_route").length;
+    const booking = tasks.filter((item) => item.sourceType === "ใบสั่งจอง").length;
+    const online = tasks.filter((item) => item.sourceType === "ใบขายออนไลน์").length;
+    const pending = active.filter((item) => item.storeStatus === "pending").length;
+    const working = active.filter((item) => item.storeStatus === "working").length;
+    const completed = active.filter((item) => ["checked", "partial"].includes(item.storeStatus)).length;
+    const waiting = active.filter((item) => ["waiting", "partial", "returned"].includes(item.storeStatus)).length;
+    const archived = tasks.length - active.length;
+    const returned = tasks.flatMap(getReturnEvents).filter((event) => isInPeriod(event.at)).length;
     const title = period === "daily" ? `รายงานสโตร์ประจำวัน ${todayServiceDate}` : `รายงานสโตร์ประจำเดือน ${monthKey}`;
-    return [title, `เชียงใหม่/ใกล้เคียง: ${nearby.length} รายการ`, `ต่างจังหวัด: ${count(reports, "outstation")} รายการ`, `ออนไลน์: ${count(reports, "online")} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`].join("\n");
+    return [title, `งานทั้งหมด: ${tasks.length} รายการ`, `เชียงใหม่/ใกล้เคียง และ Grab/รับหน้าร้าน: ${nearby} รายการ`, `ใบสั่งจอง: ${booking} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอตรวจ: ${pending} รายการ`, `กำลังตรวจ: ${working} รายการ`, `ตรวจเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`, `ส่งกลับตรวจ: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`].join("\n");
   };
 
   const copyStoreSummary = async (period) => {
@@ -3135,12 +3142,17 @@ export default function App() {
       ? String(value || "").slice(0, 10) === todayServiceDate
       : String(value || "").slice(0, 7) === monthKey;
     const packOrders = packKpiOrders.filter(order => isInPeriod(getOrderServiceDate(order)));
-    const completed = packOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
-    const waiting = packOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus) || (Array.isArray(order.missingItems) && order.missingItems.length)).length;
-    const returned = (orders || []).filter(order => order.workflowType).flatMap(getReturnEvents).filter(event => isInPeriod(event.at)).length;
-    const ready = packOrders.filter(order => ["checked", "partial"].includes(order.packStatus) && !["waiting", "returned"].includes(order.packStatus)).length;
+    const active = packOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
+    const preparation = packOrders.filter(order => order.workflowType !== "store_report").length;
+    const online = packOrders.filter(order => order.sourceType === "ใบขายออนไลน์").length;
+    const pending = active.filter(order => order.packStatus === "pending").length;
+    const working = active.filter(order => order.packStatus === "working").length;
+    const completed = active.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
+    const waiting = active.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length;
+    const returned = packOrders.flatMap(getReturnEvents).filter(event => isInPeriod(event.at)).length;
+    const archived = packOrders.length - active.length;
     const title = period === "daily" ? `รายงานห้องแพ็คประจำวัน ${todayServiceDate}` : `รายงานห้องแพ็คประจำเดือน ${monthKey}`;
-    return [title, `งานเข้าห้องแพ็ค: ${packOrders.length} รายการ`, `แพ็คเสร็จ: ${completed} รายการ`, `รอของ/ของไม่ครบ: ${waiting} รายการ`, `ส่งกลับสโตร์: ${returned} เหตุการณ์`, `พร้อมส่งต่อ: ${ready} รายการ`].join("\n");
+    return [title, `งานทั้งหมด: ${packOrders.length} รายการ`, `ออเดอร์เตรียมสินค้า: ${preparation} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอแพ็ค: ${pending} รายการ`, `กำลังแพ็ค: ${working} รายการ`, `แพ็คเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `รอของ/ของไม่ครบ: ${waiting} รายการ`, `ส่งกลับสโตร์: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`].join("\n");
   };
 
   const copyPackSummary = async period => {
