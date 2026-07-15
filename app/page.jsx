@@ -4275,12 +4275,6 @@ export default function App() {
 
         {displayTab === "sales" && (
           <>
-            {grabCompletedOrders.length > 0 && <section className="panel" style={{ marginBottom: "12px", borderColor: "#0f766e" }}>
-              <div className="panel-head"><h2>ประวัติ Grab รับหน้าร้าน</h2><span>{grabCompletedOrders.length} งาน</span></div>
-              <div style={{ display: "grid", gap: "8px" }}>
-                {grabCompletedOrders.map(order => <article key={order.id} style={{ border: "1px solid #99f6e4", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone || "-"} · ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"}</div><small className="muted">ห้องแพ็คยืนยัน: {order.packCheckerName || "-"} · {order.grabCompletedAt ? new Date(order.grabCompletedAt).toLocaleString("th-TH") : "-"}</small></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>แพ็คเสร็จ · รอ Grab รับสินค้า</span></article>)}
-              </div>
-            </section>}
             <div className="sales-grid">
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
@@ -4787,7 +4781,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
+              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length} · Grab/หน้าร้าน {grabCompletedOrders.length}</span></div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
                 <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
                   <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
@@ -4798,6 +4792,7 @@ export default function App() {
                   <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
+              {grabCompletedOrders.length > 0 && <details style={{ marginBottom: "14px", border: "1px solid #99f6e4", borderRadius: "8px", padding: "10px", background: "#f0fdfa" }}><summary style={{ cursor: "pointer", fontWeight: 800, color: "#0f766e" }}>Grab/รับหน้าร้านที่แพ็คเสร็จ ({grabCompletedOrders.length} งาน)</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{grabCompletedOrders.map(order => <article key={order.id} style={{ border: "1px solid #ccfbf1", borderRadius: "7px", padding: "9px", background: "white" }}><b>{order.id} · {order.customerName}</b><div className="muted">{order.bookingNumber || "ยังไม่ระบุใบสั่งจอง"} · {order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "รอ Grab รับสินค้า"}</div><small className="muted">ห้องแพ็คยืนยัน: {order.packCheckerName || "-"} · {order.grabCompletedAt ? new Date(order.grabCompletedAt).toLocaleString("th-TH") : "-"}</small></article>)}</div></details>}
               <div style={{ maxHeight: "400px", overflowY: "auto" }}>
                 {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 && completedTodayRouteTasks.length === 0 ? (
                   <p className="muted">ยังไม่มีการส่ง</p>
