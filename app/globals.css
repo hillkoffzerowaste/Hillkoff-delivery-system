@@ -157,6 +157,28 @@ nav button.active {
   color: #fff;
 }
 
+.nav-count-badge {
+  min-width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 4px 10px rgba(127, 29, 29, .32);
+}
+
+nav button.active .nav-count-badge {
+  background: #b91c1c;
+  color: #fff;
+}
+
 .workspace {
   margin-left: 248px;
   padding: 16px;
