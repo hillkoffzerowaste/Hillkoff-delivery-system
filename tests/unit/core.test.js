@@ -41,7 +41,7 @@ describe("OTP primitives", () => {
 });
 
 describe("driver identity", () => {
-  it("moves the current UID to the canonical slot without trusting old UIDs", async () => {
+  it("moves the current UID to the canonical slot and resolves it", async () => {
     const patch = driverIdentityPatch({ uid: "old", legacyUids: ["older", "old"] }, "current");
     expect(patch.uidLast).toBe("current");
     expect(patch.legacyUids).toEqual(["older", "old", "current"]);
@@ -70,6 +70,20 @@ describe("driver identity", () => {
       })
     };
     expect((await resolveVerifiedDriver(db, { uid: "fresh" }))?.doc?.id).toBe("0812345678");
+  });
+
+  it("accepts only a previously verified driver UID from the canonical account", async () => {
+    const db = {
+      collection: (name) => ({
+        doc: () => ({
+          get: vi.fn().mockResolvedValue(name === "users"
+            ? { exists: true, data: () => ({ role: "driver", phoneDigits: "0812345678", active: true }) }
+            : { exists: true, id: "0812345678", data: () => ({ role: "driver", active: true, uidLast: "new", legacyUids: ["old", "new"] }) })
+        }),
+        where: () => ({ limit: () => ({ get: vi.fn() }) })
+      })
+    };
+    expect((await resolveVerifiedDriver(db, { uid: "old" }))?.user?.uidLast).toBe("new");
   });
 });
 

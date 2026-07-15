@@ -2294,13 +2294,13 @@ export default function App() {
 	    }
 	  };
 
-  const logout = () => {
+  const logout = async () => {
     setState(prev => {
       const updated = { ...prev.onlineDrivers };
       if (auth.driverId) delete updated[auth.driverId];
       return { ...prev, onlineDrivers: updated };
     });
-    try { fbLogout(); } catch {}
+    try { await fbLogout(); } catch {}
     localStorage.removeItem("hillkoff_auth");
     setAuth({ role: "", name: "", phone: "", driverId: "", email: state.auth?.email || "", token: "" });
   };
