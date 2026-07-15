@@ -1894,6 +1894,7 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
 .ops-activity-list article div { display: grid; gap: 2px; }
 .ops-activity-list b { color: #234334; font-size: 12px; }
 .ops-activity-list span { color: #6a8473; font-size: 11px; }
+.ops-activity-list { max-height: 460px; overflow-y: auto; padding-right: 5px; scrollbar-gutter: stable; }
 .ops-report-actions { display: grid; align-content: start; gap: 13px; }
 .ops-report-actions h3 { margin: 0; color: #183d2c; font-size: 15px; }
 .ops-report-actions > div { display: grid; gap: 8px; }
