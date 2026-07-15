@@ -20,7 +20,7 @@ export async function GET(request) {
       const ref = db.collection("orders").doc(id);
       const snap = await ref.get();
       if (!snap.exists) return Response.json({ ok: false, error: "Order not found" }, { status: 404 });
-      const activity = await ref.collection("activity").orderBy("at", "asc").limit(300).get();
+      const activity = await ref.collection("activity").orderBy("at", "asc").limit(1000).get();
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), activity: activity.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
     const queryText = clean(params.get("q")).toLowerCase();
@@ -38,7 +38,7 @@ export async function GET(request) {
       for (const doc of snap.docs) {
         const order = { id: doc.id, ...(doc.data() || {}) };
         if (!order.workflowType) continue;
-        const haystack = [order.id, order.bookingNumber, order.customerName, order.customerPhone, order.zone, order.address, order.salesNote, order.driverNote, order.status, order.storeStatus, order.packStatus].join(" ").toLowerCase();
+        const haystack = [order.id, order.bookingNumber, ...(Array.isArray(order.bookingNumbers) ? order.bookingNumbers : []), order.customerName, order.customerPhone, order.zone, order.address, order.salesNote, order.driverNote, order.status, order.storeStatus, order.packStatus].join(" ").toLowerCase();
         if (haystack.includes(queryText)) data.push(order);
         if (data.length >= MAX_SEARCH_RESULTS) break;
       }

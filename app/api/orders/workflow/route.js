@@ -1,12 +1,12 @@
 import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
 
 const STORE_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
 const PACK_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
-const BOOKING_NUMBER_PATTERN = /^\S+-\d{4}$/;
 
 export async function PATCH(request) {
   try {
@@ -23,6 +23,7 @@ export async function PATCH(request) {
     const now = new Date().toISOString();
     const history = { action, role: profile.role, name: profile.name, uid: profile.uid, at: now, note: String(body?.note || "").trim().slice(0, 1000) };
     const patch = { updatedAt: now, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-99), history] };
+    let bookingReservation = null;
 
     if (profile.role === "pack" && action === "pack_archive") {
       const reason = String(body.reason || "").trim().slice(0, 1000);
@@ -44,9 +45,25 @@ export async function PATCH(request) {
       patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name).slice(0, 160); patch.storeCheckerName = String(body.storeCheckerName || "").slice(0, 160); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : [];
       Object.assign(history, { fromStatus: order.storeStatus || "pending", toStatus: body.storeStatus, result: body.storeWorkDetails?.checkResult || "", packerName: patch.storePackerName, checkerName: patch.storeCheckerName, missingItems: patch.missingItems });
       if (body.bookingNumber !== undefined) {
-        const bookingNumber = String(body.bookingNumber || "").trim().slice(0, 100);
+        const bookingNumber = normalizeBookingNumber(body.bookingNumber).slice(0, 100);
         if (!BOOKING_NUMBER_PATTERN.test(bookingNumber)) throw Object.assign(new Error("Booking number must use PREFIX-1234 format"), { status: 400 });
-        patch.bookingNumber = bookingNumber;
+        const existingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter((value) => BOOKING_NUMBER_PATTERN.test(value)))];
+        if (existingNumbers.length && !existingNumbers.includes(bookingNumber)) {
+          throw Object.assign(new Error("เลขที่ใบสั่งจองถูกกำหนดจากฝ่ายขายแล้ว สโตร์ไม่สามารถเปลี่ยนเลขได้"), { status: 409 });
+        }
+        patch.bookingNumber = existingNumbers[0] || bookingNumber;
+        patch.bookingNumbers = existingNumbers.length ? existingNumbers : [bookingNumber];
+        if (!existingNumbers.length) {
+          const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
+          const registryId = bookingRegistryId(serviceDate, bookingNumber);
+          if (!registryId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
+          const reservationRef = db.collection("booking_month_registry").doc(registryId);
+          const reservationSnap = await reservationRef.get();
+          if (reservationSnap.exists && reservationSnap.data()?.sourceId !== orderId) {
+            throw Object.assign(new Error(bookingConflictMessage(reservationSnap.data())), { status: 409 });
+          }
+          if (!reservationSnap.exists) bookingReservation = { ref: reservationRef, data: bookingRegistryRecord({ serviceDate, bookingNumber, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) };
+        }
       }
       if (body.storeWorkDetails && typeof body.storeWorkDetails === "object") patch.storeWorkDetails = {
         detail: String(body.storeWorkDetails.detail || "").trim().slice(0, 2000),
@@ -113,8 +130,11 @@ export async function PATCH(request) {
     } else {
       throw Object.assign(new Error("Action not allowed"), { status: 403 });
     }
-    await ref.update(patch, { lastUpdateTime: snap.updateTime });
-    await ref.collection("activity").doc().set(history);
+    const batch = db.batch();
+    batch.update(ref, patch, { lastUpdateTime: snap.updateTime });
+    batch.set(ref.collection("activity").doc(), history);
+    if (bookingReservation) batch.create(bookingReservation.ref, bookingReservation.data);
+    await batch.commit();
     try {
       await syncDeliveryOrderToSheet(db, orderId, { ...order, ...patch });
     } catch (syncError) {

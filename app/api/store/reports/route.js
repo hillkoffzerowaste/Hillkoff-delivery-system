@@ -1,4 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,7 @@ export async function GET(request) {
       const snap = await ref.get();
       if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
       if (profile.role === "pack" && snap.data()?.type !== "online") return Response.json({ ok: false, error: "Pack can view online reports only" }, { status: 403 });
-      const history = await ref.collection("history").orderBy("at", "desc").limit(100).get();
+      const history = await ref.collection("history").orderBy("at", "desc").limit(1000).get();
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
@@ -89,23 +90,42 @@ export async function POST(request) {
 
     const now = new Date().toISOString();
     const draft = Boolean(body?.draft);
-    const batch = db.batch();
     const saved = [];
+    const bookingKeys = new Set();
     for (const row of rows) {
-      const bookingNumber = clean(row?.bookingNumber, 100);
+      const bookingNumber = normalizeBookingNumber(row?.bookingNumber);
       const detail = clean(row?.detail, 1000);
       const note = clean(row?.note, 1000);
       const status = REPORT_STATUSES.includes(row?.status) ? row.status : (draft ? "draft" : "saved");
       if (!bookingNumber && !detail && !note) continue;
+      if (type === "booking" && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234 ทุกรายการ" }, { status: 400 });
+      if (bookingNumber && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) return Response.json({ ok: false, error: "เลขที่ใบสั่งจองต้องเป็นรูปแบบ PREFIX-1234" }, { status: 400 });
+      const serviceDate = bangkokDateKey(now);
+      const bookingKey = bookingNumber ? bookingRegistryId(serviceDate, bookingNumber) : "";
+      if (bookingKey && bookingKeys.has(bookingKey)) return Response.json({ ok: false, error: `เลขที่ใบสั่งจอง ${bookingNumber} ซ้ำกันในรายการที่กำลังบันทึก` }, { status: 409 });
+      if (bookingKey) bookingKeys.add(bookingKey);
       const ref = db.collection("store_reports").doc();
-      const item = { type, serviceDate: bangkokDateKey(now), bookingNumber, detail, note, status, packStatus: type === "online" ? "pending" : "", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
-      batch.set(ref, item);
-      batch.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, item));
-      saved.push({ id: ref.id, ...item });
+      const item = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: type === "online" ? "pending" : "", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
+      saved.push({ id: ref.id, ref, bookingKey, ...item });
     }
     if (!saved.length) return Response.json({ ok: false, error: "Enter at least one report row" }, { status: 400 });
-    await batch.commit();
-    return Response.json({ ok: true, data: saved });
+    await db.runTransaction(async (transaction) => {
+      const reservations = [];
+      for (const item of saved) {
+        if (!item.bookingKey) continue;
+        const registryRef = db.collection("booking_month_registry").doc(item.bookingKey);
+        const registrySnap = await transaction.get(registryRef);
+        if (registrySnap.exists) throw Object.assign(new Error(bookingConflictMessage(registrySnap.data())), { status: 409 });
+        reservations.push({ item, registryRef });
+      }
+      for (const item of saved) {
+        const { ref, bookingKey, ...data } = item;
+        transaction.set(ref, data);
+        transaction.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, data));
+      }
+      for (const { item, registryRef } of reservations) transaction.create(registryRef, bookingRegistryRecord({ serviceDate: item.serviceDate, bookingNumber: item.bookingNumber, source: "store_reports", sourceId: item.id, createdAt: now, createdBy: item.createdBy }));
+    });
+    return Response.json({ ok: true, data: saved.map(({ ref, bookingKey, ...item }) => item) });
   } catch (error) {
     return errorResponse(error);
   }
@@ -175,11 +195,27 @@ export async function PUT(request) {
     const updatedAt = new Date().toISOString();
     const reason = clean(body?.reason, 1000);
     if (item.confirmedAt && !reason) return Response.json({ ok: false, error: "Provide an edit reason for a confirmed report" }, { status: 400 });
-    const patch = { bookingNumber: clean(body?.bookingNumber, 100), detail: clean(body?.detail, 1000), note: clean(body?.note, 1000), status, updatedAt, updatedBy: profile.name || profile.email };
-    const batch = db.batch();
-    batch.set(ref, patch, { merge: true });
-    batch.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
-    await batch.commit();
+    const bookingNumber = normalizeBookingNumber(body?.bookingNumber);
+    if (item.type === "booking" && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
+    if (bookingNumber && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) return Response.json({ ok: false, error: "เลขที่ใบสั่งจองต้องเป็นรูปแบบ PREFIX-1234" }, { status: 400 });
+    const patch = { bookingNumber, bookingMonthKey: bookingNumber ? String(item.serviceDate || bangkokDateKey(item.createdAt)).slice(0, 7) : "", detail: clean(body?.detail, 1000), note: clean(body?.note, 1000), status, updatedAt, updatedBy: profile.name || profile.email };
+    const bookingChanged = bookingNumber !== normalizeBookingNumber(item.bookingNumber);
+    if (bookingChanged && bookingNumber) {
+      const serviceDate = String(item.serviceDate || bangkokDateKey(item.createdAt));
+      const registryRef = db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, bookingNumber));
+      await db.runTransaction(async (transaction) => {
+        const registrySnap = await transaction.get(registryRef);
+        if (registrySnap.exists) throw Object.assign(new Error(bookingConflictMessage(registrySnap.data())), { status: 409 });
+        transaction.set(ref, patch, { merge: true });
+        transaction.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
+        transaction.create(registryRef, bookingRegistryRecord({ serviceDate, bookingNumber, source: "store_reports", sourceId: id, createdAt: updatedAt, createdBy: profile.name || profile.email }));
+      });
+    } else {
+      const batch = db.batch();
+      batch.set(ref, patch, { merge: true });
+      batch.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
+      await batch.commit();
+    }
     return Response.json({ ok: true, data: { id, ...item, ...patch } });
   } catch (error) { return errorResponse(error); }
 }

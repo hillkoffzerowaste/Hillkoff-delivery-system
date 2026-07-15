@@ -3,10 +3,9 @@ import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
-
-const BOOKING_NUMBER_PATTERN = /^[^-\s]{1,20}-\d{4}$/;
 
 function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
@@ -79,10 +78,11 @@ export async function POST(request) {
 
   try {
     const { profile, db, decoded } = await requireProfile(request, ["sales", "admin"]);
-    const bookingNumber = String(order.bookingNumber || "").trim();
-    if (bookingNumber.length > 100 || (bookingNumber && !BOOKING_NUMBER_PATTERN.test(bookingNumber))) {
-      return Response.json({ ok: false, error: "Booking number must use PREFIX-1234 format" }, { status: 400 });
+    const bookingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter(Boolean))].slice(0, 20);
+    if (!bookingNumbers.length || bookingNumbers.some((value) => !BOOKING_NUMBER_PATTERN.test(value))) {
+      return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
     }
+    const bookingNumber = bookingNumbers[0];
     const customerId = clean(order.customerId, 120);
     if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "A valid customer is required" }, { status: 400 });
     const customerSnap = await db.collection("customers").doc(customerId).get();
@@ -98,6 +98,7 @@ export async function POST(request) {
     const serviceDate = requestedServiceDate || toServiceDateKey(now);
     if (!validDateKey(serviceDate)) return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
     const orderRef = db.collection("orders").doc(orderId);
+    const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, value)) }));
     const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
     const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
 
@@ -122,6 +123,8 @@ export async function POST(request) {
       workflowType,
       deliveryMethod,
       bookingNumber: bookingNumber.slice(0, 100),
+      bookingNumbers,
+      bookingMonthKey: serviceDate.slice(0, 7),
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
       storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
@@ -145,12 +148,19 @@ export async function POST(request) {
       createdByUid: decoded.uid
     };
 
-    const batch = db.batch();
-    batch.create(orderRef, next);
-    batch.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
-    batch.set(db.collection("customer_search").doc(next.customerId), customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
     try {
-      await batch.commit();
+      await db.runTransaction(async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        if (orderSnap.exists) throw Object.assign(new Error("Order id already exists"), { status: 409 });
+        for (const reservation of bookingRefs) {
+          const bookingSnap = await transaction.get(reservation.ref);
+          if (bookingSnap.exists) throw Object.assign(new Error(bookingConflictMessage(bookingSnap.data())), { status: 409 });
+        }
+        transaction.create(orderRef, next);
+        transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
+        transaction.set(db.collection("customer_search").doc(next.customerId), customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
+        for (const reservation of bookingRefs) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
+      });
     } catch (error) {
       if (error?.code === 6 || error?.code === "already-exists") {
         return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });

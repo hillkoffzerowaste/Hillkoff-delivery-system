@@ -10,6 +10,16 @@ import { driverIdentityPatch, resolveVerifiedDriver } from "../../lib/driverIden
 import { createOtpCode, hashOtp, isOtpExpired, otpHashesEqual } from "../../lib/otp.js";
 import { getDeliverySheetUrl, postToGoogleAppsScript } from "../../lib/googleAppsScript.js";
 import { findVehicleById, vehicleDisplayName } from "../../lib/vehicleMaster.js";
+import { BOOKING_NUMBER_PATTERN, bookingRegistryId, normalizeBookingNumber } from "../../lib/bookingRegistry.js";
+
+describe("monthly booking registry", () => {
+  it("normalizes booking numbers and scopes uniqueness by month", () => {
+    expect(normalizeBookingNumber(" csp - 1234 ")).toBe("CSP-1234");
+    expect(BOOKING_NUMBER_PATTERN.test("CSP-1234")).toBe(true);
+    expect(bookingRegistryId("2026-07-15", "csp-1234")).toBe("2026-07__CSP-1234");
+    expect(bookingRegistryId("2026-08-01", "CSP-1234")).toBe("2026-08__CSP-1234");
+  });
+});
 
 describe("customer search indexing", () => {
   it("normalizes Thai customer data and builds useful prefix/trigram keys", () => {
