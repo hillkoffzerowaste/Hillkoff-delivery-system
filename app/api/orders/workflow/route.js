@@ -24,7 +24,19 @@ export async function PATCH(request) {
     const history = { action, role: profile.role, name: profile.name, uid: profile.uid, at: now, note: String(body?.note || "").trim().slice(0, 1000) };
     const patch = { updatedAt: now, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-99), history] };
 
-    if (profile.role === "store" && action === "store_update") {
+    if (profile.role === "pack" && action === "pack_archive") {
+      const reason = String(body.reason || "").trim().slice(0, 1000);
+      if (!reason) throw Object.assign(new Error("กรุณาระบุเหตุผลที่นำออเดอร์ออกจากคิว"), { status: 400 });
+      if (["queued", "completed"].includes(String(order.queueStatus || "")) || order.driverId) {
+        throw Object.assign(new Error("ออเดอร์นี้เข้าคิวคนขับแล้ว ไม่สามารถนำออกจากห้องแพ็คได้"), { status: 409 });
+      }
+      patch.queueStatus = "pack_archived";
+      patch.status = "นำออกจากคิวห้องแพ็ค";
+      patch.packArchivedAt = now;
+      patch.packArchivedBy = profile.name || profile.email;
+      patch.packArchiveReason = reason;
+      Object.assign(history, { result: "archived", reason });
+    } else if (profile.role === "store" && action === "store_update") {
       if (!STORE_STATUSES.includes(body.storeStatus)) throw Object.assign(new Error("Invalid store status"), { status: 400 });
       if (["checked", "partial", "waiting"].includes(body.storeStatus) && !String(body.storeCheckerName || "").trim()) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบสโตร์"), { status: 400 });

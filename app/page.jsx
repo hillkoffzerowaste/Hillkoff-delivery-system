@@ -1648,7 +1648,7 @@ export default function App() {
     return Array.from(byId.values());
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
-  const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up"];
+  const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived"];
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const todayPreparationOrders = preparationOrders.filter(isTodayOrder);
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
@@ -1666,7 +1666,7 @@ export default function App() {
   const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus !== "outstation_ready");
   const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
   const storeKpiOrders = (orders || []).filter(order => order.workflowType === "store_route");
-  const packKpiOrders = (orders || []).filter(order => order.workflowType && order.packStatus !== "blocked");
+  const packKpiOrders = (orders || []).filter(order => order.workflowType && order.packStatus !== "blocked" && order.queueStatus !== "pack_archived");
   const storeKpiReturned = storeKpiOrders.filter(order => order.storeStatus === "returned");
   const packKpiReturned = packKpiOrders.filter(order => order.packStatus === "returned");
   const storeKpiPending = storeKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
@@ -1715,7 +1715,7 @@ export default function App() {
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
-  const packTodayOrders = todayOrdersOnly.filter(order => order.workflowType && order.packStatus !== "blocked");
+  const packTodayOrders = todayOrdersOnly.filter(order => order.workflowType && order.packStatus !== "blocked" && order.queueStatus !== "pack_archived");
   const storeTodayCompleted = storeTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
   const packTodayCompleted = packTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
@@ -2725,6 +2725,15 @@ export default function App() {
       setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${error}`);
       return { ok: false, error };
     }
+  };
+
+  const archivePackOrder = async (order) => {
+    if (!window.confirm(`นำออเดอร์ "${order.id}" ออกจากคิวห้องแพ็คใช่ไหม?\n\nข้อมูลและ Log จะยังคงถูกเก็บไว้`)) return;
+    const reason = window.prompt("ระบุเหตุผล เช่น ส่งไปแล้ว / ออเดอร์ค้าง / รายการซ้ำ:", "");
+    if (reason === null) return;
+    if (!reason.trim()) return setSyncStatus("⚠️ กรุณาระบุเหตุผลก่อนนำออเดอร์ออกจากคิว");
+    setSyncStatus(`⏳ กำลังนำออเดอร์ "${order.id}" ออกจากคิวห้องแพ็ค...`);
+    await updatePreparationWorkflow(order, "pack_archive", { reason: reason.trim() });
   };
 
   const searchChiangmaiHistory = async () => {
@@ -4967,7 +4976,7 @@ export default function App() {
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                <button className="primary" onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button><button className="secondary danger" onClick={() => archivePackOrder(order)}>นำออกจากคิว</button></div>
               </article>)}
               {!(displayTab === "pack-outstation" ? salesOutstationPackOrders : packWorkOrders).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
