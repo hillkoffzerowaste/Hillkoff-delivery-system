@@ -47,9 +47,29 @@ describe("driver identity", () => {
     expect(patch.legacyUids).toEqual(["older", "old", "current"]);
 
     const get = vi.fn().mockResolvedValue({ docs: [{ id: "081", data: () => ({ role: "driver", uidLast: "current" }) }] });
-    const db = { collection: () => ({ where: () => ({ limit: () => ({ get }) }) }) };
+    const db = {
+      collection: () => ({
+        doc: () => ({ get: vi.fn().mockResolvedValue({ exists: false }) }),
+        where: () => ({ limit: () => ({ get }) })
+      })
+    };
     expect((await resolveVerifiedDriver(db, { uid: "current" }))?.user?.role).toBe("driver");
     expect(await resolveVerifiedDriver(db, {})).toBeNull();
+  });
+
+  it("resolves a fresh login through its deterministic UID and phone documents", async () => {
+    const usersByPhoneDoc = { id: "0812345678", exists: true, data: () => ({ role: "driver", uidLast: "fresh", phoneDigits: "0812345678" }) };
+    const db = {
+      collection: (name) => ({
+        doc: (id) => ({
+          get: vi.fn().mockResolvedValue(name === "users"
+            ? { exists: true, data: () => ({ role: "driver", phoneDigits: "0812345678" }) }
+            : usersByPhoneDoc)
+        }),
+        where: () => ({ limit: () => ({ get: vi.fn() }) })
+      })
+    };
+    expect((await resolveVerifiedDriver(db, { uid: "fresh" }))?.doc?.id).toBe("0812345678");
   });
 });
 
