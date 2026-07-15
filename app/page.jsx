@@ -2408,6 +2408,7 @@ export default function App() {
       workflowType, deliveryMethod: orderForm.deliveryMethod,
       bookingNumber: bookingDigits ? `${orderForm.bookingPrefix}-${bookingDigits}` : "",
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
+      shippingCarrierOther: String(orderForm.shippingCarrierOther || "").trim(),
       storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
       queueStatus: "preparing",
@@ -2424,12 +2425,14 @@ export default function App() {
 
 	  const confirmOrder = async () => {
 	    if (!pendingOrder || orderConfirmSubmitting) return;
-    if (pendingOrder.deliveryMethod === "outstation" && !String(pendingOrder.shippingCarrier || "").trim()) {
+	    const resolvedShippingCarrier = pendingOrder.shippingCarrier === "อื่นๆ" ? String(pendingOrder.shippingCarrierOther || "").trim() : String(pendingOrder.shippingCarrier || "").trim();
+	    if (pendingOrder.deliveryMethod === "outstation" && !resolvedShippingCarrier) {
       setSyncStatus("❌ กรุณาเลือกบริษัทขนส่งสำหรับออเดอร์ต่างจังหวัด");
       return;
     }
     const workflowType = pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType;
-    const orderToCreate = { ...pendingOrder, workflowType, storeStatus: workflowType === "direct_pack" ? "skipped" : "pending", packStatus: workflowType === "direct_pack" ? "pending" : "blocked" };
+    const orderToCreate = { ...pendingOrder, workflowType, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "", storeStatus: workflowType === "direct_pack" ? "skipped" : "pending", packStatus: workflowType === "direct_pack" ? "pending" : "blocked" };
+    delete orderToCreate.shippingCarrierOther;
     const shouldShareLine = shareNewOrderToLine;
     setOrderConfirmSubmitting(true);
     setSyncStatus(`⏳ กำลังบันทึกออเดอร์ "${orderToCreate.id}"...`);
@@ -6634,9 +6637,17 @@ export default function App() {
           borderRadius: "8px",
           boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
           maxWidth: "500px",
-          width: "90%"
+          width: "90%",
+          maxHeight: "90vh",
+          overflowY: "auto"
         }}>
           <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
+          <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
+            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option></select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
+            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
+            <label style={{ display: "grid", gap: "6px" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>
+          </div>
           <div style={{ background: "#f3f4f6", padding: "12px", borderRadius: "6px", margin: "12px 0" }}>
             <p><b>ลูกค้า:</b> {pendingOrder.customerName}</p>
             <p><b>พื้นที่:</b> {pendingOrder.zone}</p>
@@ -6674,12 +6685,6 @@ export default function App() {
             </select>
             {orderForm.shippingCarrier === "อื่นๆ" && <input value={orderForm.shippingCarrierOther} onChange={e => setOrderForm(p => ({ ...p, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" autoFocus />}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { setShowOutstationCarrierModal(false); if (!orderForm.shippingCarrier) setOrderForm(p => ({ ...p, deliveryMethod: "company_driver" })); }}>ยกเลิก</button><button className="primary" onClick={() => { const carrier = orderForm.shippingCarrier === "อื่นๆ" ? orderForm.shippingCarrierOther.trim() : orderForm.shippingCarrier; if (!carrier) return setSyncStatus("❌ กรุณาระบุบริษัทขนส่ง"); setOrderForm(p => ({ ...p, shippingCarrier: carrier })); setShowOutstationCarrierModal(false); }}>ยืนยันขนส่ง</button></div>
-          </div>
-          <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
-            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option></select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
-            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
-            {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select></label>}
-            <label style={{ display: "grid", gap: "6px" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>
           </div>
         </section>
       </div>
