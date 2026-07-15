@@ -1638,10 +1638,11 @@ export default function App() {
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
   const preparationOrders = (orders || []).filter(order => order.workflowType && !["queued", "outstation_ready", "grab_completed"].includes(order.queueStatus));
+  const todayPreparationOrders = preparationOrders.filter(isTodayOrder);
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
-  const readyPreparationOrdersCount = preparationOrders.filter(isPreparationReadyForDriver).length;
-  const sortedPreparationOrders = preparationOrders.slice().sort((a, b) => {
+  const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
+  const sortedPreparationOrders = todayPreparationOrders.slice().sort((a, b) => {
     const readyDifference = Number(isPreparationReadyForDriver(b)) - Number(isPreparationReadyForDriver(a));
     if (readyDifference) return readyDifference;
     return Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0);
@@ -4948,7 +4949,7 @@ export default function App() {
           <section className={displayTab === "chiangmai" ? "panel role-workspace ops-workspace" : "panel"}>
             <div className="panel-head">
               <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
-              <span>{preparationOrders.length} งาน{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
+              <span>{todayPreparationOrders.length} งานวันนี้{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
               {sortedPreparationOrders.map(order => (
@@ -4975,7 +4976,7 @@ export default function App() {
                   )}
                 </article>
               ))}
-              {preparationOrders.length === 0 && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
+              {todayPreparationOrders.length === 0 && <p className="muted">ยังไม่มีออเดอร์ของวันนี้ในขั้นตอนนี้</p>}
             </div>
           </section>
         )}
