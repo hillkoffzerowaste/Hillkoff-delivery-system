@@ -36,10 +36,34 @@ function utcRangeForBangkokDate(date) {
 }
 
 function reportLog(ref, event, profile, now, before = null, after = null, reason = "") {
+  const compact = (value) => {
+    if (!value || typeof value !== "object") return value;
+    const { workflowHistory, ...rest } = value;
+    void workflowHistory;
+    return rest;
+  };
   return {
     event, at: now, by: profile.name || profile.email, byUid: profile.uid,
-    reason: clean(reason, 1000), before, after
+    reason: clean(reason, 1000), before: compact(before), after: compact(after)
   };
+}
+
+function reportKpiEvent(event, profile, now, after = {}, reason = "") {
+  const row = {
+    action: event,
+    role: String(event || "").startsWith("pack_") ? "pack" : "store",
+    at: now,
+    name: profile.name || profile.email,
+    status: after.status || "",
+    packStatus: after.packStatus || "",
+    reason: clean(reason, 1000)
+  };
+  if (event === "pack_returned") Object.assign(row, { result: "returned", toStatus: "returned" });
+  return row;
+}
+
+function appendReportHistory(item, event) {
+  return [...(Array.isArray(item?.workflowHistory) ? item.workflowHistory : []).slice(-99), event];
 }
 
 export async function GET(request) {
@@ -52,6 +76,7 @@ export async function GET(request) {
     const id = clean(params.get("id"), 200);
     const queryText = clean(params.get("q"), 200).toLowerCase();
     const includeDeleted = params.get("includeDeleted") === "true";
+    const kpi = params.get("kpi") === "true";
     if (id) {
       if (!validDocId(id)) return Response.json({ ok: false, error: "Invalid report id" }, { status: 400 });
       const ref = db.collection("store_reports").doc(id);
@@ -66,7 +91,7 @@ export async function GET(request) {
     if (date && !dateRange) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
     let query = db.collection("store_reports").orderBy("createdAt", "desc");
     if (dateRange) query = query.startAt(dateRange.end).endAt(dateRange.start);
-    const snap = await query.limit(500).get();
+    const snap = await query.limit(kpi ? 5000 : 500).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
       if (!includeDeleted && item.deletedAt) return false;
@@ -105,7 +130,8 @@ export async function POST(request) {
       if (bookingKey && bookingKeys.has(bookingKey)) return Response.json({ ok: false, error: `เลขที่ใบสั่งจอง ${bookingNumber} ซ้ำกันในรายการที่กำลังบันทึก` }, { status: 409 });
       if (bookingKey) bookingKeys.add(bookingKey);
       const ref = db.collection("store_reports").doc();
-      const item = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: type === "online" ? "pending" : "", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
+      const base = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: type === "online" ? "pending" : "", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
+      const item = { ...base, workflowHistory: [reportKpiEvent(draft ? "created_draft" : "created", profile, now, base)] };
       saved.push({ id: ref.id, ref, bookingKey, ...item });
     }
     if (!saved.length) return Response.json({ ok: false, error: "Enter at least one report row" }, { status: 400 });
@@ -144,6 +170,7 @@ export async function PATCH(request) {
       const item = snap.data(); const now = new Date().toISOString(); const reason = clean(body?.reason, 1000);
       if (packStatus === "returned" && !reason) return Response.json({ ok: false, error: "Provide return reason" }, { status: 400 });
       const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
+      patch.workflowHistory = appendReportHistory(item, reportKpiEvent(`pack_${packStatus}`, profile, now, { ...item, ...patch }, reason));
       const batch = db.batch();
       batch.set(ref, patch, { merge: true });
       batch.set(ref.collection("history").doc(), reportLog(ref, `pack_${packStatus}`, profile, now, item, { ...item, ...patch }, reason));
@@ -167,6 +194,7 @@ export async function PATCH(request) {
       const item = snap.data();
       if (item.type !== type || String(item.serviceDate || bangkokDateKey(item.createdAt)) !== date) return;
       const after = { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email };
+      after.workflowHistory = appendReportHistory(item, reportKpiEvent("confirmed", profile, now, after));
       batch.update(snap.ref, after);
       batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "confirmed", profile, now, item, after));
       updated += 1;
@@ -199,6 +227,7 @@ export async function PUT(request) {
     if (item.type === "booking" && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
     if (bookingNumber && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) return Response.json({ ok: false, error: "เลขที่ใบสั่งจองต้องเป็นรูปแบบ PREFIX-1234" }, { status: 400 });
     const patch = { bookingNumber, bookingMonthKey: bookingNumber ? String(item.serviceDate || bangkokDateKey(item.createdAt)).slice(0, 7) : "", detail: clean(body?.detail, 1000), note: clean(body?.note, 1000), status, updatedAt, updatedBy: profile.name || profile.email };
+    patch.workflowHistory = appendReportHistory(item, reportKpiEvent("updated", profile, updatedAt, { ...item, ...patch }, reason));
     const bookingChanged = bookingNumber !== normalizeBookingNumber(item.bookingNumber);
     if (bookingChanged && bookingNumber) {
       const serviceDate = String(item.serviceDate || bangkokDateKey(item.createdAt));
@@ -235,6 +264,7 @@ export async function DELETE(request) {
     const reason = clean(body?.reason, 1000);
     if (item.confirmedAt && !reason) return Response.json({ ok: false, error: "Provide a delete reason for a confirmed report" }, { status: 400 });
     const patch = { deletedAt: now, deletedBy: profile.name || profile.email, deleteReason: reason, updatedAt: now };
+    patch.workflowHistory = appendReportHistory(item, reportKpiEvent("deleted", profile, now, { ...item, ...patch }, reason));
     const batch = db.batch();
     batch.set(ref, patch, { merge: true });
     batch.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));

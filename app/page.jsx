@@ -1680,20 +1680,34 @@ export default function App() {
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
-  const storeKpiOrders = (orders || []).filter(order => order.workflowType === "store_route");
-  const packKpiOrders = (orders || []).filter(order => order.workflowType && order.packStatus !== "blocked" && order.queueStatus !== "pack_archived");
+  const reportToKpiOrder = (report, department) => ({
+    ...report,
+    id: `report:${report.id}`,
+    customerName: report.bookingNumber || (report.type === "online" ? "ใบขายออนไลน์" : "ใบสั่งจอง"),
+    workflowType: "store_report",
+    storeStatus: report.deletedAt ? "archived" : report.status === "saved" ? "checked" : report.status === "draft" ? "pending" : report.status || "pending",
+    packStatus: report.deletedAt ? "archived" : report.packStatus || (department === "pack" ? "pending" : "blocked"),
+    queueStatus: report.deletedAt ? "report_archived" : "report_active",
+    sourceType: report.type === "online" ? "ใบขายออนไลน์" : "ใบสั่งจอง"
+  });
+  const storeKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "store"));
+  const packKpiReportOrders = (storeReports || []).filter(report => report.type === "online").map(report => reportToKpiOrder(report, "pack"));
+  const storeKpiOrders = [...(orders || []).filter(order => order.workflowType === "store_route"), ...storeKpiReportOrders];
+  const packKpiOrders = [...(orders || []).filter(order => order.workflowType && order.packStatus !== "blocked"), ...packKpiReportOrders];
+  const activeStoreKpiOrders = storeKpiOrders.filter(order => !["archived"].includes(order.storeStatus));
+  const activePackKpiOrders = packKpiOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
   const storeKpiReturned = storeKpiOrders.filter(order => order.storeStatus === "returned");
   const packKpiReturned = packKpiOrders.filter(order => order.packStatus === "returned");
-  const storeKpiPending = storeKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
-  const packKpiPending = packKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus));
+  const storeKpiPending = activeStoreKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned", "draft"].includes(order.storeStatus));
+  const packKpiPending = activePackKpiOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus));
   const isOverdueWorkflowOrder = order => {
     const createdAt = Date.parse(order.createdAt || "");
     return Number.isFinite(createdAt) && Date.now() - createdAt >= 86400000;
   };
   const storeKpiOverdue = storeKpiPending.filter(isOverdueWorkflowOrder);
   const packKpiOverdue = packKpiPending.filter(isOverdueWorkflowOrder);
-  const storeKpiCompleted = storeKpiOrders.filter(order => order.storeStatus === "checked");
-  const packKpiCompleted = packKpiOrders.filter(order => order.packStatus === "checked");
+  const storeKpiCompleted = activeStoreKpiOrders.filter(order => order.storeStatus === "checked");
+  const packKpiCompleted = activePackKpiOrders.filter(order => order.packStatus === "checked");
   const getWorkflowEvents = order => Array.isArray(order.activity) && order.activity.length ? order.activity : Array.isArray(order.workflowHistory) ? order.workflowHistory : [];
   const getReturnEvents = order => {
     const events = getWorkflowEvents(order).filter(item => item?.result === "returned" || item?.toStatus === "returned");
@@ -1722,6 +1736,12 @@ export default function App() {
         title = "ห้องแพ็คตรวจซ้ำและปิดเคส";
         note = `${order.customerName || order.id} · ผู้ตรวจ: ${item.checkerName || order.packCheckerName || item.name || "ไม่ระบุ"}`;
       } else if (item.action === "created") title = "ฝ่ายขายสร้างออเดอร์";
+      else if (item.action === "created_draft") title = `${order.sourceType || "สโตร์"}บันทึกร่าง`;
+      else if (item.action === "confirmed") title = `${order.sourceType || "สโตร์"}ยืนยันรายการ`;
+      else if (item.action === "updated") title = `${order.sourceType || "สโตร์"}แก้ไขรายการ`;
+      else if (item.action === "deleted" || item.action === "pack_archive") title = "นำรายการออกจากคิว (เก็บประวัติ)";
+      else if (item.action === "pack_checked") title = "ห้องแพ็คยืนยันใบขายออนไลน์ครบ";
+      else if (item.action === "pack_partial") title = "ห้องแพ็คพบใบขายออนไลน์ของไม่ครบ";
       else if (item.action === "store_update") title = "สโตร์อัปเดตการตรวจสินค้า";
       else if (item.action === "pack_update") title = "ห้องแพ็คอัปเดตการตรวจสินค้า";
       return { id: `${department}-${order.id}-${item.id || item.at || index}`, at: item.at, title, note };
@@ -1729,10 +1749,12 @@ export default function App() {
   });
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
-  const storeTodayOrders = todayOrdersOnly.filter(order => order.workflowType === "store_route");
-  const packTodayOrders = todayOrdersOnly.filter(order => order.workflowType && order.packStatus !== "blocked" && order.queueStatus !== "pack_archived");
-  const storeTodayCompleted = storeTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
-  const packTodayCompleted = packTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
+  const storeTodayOrders = storeKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
+  const packTodayOrders = packKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
+  const activeStoreTodayOrders = storeTodayOrders.filter(order => order.storeStatus !== "archived");
+  const activePackTodayOrders = packTodayOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
+  const storeTodayCompleted = activeStoreTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
+  const packTodayCompleted = activePackTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
   const routeTaskSortValue = (task) => new Date(task?.updatedAt || task?.completedAt || task?.startedAt || 0).getTime() || 0;
   const sortedTodayRouteTasks = todayRouteTasks.slice().sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
@@ -1751,15 +1773,16 @@ export default function App() {
   const backlogUndelivered = (orders || []).filter(isBacklogOrder);
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
-  const fetchStoreReports = async ({ date = "", query = "", includeDeleted = false } = {}) => {
+  const fetchStoreReports = async ({ date = "", query = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
     if (!["store", "pack"].includes(auth.role)) return;
-    setStoreReportsLoading(true);
+    if (!silent) setStoreReportsLoading(true);
     try {
       const idToken = await refreshAuthToken(true);
       const params = new URLSearchParams();
       if (date) params.set("date", date);
       if (query.trim()) params.set("q", query.trim());
       if (includeDeleted) params.set("includeDeleted", "true");
+      if (kpi) params.set("kpi", "true");
       if (auth.role === "pack") params.set("type", "online");
       const res = await fetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
@@ -1768,11 +1791,15 @@ export default function App() {
     } catch (error) {
       setSyncStatus(`❌ โหลดรายงานสโตร์ไม่สำเร็จ: ${error?.message || error}`);
     } finally {
-      setStoreReportsLoading(false);
+      if (!silent) setStoreReportsLoading(false);
     }
   };
   useEffect(() => {
-    if (auth.role === "store" || (auth.role === "pack" && displayTab === "pack-online")) fetchStoreReports({ date: ["store-booking", "store-online", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted });
+    const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
+    if (auth.role === "store" || (auth.role === "pack" && ["pack-online", "pack-dashboard"].includes(displayTab))) fetchStoreReports({ date: ["store-booking", "store-online", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
+    if (!isKpi) return undefined;
+    const timer = window.setInterval(() => fetchStoreReports({ includeDeleted: true, kpi: true, silent: true }), 10000);
+    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
 
@@ -3107,7 +3134,7 @@ export default function App() {
     const isInPeriod = value => period === "daily"
       ? String(value || "").slice(0, 10) === todayServiceDate
       : String(value || "").slice(0, 7) === monthKey;
-    const packOrders = (orders || []).filter(order => order.workflowType && order.packStatus !== "blocked" && isInPeriod(getOrderServiceDate(order)));
+    const packOrders = packKpiOrders.filter(order => isInPeriod(getOrderServiceDate(order)));
     const completed = packOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
     const waiting = packOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus) || (Array.isArray(order.missingItems) && order.missingItems.length)).length;
     const returned = (orders || []).filter(order => order.workflowType).flatMap(getReturnEvents).filter(event => isInPeriod(event.at)).length;
