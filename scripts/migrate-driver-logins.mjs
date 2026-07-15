@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import dotenv from "dotenv";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
 const env = dotenv.parse(fs.readFileSync(".env.local"));
 const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
@@ -44,7 +44,7 @@ const rows = [];
 let linked = 0;
 let missingPhone = 0;
 let missingAccount = 0;
-let missingPin = 0;
+let missingPassword = 0;
 
 for (const driver of activeDrivers) {
   const phone = digits(driver.phone || driver.phoneDigits || driver.driverPhone);
@@ -53,12 +53,12 @@ for (const driver of activeDrivers) {
   const name = currentName && !currentName.startsWith("driver_")
     ? currentName
     : (historicalNames.get(String(account?.driverId || driver.driverId || driver.id)) || currentName || driver.id);
-  const hasPin = Boolean(account?.pinHash && account?.pinSalt);
+  const hasPassword = Boolean((account?.passwordHash || account?.pinHash) && (account?.passwordSalt || account?.pinSalt));
   const driverId = String(account?.driverId || driver.driverId || driver.id);
   let state = "ready";
   if (!phone) { state = "missing_phone"; missingPhone += 1; }
   else if (!account) { state = "missing_account"; missingAccount += 1; }
-  else if (!hasPin) { state = "missing_pin"; missingPin += 1; }
+  else if (!hasPassword) { state = "missing_password"; missingPassword += 1; }
 
   if (apply && account) {
     const now = new Date().toISOString();
@@ -73,8 +73,7 @@ for (const driver of activeDrivers) {
     };
     const patch = {
       role: "driver",
-      authProvider: "pin",
-      loginMethod: "phone_pin",
+      loginMethod: "username_password",
       googleLoginEnabled: false,
       phone: driver.phone || account.phone || phone,
       phoneDigits: phone,
@@ -82,7 +81,14 @@ for (const driver of activeDrivers) {
       driverId,
       driverProfile,
       active: true,
-      status: account.status === "pending_profile" && hasPin ? "active" : (account.status || "active"),
+      status: account.status === "pending_profile" && hasPassword ? "active" : (account.status || "active"),
+      authProvider: "password",
+      passwordHash: account.passwordHash || account.pinHash,
+      passwordSalt: account.passwordSalt || account.pinSalt,
+      passwordHashVersion: account.passwordHashVersion || account.pinHashVersion || "sha256-v1",
+      pinHash: FieldValue.delete(),
+      pinSalt: FieldValue.delete(),
+      pinHashVersion: FieldValue.delete(),
       updatedAt: now,
     };
     const batch = db.batch();
@@ -91,7 +97,7 @@ for (const driver of activeDrivers) {
       phoneDigits: phone,
       name,
       driverId,
-      loginMethod: "phone_pin",
+      loginMethod: "username_password",
       userPhoneKey: phone,
       updatedAt: now,
     }, { merge: true });
@@ -106,8 +112,8 @@ for (const driver of activeDrivers) {
     linked += 1;
   }
 
-  rows.push({ driverId, name, phone: maskedPhone(phone), hasPin, state });
+  rows.push({ driverId, name, phone: maskedPhone(phone), hasPassword, state });
 }
 
 console.table(rows);
-console.log(JSON.stringify({ mode: apply ? "apply" : "audit", activeDrivers: activeDrivers.length, linked, missingPhone, missingAccount, missingPin }, null, 2));
+console.log(JSON.stringify({ mode: apply ? "apply" : "audit", activeDrivers: activeDrivers.length, linked, missingPhone, missingAccount, missingPassword }, null, 2));

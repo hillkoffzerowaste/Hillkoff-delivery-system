@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { driverIdentityPatch } from "../../../../lib/driverIdentity";
 
 export const runtime = "nodejs";
 
-const PIN_PATTERN = /^\d{4,8}$/;
+const PASSWORD_PATTERN = /^.{4,72}$/s;
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILURE_WINDOW_MS = 15 * 60_000;
 const LOCKOUT_MS = 15 * 60_000;
@@ -13,12 +14,12 @@ function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
 
-function legacyPinHash(pin, salt) {
-  return crypto.createHash("sha256").update(`${salt}:${pin}`, "utf8").digest("hex");
+function legacyPasswordHash(password, salt) {
+  return crypto.createHash("sha256").update(`${salt}:${password}`, "utf8").digest("hex");
 }
 
-function scryptPinHash(pin, salt) {
-  return crypto.scryptSync(pin, salt, 32).toString("hex");
+function scryptPasswordHash(password, salt) {
+  return crypto.scryptSync(password, salt, 32).toString("hex");
 }
 
 function safeHexEqual(left, right) {
@@ -27,13 +28,14 @@ function safeHexEqual(left, right) {
   return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function pinMatches(profile, pin) {
-  const salt = String(profile?.pinSalt || "");
-  const expected = String(profile?.pinHash || "");
+function passwordMatches(profile, password) {
+  const salt = String(profile?.passwordSalt || profile?.pinSalt || "");
+  const expected = String(profile?.passwordHash || profile?.pinHash || "");
   if (!salt || !expected) return false;
-  const actual = profile?.pinHashVersion === "scrypt-v1"
-    ? scryptPinHash(pin, salt)
-    : legacyPinHash(pin, salt);
+  const version = profile?.passwordHashVersion || profile?.pinHashVersion;
+  const actual = version === "scrypt-v1"
+    ? scryptPasswordHash(password, salt)
+    : legacyPasswordHash(password, salt);
   return safeHexEqual(actual, expected);
 }
 
@@ -55,7 +57,7 @@ function publicProfile(profile) {
     driverProfile: profile.driverProfile || null,
     status: profile.status || "active",
     active: profile.active !== false,
-    authProvider: "pin",
+    authProvider: "password",
     updatedAt: profile.updatedAt,
     createdAt: profile.createdAt
   };
@@ -67,7 +69,7 @@ async function getLoginLimit(db, phone) {
   return Number(data.lockedUntilMs || 0);
 }
 
-async function recordPinFailure(db, phone) {
+async function recordPasswordFailure(db, phone) {
   const ref = db.collection("login_rate_limits").doc(phone);
   const now = Date.now();
   return db.runTransaction(async (transaction) => {
@@ -99,14 +101,13 @@ export async function POST(request) {
   const role = String(payload?.role || "").trim();
   const phoneRaw = String(payload?.username || payload?.phone || "").trim().slice(0, 40);
   const phone = normalizePhoneDigits(phoneRaw);
-  const pin = String(payload?.password || payload?.pin || "").trim();
-  const setPin = payload?.setPin === true;
+  const password = String(payload?.password || "").trim();
   const rawDeviceId = String(payload?.deviceId || "").trim();
   const deviceId = rawDeviceId.length >= 20 && rawDeviceId.length <= 200 ? rawDeviceId : "";
   const rememberDevice = payload?.rememberDevice === true;
 
   if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
-  if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
+  if (role !== "driver") return Response.json({ ok: false, error: "PASSWORD_LOGIN_NOT_ALLOWED_FOR_ROLE" }, { status: 403 });
   if (phone.length < 9 || phone.length > 15) return Response.json({ ok: false, error: "Invalid phone" }, { status: 400 });
 
   try {
@@ -122,10 +123,9 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "ACCOUNT_DISABLED" }, { status: 403 });
     }
 
-    const hasPin = Boolean(existing.pinHash && existing.pinSalt);
-    if (setPin && hasPin) return Response.json({ ok: false, error: "PIN_ALREADY_SET" }, { status: 403 });
-    if (!hasPin && !setPin) return Response.json({ ok: false, error: "PIN_NOT_SET" }, { status: 401 });
-    if (setPin && !PIN_PATTERN.test(pin)) return Response.json({ ok: false, error: "PIN_INVALID_FORMAT" }, { status: 400 });
+    const hasPassword = Boolean((existing.passwordHash || existing.pinHash) && (existing.passwordSalt || existing.pinSalt));
+    if (!hasPassword) return Response.json({ ok: false, error: "PASSWORD_NOT_SET" }, { status: 401 });
+    if (!PASSWORD_PATTERN.test(password)) return Response.json({ ok: false, error: "INVALID_PASSWORD" }, { status: 401 });
 
     const deviceHash = deviceId ? hashDeviceId(deviceId) : "";
     const trustedDeviceHashes = Array.isArray(existing.trustedDeviceHashes)
@@ -133,28 +133,26 @@ export async function POST(request) {
       : [];
     const isDeviceTrusted = Boolean(deviceHash && trustedDeviceHashes.includes(deviceHash));
 
-    if (!isDeviceTrusted) {
-      const lockedUntilMs = await getLoginLimit(db, phone);
-      if (lockedUntilMs > Date.now()) {
-        return Response.json({ ok: false, error: "PIN_TOO_MANY_ATTEMPTS", retryAt: new Date(lockedUntilMs).toISOString() }, { status: 429 });
-      }
-      if (!setPin && !PIN_PATTERN.test(pin)) {
-        return Response.json({ ok: false, error: "PIN_INVALID_FORMAT" }, { status: 400 });
-      }
-      if (!setPin && !pinMatches(existing, pin)) {
-        const nextLockedUntilMs = await recordPinFailure(db, phone);
-        return Response.json({
-          ok: false,
-          error: nextLockedUntilMs ? "PIN_TOO_MANY_ATTEMPTS" : "INVALID_PIN",
-          ...(nextLockedUntilMs ? { retryAt: new Date(nextLockedUntilMs).toISOString() } : {})
-        }, { status: nextLockedUntilMs ? 429 : 401 });
-      }
+    const lockedUntilMs = await getLoginLimit(db, phone);
+    if (lockedUntilMs > Date.now()) {
+      return Response.json({ ok: false, error: "TOO_MANY_LOGIN_ATTEMPTS", retryAt: new Date(lockedUntilMs).toISOString() }, { status: 429 });
+    }
+    if (!passwordMatches(existing, password)) {
+      const nextLockedUntilMs = await recordPasswordFailure(db, phone);
+      return Response.json({
+        ok: false,
+        error: nextLockedUntilMs ? "TOO_MANY_LOGIN_ATTEMPTS" : "INVALID_PASSWORD",
+        ...(nextLockedUntilMs ? { retryAt: new Date(nextLockedUntilMs).toISOString() } : {})
+      }, { status: nextLockedUntilMs ? 429 : 401 });
     }
 
     const now = new Date().toISOString();
-    const pinSalt = setPin ? crypto.randomBytes(16).toString("hex") : String(existing.pinSalt || "");
-    const shouldUpgradePin = !setPin && !isDeviceTrusted && existing.pinHashVersion !== "scrypt-v1";
-    const pinHash = setPin || shouldUpgradePin ? scryptPinHash(pin, pinSalt) : existing.pinHash;
+    const passwordSalt = String(existing.passwordSalt || existing.pinSalt || crypto.randomBytes(16).toString("hex"));
+    const currentVersion = existing.passwordHashVersion || existing.pinHashVersion;
+    const shouldUpgradePassword = currentVersion !== "scrypt-v1";
+    const passwordHash = shouldUpgradePassword
+      ? scryptPasswordHash(password, passwordSalt)
+      : (existing.passwordHash || existing.pinHash);
     const nextDeviceHashes = new Set(trustedDeviceHashes);
     if (rememberDevice && deviceHash) nextDeviceHashes.add(deviceHash);
 
@@ -167,9 +165,12 @@ export async function POST(request) {
       phoneDigits: phone,
       name: existing.name || String(payload?.name || "").trim().slice(0, 160) || null,
       driverId: role === "driver" ? (existing.driverId || `driver_${phone}`) : null,
-      pinSalt,
-      pinHash,
-      pinHashVersion: setPin || shouldUpgradePin ? "scrypt-v1" : existing.pinHashVersion || "sha256-v1",
+      passwordSalt,
+      passwordHash,
+      passwordHashVersion: shouldUpgradePassword ? "scrypt-v1" : currentVersion,
+      pinSalt: FieldValue.delete(),
+      pinHash: FieldValue.delete(),
+      pinHashVersion: FieldValue.delete(),
       trustedDevices: [],
       trustedDeviceHashes: Array.from(nextDeviceHashes).slice(-8),
       driverProfile: role === "driver" ? existing.driverProfile || null : null,
@@ -190,7 +191,7 @@ export async function POST(request) {
       role,
       phone: next.phone,
       success: true,
-      provider: "pin",
+      provider: "password",
       createdAt: now
     });
     await batch.commit();
@@ -208,7 +209,7 @@ export async function POST(request) {
     });
   } catch (error) {
     const status = String(error?.code || "").startsWith("auth/") ? 401 : 500;
-    console.error("PIN login failed", { code: error?.code, message: error?.message });
+    console.error("Password login failed", { code: error?.code, message: error?.message });
     return Response.json({ ok: false, error: status === 401 ? "Invalid or expired authentication token" : "Unexpected server error" }, { status });
   }
 }

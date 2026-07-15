@@ -478,14 +478,12 @@ export default function App() {
   const [driverId, setDriverId] = useState("D1");
   const [driverSequenceDragId, setDriverSequenceDragId] = useState("");
   const [driverNoteDrafts, setDriverNoteDrafts] = useState({});
-  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", pin: "", username: "", password: "" });
+  const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", username: "", password: "" });
   const [rememberPhone, setRememberPhone] = useState(false);
-  const [loginStage, setLoginStage] = useState("login"); // login | set_pin
   const [googleOtpStage, setGoogleOtpStage] = useState("idle"); // idle | otp
   const [googleOtpSession, setGoogleOtpSession] = useState(null);
   const [googleOtpCode, setGoogleOtpCode] = useState("");
   const [googleOtpDevCode, setGoogleOtpDevCode] = useState("");
-  const [pinConfirm, setPinConfirm] = useState("");
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [lastCheckerNames, setLastCheckerNames] = useState({ store: "", pack: "" });
@@ -2122,23 +2120,10 @@ export default function App() {
     }
   };
 
-  const pinLogin = async () => {
+  const passwordLogin = async () => {
     if (!loginForm.phone.trim()) return;
     const deviceId = getOrCreateDeviceId();
-
-    if (loginStage === "set_pin") {
-      if (!loginForm.pin.trim()) return;
-      if (loginForm.pin.trim().length < 4) {
-        setSyncStatus("⚠️ PIN อย่างน้อย 4 ตัว");
-        return;
-      }
-      if (loginForm.pin.trim() !== String(pinConfirm || "").trim()) {
-        setSyncStatus("⚠️ PIN ไม่ตรงกัน");
-        return;
-      }
-    } else {
-      if (!loginForm.pin.trim()) return;
-    }
+    if (!loginForm.password.trim()) return;
     try {
       setSyncStatus("⏳ กำลังเข้าสู่ระบบ...");
       const cred = await signInAnon();
@@ -2155,29 +2140,16 @@ export default function App() {
           role,
           name: loginForm.name.trim(),
           username: loginForm.phone.trim(),
-          password: loginForm.pin.trim(),
+          password: loginForm.password.trim(),
           phone: loginForm.phone.trim(),
-          pin: loginForm.pin.trim(),
-          setPin: loginStage === "set_pin",
           deviceId,
           rememberDevice: rememberPhone
         })
       });
       const json = await res.json();
       if (!json?.ok) {
-        if (json?.error === "PIN_NOT_SET") {
-          setLoginStage("set_pin");
-          setSyncStatus("⚠️ ยังไม่ตั้ง PIN: กรุณาตั้ง PIN ครั้งแรก");
-          return;
-        }
-        if (json?.error === "PIN_REQUIRED") {
-          setLoginStage("login");
-          setSyncStatus("⚠️ กรุณากรอก PIN");
-          return;
-        }
-        if (json?.error === "INVALID_PIN") {
-          setLoginStage("login");
-          setSyncStatus("❌ PIN ไม่ถูกต้อง");
+        if (json?.error === "INVALID_PASSWORD") {
+          setSyncStatus("❌ Username หรือ Password ไม่ถูกต้อง");
           return;
         }
         throw new Error(json?.error || "Login failed");
@@ -2191,7 +2163,7 @@ export default function App() {
           : "";
       const newAuthState = {
         role: d.role || role,
-        // Prefer driver's registered profile name over whatever was typed on the PIN screen (often phone)
+        // Prefer the registered driver profile name over the login username.
         name: (d.role || role) === "driver" ? (profileName || d.name || loginForm.name.trim() || "") : (d.name || loginForm.name.trim() || ""),
         phone: d.phone || loginForm.phone.trim(),
         driverId: d.driverId || "",
@@ -2203,8 +2175,6 @@ export default function App() {
       if (newAuthState.driverId) setDriverId(newAuthState.driverId);
       ensureWebPushForDriver(newAuthState);
       setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
-      setLoginStage("login");
-      setPinConfirm("");
       if (rememberPhone) {
         try { localStorage.setItem("hillkoff-last-phone", loginForm.phone.trim()); } catch {}
       }
@@ -2238,12 +2208,8 @@ export default function App() {
     }
   };
 
-  const loginSales = async () => {
-    return pinLogin();
-  };
-
   const loginDriver = async () => {
-    return pinLogin();
+    return passwordLogin();
   };
 
   const loginStaff = async () => {
@@ -2266,8 +2232,8 @@ export default function App() {
 	      setSyncStatus("⚠️ กรุณาเข้าสู่ระบบก่อน");
 	      return;
 	    }
-      if (!loginForm.pin.trim()) {
-        setSyncStatus("⚠️ กรุณากรอก PIN");
+      if (!loginForm.password.trim()) {
+        setSyncStatus("⚠️ กรุณากรอก Password");
         return;
       }
 	    try {
@@ -2280,7 +2246,7 @@ export default function App() {
 	          role: "driver",
 	          name: `${driverForm.firstName.trim()} ${driverForm.lastName.trim()}`.trim(),
 	          phone: driverForm.phone.trim(),
-	          pin: loginForm.pin.trim(),
+	          password: loginForm.password.trim(),
 	          driverProfile: {
 	            firstName: driverForm.firstName.trim(),
 	            lastName: driverForm.lastName.trim(),
@@ -3964,7 +3930,7 @@ export default function App() {
               ) : (
               <>
               {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
-              <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder={loginForm.role === "driver" ? "Username (เบอร์โทร)" : "เบอร์โทร"} inputMode="tel" autoComplete="username" />
+              {loginForm.role === "driver" && <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="Username (เบอร์โทร)" inputMode="tel" autoComplete="username" />}
               {loginForm.role === "sales" && (googleOtpStage === "otp" ? (
                 <>
                   <input value={googleOtpCode} onChange={e => setGoogleOtpCode(e.target.value)} placeholder="OTP 6 หลัก" inputMode="numeric" />
@@ -3979,19 +3945,16 @@ export default function App() {
                   เข้าใช้งานด้วย Google + OTP
                 </button>
               ))}
-              {loginForm.role === "sales" && <p className="login-note">ฝ่ายขายสามารถใช้ Google อีเมล @hillkoff.com หรือ PIN สำรอง</p>}
-              <input type="password" value={loginForm.pin} onChange={e => setLoginForm(p => ({ ...p, pin: e.target.value }))} placeholder={loginStage === "set_pin" ? "ตั้งรหัสผ่าน PIN (อย่างน้อย 4 ตัว)" : (loginForm.role === "driver" ? "Password (PIN เดิม)" : "PIN")} inputMode="numeric" autoComplete="current-password" />
-              {loginStage === "set_pin" && (
-                <input value={pinConfirm} onChange={e => setPinConfirm(e.target.value)} placeholder="ยืนยัน PIN" inputMode="numeric" />
-              )}
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-                <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
-                จดจำ Username ในครั้งต่อไป
-              </label>
-              <button className="primary wide" onClick={loginForm.role === "sales" ? loginSales : loginDriver}>
-                {loginStage === "set_pin" ? "ตั้ง Password และเข้าใช้งาน" : (loginForm.role === "sales" ? "เข้าใช้งานฝ่ายขายด้วย PIN สำรอง" : "เข้าสู่ระบบคนขับ")}
-              </button>
-              <p className="login-note">{loginForm.role === "driver" ? "ใช้เบอร์โทรเป็น Username และใช้ PIN เดิมเป็น Password ระบบจะเรียกชื่อที่ผูกกับบัญชีให้อัตโนมัติ" : "PIN สำรองควรเก็บเป็นความลับ"}</p>
+              {loginForm.role === "sales" && <p className="login-note">ฝ่ายขายเข้าสู่ระบบด้วย Google อีเมล @hillkoff.com เท่านั้น</p>}
+              {loginForm.role === "driver" && <>
+                <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" autoComplete="current-password" />
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+                  <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
+                  จดจำ Username ในครั้งต่อไป
+                </label>
+                <button className="primary wide" onClick={loginDriver}>เข้าสู่ระบบคนขับ</button>
+                <p className="login-note">ใช้เบอร์โทรเป็น Username ระบบจะเรียกชื่อและประวัติที่ผูกกับบัญชีให้อัตโนมัติ</p>
+              </>}
               </>
               )}
             </>
