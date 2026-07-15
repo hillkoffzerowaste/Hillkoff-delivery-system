@@ -1650,7 +1650,8 @@ export default function App() {
   const orders = state.orders;
   const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived"];
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
-  const todayPreparationOrders = preparationOrders.filter(isTodayOrder);
+  const chiangmaiPreparationOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation");
+  const todayPreparationOrders = chiangmaiPreparationOrders.filter(isTodayOrder);
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
@@ -1663,7 +1664,7 @@ export default function App() {
   const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation" && order.packStatus !== "blocked" && ["pending", "working", "waiting"].includes(order.packStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
-  const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus !== "outstation_ready");
+  const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
   const storeKpiOrders = (orders || []).filter(order => order.workflowType === "store_route");
   const packKpiOrders = (orders || []).filter(order => order.workflowType && order.packStatus !== "blocked" && order.queueStatus !== "pack_archived");
@@ -4950,13 +4951,13 @@ export default function App() {
           <section className="panel">
             <div className="panel-head"><h2>ติดตามเตรียมออเดอร์เชียงใหม่</h2><span>ดูข้อมูลจากฝ่ายขาย · อ่านอย่างเดียว</span></div>
             <div style={{ display: "grid", gap: "10px" }}>
-              {preparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
+              {chiangmaiPreparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}{order.shippingCarrier ? ` · ขนส่ง: ${order.shippingCarrier}` : ""}</div>
                 {order.salesNote && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>หมายเหตุฝ่ายขาย:</b> {order.salesNote}</div>}
                 {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
               </article>)}
-              {!preparationOrders.length && <p className="muted">ยังไม่มีออเดอร์ที่อยู่ระหว่างเตรียม</p>}
+              {!chiangmaiPreparationOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/ใกล้เคียงที่อยู่ระหว่างเตรียม</p>}
             </div>
           </section>
         )}
