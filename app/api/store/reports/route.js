@@ -2,7 +2,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
-const REPORT_TYPES = ["outstation", "online"];
+const REPORT_TYPES = ["booking", "online"];
 const REPORT_STATUSES = ["draft", "saved", "waiting", "partial"];
 
 function clean(value, max = 500) {

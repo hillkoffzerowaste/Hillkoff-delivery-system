@@ -98,6 +98,8 @@ export async function POST(request) {
     const serviceDate = requestedServiceDate || toServiceDateKey(now);
     if (!validDateKey(serviceDate)) return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
     const orderRef = db.collection("orders").doc(orderId);
+    const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
+    const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
 
     const next = {
       customerId,
@@ -109,6 +111,7 @@ export async function POST(request) {
       mapUrl: safeHttpUrl(customer.mapUrl),
       window: clean(order.window, 100),
       boxes,
+      packageUnit: order.packageUnit === "bag" ? "bag" : "box",
       paymentType: clean(order.paymentType || "COD", 50),
       cod,
       driverId: clean(order.driverId, 120),
@@ -116,12 +119,12 @@ export async function POST(request) {
       salesName: clean(profile.name || profile.email, 200),
       salesPhone: clean(profile.phone, 40),
       status: "รอจัดเตรียมสินค้า",
-      workflowType: order.deliveryMethod === "outstation" ? "store_route" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
-      deliveryMethod: ["grab_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver",
+      workflowType,
+      deliveryMethod,
       bookingNumber: bookingNumber.slice(0, 100),
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
-      storeStatus: order.workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: order.workflowType === "direct_pack" ? "pending" : "blocked",
+      storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
       queueStatus: "preparing",
       storePackerName: "",
       storeCheckerName: "",
