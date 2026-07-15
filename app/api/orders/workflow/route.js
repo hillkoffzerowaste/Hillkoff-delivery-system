@@ -30,6 +30,7 @@ export async function PATCH(request) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบสโตร์"), { status: 400 });
       }
       patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name).slice(0, 160); patch.storeCheckerName = String(body.storeCheckerName || "").slice(0, 160); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : [];
+      Object.assign(history, { fromStatus: order.storeStatus || "pending", toStatus: body.storeStatus, result: body.storeWorkDetails?.checkResult || "", packerName: patch.storePackerName, checkerName: patch.storeCheckerName, missingItems: patch.missingItems });
       if (body.bookingNumber !== undefined) {
         const bookingNumber = String(body.bookingNumber || "").trim().slice(0, 100);
         if (!BOOKING_NUMBER_PATTERN.test(bookingNumber)) throw Object.assign(new Error("Booking number must use PREFIX-1234 format"), { status: 400 });
@@ -54,6 +55,7 @@ export async function PATCH(request) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบห้องแพ็ค"), { status: 400 });
       }
       patch.packStatus = body.packStatus; patch.packPackerName = String(body.packPackerName || profile.name).slice(0, 160); patch.packCheckerName = String(body.packCheckerName || "").slice(0, 160); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : order.missingItems || [];
+      Object.assign(history, { fromStatus: order.packStatus || "pending", toStatus: body.packStatus, result: body.packWorkDetails?.checkResult || "", packerName: patch.packPackerName, checkerName: patch.packCheckerName, missingItems: patch.missingItems });
       if (body.packWorkDetails && typeof body.packWorkDetails === "object") patch.packWorkDetails = {
         detail: String(body.packWorkDetails.detail || "").trim().slice(0, 2000),
         note: String(body.packWorkDetails.note || "").trim().slice(0, 2000),
@@ -83,6 +85,7 @@ export async function PATCH(request) {
         patch.returnedToStoreAt = now;
         patch.returnedToStoreBy = profile.name || profile.email;
         patch.returnReason = String(body.returnReason || body.packWorkDetails?.note || "").trim().slice(0, 1000);
+        Object.assign(history, { result: "returned", reason: patch.returnReason, storePackerName: order.storePackerName || "", storeCheckerName: order.storeCheckerName || "" });
       }
     } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
       if (order.deliveryMethod !== "grab_pickup" || order.queueStatus !== "grab_ready") {
