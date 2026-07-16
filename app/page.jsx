@@ -1667,7 +1667,7 @@ export default function App() {
     return Array.from(byId.values());
   }, [state.customers, historicalCustomers]);
   const orders = state.orders;
-  const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived"];
+  const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived", "driver_archived"];
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const chiangmaiPreparationOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation");
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
