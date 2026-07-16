@@ -17,6 +17,9 @@ describe("monthly booking registry", () => {
     expect(normalizeBookingNumber(" csp - 1234 ")).toBe("CSP-1234");
     expect(BOOKING_NUMBER_PATTERN.test("CSP-1234")).toBe(true);
     expect(bookingRegistryId("2026-07-15", "csp-1234")).toBe("2026-07__CSP-1234");
+    expect(bookingRegistryId("2026-07-15", "CSR-1234")).toBe("2026-07__CSR-1234");
+    expect(bookingRegistryId("2026-07-15", "TSR-1234")).toBe("2026-07__TSR-1234");
+    expect(bookingRegistryId("2026-07-15", "CSP-1234")).not.toBe(bookingRegistryId("2026-07-15", "CSR-1234"));
     expect(bookingRegistryId("2026-08-01", "CSP-1234")).toBe("2026-08__CSP-1234");
   });
 });
