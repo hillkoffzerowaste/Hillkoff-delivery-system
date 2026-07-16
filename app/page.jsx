@@ -543,6 +543,35 @@ function BookingNumberInput({ value, onChange, required = false }) {
   </div>;
 }
 
+function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange, onSearch, onClear, selectedIds, onSelectedIdsChange, onConfirmSelected, onUpdateStatus, updatedAt }) {
+  const selectableRows = rows.filter((item) => item.packStatus === "pending");
+  const selectedSet = new Set(selectedIds);
+  const selectedVisibleIds = selectableRows.filter((item) => selectedSet.has(item.id)).map((item) => item.id);
+  const allSelectable = selectableRows.length > 0 && selectedVisibleIds.length === selectableRows.length;
+  const toggleAll = (checked) => onSelectedIdsChange(checked ? selectableRows.map((item) => item.id) : []);
+  const toggleOne = (id, checked) => onSelectedIdsChange(checked ? [...new Set([...selectedIds, id])] : selectedIds.filter((selectedId) => selectedId !== id));
+  const statusMeta = (item) => {
+    if (item.packStatus === "returned") return { label: "ส่งกลับสโตร์", tone: "partial" };
+    if (item.packStatus === "partial") return { label: "ของไม่ครบ / รอของ", tone: "partial" };
+    if (item.packStatus === "checked") return { label: "ห้องแพ็คยืนยันแล้ว", tone: "confirmed" };
+    return { label: "รอห้องแพ็คตรวจ", tone: "draft" };
+  };
+  return <section className="panel role-workspace ops-workspace">
+    <div className="panel-head"><h2>{title}</h2><span>{selectableRows.length} งานรอยืนยัน</span></div>
+    <div className="store-report-filters" style={{ marginBottom: "10px" }}>
+      <div className="store-report-search"><Search size={17} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div>
+      <button className="secondary" onClick={onSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={onClear}>ล้าง</button>
+    </div>
+    <div className="store-report-actions" style={{ marginBottom: "10px" }}>
+      <span className="muted">เลือกงานที่ตรวจครบ แล้วกดยืนยันครั้งเดียว หรือยืนยันทีละงานได้</span>
+      <div><button className="secondary" disabled={!selectableRows.length} onClick={() => toggleAll(!allSelectable)}>{allSelectable ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableRows.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length} onClick={() => onConfirmSelected(selectedVisibleIds)}>ยืนยันที่เลือก ({selectedVisibleIds.length})</button></div>
+    </div>
+    {updatedAt && <small className="muted">อัปเดตล่าสุด {new Date(updatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small>}
+    {loading ? <p className="muted">กำลังโหลดรายการ…</p> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{rows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "#b91c1c" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span></td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!selectable} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!selectable} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!selectable} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
+    {!loading && !rows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่รอห้องแพ็คตรวจ</p>}
+  </section>;
+}
+
 export default function App() {
   const [tab, setTab] = useState("sales");
   const [appClock, setAppClock] = useState(() => new Date());
@@ -696,6 +725,8 @@ export default function App() {
   const [storeDraftRows, setStoreDraftRows] = useState({ booking: [], online: [] });
   const [showStoreReportConfirm, setShowStoreReportConfirm] = useState("");
   const [storeReportConfirmIds, setStoreReportConfirmIds] = useState([]);
+  const [packReportSelectedIds, setPackReportSelectedIds] = useState([]);
+  const [packReportBulkSubmitting, setPackReportBulkSubmitting] = useState(false);
   const [reportModal, setReportModal] = useState(null);
   const [reportRows, setReportRows] = useState([{ bookingNumber: "", detail: "", note: "", status: "saved" }]);
   const [reportPhotoPreview, setReportPhotoPreview] = useState("");
@@ -1916,6 +1947,23 @@ export default function App() {
     }
     const reason = packStatus === "returned" ? returnReason.trim() : "";
     try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตผลตรวจของห้องแพ็คแล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const confirmSelectedPackReports = async (type, ids) => {
+    const uniqueIds = [...new Set(ids || [])];
+    if (!uniqueIds.length || packReportBulkSubmitting) return;
+    setPackReportBulkSubmitting(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ action: "bulk_confirm", type, ids: uniqueIds }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "ยืนยันรายการไม่สำเร็จ");
+      const confirmedAt = json.data.confirmedAt;
+      setStoreReports((items) => items.map((item) => json.data.ids.includes(item.id) ? { ...item, packStatus: "checked", status: "saved", packUpdatedAt: confirmedAt, returnReason: "" } : item));
+      setPackReportSelectedIds((current) => current.filter((id) => !json.data.ids.includes(id)));
+      setSyncStatus(`✅ ห้องแพ็คยืนยันครบ ${json.data.ids.length} รายการแล้ว`);
+    } catch (error) { setSyncStatus(`❌ ยืนยันรายการไม่สำเร็จ: ${error?.message || error}`); }
+    finally { setPackReportBulkSubmitting(false); }
   };
 
   const resubmitStoreReport = async (item) => {
@@ -5274,6 +5322,16 @@ export default function App() {
         {displayTab === "pack-dashboard" && (() => { const pending = packTodayOrders.filter(order => order.packStatus === "pending").length; const working = packTodayOrders.filter(order => order.packStatus === "working").length; const waiting = packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length; const monthOrders = packKpiOrders.filter(order => getOrderServiceDate(order).startsWith(currentMonthKey)); const monthCompleted = monthOrders.filter(order => ["checked", "partial"].includes(order.packStatus)); const monthReturned = packKpiOrders.flatMap(getReturnEvents).filter(event => String(event.at || "").startsWith(currentMonthKey)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอแพ็ค", working: "กำลังแพ็ค", checked: "แพ็คเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับสโตร์" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = packTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.packStatus] || "รอแพ็ค", statusTone: statusTones[order.packStatus] })); let activityRows = buildKpiActivityRows(packKpiOrders, "pack"); if (!activityRows.length) activityRows = packTodayOrders.map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "อัปเดตออเดอร์ห้องแพ็ค", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard cards={[{ icon: "📦", value: packTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่เข้าสู่ห้องแพ็ค", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอแพ็ค", detail: "ยังไม่ได้เริ่มแพ็ค", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังแพ็ค", detail: "ห้องแพ็คกำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: packTodayCompleted, label: "แพ็คเสร็จ", detail: "ตรวจและยืนยันแล้ว", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={packTodayCompleted} total={packTodayOrders.length} followUps={[{ label: "งานส่งกลับสโตร์", emptyLabel: "ไม่มีงานส่งกลับ", value: packKpiReturned.length }, { label: "งานค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: packKpiOverdue.length }, { label: "งานรอดำเนินการ / รอของ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "แพ็คเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับสโตร์", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราแพ็คครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows} reportActions={{ copyDaily: () => copyPackSummary("daily"), shareDaily: () => sharePackSummary("daily"), copyMonthly: () => copyPackSummary("monthly"), shareMonthly: () => sharePackSummary("monthly") }} information="KPI ห้องแพ็คอ้างอิง Log การตรวจจริงแบบเรียลไทม์ เคสส่งกลับที่แก้เสร็จแล้วยังคงอยู่ในสถิติย้อนหลัง แต่ไม่แสดงเป็นงานค้าง" progressTitle="ความคืบหน้าการแพ็คสินค้า" progressLabel="แพ็คเสร็จ" />;</section>; })()}
 
         {["pack-booking", "pack-online"].includes(displayTab) && (() => {
+          const type = displayTab === "pack-booking" ? "booking" : "online";
+          const title = type === "booking" ? "ใบสั่งจอง · ห้องแพ็ค" : "ใบขายออนไลน์ · ห้องแพ็ค";
+          const pendingRows = storeReports.filter((item) => item.type === type && item.confirmedAt && !item.deletedAt && ["pending", "partial", "returned"].includes(item.packStatus));
+          const rows = storeReportSearchActive ? storeReports.filter((item) => item.type === type && !item.deletedAt) : pendingRows;
+          const search = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: storeReportQuery, includeDeleted: true }); };
+          const clear = () => { setStoreReportQuery(""); setStoreReportSearchActive(false); setPackReportSelectedIds([]); fetchStoreReports({ type, date: storeReportDate, includeDeleted: false }); };
+          return <PackReportWorkspace type={type} title={title} rows={rows} loading={storeReportsLoading} query={storeReportQuery} onQueryChange={setStoreReportQuery} onSearch={search} onClear={clear} selectedIds={packReportSelectedIds} onSelectedIdsChange={setPackReportSelectedIds} onConfirmSelected={(ids) => confirmSelectedPackReports(type, ids)} onUpdateStatus={updateReportPackStatus} updatedAt={storeReportsUpdatedAt} />;
+        })()}
+
+        {false && ["pack-booking", "pack-online"].includes(displayTab) && (() => {
           const type = displayTab === "pack-booking" ? "booking" : "online";
           const title = type === "booking" ? "ใบสั่งจอง · ห้องแพ็ค" : "ใบขายออนไลน์ · ห้องแพ็ค";
           const pendingRows = storeReports.filter(item => item.type === type && item.confirmedAt && !["checked", "blocked"].includes(item.packStatus) && !item.deletedAt);

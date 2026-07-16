@@ -229,6 +229,29 @@ export async function PATCH(request) {
     const { profile, db } = await requireProfile(request, ["store", "pack"]);
     const body = await request.json();
     if (profile.role === "pack") {
+      if (body?.action === "bulk_confirm") {
+        const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.slice(0, 50).map((id) => String(id || "").trim()).filter(validDocId))] : [];
+        const type = clean(body?.type, 30);
+        if (!ids.length) return Response.json({ ok: false, error: "No report rows selected" }, { status: 400 });
+        if (!REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
+        const snapshots = await db.getAll(...ids.map((id) => db.collection("store_reports").doc(id)));
+        const now = new Date().toISOString();
+        const batch = db.batch();
+        const updatedIds = [];
+        snapshots.forEach((snap) => {
+          if (!snap.exists) return;
+          const item = snap.data();
+          if (item.type !== type || item.deletedAt || item.packStatus !== "pending") return;
+          const patch = { packStatus: "checked", packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, returnReason: "", status: "saved", updatedAt: now };
+          patch.workflowHistory = appendReportHistory(item, reportKpiEvent("pack_checked", profile, now, { ...item, ...patch }));
+          batch.set(snap.ref, patch, { merge: true });
+          batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "pack_checked", profile, now, item, { ...item, ...patch }));
+          updatedIds.push(snap.id);
+        });
+        if (!updatedIds.length) return Response.json({ ok: false, error: "Selected rows are no longer waiting for pack confirmation" }, { status: 409 });
+        await batch.commit();
+        return Response.json({ ok: true, data: { ids: updatedIds, confirmedAt: now } });
+      }
       const id = clean(body?.id, 200);
       const packStatus = ["checked", "partial", "returned"].includes(body?.packStatus) ? body.packStatus : "";
       if (!validDocId(id) || !packStatus) return Response.json({ ok: false, error: "Invalid online pack update" }, { status: 400 });
