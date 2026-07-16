@@ -151,9 +151,16 @@ export async function POST(request) {
     };
 
     try {
-      await db.runTransaction(async (transaction) => {
+      const transactionResult = await db.runTransaction(async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
-        if (orderSnap.exists) throw Object.assign(new Error("Order id already exists"), { status: 409 });
+        if (orderSnap.exists) {
+          const existing = orderSnap.data() || {};
+          const sameRequest = String(existing.createdByUid || "") === String(decoded.uid || "")
+            && String(existing.customerId || "") === customerId
+            && normalizeBookingNumber(existing.bookingNumber || "") === bookingNumber;
+          if (sameRequest) return { alreadyExists: true };
+          throw Object.assign(new Error("Order id already exists"), { status: 409 });
+        }
         for (const reservation of bookingRefs) {
           const bookingSnap = await transaction.get(reservation.ref);
           if (bookingSnap.exists) throw Object.assign(new Error(bookingConflictMessage(bookingSnap.data())), { status: 409 });
@@ -162,7 +169,9 @@ export async function POST(request) {
         transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
         transaction.set(db.collection("customer_search").doc(next.customerId), customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
         for (const reservation of bookingRefs) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
+        return { alreadyExists: false };
       });
+      if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });
     } catch (error) {
       if (error?.code === 6 || error?.code === "already-exists") {
         return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });
