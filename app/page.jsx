@@ -2803,6 +2803,26 @@ export default function App() {
     }
   };
 
+  const cancelDriverDeliveryOrder = async (order) => {
+    if (pendingOrderUpdatesRef.current.has(order.id)) return;
+    const reason = window.prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:", "");
+    if (reason === null) return;
+    if (!reason.trim()) return setSyncStatus("⚠️ กรุณาระบุเหตุผลก่อนส่งออเดอร์กลับเข้าคิว");
+    pendingOrderUpdatesRef.current.add(order.id);
+    try { await updatePreparationWorkflow(order, "driver_cancel", { reason: reason.trim() }); }
+    finally { pendingOrderUpdatesRef.current.delete(order.id); }
+  };
+
+  const completeDriverDeliveryOrder = async (order, { deliveredAt, driverNote, podPhotoCount }) => {
+    if (pendingOrderUpdatesRef.current.has(order.id)) return { ok: false, error: "Order update in progress" };
+    pendingOrderUpdatesRef.current.add(order.id);
+    try {
+      return await updatePreparationWorkflow(order, "driver_complete", { deliveredAt, driverNote, podPhotoCount });
+    } finally {
+      pendingOrderUpdatesRef.current.delete(order.id);
+    }
+  };
+
   const archivePackOrder = async (order) => {
     if (!window.confirm(`นำออเดอร์ "${order.id}" ออกจากคิวห้องแพ็คใช่ไหม?\n\nข้อมูลและ Log จะยังคงถูกเก็บไว้`)) return;
     const reason = window.prompt("ระบุเหตุผล เช่น ส่งไปแล้ว / ออเดอร์ค้าง / รายการซ้ำ:", "");
@@ -3747,14 +3767,11 @@ export default function App() {
 	        } else {
 	          await navigator.share({ text });
 	        }
-	        const saved = await persistDriverOrderPatch(order, {
-	          status: completedOrder.status,
-	          deliveredAt: completedOrder.deliveredAt,
-	          driverNote: completedOrder.driverNote,
-	          driverName: completedOrder.driverName,
-	          driverId: completedOrder.driverId,
-	          sharedToLine: true
-	        });
+        const saved = await completeDriverDeliveryOrder(order, {
+          deliveredAt: completedOrder.deliveredAt,
+          driverNote: completedOrder.driverNote,
+          podPhotoCount: files.length
+        });
 	        if (!saved.ok) throw new Error(saved.error);
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
 	        setSyncStatus(`✅ ส่งสำเร็จและส่งพร้อม LINE แล้ว ${files.length} รูป (${order.id})`);
@@ -5686,13 +5703,7 @@ export default function App() {
 	                              className="secondary" 
 	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
 	                              disabled={false}
-	                              onClick={() => {
-	                                const reason = prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:");
-	                                if (reason) {
-	                                  updateOrder(order.id, { status: "รอคนขับรับ", queueStatus: "queued", driverId: "", driverName: "", complaint: reason, sharedToLine: false });
-	                                  setSyncStatus(`⏳ ส่งออเดอร์ "${order.id}" กลับเข้าคิวอีกครั้ง`);
-	                                }
-	                              }}>❌ ยกเลิก</button>
+                              onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && (
@@ -5710,12 +5721,7 @@ export default function App() {
 	                              className="secondary" 
 	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
 	                              disabled={false}
-	                              onClick={() => {
-	                                const reason = prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:");
-	                                if (reason) {
-	                                  updateOrder(order.id, { status: "รอคนขับรับ", queueStatus: "queued", driverId: "", driverName: "", complaint: reason, photo: "", sharedToLine: false });
-	                                }
-	                              }}>❌ ยกเลิก</button>
+                              onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
                           </>
                         )}
 	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={e => setDriverNoteDrafts((drafts) => ({ ...drafts, [order.id]: e.target.value }))} placeholder="หมายเหตุจากคนขับ (ถ้ามี)" rows={2} style={{ gridColumn: "1 / -1", width: "100%", boxSizing: "border-box", padding: "8px", borderRadius: "8px", border: "1px solid #bfdbfe" }} />}

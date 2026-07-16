@@ -10,7 +10,7 @@ const PACK_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
 
 export async function PATCH(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["sales", "store", "pack", "admin"]);
+    const { profile, db } = await requireProfile(request, ["sales", "store", "pack", "driver", "admin"]);
     const body = await request.json();
     const orderId = String(body?.orderId || "");
     const action = String(body?.action || "");
@@ -25,7 +25,40 @@ export async function PATCH(request) {
     const patch = { updatedAt: now, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-99), history] };
     let bookingReservation = null;
 
-    if (profile.role === "pack" && action === "pack_archive") {
+    if (profile.role === "driver" && ["driver_cancel", "driver_complete"].includes(action)) {
+      if (String(order.driverId || "") !== String(profile.driverId || "")) {
+        throw Object.assign(new Error("Driver can update only an assigned order"), { status: 403 });
+      }
+      if (!["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || ""))) {
+        throw Object.assign(new Error("Order is not in an active delivery state"), { status: 409 });
+      }
+      if (action === "driver_cancel") {
+        const reason = String(body.reason || "").trim().slice(0, 1000);
+        if (!reason) throw Object.assign(new Error("Cancellation reason is required"), { status: 400 });
+        patch.driverId = "";
+        patch.driverName = "";
+        patch.status = "รอคนขับรับ";
+        patch.queueStatus = "queued";
+        patch.complaint = reason;
+        patch.sharedToLine = false;
+        patch.acceptedAt = "";
+        patch.driverSequence = 0;
+        patch.driverSequenceServiceDate = "";
+        patch.driverSequenceUpdatedAt = "";
+        patch.driverSequenceUpdatedBy = "";
+        Object.assign(history, { result: "returned_to_queue", reason });
+      } else {
+        const deliveredAt = String(body.deliveredAt || now).trim().slice(0, 80) || now;
+        const driverNote = String(body.driverNote || "").trim().slice(0, 2000);
+        patch.status = "ส่งสำเร็จ";
+        patch.queueStatus = "completed";
+        patch.deliveredAt = deliveredAt;
+        patch.driverNote = driverNote;
+        patch.sharedToLine = true;
+        patch.podPhotoCount = Math.max(0, Math.min(5, Number(body.podPhotoCount) || 0));
+        Object.assign(history, { result: "delivered", podPhotoCount: patch.podPhotoCount });
+      }
+    } else if (profile.role === "pack" && action === "pack_archive") {
       const reason = String(body.reason || "").trim().slice(0, 1000);
       if (!reason) throw Object.assign(new Error("กรุณาระบุเหตุผลที่นำออเดอร์ออกจากคิว"), { status: 400 });
       if (["queued", "completed"].includes(String(order.queueStatus || "")) || order.driverId) {
