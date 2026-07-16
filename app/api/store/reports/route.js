@@ -77,6 +77,20 @@ export async function GET(request) {
     const queryText = clean(params.get("q"), 200).toLowerCase();
     const includeDeleted = params.get("includeDeleted") === "true";
     const kpi = params.get("kpi") === "true";
+    const alerts = params.get("alerts") === "true";
+    if (alerts) {
+      if (profile.role !== "store") return Response.json({ ok: false, error: "Store access required" }, { status: 403 });
+      const alertSnap = await db.collection("store_reports").orderBy("createdAt", "desc").limit(5000).get();
+      const incomplete = alertSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => !item.deletedAt
+        && REPORT_TYPES.includes(item.type)
+        && (["waiting", "partial"].includes(item.status) || ["waiting", "partial", "returned"].includes(item.packStatus))
+      ).sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
+      const summarize = (type) => {
+        const items = incomplete.filter((item) => item.type === type);
+        return { count: items.length, items: items.slice(0, 100) };
+      };
+      return Response.json({ ok: true, data: { booking: summarize("booking"), online: summarize("online"), updatedAt: new Date().toISOString() } });
+    }
     if (id) {
       if (!validDocId(id)) return Response.json({ ok: false, error: "Invalid report id" }, { status: 400 });
       const ref = db.collection("store_reports").doc(id);

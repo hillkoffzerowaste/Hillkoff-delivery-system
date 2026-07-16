@@ -633,6 +633,7 @@ export default function App() {
   const [storeReportIncludeDeleted, setStoreReportIncludeDeleted] = useState(false);
   const [storeReportStatusFilter, setStoreReportStatusFilter] = useState("all");
   const [storeReportsUpdatedAt, setStoreReportsUpdatedAt] = useState(null);
+  const [storeReportIssues, setStoreReportIssues] = useState({ booking: { count: 0, items: [] }, online: { count: 0, items: [] } });
   const storeReportsFetchInFlightRef = useRef(false);
   const [storeDraftRows, setStoreDraftRows] = useState({ booking: [], online: [] });
   const [showStoreReportConfirm, setShowStoreReportConfirm] = useState("");
@@ -1813,6 +1814,27 @@ export default function App() {
       if (!silent) setStoreReportsLoading(false);
     }
   };
+  const fetchStoreReportIssues = useCallback(async () => {
+    if (auth.role !== "store") return;
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/store/reports?alerts=true", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStoreReportIssues({
+        booking: json.data?.booking || { count: 0, items: [] },
+        online: json.data?.online || { count: 0, items: [] }
+      });
+    } catch (error) {
+      setSyncStatus(`⚠️ โหลดรายการของไม่ครบไม่สำเร็จ: ${error?.message || error}`);
+    }
+  }, [auth.role, refreshAuthToken]);
+  useEffect(() => {
+    if (auth.role !== "store") return;
+    fetchStoreReportIssues();
+    const timer = window.setInterval(fetchStoreReportIssues, 30000);
+    return () => window.clearInterval(timer);
+  }, [auth.role, fetchStoreReportIssues]);
   useEffect(() => {
     const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
     const packType = displayTab === "pack-booking" ? "booking" : displayTab === "pack-online" ? "online" : "";
@@ -4364,9 +4386,9 @@ export default function App() {
             <>
               <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
               <button type="button" className={displayTab === "store-pickup" ? "active" : ""} onClick={() => selectAppTab("store-pickup")}><Store size={18} /> Grab/รับหน้าร้าน</button>
-              <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง</button>
-              <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์</button>
-              <button type="button" className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => selectAppTab("store-dashboard")}><ClipboardList size={18} /> รายงาน KPI สโตร์</button>
+              <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง{storeReportIssues.booking.count > 0 && <span className="nav-count-badge" aria-label={`ใบสั่งจองของไม่ครบ ${storeReportIssues.booking.count} รายการ`}>{storeReportIssues.booking.count}</span>}</button>
+              <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์{storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`ใบขายออนไลน์ของไม่ครบ ${storeReportIssues.online.count} รายการ`}>{storeReportIssues.online.count}</span>}</button>
+              <button type="button" className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => selectAppTab("store-dashboard")}><ClipboardList size={18} /> รายงาน KPI สโตร์{storeReportIssues.booking.count + storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`งานของไม่ครบรวม ${storeReportIssues.booking.count + storeReportIssues.online.count} รายการ`}>{storeReportIssues.booking.count + storeReportIssues.online.count}</span>}</button>
             </>
           )}
           {auth.role === "pack" && (
@@ -5154,6 +5176,7 @@ export default function App() {
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
             {["store-booking", "store-online"].includes(displayTab) && <div className="store-report-workspace">
+              {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "7px", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "#991b1b" }}>⚠️ มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "#b91c1c", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "#dc2626", color: "#991b1b" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "6px" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid #fecaca", background: "#fff", color: "#7f1d1d", borderRadius: "7px", padding: "8px", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "#991b1b" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
               {storeReports.filter(item => item.type === (displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "#991b1b" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
               {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, includeDeleted: storeReportIncludeDeleted }); }; return <>
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
