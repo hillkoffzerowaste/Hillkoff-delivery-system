@@ -2525,7 +2525,19 @@ export default function App() {
         body: JSON.stringify({ order: orderToCreate })
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      if (!res.ok || !json?.ok) {
+        const rawReason = String(json?.error || `HTTP ${res.status}`).trim();
+        if (res.status === 409) {
+          const reason = /order id already exists/i.test(rawReason)
+            ? "ออเดอร์นี้ถูกบันทึกไปแล้ว อาจเกิดจากกดยืนยันซ้ำหรือกดใหม่หลังสัญญาณขัดข้อง"
+            : /booking|ใบสั่ง|เธฅเธข|เธเธ—/i.test(rawReason)
+              ? "เลขที่ใบสั่งจองนี้ถูกใช้แล้วในเดือนเดียวกัน กรุณาตรวจสอบเลขก่อนยืนยัน"
+              : "ข้อมูลออเดอร์ขัดแย้งกับรายการที่มีอยู่ในระบบ กรุณาตรวจสอบข้อมูลก่อนยืนยันอีกครั้ง";
+          const readableDetail = rawReason && !/^HTTP 409$/i.test(rawReason) && !/เธ/.test(rawReason) ? ` · รายละเอียด: ${rawReason}` : "";
+          throw new Error(`${reason}${readableDetail}`);
+        }
+        throw new Error(rawReason);
+      }
 
       setState(prev => {
         const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
