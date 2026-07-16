@@ -68,12 +68,12 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
     const images = await Promise.all(sourceFiles.map(loadImage));
     const columns = images.length === 1 ? 1 : 2;
     const rows = Math.ceil(images.length / columns);
-    const canvasWidth = 2048;
-    const padding = 24;
-    const headerHeight = 136;
-    const gap = 14;
+    const canvasWidth = 3072;
+    const padding = 36;
+    const headerHeight = 204;
+    const gap = 21;
     const cellWidth = (canvasWidth - (padding * 2) - (gap * (columns - 1))) / columns;
-    const cellHeight = columns === 1 ? 1536 : 720;
+    const cellHeight = columns === 1 ? 2304 : 1080;
     const canvas = document.createElement("canvas");
     canvas.width = canvasWidth;
     canvas.height = headerHeight + padding + (rows * cellHeight) + ((rows - 1) * gap) + padding;
@@ -84,10 +84,10 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
     context.fillStyle = "#174b36";
     context.fillRect(0, 0, canvas.width, headerHeight);
     context.fillStyle = "#ffffff";
-    context.font = "700 46px sans-serif";
-    context.fillText("Hillkoff Delivery · หลักฐานภาพ", padding, 56);
-    context.font = "500 32px sans-serif";
-    context.fillText(String(title).slice(0, 80), padding, 104);
+    context.font = "700 69px sans-serif";
+    context.fillText("Hillkoff Delivery · หลักฐานภาพ", padding, 84);
+    context.font = "500 48px sans-serif";
+    context.fillText(String(title).slice(0, 80), padding, 156);
     images.forEach((image, index) => {
       const column = index % columns;
       const row = Math.floor(index / columns);
@@ -100,12 +100,12 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
       const height = image.height * scale;
       context.drawImage(image, x + ((cellWidth - width) / 2), y + ((cellHeight - height) / 2), width, height);
       context.fillStyle = "rgba(23, 75, 54, .9)";
-      context.fillRect(x, y, 78, 58);
+      context.fillRect(x, y, 117, 87);
       context.fillStyle = "#ffffff";
-      context.font = "700 32px sans-serif";
-      context.fillText(String(index + 1), x + 28, y + 40);
+      context.font = "700 48px sans-serif";
+      context.fillText(String(index + 1), x + 42, y + 60);
     });
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.95));
     return blob ? new File([blob], `hillkoff-proof-${Date.now()}.jpg`, { type: "image/jpeg" }) : null;
   } catch {
     return null;
