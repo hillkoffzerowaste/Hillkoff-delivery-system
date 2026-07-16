@@ -24,6 +24,7 @@ export async function PATCH(request) {
     const history = { action, role: profile.role, name: profile.name, uid: profile.uid, at: now, note: String(body?.note || "").trim().slice(0, 1000) };
     const patch = { updatedAt: now, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-99), history] };
     let bookingReservation = null;
+    let previousBookingReservationRef = null;
 
     if (profile.role === "driver" && ["driver_cancel", "driver_complete"].includes(action)) {
       if (String(order.driverId || "") !== String(profile.driverId || "")) {
@@ -85,21 +86,26 @@ export async function PATCH(request) {
         const bookingNumber = normalizeBookingNumber(body.bookingNumber).slice(0, 100);
         if (!BOOKING_NUMBER_PATTERN.test(bookingNumber)) throw Object.assign(new Error("Booking number must use PREFIX-1234 format"), { status: 400 });
         const existingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter((value) => BOOKING_NUMBER_PATTERN.test(value)))];
-        if (existingNumbers.length && !existingNumbers.includes(bookingNumber)) {
-          throw Object.assign(new Error("เลขที่ใบสั่งจองถูกกำหนดจากฝ่ายขายแล้ว สโตร์ไม่สามารถเปลี่ยนเลขได้"), { status: 409 });
+        const previousPrimaryNumber = existingNumbers[0] || "";
+        const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
+        const registryId = bookingRegistryId(serviceDate, bookingNumber);
+        if (!registryId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
+        const reservationRef = db.collection("booking_month_registry").doc(registryId);
+        const reservationSnap = await reservationRef.get();
+        if (reservationSnap.exists && reservationSnap.data()?.sourceId !== orderId) {
+          throw Object.assign(new Error(bookingConflictMessage(reservationSnap.data())), { status: 409 });
         }
-        patch.bookingNumber = existingNumbers[0] || bookingNumber;
-        patch.bookingNumbers = existingNumbers.length ? existingNumbers : [bookingNumber];
-        if (!existingNumbers.length) {
-          const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
-          const registryId = bookingRegistryId(serviceDate, bookingNumber);
-          if (!registryId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
-          const reservationRef = db.collection("booking_month_registry").doc(registryId);
-          const reservationSnap = await reservationRef.get();
-          if (reservationSnap.exists && reservationSnap.data()?.sourceId !== orderId) {
-            throw Object.assign(new Error(bookingConflictMessage(reservationSnap.data())), { status: 409 });
+        patch.bookingNumber = bookingNumber;
+        patch.bookingNumbers = [bookingNumber, ...existingNumbers.filter((value) => value !== previousPrimaryNumber && value !== bookingNumber)];
+        if (!reservationSnap.exists) bookingReservation = { ref: reservationRef, data: bookingRegistryRecord({ serviceDate, bookingNumber, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) };
+        if (previousPrimaryNumber && previousPrimaryNumber !== bookingNumber) {
+          const previousRegistryId = bookingRegistryId(serviceDate, previousPrimaryNumber);
+          if (previousRegistryId) {
+            const previousRef = db.collection("booking_month_registry").doc(previousRegistryId);
+            const previousSnap = await previousRef.get();
+            if (previousSnap.exists && previousSnap.data()?.sourceId === orderId) previousBookingReservationRef = previousRef;
           }
-          if (!reservationSnap.exists) bookingReservation = { ref: reservationRef, data: bookingRegistryRecord({ serviceDate, bookingNumber, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) };
+          Object.assign(history, { bookingNumberFrom: previousPrimaryNumber, bookingNumberTo: bookingNumber });
         }
       }
       if (body.storeWorkDetails && typeof body.storeWorkDetails === "object") patch.storeWorkDetails = {
@@ -171,6 +177,7 @@ export async function PATCH(request) {
     batch.update(ref, patch, { lastUpdateTime: snap.updateTime });
     batch.set(ref.collection("activity").doc(), history);
     if (bookingReservation) batch.create(bookingReservation.ref, bookingReservation.data);
+    if (previousBookingReservationRef) batch.delete(previousBookingReservationRef);
     await batch.commit();
     try {
       await syncDeliveryOrderToSheet(db, orderId, { ...order, ...patch });

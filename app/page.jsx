@@ -462,7 +462,7 @@ const DEFAULT_PREPARATION_CHECKERS = {
 
 function BookingNumberInput({ value, onChange, required = false }) {
   const rawValue = String(value || "").trim().toUpperCase();
-  const knownPrefixes = ["CSP", "CSR", "AS7", "AS1", "AS6"];
+  const knownPrefixes = ["CSP", "CSR", "TSR", "AS7", "AS1", "AS6"];
   const knownPrefix = knownPrefixes.find(item => rawValue === item || rawValue.startsWith(`${item}-`) || (rawValue.startsWith(item) && /^\d/.test(rawValue.slice(item.length))));
   const customMatch = knownPrefix ? null : rawValue.match(/^([^\-\d\s]+)(?:-)?\d*$/);
   const prefix = knownPrefix || (customMatch?.[1] ? "other" : "CSP");
@@ -478,7 +478,7 @@ function BookingNumberInput({ value, onChange, required = false }) {
     onChange(cleanPrefix ? `${cleanPrefix}-${cleanDigits}` : "");
   };
   return <div style={{ display: "grid", gridTemplateColumns: prefix === "other" ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "7px" }}>
-    <select value={prefix} onChange={e => { const next = e.target.value; setBooking(next === "other" ? "OTHER" : next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="AS7">AS7</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="other">อื่นๆ</option></select>
+    <select value={prefix} onChange={e => { const next = e.target.value; setBooking(next === "other" ? "OTHER" : next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="other">อื่นๆ</option></select>
     {prefix === "other" && <input value={customPrefix} onChange={e => setBooking(e.target.value.trim().toUpperCase(), digits)} placeholder="คำนำหน้า" aria-label="คำนำหน้าอื่น" />}
     <input value={digits} onChange={e => setBooking(activePrefix, digitsOnly(e.target.value).slice(0, 4))} inputMode="numeric" maxLength={4} placeholder={required ? "เลข 4 หลัก *" : "เลข 4 หลัก"} aria-label="เลข 4 หลักของใบสั่งจอง" />
   </div>;
@@ -2966,7 +2966,7 @@ export default function App() {
     if (!workModal) return false;
     const { role } = workModal;
     const fail = (message) => { setWorkSubmitError(message); setSyncStatus(message); return false; };
-    const effectiveBookingNumber = getOrderBookingNumbers(workModal.order)[0] || normalizeBookingNumber(workForm.bookingNumber);
+    const effectiveBookingNumber = normalizeBookingNumber(workForm.bookingNumber) || getOrderBookingNumbers(workModal.order)[0];
     if (role === "store" && !effectiveBookingNumber) return fail("❌ กรุณากรอกเลขที่ใบสั่งจอง");
     if (role === "store" && !isValidBookingNumber(effectiveBookingNumber)) return fail("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้า ตามด้วย - และตัวเลข 4 หลัก เช่น CSP-1234");
     if (!workForm.checkerName.trim()) return fail(`❌ กรุณาเลือกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
@@ -2982,7 +2982,7 @@ export default function App() {
     const text = [
       role === "store" ? "📦 สโตร์ยืนยันออเดอร์" : "📦 ห้องแพ็คยืนยันออเดอร์",
       `งาน: ${order.id}`,
-      `เลขที่ใบสั่งจอง: ${formatOrderBookingNumbers(order) || workForm.bookingNumber || "-"}`,
+      `เลขที่ใบสั่งจอง: ${workForm.bookingNumber || formatOrderBookingNumbers(order) || "-"}`,
       order.customerName ? `ลูกค้า: ${order.customerName}` : "",
       workForm.detail ? `รายละเอียด: ${workForm.detail}` : "",
       workForm.note ? `หมายเหตุ: ${workForm.note}` : "",
@@ -3016,7 +3016,7 @@ export default function App() {
     const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine, checklist: workForm.checklist, checkResult: workForm.checkResult };
     setWorkSubmitting(true);
     const result = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
-      ? { storeStatus: workForm.checkResult === "partial" ? "partial" : "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), bookingNumber: getOrderBookingNumbers(order)[0] || workForm.bookingNumber, missingItems, storeWorkDetails: details }
+      ? { storeStatus: workForm.checkResult === "partial" ? "partial" : "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), bookingNumber: workForm.bookingNumber, missingItems, storeWorkDetails: details }
       : { packStatus: workForm.checkResult === "returned" ? "returned" : workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, returnReason: workForm.checkResult === "returned" ? workForm.missingNote.trim() : "", packWorkDetails: details });
     setWorkSubmitting(false);
     if (result?.ok) {
@@ -4953,7 +4953,7 @@ export default function App() {
                   <div style={{ color: "#6b7280", fontSize: "12px", textAlign: "center" }}>บาท</div>
                 </div>
               </div>
-              <div style={{ display: "grid", gap: "7px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: "92px 1fr auto", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value }))}><option value="CSP">CSP</option><option value="CSR">CSR</option></select><input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${orderForm.bookingPrefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#991b1b", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">เลขแต่ละตัวห้ามซ้ำภายในเดือนเดียวกัน เดือนใหม่ใช้ซ้ำได้</small></div>
+              <div style={{ display: "grid", gap: "7px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: "92px 1fr auto", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option></select><input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${orderForm.bookingPrefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#991b1b", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">เลขแต่ละตัวห้ามซ้ำภายในเดือนเดียวกัน เดือนใหม่ใช้ซ้ำได้</small></div>
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
 
@@ -5271,7 +5271,7 @@ export default function App() {
               <div style={{ display: "grid", gap: "10px" }}>
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
                 <details className="prep-order-details"><summary>ดูรายละเอียดลูกค้าและออเดอร์</summary><PackSalesOrderDetails order={workModal.order} /></details>
-                {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label>{getOrderBookingNumbers(workModal.order).length ? <div className="status-chip" style={{ width: "fit-content" }}>{formatOrderBookingNumbers(workModal.order)} · กำหนดโดยฝ่ายขาย</div> : <BookingNumberInput value={workForm.bookingNumber} onChange={bookingNumber => setWorkForm(p => ({ ...p, bookingNumber }))} required />}</> : <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุจากฝ่ายขาย"}</div>}
+                {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><BookingNumberInput value={workForm.bookingNumber} onChange={bookingNumber => setWorkForm(p => ({ ...p, bookingNumber }))} required />{getOrderBookingNumbers(workModal.order).length > 1 && <small className="muted">มีเลขร่วมในออเดอร์นี้: {formatOrderBookingNumbers(workModal.order)}</small>}</> : <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุจากฝ่ายขาย"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
                 <details style={{ border: "1px solid #dbe4d6", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
