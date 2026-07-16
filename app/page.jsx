@@ -1811,9 +1811,10 @@ export default function App() {
     const isStoreReport = auth.role === "store" && ["store-booking", "store-online"].includes(displayTab);
     if (!isKpi && !isStoreReport) return undefined;
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       if (isKpi) fetchStoreReports({ includeDeleted: true, kpi: true, silent: true });
       else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type: packType, includeDeleted: storeReportIncludeDeleted, silent: true });
-    }, isKpi ? 10000 : 30000);
+    }, 30000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
