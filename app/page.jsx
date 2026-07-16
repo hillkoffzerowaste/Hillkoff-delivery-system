@@ -3443,6 +3443,24 @@ export default function App() {
     }
   };
 
+  // POD รูปภาพเก็บไว้เฉพาะในเครื่องระหว่างเตรียมแชร์เท่านั้น
+  const clearPodPhotos = (orderId) => {
+    const previews = podPreviewsByOrder[orderId] || [];
+    previews.forEach((preview) => {
+      try { URL.revokeObjectURL(preview); } catch {}
+    });
+    delete podFilesRef.current[orderId];
+    setPodPreviewsByOrder((prev) => {
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
+    setState((prev) => ({
+      ...prev,
+      orders: prev.orders.map((item) => item.id === orderId ? { ...item, photo: "" } : item)
+    }));
+  };
+
   const createRouteTask = async () => {
     const did = state.auth?.driverId || driverId || "";
     if (!did) {
@@ -3781,6 +3799,8 @@ export default function App() {
           podPhotoCount: files.length || Number(order.podPhotoCount) || 0
         });
 	        if (!saved.ok) throw new Error(saved.error);
+	        // ล้างไฟล์และ preview หลังบันทึกส่งสำเร็จ เช่นเดียวกับ flow ห้องแพ็ค
+	        clearPodPhotos(order.id);
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
 	        setSyncStatus(`✅ ส่งสำเร็จและส่งพร้อม LINE แล้ว ${files.length} รูป (${order.id})`);
       } catch (error) {
