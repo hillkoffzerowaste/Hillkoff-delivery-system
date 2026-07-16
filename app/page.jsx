@@ -417,7 +417,7 @@ function PackSalesOrderDetails({ order }) {
     ["วันที่และเวลาเปิดออเดอร์", order.createdAt ? formatThaiDateTime(order.createdAt) : ""],
     ["เลขที่ใบสั่งจอง", formatOrderBookingNumbers(order)], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}` : ""], ["ชำระเงิน", order.paymentType],
-    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
+    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
   ].filter(([, value]) => String(value || "").trim());
   return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
     <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
@@ -1699,7 +1699,7 @@ export default function App() {
   const storeKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "store"));
   const packKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "pack"));
   const storeKpiOrders = [...(orders || []).filter(order => order.workflowType === "store_route"), ...storeKpiReportOrders];
-  const packKpiOrders = [...(orders || []).filter(order => order.workflowType && order.packStatus !== "blocked"), ...packKpiReportOrders];
+  const packKpiOrders = [...(orders || []).filter(order => order.workflowType && order.workflowType !== "direct_driver" && order.packStatus !== "blocked"), ...packKpiReportOrders];
   const activeStoreKpiOrders = storeKpiOrders.filter(order => !["archived"].includes(order.storeStatus));
   const activePackKpiOrders = packKpiOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
   const storeKpiReturned = storeKpiOrders.filter(order => order.storeStatus === "returned");
@@ -2451,6 +2451,7 @@ export default function App() {
       return;
     }
     const workflowType = orderForm.workflowType;
+    const directDriver = workflowType === "direct_driver" && orderForm.deliveryMethod === "company_driver";
     
     const id = generateOrderId();
     const serviceDate = toServiceDateKey(new Date());
@@ -2478,9 +2479,10 @@ export default function App() {
       bookingNumbers,
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
       shippingCarrierOther: String(orderForm.shippingCarrierOther || "").trim(),
-      storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
-      queueStatus: "preparing",
+      storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
+      queueStatus: directDriver ? "queued" : "preparing",
+      urgentDelivery: directDriver,
       photo: "",
       checkInAt: "",
       deliveredAt: "",
@@ -2499,8 +2501,9 @@ export default function App() {
       setSyncStatus("❌ กรุณาเลือกบริษัทขนส่งสำหรับออเดอร์ต่างจังหวัด");
       return;
     }
-    const workflowType = pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType;
-    const orderToCreate = { ...pendingOrder, workflowType, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "", storeStatus: workflowType === "direct_pack" ? "skipped" : "pending", packStatus: workflowType === "direct_pack" ? "pending" : "blocked" };
+    const directDriver = pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType === "direct_driver";
+    const workflowType = pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : directDriver ? "direct_driver" : pendingOrder.workflowType;
+    const orderToCreate = { ...pendingOrder, workflowType, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "", storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending", packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked", queueStatus: directDriver ? "queued" : "preparing", status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า", urgentDelivery: directDriver };
     delete orderToCreate.shippingCarrierOther;
     const shouldShareLine = shareNewOrderToLine;
     setOrderConfirmSubmitting(true);
@@ -5592,6 +5595,7 @@ export default function App() {
                         <div>
                           <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.id}</b>
                           <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
+                          {order.workflowType === "direct_driver" && <span className="status-chip" style={{ display: "inline-flex", marginTop: "6px", color: "#991b1b", background: "#fee2e2", border: "2px solid #dc2626", fontWeight: 900 }}>🚨 เร่งด่วน · ส่งตรงคนขับ</span>}
                           <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
                           <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
                           <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
@@ -6808,8 +6812,9 @@ export default function App() {
         }}>
           <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
           <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
-            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option></select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
-            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
+            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "#fee2e2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "10px", padding: "12px", fontWeight: 800 }}><div style={{ fontSize: "15px" }}>🚨 ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "4px" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
             {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
             <label style={{ display: "grid", gap: "6px" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>
           </div>

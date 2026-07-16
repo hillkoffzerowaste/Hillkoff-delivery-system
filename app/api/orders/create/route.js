@@ -100,7 +100,8 @@ export async function POST(request) {
     const orderRef = db.collection("orders").doc(orderId);
     const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, value)) }));
     const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
-    const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
+    const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_driver" && deliveryMethod === "company_driver" ? "direct_driver" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
+    const directDriver = workflowType === "direct_driver";
 
     const next = {
       customerId,
@@ -119,16 +120,17 @@ export async function POST(request) {
       driverName: clean(order.driverName, 200),
       salesName: clean(profile.name || profile.email, 200),
       salesPhone: clean(profile.phone, 40),
-      status: "รอจัดเตรียมสินค้า",
+      status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า",
       workflowType,
       deliveryMethod,
       bookingNumber: bookingNumber.slice(0, 100),
       bookingNumbers,
       bookingMonthKey: serviceDate.slice(0, 7),
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
-      storeStatus: workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: workflowType === "direct_pack" ? "pending" : "blocked",
-      queueStatus: "preparing",
+      storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
+      queueStatus: directDriver ? "queued" : "preparing",
+      urgentDelivery: directDriver,
       storePackerName: "",
       storeCheckerName: "",
       packPackerName: "",
