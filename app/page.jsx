@@ -54,6 +54,64 @@ const WORKFLOW_STATUS_META = {
   saved: { label: "บันทึกแล้ว", tone: "done" }
 };
 
+async function createLinePhotoSheet(files, title = "หลักฐานการปฏิบัติงาน") {
+  const sourceFiles = Array.from(files || []).filter((file) => file?.type?.startsWith("image/")).slice(0, 5);
+  if (!sourceFiles.length || typeof document === "undefined") return null;
+  const loadImage = (file) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("ไม่สามารถอ่านรูปภาพได้")); };
+    image.src = url;
+  });
+  try {
+    const images = await Promise.all(sourceFiles.map(loadImage));
+    const columns = images.length === 1 ? 1 : 2;
+    const rows = Math.ceil(images.length / columns);
+    const canvasWidth = 1280;
+    const padding = 24;
+    const headerHeight = 104;
+    const gap = 14;
+    const cellWidth = (canvasWidth - (padding * 2) - (gap * (columns - 1))) / columns;
+    const cellHeight = columns === 1 ? 960 : 440;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasWidth;
+    canvas.height = headerHeight + padding + (rows * cellHeight) + ((rows - 1) * gap) + padding;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#174b36";
+    context.fillRect(0, 0, canvas.width, headerHeight);
+    context.fillStyle = "#ffffff";
+    context.font = "700 34px sans-serif";
+    context.fillText("Hillkoff Delivery · หลักฐานภาพ", padding, 43);
+    context.font = "500 24px sans-serif";
+    context.fillText(String(title).slice(0, 80), padding, 78);
+    images.forEach((image, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = padding + (column * (cellWidth + gap));
+      const y = headerHeight + padding + (row * (cellHeight + gap));
+      context.fillStyle = "#edf3ef";
+      context.fillRect(x, y, cellWidth, cellHeight);
+      const scale = Math.min(cellWidth / image.width, cellHeight / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      context.drawImage(image, x + ((cellWidth - width) / 2), y + ((cellHeight - height) / 2), width, height);
+      context.fillStyle = "rgba(23, 75, 54, .9)";
+      context.fillRect(x, y, 62, 46);
+      context.fillStyle = "#ffffff";
+      context.font = "700 24px sans-serif";
+      context.fillText(String(index + 1), x + 22, y + 31);
+    });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72));
+    return blob ? new File([blob], `hillkoff-proof-${Date.now()}.jpg`, { type: "image/jpeg" }) : null;
+  } catch {
+    return null;
+  }
+}
+
 function WorkflowStatus({ role, status }) {
   const meta = WORKFLOW_STATUS_META[status] || { label: status || "ยังไม่ระบุ", tone: "neutral" };
   const prefix = role === "store" ? "สโตร์: " : role === "pack" ? "ห้องแพ็ค: " : "";
@@ -3017,7 +3075,9 @@ export default function App() {
       try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
       const files = workPhotoFilesRef.current[`${role}:${order.id}`] || [];
       if (!navigator?.share) throw new Error("อุปกรณ์นี้ไม่รองรับการแชร์");
-      if (files.length && navigator.canShare?.({ files })) await navigator.share({ files, text });
+      const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
+      const filesToShare = photoSheet ? [photoSheet] : files;
+      if (filesToShare.length && navigator.canShare?.({ files: filesToShare })) await navigator.share({ files: filesToShare, text });
       else await navigator.share({ text });
       setWorkSharedToLine(true);
       const confirmed = await confirmWorkModal(true);
@@ -3822,9 +3882,11 @@ export default function App() {
           };
 	        text = buildLineMessageForOrder(completedOrder);
 	        try { await navigator.clipboard?.writeText?.(text); } catch {}
+	        const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
+	        const filesToShare = photoSheet ? [photoSheet] : files;
 
-	        if (files.length && navigator.canShare?.({ files })) {
-	          await navigator.share({ files, text });
+	        if (filesToShare.length && navigator.canShare?.({ files: filesToShare })) {
+	          await navigator.share({ files: filesToShare, text });
 	        } else {
 	          await navigator.share({ text });
 	        }
