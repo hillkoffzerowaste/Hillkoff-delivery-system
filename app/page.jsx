@@ -1670,7 +1670,7 @@ export default function App() {
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const chiangmaiPreparationOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation");
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
-  const isReadyDriverBacklog = order => isPreparationReadyForDriver(order) && !order.driverId && ["", "preparing", "ready"].includes(String(order.queueStatus || ""));
+  const isReadyDriverBacklog = order => isPreparationReadyForDriver(order) && getOrderServiceDate(order) === previousServiceDate && !order.driverId && ["", "preparing", "ready"].includes(String(order.queueStatus || ""));
   const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
