@@ -422,6 +422,7 @@ function PackSalesOrderDetails({ order }) {
   return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
     <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
     {fields.map(([label, value]) => <div key={label}><b>{label}:</b> {value}</div>)}
+    {Array.isArray(order.storeBookingSupplements) && order.storeBookingSupplements.length > 0 && <div style={{ marginTop: "4px", paddingTop: "7px", borderTop: "1px solid #dbe4ee", display: "grid", gap: "4px" }}><b style={{ color: "#1d4ed8" }}>รายละเอียดใบสั่งจองเพิ่มจากสโตร์</b>{order.storeBookingSupplements.map((item, index) => <div key={item.reportId || `${item.bookingNumber}-${index}`}><b>{item.bookingNumber || "ใบสั่งจอง"}:</b> {[item.detail, item.note].filter(Boolean).join(" · ") || "ไม่มีรายละเอียด"}<small className="muted"> · {item.createdBy || "สโตร์"}</small></div>)}</div>}
     {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>เปิดแผนที่ลูกค้า</a>}
   </div>;
 }

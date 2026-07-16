@@ -94,6 +94,8 @@ export async function GET(request) {
     const snap = await query.limit(kpi ? 5000 : 500).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
+      // ห้องแพ็คใช้รายการออเดอร์ฝ่ายขายต้นทางอยู่แล้ว จึงไม่แสดงแถวซ้ำจากสโตร์
+      if (profile.role === "pack" && item.registryShared && item.linkedOrderId) return false;
       if (!includeDeleted && item.deletedAt) return false;
       if (!queryText) return true;
       return [item.bookingNumber, item.detail, item.note, item.status, item.createdBy].join(" ").toLowerCase().includes(queryText);
@@ -137,11 +139,28 @@ export async function POST(request) {
     if (!saved.length) return Response.json({ ok: false, error: "Enter at least one report row" }, { status: 400 });
     await db.runTransaction(async (transaction) => {
       const reservations = [];
+      const linkedOrderUpdates = new Map();
       for (const item of saved) {
         if (!item.bookingKey) continue;
         const registryRef = db.collection("booking_month_registry").doc(item.bookingKey);
         const registrySnap = await transaction.get(registryRef);
-        if (registrySnap.exists) throw Object.assign(new Error(bookingConflictMessage(registrySnap.data())), { status: 409 });
+        if (registrySnap.exists) {
+          const registry = registrySnap.data() || {};
+          // ฝ่ายขายเป็นเจ้าของเลขนี้อยู่แล้ว: เก็บรายงานสโตร์ไว้และเติมรายละเอียดกลับเข้าออเดอร์เดิม
+          if (registry.source === "orders" && validDocId(String(registry.sourceId || ""))) {
+            const orderRef = db.collection("orders").doc(String(registry.sourceId));
+            const orderSnap = await transaction.get(orderRef);
+            if (orderSnap.exists) {
+              item.linkedOrderId = orderSnap.id;
+              item.registryShared = true;
+              const linked = linkedOrderUpdates.get(orderSnap.id) || { ref: orderRef, order: orderSnap.data() || {}, items: [] };
+              linked.items.push(item);
+              linkedOrderUpdates.set(orderSnap.id, linked);
+              continue;
+            }
+          }
+          throw Object.assign(new Error(bookingConflictMessage(registry)), { status: 409 });
+        }
         reservations.push({ item, registryRef });
       }
       for (const item of saved) {
@@ -150,6 +169,26 @@ export async function POST(request) {
         transaction.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, data));
       }
       for (const { item, registryRef } of reservations) transaction.create(registryRef, bookingRegistryRecord({ serviceDate: item.serviceDate, bookingNumber: item.bookingNumber, source: "store_reports", sourceId: item.id, createdAt: now, createdBy: item.createdBy }));
+      for (const linked of linkedOrderUpdates.values()) {
+        const supplements = linked.items.map((item) => ({
+          reportId: item.id,
+          bookingNumber: item.bookingNumber,
+          detail: item.detail,
+          note: item.note,
+          status: item.status,
+          createdAt: now,
+          createdBy: profile.name || profile.email
+        }));
+        const existing = Array.isArray(linked.order.storeBookingSupplements) ? linked.order.storeBookingSupplements : [];
+        const history = Array.isArray(linked.order.workflowHistory) ? linked.order.workflowHistory : [];
+        const orderPatch = {
+          storeBookingSupplements: [...existing, ...supplements].slice(-30),
+          updatedAt: now,
+          workflowHistory: [...history.slice(-98), { action: "store_booking_detail_added", role: "store", name: profile.name || profile.email, uid: profile.uid, at: now, bookingNumbers: supplements.map((item) => item.bookingNumber) }]
+        };
+        transaction.update(linked.ref, orderPatch);
+        transaction.set(linked.ref.collection("activity").doc(), { action: "store_booking_detail_added", role: "store", name: profile.name || profile.email, uid: profile.uid, at: now, bookingNumbers: supplements.map((item) => item.bookingNumber), detail: supplements.map((item) => item.detail).filter(Boolean).join(" · ").slice(0, 2000) });
+      }
     });
     return Response.json({ ok: true, data: saved.map(({ ref, bookingKey, ...item }) => item) });
   } catch (error) {
@@ -246,6 +285,20 @@ export async function PUT(request) {
     const patch = { bookingNumber, bookingMonthKey: bookingNumber ? String(item.serviceDate || bangkokDateKey(item.createdAt)).slice(0, 7) : "", detail: clean(body?.detail, 1000), note: clean(body?.note, 1000), status, updatedAt, updatedBy: profile.name || profile.email };
     patch.workflowHistory = appendReportHistory(item, reportKpiEvent("updated", profile, updatedAt, { ...item, ...patch }, reason));
     const bookingChanged = bookingNumber !== normalizeBookingNumber(item.bookingNumber);
+    if (!bookingChanged && validDocId(String(item.linkedOrderId || ""))) {
+      const orderRef = db.collection("orders").doc(String(item.linkedOrderId));
+      await db.runTransaction(async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        transaction.set(ref, patch, { merge: true });
+        transaction.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
+        if (!orderSnap.exists) return;
+        const order = orderSnap.data() || {};
+        const supplements = (Array.isArray(order.storeBookingSupplements) ? order.storeBookingSupplements : []).map((supplement) => supplement.reportId === id ? { ...supplement, bookingNumber, detail: patch.detail, note: patch.note, status, updatedAt, updatedBy: profile.name || profile.email } : supplement);
+        transaction.update(orderRef, { storeBookingSupplements: supplements, updatedAt, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-98), { action: "store_booking_detail_updated", role: "store", name: profile.name || profile.email, uid: profile.uid, at: updatedAt, bookingNumber }] });
+        transaction.set(orderRef.collection("activity").doc(), { action: "store_booking_detail_updated", role: "store", name: profile.name || profile.email, uid: profile.uid, at: updatedAt, bookingNumber, detail: patch.detail });
+      });
+      return Response.json({ ok: true, data: { id, ...item, ...patch } });
+    }
     if (bookingChanged && bookingNumber) {
       const serviceDate = String(item.serviceDate || bangkokDateKey(item.createdAt));
       const registryRef = db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, bookingNumber));
@@ -282,6 +335,20 @@ export async function DELETE(request) {
     if (item.confirmedAt && !reason) return Response.json({ ok: false, error: "Provide a delete reason for a confirmed report" }, { status: 400 });
     const patch = { deletedAt: now, deletedBy: profile.name || profile.email, deleteReason: reason, updatedAt: now };
     patch.workflowHistory = appendReportHistory(item, reportKpiEvent("deleted", profile, now, { ...item, ...patch }, reason));
+    if (validDocId(String(item.linkedOrderId || ""))) {
+      const orderRef = db.collection("orders").doc(String(item.linkedOrderId));
+      await db.runTransaction(async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        transaction.set(ref, patch, { merge: true });
+        transaction.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
+        if (!orderSnap.exists) return;
+        const order = orderSnap.data() || {};
+        const supplements = (Array.isArray(order.storeBookingSupplements) ? order.storeBookingSupplements : []).filter((supplement) => supplement.reportId !== id);
+        transaction.update(orderRef, { storeBookingSupplements: supplements, updatedAt: now, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-98), { action: "store_booking_detail_deleted", role: "store", name: profile.name || profile.email, uid: profile.uid, at: now, bookingNumber: item.bookingNumber }] });
+        transaction.set(orderRef.collection("activity").doc(), { action: "store_booking_detail_deleted", role: "store", name: profile.name || profile.email, uid: profile.uid, at: now, bookingNumber: item.bookingNumber, reason });
+      });
+      return Response.json({ ok: true, data: { id, ...item, ...patch } });
+    }
     const batch = db.batch();
     batch.set(ref, patch, { merge: true });
     batch.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
