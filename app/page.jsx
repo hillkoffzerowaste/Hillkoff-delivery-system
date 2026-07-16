@@ -556,7 +556,7 @@ function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange,
     if (item.packStatus === "checked") return { label: "ห้องแพ็คยืนยันแล้ว", tone: "confirmed" };
     return { label: "รอห้องแพ็คตรวจ", tone: "draft" };
   };
-  return <section className="panel role-workspace ops-workspace">
+  return <section className="panel role-workspace ops-workspace pack-report-workspace">
     <div className="panel-head"><h2>{title}</h2><span>{selectableRows.length} งานรอยืนยัน</span></div>
     <div className="store-report-filters" style={{ marginBottom: "10px" }}>
       <div className="store-report-search"><Search size={17} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div>
