@@ -709,6 +709,7 @@ export default function App() {
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
+  const previousServiceDate = toServiceDateKey(new Date(Date.parse(`${todayServiceDate}T12:00:00+07:00`) - 86400000));
   const getOrderServiceDate = (o) => {
     if (o?.serviceDate) return String(o.serviceDate).slice(0, 10);
     const sourceDate = o?.createdAt || o?.updatedAt || "";
@@ -3116,7 +3117,6 @@ export default function App() {
     } catch (error) { setSyncStatus(`❌ ลบรายการไม่สำเร็จ: ${error?.message || error}`); }
   };
 
-  const previousServiceDate = toServiceDateKey(new Date(Date.parse(`${todayServiceDate}T12:00:00+07:00`) - 86400000));
   const comparisonLine = (todayValue, previousValue) => {
     const difference = todayValue - previousValue;
     const percent = previousValue ? Math.round((difference / previousValue) * 100) : todayValue ? 100 : 0;
