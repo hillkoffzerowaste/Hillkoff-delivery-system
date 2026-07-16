@@ -29,10 +29,10 @@ export async function PATCH(request) {
       if (String(order.driverId || "") !== String(profile.driverId || "")) {
         throw Object.assign(new Error("Driver can update only an assigned order"), { status: 403 });
       }
-      if (!["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || ""))) {
-        throw Object.assign(new Error("Order is not in an active delivery state"), { status: 409 });
-      }
       if (action === "driver_cancel") {
+        if (!["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || ""))) {
+          throw Object.assign(new Error("Order is not in an active delivery state"), { status: 409 });
+        }
         const reason = String(body.reason || "").trim().slice(0, 1000);
         if (!reason) throw Object.assign(new Error("Cancellation reason is required"), { status: 400 });
         patch.driverId = "";
@@ -48,6 +48,9 @@ export async function PATCH(request) {
         patch.driverSequenceUpdatedBy = "";
         Object.assign(history, { result: "returned_to_queue", reason });
       } else {
+        if (!["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(String(order.status || ""))) {
+          throw Object.assign(new Error("Order is not in a delivery state"), { status: 409 });
+        }
         const deliveredAt = String(body.deliveredAt || now).trim().slice(0, 80) || now;
         const driverNote = String(body.driverNote || "").trim().slice(0, 2000);
         patch.status = "ส่งสำเร็จ";
@@ -55,7 +58,8 @@ export async function PATCH(request) {
         patch.deliveredAt = deliveredAt;
         patch.driverNote = driverNote;
         patch.sharedToLine = true;
-        patch.podPhotoCount = Math.max(0, Math.min(5, Number(body.podPhotoCount) || 0));
+        const podPhotoCount = Number(body.podPhotoCount);
+        patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
         Object.assign(history, { result: "delivered", podPhotoCount: patch.podPhotoCount });
       }
     } else if (profile.role === "pack" && action === "pack_archive") {

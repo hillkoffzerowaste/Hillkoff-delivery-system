@@ -3778,7 +3778,7 @@ export default function App() {
         const saved = await completeDriverDeliveryOrder(order, {
           deliveredAt: completedOrder.deliveredAt,
           driverNote: completedOrder.driverNote,
-          podPhotoCount: files.length
+          podPhotoCount: files.length || Number(order.podPhotoCount) || 0
         });
 	        if (!saved.ok) throw new Error(saved.error);
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
