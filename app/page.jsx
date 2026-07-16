@@ -4369,7 +4369,7 @@ export default function App() {
               <button type="button" className={displayTab === "sales" ? "active" : ""} onClick={() => selectAppTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
               <button type="button" className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => selectAppTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button type="button" className={displayTab === "dispatch" ? "active" : ""} onClick={() => selectAppTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
-              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{readyPreparationOrdersCount > 0 && <span className="nav-count-badge" aria-label={`พร้อมจัดส่ง ${readyPreparationOrdersCount} งาน`}>{readyPreparationOrdersCount}</span>}</button>
+              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
           )}
