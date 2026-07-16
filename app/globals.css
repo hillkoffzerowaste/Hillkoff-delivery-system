@@ -158,6 +158,7 @@ nav button.active {
 }
 
 .nav-count-badge {
+  flex: 0 0 auto;
   min-width: 24px;
   height: 24px;
   margin-left: auto;
