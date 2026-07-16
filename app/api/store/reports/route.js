@@ -84,7 +84,15 @@ export async function GET(request) {
       if (!snap.exists) return Response.json({ ok: false, error: "Report not found" }, { status: 404 });
       if (profile.role === "pack" && !REPORT_TYPES.includes(snap.data()?.type)) return Response.json({ ok: false, error: "Pack can view preparation reports only" }, { status: 403 });
       const history = await ref.collection("history").orderBy("at", "desc").limit(1000).get();
-      return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
+      const item = { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) };
+      if (validDocId(String(item.linkedOrderId || ""))) {
+        const linkedSnap = await db.collection("orders").doc(String(item.linkedOrderId)).get();
+        if (linkedSnap.exists) {
+          const linked = linkedSnap.data() || {};
+          item.linkedOrder = { id: linkedSnap.id, customerName: linked.customerName || "", zone: linked.zone || "", address: linked.address || "", deliveryMethod: linked.deliveryMethod || "" };
+        }
+      }
+      return Response.json({ ok: true, data: item });
     }
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     const dateRange = date ? utcRangeForBangkokDate(date) : null;
@@ -100,7 +108,13 @@ export async function GET(request) {
       if (!queryText) return true;
       return [item.bookingNumber, item.detail, item.note, item.status, item.createdBy].join(" ").toLowerCase().includes(queryText);
     });
-    return Response.json({ ok: true, data, requestedBy: profile.name || profile.email });
+    const linkedIds = kpi ? [] : [...new Set(data.map((item) => String(item.linkedOrderId || "")).filter(validDocId))].slice(0, 500);
+    const linkedSnaps = linkedIds.length ? await db.getAll(...linkedIds.map((id) => db.collection("orders").doc(id))) : [];
+    const linkedOrders = new Map(linkedSnaps.filter((linkedSnap) => linkedSnap.exists).map((linkedSnap) => {
+      const linked = linkedSnap.data() || {};
+      return [linkedSnap.id, { id: linkedSnap.id, customerName: linked.customerName || "", zone: linked.zone || "", address: linked.address || "", deliveryMethod: linked.deliveryMethod || "" }];
+    }));
+    return Response.json({ ok: true, data: data.map((item) => linkedOrders.has(String(item.linkedOrderId || "")) ? { ...item, linkedOrder: linkedOrders.get(String(item.linkedOrderId)) } : item), requestedBy: profile.name || profile.email });
   } catch (error) {
     return errorResponse(error);
   }
