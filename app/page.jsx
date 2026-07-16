@@ -1669,8 +1669,9 @@ export default function App() {
   const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived"];
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const chiangmaiPreparationOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation");
-  const todayPreparationOrders = chiangmaiPreparationOrders.filter(isTodayOrder);
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
+  const isReadyDriverBacklog = order => isPreparationReadyForDriver(order) && !order.driverId && ["", "preparing", "ready"].includes(String(order.queueStatus || ""));
+  const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
   const sortedPreparationOrders = todayPreparationOrders.slice().sort((a, b) => {
@@ -5153,7 +5154,7 @@ export default function App() {
           <section className={displayTab === "chiangmai" ? "panel role-workspace ops-workspace" : "panel"}>
             <div className="panel-head">
               <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
-              <span>{todayPreparationOrders.length} งานวันนี้{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
+              <span>{todayPreparationOrders.length} งานที่ต้องดำเนินการ{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
@@ -5164,6 +5165,7 @@ export default function App() {
                     <div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div>
                   </div>
                   {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && <span className="status-chip" style={{ width: "fit-content", color: "#b91c1c", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>พร้อมส่งคนขับ</span>}
+                  {displayTab === "chiangmai" && isReadyDriverBacklog(order) && !isTodayOrder(order) && <span className="status-chip" style={{ width: "fit-content", color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", fontWeight: 800 }}>ค้างจากวันก่อน · รอส่งเข้าคิวคนขับ</span>}
                   <div style={{ fontSize: "12px", color: "#4b5563" }}>
                     เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์"} · {order.boxes || 0} กล่อง
                     {order.storePackerName && <> · ผู้จัด: {order.storePackerName}</>}
