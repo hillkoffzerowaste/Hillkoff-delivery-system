@@ -119,6 +119,14 @@ export async function PATCH(request) {
       };
       if (["checked", "partial"].includes(body.storeStatus) && !["working", "checked", "partial"].includes(order.packStatus)) patch.packStatus = "pending";
       else if (body.storeStatus === "waiting") patch.packStatus = "waiting";
+      if (order.storeStatus === "returned" && ["checked", "partial"].includes(body.storeStatus)) {
+        patch.queueStatus = "preparing";
+        patch.status = "สโตร์แก้ไขแล้ว · รอห้องแพ็คตรวจซ้ำ";
+        patch.returnResolvedAt = now;
+        patch.returnResolvedBy = profile.name || profile.email;
+        patch.returnResolutionNote = String(body.storeWorkDetails?.note || body.storeWorkDetails?.detail || "").trim().slice(0, 1000);
+        Object.assign(history, { result: "return_resolved", returnResolvedAt: now, returnResolutionNote: patch.returnResolutionNote });
+      }
     } else if (profile.role === "pack" && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
       const storeReady = order.deliveryMethod === "outstation" || order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
@@ -154,6 +162,7 @@ export async function PATCH(request) {
       if (body.packStatus === "returned") {
         patch.storeStatus = "returned";
         patch.queueStatus = "preparing";
+        patch.status = "ส่งกลับสโตร์ตรวจสอบ";
         patch.returnedToStoreAt = now;
         patch.returnedToStoreBy = profile.name || profile.email;
         patch.returnReason = String(body.returnReason || body.packWorkDetails?.note || "").trim().slice(0, 1000);
