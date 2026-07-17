@@ -704,6 +704,7 @@ export default function App() {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [orderConfirmSubmitting, setOrderConfirmSubmitting] = useState(false);
+  const [orderConfirmError, setOrderConfirmError] = useState("");
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
   const [showOutstationCarrierModal, setShowOutstationCarrierModal] = useState(false);
   const [workModal, setWorkModal] = useState(null);
@@ -2636,6 +2637,7 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
     setPendingOrder(nextOrder);
+    setOrderConfirmError("");
     setShowOrderConfirm(true);
   };
 
@@ -2643,7 +2645,9 @@ export default function App() {
 	    if (!pendingOrder || orderConfirmSubmitting) return;
 	    const resolvedShippingCarrier = pendingOrder.shippingCarrier === "อื่นๆ" ? String(pendingOrder.shippingCarrierOther || "").trim() : String(pendingOrder.shippingCarrier || "").trim();
 	    if (pendingOrder.deliveryMethod === "outstation" && !resolvedShippingCarrier) {
-      setSyncStatus("❌ กรุณาเลือกบริษัทขนส่งสำหรับออเดอร์ต่างจังหวัด");
+      const message = "กรุณาเลือกบริษัทขนส่งสำหรับออเดอร์ต่างจังหวัดก่อนยืนยัน";
+      setOrderConfirmError(message);
+      setSyncStatus(`❌ ${message}`);
       return;
     }
     const directDriver = pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType === "direct_driver";
@@ -2651,6 +2655,7 @@ export default function App() {
     const orderToCreate = { ...pendingOrder, workflowType, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "", storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending", packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked", queueStatus: directDriver ? "queued" : "preparing", status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า", urgentDelivery: directDriver };
     delete orderToCreate.shippingCarrierOther;
     const shouldShareLine = shareNewOrderToLine;
+    setOrderConfirmError("");
     setOrderConfirmSubmitting(true);
     setSyncStatus(`⏳ กำลังบันทึกออเดอร์ "${orderToCreate.id}"...`);
     try {
@@ -2683,6 +2688,7 @@ export default function App() {
       setSelectedCustomerId("");
       setOrderCustomerSearch("");
       setShowOrderConfirm(false);
+      setOrderConfirmError("");
       setPendingOrder(null);
       setShareNewOrderToLine(false);
 
@@ -2709,7 +2715,9 @@ export default function App() {
           : `✅ บันทึกออเดอร์แล้ว แต่ยังไม่ได้แชร์ LINE`);
       }
     } catch (error) {
-      setSyncStatus(`❌ บันทึกออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
+      const message = String(error?.message || error || "ไม่ทราบสาเหตุ");
+      setOrderConfirmError(message);
+      setSyncStatus(`❌ บันทึกออเดอร์ไม่สำเร็จ: ${message}`);
     } finally {
       setOrderConfirmSubmitting(false);
     }
@@ -7019,6 +7027,7 @@ export default function App() {
           overflowY: "auto"
         }}>
           <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
+          {orderConfirmError && <div role="alert" style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "6px", color: "#991b1b", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>❌ ยังบันทึกออเดอร์ไม่ได้</b><span style={{ fontSize: "13px" }}>{orderConfirmError}</span><small>ตรวจสอบข้อมูลด้านล่าง แล้วกดยืนยันอีกครั้งได้ทันที</small></div>}
           {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "#fff1f2", border: "2px solid #e11d48", borderLeftWidth: "6px", color: "#9f1239", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>⚠️ ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
           <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
             <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
@@ -7047,7 +7056,7 @@ export default function App() {
             <span>แชร์ข้อความคิวงานหลังส่งเข้าคิว</span>
           </label>
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
-            <button className="secondary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={() => { setShowOrderConfirm(false); setShareNewOrderToLine(false); }}>ยกเลิก</button>
+            <button className="secondary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={() => { setShowOrderConfirm(false); setOrderConfirmError(""); setShareNewOrderToLine(false); }}>ยกเลิก</button>
             <button className="primary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={confirmOrder}>{orderConfirmSubmitting ? "กำลังบันทึก..." : "ยืนยันและบันทึกออเดอร์"}</button>
           </div>
         </div>
