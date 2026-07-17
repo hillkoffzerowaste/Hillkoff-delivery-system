@@ -1771,9 +1771,11 @@ export default function App() {
     if (readyDifference) return readyDifference;
     return Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0);
   });
-  const storeWorkOrders = (orders || []).filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
-  const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus));
-  const packWorkOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation" && order.packStatus !== "blocked" && ["pending", "working", "waiting"].includes(order.packStatus));
+  const isOpenStoreQueueStatus = (status) => ["pending", "working", "waiting", "partial", "returned"].includes(status || "pending");
+  const isOpenPackQueueStatus = (status) => ["pending", "working", "waiting"].includes(status || "pending");
+  const storeWorkOrders = (orders || []).filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
+  const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
+  const packWorkOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation" && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
@@ -4503,8 +4505,8 @@ export default function App() {
           )}
           {auth.role === "pack" && (
             <>
-              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> เชียงใหม่/ใกล้เคียง</button>
-              <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
+              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{packWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอห้องแพ็ค ${packWorkOrders.length} งาน`}>{packWorkOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> <span>ออเดอร์ต่างจังหวัด</span>{salesOutstationPackOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์ต่างจังหวัดที่รอห้องแพ็ค ${salesOutstationPackOrders.length} งาน`}>{salesOutstationPackOrders.length}</span>}</button>
               <button type="button" className={displayTab === "pack-booking" ? "active" : ""} onClick={() => selectAppTab("pack-booking")}><FileText size={18} /> ใบสั่งจอง</button>
               <button type="button" className={displayTab === "pack-online" ? "active" : ""} onClick={() => selectAppTab("pack-online")}><Store size={18} /> ใบขายออนไลน์</button>
               <button type="button" className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => selectAppTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
