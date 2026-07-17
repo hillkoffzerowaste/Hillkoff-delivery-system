@@ -2724,7 +2724,8 @@ export default function App() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setSyncStatus(`✅ ลบออเดอร์ "${orderId}" สำเร็จ`);
+      const released = Array.isArray(json?.data?.releasedBookingNumbers) ? json.data.releasedBookingNumbers : [];
+      setSyncStatus(released.length ? `✅ ยกเลิกออเดอร์ "${orderId}" และคืนเลขใบสั่งจอง ${released.join(", ")} ให้ใช้ใหม่ได้แล้ว` : `✅ ลบออเดอร์ "${orderId}" สำเร็จ`);
     } catch (error) {
       setState(prev => ({ ...prev, orders: previousOrders }));
       setSyncStatus(`❌ ลบออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
