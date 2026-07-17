@@ -44,7 +44,7 @@ export async function POST(request) {
   if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "Invalid customer id" }, { status: 400 });
 
   try {
-    const { profile, db } = await requireProfile(request, ["sales", "admin"]);
+    const { profile, db } = await requireProfile(request, ["sales", "admin", "store"]);
     const next = cleanCustomer(customer);
     if (!next.name) return Response.json({ ok: false, error: "Customer name is required" }, { status: 400 });
     if (!isSafeHttpUrl(next.mapUrl)) return Response.json({ ok: false, error: "Map URL must use http or https" }, { status: 400 });
@@ -88,6 +88,8 @@ export async function POST(request) {
     batch.set(customerRef, {
       ...next,
       updatedByUid: profile.uid,
+      updatedByRole: profile.role,
+      updatedByName: String(profile.name || profile.email || "").slice(0, 200),
       ...(!current.exists ? { createdAt: new Date().toISOString(), createdByUid: profile.uid } : {})
     }, { merge: true });
     batch.set(db.collection("customer_search").doc(customerId), customerSearchRecord(next), { merge: true });

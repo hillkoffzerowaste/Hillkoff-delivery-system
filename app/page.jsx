@@ -138,6 +138,7 @@ const TAB_TITLES = {
   dispatch: "แดชบอร์ดการจัดส่ง",
   chiangmai: "เตรียมออเดอร์เชียงใหม่",
   "store-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · สโตร์",
+  "store-urgent": "เปิดออเดอร์เร่งด่วน · สโตร์",
   "store-pickup": "Grab/รับหน้าร้าน · สโตร์",
   "store-booking": "ใบสั่งจอง · สโตร์",
   "store-online": "ใบขายออนไลน์ · สโตร์",
@@ -484,6 +485,7 @@ function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, r
 function PackSalesOrderDetails({ order }) {
   const fields = [
     ["วันที่และเวลาเปิดออเดอร์", order.createdAt ? formatThaiDateTime(order.createdAt) : ""],
+    ["ผู้เปิดออเดอร์", order.orderEntrySource === "store_assist" ? `สโตร์ช่วยคีย์: ${order.createdByName || order.salesName || "สโตร์"}` : `ฝ่ายขาย: ${order.createdByName || order.salesName || "-"}`],
     ["เลขที่ใบสั่งจอง", formatOrderBookingNumbers(order) || (order.bookingNumberMissing ? "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์" : "")], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}` : ""], ["ชำระเงิน", order.paymentType],
     ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
@@ -498,7 +500,8 @@ function PackSalesOrderDetails({ order }) {
 
 function OrderCreatedAt({ order }) {
   if (!order?.createdAt) return null;
-  return <div className="muted" style={{ fontSize: "12px", fontWeight: 700 }}>🕒 ฝ่ายขายเปิดออเดอร์: {formatThaiDateTime(order.createdAt)} น.</div>;
+  const source = order.orderEntrySource === "store_assist" ? "สโตร์ช่วยคีย์" : "ฝ่ายขายเปิดออเดอร์";
+  return <div className="muted" style={{ fontSize: "12px", fontWeight: 700 }}>🕒 {source}: {formatThaiDateTime(order.createdAt)} น.</div>;
 }
 
 function OrderHistorySearch({ title, query, onQueryChange, onSearch, onClear, loading, searched, results, onOpen }) {
@@ -707,7 +710,7 @@ export default function App() {
     paymentType: "COD",
     codAmount: "",
     salesNote: "",
-    bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], shippingCarrier: "", shippingCarrierOther: "",
+    bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "",
     workflowType: "store_route", deliveryMethod: "company_driver"
   });
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
@@ -992,15 +995,15 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-urgent", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
     const isKpiDashboard = ["store-dashboard", "pack-dashboard"].includes(String(displayTab || ""));
-	    const needsCompleteOperationalQueue = ["sales", "sales-outstation", "chiangmai", "store-work", "store-pickup", "pack-work", "pack-pickup", "pack-outstation"].includes(String(displayTab || ""));
+    const needsCompleteOperationalQueue = ["sales", "sales-outstation", "chiangmai", "store-work", "store-urgent", "store-pickup", "pack-work", "pack-pickup", "pack-outstation"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : (isKpiDashboard || needsCompleteOperationalQueue) ? Math.max(ordersLimit, 5000)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
-	    const needsCustomers = String(displayTab || "") === "sales";
+    const needsCustomers = ["sales", "store-urgent"].includes(String(displayTab || ""));
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	    const needsDriverAssessments = ["driver-sop-report", "settings"].includes(String(displayTab || ""));
 	    const needsChat = Boolean(chatOpen);
@@ -1849,7 +1852,7 @@ export default function App() {
       } else if (isAfterReturn && item.role === "pack" && ["checked", "partial"].includes(item.toStatus || order.packStatus)) {
         title = "ห้องแพ็คตรวจซ้ำและปิดเคส";
         note = `${order.customerName || order.id} · ผู้ตรวจ: ${item.checkerName || order.packCheckerName || item.name || "ไม่ระบุ"}`;
-      } else if (item.action === "created") title = "ฝ่ายขายสร้างออเดอร์";
+      } else if (item.action === "created") title = order.orderEntrySource === "store_assist" ? "สโตร์ช่วยคีย์ออเดอร์เร่งด่วน" : "ฝ่ายขายสร้างออเดอร์";
       else if (item.action === "created_draft") title = `${order.sourceType || "สโตร์"}บันทึกร่าง`;
       else if (item.action === "confirmed") title = `${order.sourceType || "สโตร์"}ยืนยันรายการ`;
       else if (item.action === "updated") title = `${order.sourceType || "สโตร์"}แก้ไขรายการ`;
@@ -1989,7 +1992,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (auth.role !== "sales" && auth.role !== "admin") return;
+    if (!["sales", "admin", "store"].includes(auth.role)) return;
     const sequence = ++historicalCustomerSearchSeqRef.current;
     const query = (customerQuery.trim().length >= 3 ? customerQuery : orderCustomerSearch).trim();
     if (query.length < 3) return;
@@ -2605,7 +2608,7 @@ export default function App() {
       return;
     }
     const currentBookingNumber = bookingDigits && selectedBookingPrefix ? `${selectedBookingPrefix}-${bookingDigits}` : "";
-    const bookingNumbers = [...new Set([...(orderForm.bookingNumbers || []), currentBookingNumber].map(normalizeBookingNumber).filter(Boolean))];
+    const bookingNumbers = [...new Set([...(orderForm.bookingNumbers || []), currentBookingNumber, orderForm.urgentBookingNumber].map(normalizeBookingNumber).filter(Boolean))];
     const workflowType = orderForm.workflowType;
     const directDriver = workflowType === "direct_driver" && orderForm.deliveryMethod === "company_driver";
     
@@ -2696,7 +2699,7 @@ export default function App() {
         const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
         return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
       });
-      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
+      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
       setSelectedCustomerId("");
       setOrderCustomerSearch("");
       setShowOrderConfirm(false);
@@ -4524,6 +4527,7 @@ export default function App() {
           {auth.role === "store" && (
             <>
               <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{storeWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอสโตร์ ${storeWorkOrders.length} งาน`}>{storeWorkOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "store-urgent" ? "active" : ""} onClick={() => selectAppTab("store-urgent")}><PackagePlus size={18} /> เปิดออเดอร์เร่งด่วน</button>
               <button type="button" className={displayTab === "store-pickup" ? "active" : ""} onClick={() => selectAppTab("store-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{storePickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอสโตร์ ${storePickupOrders.length} งาน`}>{storePickupOrders.length}</span>}</button>
               <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง{storeReportIssues.booking.count > 0 && <span className="nav-count-badge" aria-label={`ใบสั่งจองของไม่ครบ ${storeReportIssues.booking.count} รายการ`}>{storeReportIssues.booking.count}</span>}</button>
               <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์{storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`ใบขายออนไลน์ของไม่ครบ ${storeReportIssues.online.count} รายการ`}>{storeReportIssues.online.count}</span>}</button>
@@ -5291,6 +5295,26 @@ export default function App() {
               <button className="secondary" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่</button>
             </div>
             <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ</p>
+          </section>
+        )}
+
+        {displayTab === "store-urgent" && (
+          <section className="panel role-workspace ops-workspace" style={{ display: "grid", gap: "14px" }}>
+            <div className="panel-head"><h2>เปิดออเดอร์เร่งด่วน</h2><span>สโตร์ช่วยคีย์แทนฝ่ายขาย</span></div>
+            <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderLeft: "5px solid #2563eb", borderRadius: "9px", padding: "10px", fontSize: "13px" }}><b>ใช้ฐานลูกค้ากลางชุดเดียวกับฝ่ายขาย</b><div className="muted" style={{ marginTop: "3px" }}>ทุกออเดอร์จะบันทึกอัตโนมัติว่า “สโตร์ช่วยคีย์” และฝ่ายขายสามารถเปิดข้อมูลเดิมมาเติมรายละเอียดต่อได้</div></div>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <label className="field-label">ค้นหาลูกค้าเก่า</label>
+              <div className="search"><Search size={16} /><input value={orderCustomerSearch} onChange={e => { setOrderCustomerSearch(e.target.value); setSelectedCustomerId(""); }} placeholder="ชื่อ / เบอร์โทร / ผู้ติดต่อ / พื้นที่" /></div>
+              <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">-- เลือกลูกค้าจากฐานกลาง --</option>{customers.filter(customer => customerMatchesQuery(customer, orderCustomerSearch)).slice(0, 50).map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.phone || customer.zone || "-"}</option>)}</select>
+              {selectedCustomerId && (() => { const customer = customers.find(item => item.id === selectedCustomerId); return customer ? <div className="customer-detail"><div><b>{customer.name}</b><p>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ")}</p><p>{customer.address || "-"}</p></div></div> : null; })()}
+            </div>
+            <div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select></div>
+            <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
+            <button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button>
+            <div className="form-grid two"><select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "store_route" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select><select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
+            <div style={{ display: "grid", gap: "6px" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง</small></div>
+            <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />
+            <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> เปิดออเดอร์เร่งด่วน</button>
           </section>
         )}
 

@@ -77,7 +77,7 @@ export async function POST(request) {
   if (!/^[A-Za-z0-9._-]{1,120}$/.test(orderId)) return Response.json({ ok: false, error: "Invalid order id" }, { status: 400 });
 
   try {
-    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin"]);
+    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin", "store"]);
     const bookingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter(Boolean))].slice(0, 20);
     if (bookingNumbers.some((value) => !BOOKING_NUMBER_PATTERN.test(value))) {
       return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
@@ -102,6 +102,8 @@ export async function POST(request) {
     const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
     const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_driver" && deliveryMethod === "company_driver" ? "direct_driver" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
     const directDriver = workflowType === "direct_driver";
+    const storeAssistEntry = profile.role === "store";
+    const createdByName = clean(profile.name || profile.email, 200);
 
     const next = {
       customerId,
@@ -118,8 +120,13 @@ export async function POST(request) {
       cod,
       driverId: clean(order.driverId, 120),
       driverName: clean(order.driverName, 200),
-      salesName: clean(profile.name || profile.email, 200),
+      salesName: createdByName,
       salesPhone: clean(profile.phone, 40),
+      orderEntrySource: storeAssistEntry ? "store_assist" : "sales",
+      createdByRole: profile.role,
+      createdByName,
+      storeAssistEntryAt: storeAssistEntry ? now : "",
+      storeAssistEntryNote: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "",
       status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า",
       workflowType,
       deliveryMethod,
@@ -127,7 +134,7 @@ export async function POST(request) {
       bookingNumbers,
       bookingMonthKey: serviceDate.slice(0, 7),
       bookingNumberMissing: bookingNumbers.length === 0,
-      bookingNumberNotice: bookingNumbers.length === 0 ? "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "",
+      bookingNumberNotice: bookingNumbers.length === 0 ? (storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
       storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
@@ -139,7 +146,7 @@ export async function POST(request) {
       packCheckerName: "",
       packPhotos: [],
       missingItems: [],
-      workflowHistory: [{ action: "created", role: profile.role, uid: decoded.uid, at: now }],
+      workflowHistory: [{ action: "created", role: profile.role, uid: decoded.uid, at: now, note: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "" }],
       photo: "",
       checkInAt: "",
       deliveredAt: "",
