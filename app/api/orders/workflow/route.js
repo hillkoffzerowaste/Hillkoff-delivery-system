@@ -146,11 +146,11 @@ export async function PATCH(request) {
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.packStatus)) {
-        patch.queueStatus = ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) ? "grab_completed" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+        patch.queueStatus = ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
         if (["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && body.packStatus === "checked") {
           patch.status = order.deliveryMethod === "customer_pickup" ? "แพ็คเสร็จ · รอลูกค้ารับหน้าร้าน" : "แพ็คเสร็จ · รอ Grab รับสินค้า";
-          patch.grabCompletedAt = now;
-          patch.grabCompletedBy = profile.name || profile.email;
+          patch.grabReadyAt = now;
+          patch.grabReadyBy = profile.name || profile.email;
         }
         if (order.deliveryMethod === "outstation" && body.packStatus === "checked") {
           patch.storeStatus = "checked";
@@ -169,10 +169,10 @@ export async function PATCH(request) {
         Object.assign(history, { result: "returned", reason: patch.returnReason, storePackerName: order.storePackerName || "", storeCheckerName: order.storeCheckerName || "" });
       }
     } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
-      if (order.deliveryMethod !== "grab_pickup" || order.queueStatus !== "grab_ready") {
+      if (!["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) || order.queueStatus !== "grab_ready") {
         throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
       }
-      patch.queueStatus = "grab_picked_up"; patch.status = "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
+      patch.queueStatus = "grab_picked_up"; patch.status = order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับสินค้าแล้ว" : "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
     } else if (["sales", "admin"].includes(profile.role) && action === "queue") {
       const storeOk = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       const packOk = ["checked", "partial"].includes(order.packStatus);
