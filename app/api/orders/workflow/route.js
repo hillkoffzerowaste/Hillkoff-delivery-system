@@ -160,6 +160,9 @@ export async function PATCH(request) {
         }
       }
       if (body.packStatus === "returned") {
+        if (order.workflowType === "direct_pack" || order.deliveryMethod === "outstation") {
+          throw Object.assign(new Error("ออเดอร์ส่งตรงห้องแพ็ค ไม่สามารถส่งกลับสโตร์ได้"), { status: 409 });
+        }
         patch.storeStatus = "returned";
         patch.queueStatus = "preparing";
         patch.status = "ส่งกลับสโตร์ตรวจสอบ";
