@@ -473,7 +473,7 @@ function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, r
 function PackSalesOrderDetails({ order }) {
   const fields = [
     ["วันที่และเวลาเปิดออเดอร์", order.createdAt ? formatThaiDateTime(order.createdAt) : ""],
-    ["เลขที่ใบสั่งจอง", formatOrderBookingNumbers(order)], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
+    ["เลขที่ใบสั่งจอง", formatOrderBookingNumbers(order) || (order.bookingNumberMissing ? "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์" : "")], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}` : ""], ["ชำระเงิน", order.paymentType],
     ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
   ].filter(([, value]) => String(value || "").trim());
@@ -2587,12 +2587,12 @@ export default function App() {
       return;
     }
     const selectedBookingPrefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase();
-    const currentBookingNumber = bookingDigits && selectedBookingPrefix ? `${selectedBookingPrefix}-${bookingDigits}` : "";
-    const bookingNumbers = [...new Set([...(orderForm.bookingNumbers || []), currentBookingNumber].map(normalizeBookingNumber).filter(Boolean))];
-    if (!bookingNumbers.length) {
-      setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจองอย่างน้อย 1 เลข");
+    if (bookingDigits && !selectedBookingPrefix) {
+      setSyncStatus("❌ กรุณากรอกรหัสหน้า หรือเคลียร์เลข 4 หลักออกก่อน");
       return;
     }
+    const currentBookingNumber = bookingDigits && selectedBookingPrefix ? `${selectedBookingPrefix}-${bookingDigits}` : "";
+    const bookingNumbers = [...new Set([...(orderForm.bookingNumbers || []), currentBookingNumber].map(normalizeBookingNumber).filter(Boolean))];
     const workflowType = orderForm.workflowType;
     const directDriver = workflowType === "direct_driver" && orderForm.deliveryMethod === "company_driver";
     
@@ -2618,8 +2618,10 @@ export default function App() {
       salesPhone: auth.phone,
       status: "รอจัดเตรียมสินค้า",
       workflowType, deliveryMethod: orderForm.deliveryMethod,
-      bookingNumber: bookingNumbers[0],
+      bookingNumber: bookingNumbers[0] || "",
       bookingNumbers,
+      bookingNumberMissing: bookingNumbers.length === 0,
+      bookingNumberNotice: bookingNumbers.length === 0 ? "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "",
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
       shippingCarrierOther: String(orderForm.shippingCarrierOther || "").trim(),
       storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
@@ -7017,6 +7019,7 @@ export default function App() {
           overflowY: "auto"
         }}>
           <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
+          {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "#fff1f2", border: "2px solid #e11d48", borderLeftWidth: "6px", color: "#9f1239", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>⚠️ ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
           <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
             <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
             <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
@@ -7030,7 +7033,7 @@ export default function App() {
             <p><b>เวลารอจัดเตรียม:</b> {pendingOrder.window}</p>
             <p><b>จำนวนของที่ส่ง:</b> {pendingOrder.boxes} {pendingOrder.packageUnit === "bag" ? "ถุง" : "กล่อง"}</p>
             <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
-            <p><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(pendingOrder)}</p>
+            <p><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(pendingOrder) || "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์"}</p>
             {pendingOrder.shippingCarrier && <p><b>ขนส่งต่างจังหวัด:</b> {pendingOrder.shippingCarrier}</p>}
             {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
           </div>

@@ -79,10 +79,10 @@ export async function POST(request) {
   try {
     const { profile, db, decoded } = await requireProfile(request, ["sales", "admin"]);
     const bookingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter(Boolean))].slice(0, 20);
-    if (!bookingNumbers.length || bookingNumbers.some((value) => !BOOKING_NUMBER_PATTERN.test(value))) {
+    if (bookingNumbers.some((value) => !BOOKING_NUMBER_PATTERN.test(value))) {
       return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
     }
-    const bookingNumber = bookingNumbers[0];
+    const bookingNumber = bookingNumbers[0] || "";
     const customerId = clean(order.customerId, 120);
     if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "A valid customer is required" }, { status: 400 });
     const customerSnap = await db.collection("customers").doc(customerId).get();
@@ -126,6 +126,8 @@ export async function POST(request) {
       bookingNumber: bookingNumber.slice(0, 100),
       bookingNumbers,
       bookingMonthKey: serviceDate.slice(0, 7),
+      bookingNumberMissing: bookingNumbers.length === 0,
+      bookingNumberNotice: bookingNumbers.length === 0 ? "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "",
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
       storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
       packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
