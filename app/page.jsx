@@ -138,7 +138,6 @@ const TAB_TITLES = {
   dispatch: "แดชบอร์ดการจัดส่ง",
   chiangmai: "เตรียมออเดอร์เชียงใหม่",
   "store-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · สโตร์",
-  "store-urgent": "เปิดออเดอร์เร่งด่วน · สโตร์",
   "store-pickup": "Grab/รับหน้าร้าน · สโตร์",
   "store-booking": "ใบสั่งจอง · สโตร์",
   "store-online": "ใบขายออนไลน์ · สโตร์",
@@ -716,6 +715,7 @@ export default function App() {
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ กำลังเชื่อมต่อระบบ...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
+  const [storeUrgentOpen, setStoreUrgentOpen] = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [orderConfirmSubmitting, setOrderConfirmSubmitting] = useState(false);
   const [orderConfirmError, setOrderConfirmError] = useState("");
@@ -995,15 +995,15 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-urgent", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
     const isKpiDashboard = ["store-dashboard", "pack-dashboard"].includes(String(displayTab || ""));
-    const needsCompleteOperationalQueue = ["sales", "sales-outstation", "chiangmai", "store-work", "store-urgent", "store-pickup", "pack-work", "pack-pickup", "pack-outstation"].includes(String(displayTab || ""));
+    const needsCompleteOperationalQueue = ["sales", "sales-outstation", "chiangmai", "store-work", "store-pickup", "pack-work", "pack-pickup", "pack-outstation"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = state.auth?.role === "driver"
 	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
 	      : (isKpiDashboard || needsCompleteOperationalQueue) ? Math.max(ordersLimit, 5000)
 	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
-    const needsCustomers = ["sales", "store-urgent"].includes(String(displayTab || ""));
+    const needsCustomers = String(displayTab || "") === "sales" || storeUrgentOpen;
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	    const needsDriverAssessments = ["driver-sop-report", "settings"].includes(String(displayTab || ""));
 	    const needsChat = Boolean(chatOpen);
@@ -2705,6 +2705,7 @@ export default function App() {
       setShowOrderConfirm(false);
       setOrderConfirmError("");
       setPendingOrder(null);
+      setStoreUrgentOpen(false);
       setShareNewOrderToLine(false);
 
       if (!shouldShareLine) {
@@ -4527,7 +4528,6 @@ export default function App() {
           {auth.role === "store" && (
             <>
               <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{storeWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอสโตร์ ${storeWorkOrders.length} งาน`}>{storeWorkOrders.length}</span>}</button>
-              <button type="button" className={displayTab === "store-urgent" ? "active" : ""} onClick={() => selectAppTab("store-urgent")}><PackagePlus size={18} /> เปิดออเดอร์เร่งด่วน</button>
               <button type="button" className={displayTab === "store-pickup" ? "active" : ""} onClick={() => selectAppTab("store-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{storePickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอสโตร์ ${storePickupOrders.length} งาน`}>{storePickupOrders.length}</span>}</button>
               <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง{storeReportIssues.booking.count > 0 && <span className="nav-count-badge" aria-label={`ใบสั่งจองของไม่ครบ ${storeReportIssues.booking.count} รายการ`}>{storeReportIssues.booking.count}</span>}</button>
               <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์{storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`ใบขายออนไลน์ของไม่ครบ ${storeReportIssues.online.count} รายการ`}>{storeReportIssues.online.count}</span>}</button>
@@ -5298,9 +5298,10 @@ export default function App() {
           </section>
         )}
 
-        {displayTab === "store-urgent" && (
-          <section className="panel role-workspace ops-workspace" style={{ display: "grid", gap: "14px" }}>
-            <div className="panel-head"><h2>เปิดออเดอร์เร่งด่วน</h2><span>สโตร์ช่วยคีย์แทนฝ่ายขาย</span></div>
+        {storeUrgentOpen && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <section className="panel role-workspace ops-workspace" style={{ width: "min(720px, 100%)", maxHeight: "90vh", overflowY: "auto", display: "grid", gap: "14px" }}>
+            <div className="panel-head"><h2>เปิดออเดอร์เร่งด่วน</h2><button className="secondary" onClick={() => setStoreUrgentOpen(false)}>ปิด</button></div>
             <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderLeft: "5px solid #2563eb", borderRadius: "9px", padding: "10px", fontSize: "13px" }}><b>ใช้ฐานลูกค้ากลางชุดเดียวกับฝ่ายขาย</b><div className="muted" style={{ marginTop: "3px" }}>ทุกออเดอร์จะบันทึกอัตโนมัติว่า “สโตร์ช่วยคีย์” และฝ่ายขายสามารถเปิดข้อมูลเดิมมาเติมรายละเอียดต่อได้</div></div>
             <div style={{ display: "grid", gap: "8px" }}>
               <label className="field-label">ค้นหาลูกค้าเก่า</label>
@@ -5316,12 +5317,14 @@ export default function App() {
             <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />
             <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> เปิดออเดอร์เร่งด่วน</button>
           </section>
+          </div>
         )}
 
         {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
             {displayTab !== "store-dashboard" && <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>}
             {displayTab === "store-work" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
+              <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วนเชียงใหม่/ใกล้เคียง</button>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
               {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "#ef4444" : order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "returned" ? "#dc2626" : order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "returned" ? "#fef2f2" : order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
@@ -5336,6 +5339,7 @@ export default function App() {
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
+              <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>
               {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
