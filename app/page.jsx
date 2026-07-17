@@ -520,25 +520,27 @@ const DEFAULT_PREPARATION_CHECKERS = {
 };
 
 function BookingNumberInput({ value, onChange, required = false }) {
+  const [manualPrefixMode, setManualPrefixMode] = useState(false);
   const rawValue = String(value || "").trim().toUpperCase();
-  const knownPrefixes = ["CSP", "CSR", "TSR", "AS7", "AS1", "AS6"];
+  const knownPrefixes = ["CSP", "CSR", "TSR", "AS7", "AS2", "AS1", "AS6"];
   const knownPrefix = knownPrefixes.find(item => rawValue === item || rawValue.startsWith(`${item}-`) || (rawValue.startsWith(item) && /^\d/.test(rawValue.slice(item.length))));
   const customMatch = knownPrefix ? null : rawValue.match(/^([^\-\d\s]+)(?:-)?\d*$/);
-  const prefix = knownPrefix || (customMatch?.[1] ? "other" : "CSP");
+  const isManualPrefix = manualPrefixMode || Boolean(customMatch?.[1]);
+  const prefix = isManualPrefix ? "custom" : knownPrefix || "CSP";
   const customPrefix = customMatch?.[1] || "";
   const digitsSource = knownPrefix
     ? rawValue.slice(knownPrefix.length).replace(/^-/, "")
     : customMatch?.[1] ? rawValue.slice(customMatch[1].length).replace(/^-/, "") : "";
   const digits = digitsSource.replace(/\D/g, "").slice(0, 4);
-  const activePrefix = prefix === "other" ? customPrefix : prefix;
+  const activePrefix = isManualPrefix ? customPrefix : prefix;
   const setBooking = (nextPrefix, nextDigits) => {
     const cleanPrefix = String(nextPrefix || "").replace(/-/g, "").trim().toUpperCase();
     const cleanDigits = digitsOnly(nextDigits).slice(0, 4);
     onChange(cleanPrefix ? `${cleanPrefix}-${cleanDigits}` : "");
   };
-  return <div style={{ display: "grid", gridTemplateColumns: prefix === "other" ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "7px" }}>
-    <select value={prefix} onChange={e => { const next = e.target.value; setBooking(next === "other" ? "OTHER" : next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="other">อื่นๆ</option></select>
-    {prefix === "other" && <input value={customPrefix} onChange={e => setBooking(e.target.value.trim().toUpperCase(), digits)} placeholder="คำนำหน้า" aria-label="คำนำหน้าอื่น" />}
+  return <div style={{ display: "grid", gridTemplateColumns: isManualPrefix ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "7px" }}>
+    <select value={prefix} onChange={e => { const next = e.target.value; if (next === "custom") { setManualPrefixMode(true); onChange(""); return; } setManualPrefixMode(false); setBooking(next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>
+    {isManualPrefix && <input value={customPrefix} onChange={e => setBooking(e.target.value.trim().toUpperCase(), digits)} placeholder="รหัสหน้า เช่น ABC" aria-label="กรอกรหัสหน้าเอง" />}
     <input value={digits} onChange={e => setBooking(activePrefix, digitsOnly(e.target.value).slice(0, 4))} inputMode="numeric" maxLength={4} placeholder={required ? "เลข 4 หลัก *" : "เลข 4 หลัก"} aria-label="เลข 4 หลักของใบสั่งจอง" />
   </div>;
 }
@@ -694,7 +696,7 @@ export default function App() {
     paymentType: "COD",
     codAmount: "",
     salesNote: "",
-    bookingPrefix: "CSP", bookingDigits: "", bookingNumbers: [], shippingCarrier: "", shippingCarrierOther: "",
+    bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], shippingCarrier: "", shippingCarrierOther: "",
     workflowType: "store_route", deliveryMethod: "company_driver"
   });
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
@@ -2584,7 +2586,8 @@ export default function App() {
       setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจองให้ครบ 4 หลัก");
       return;
     }
-    const currentBookingNumber = bookingDigits ? `${orderForm.bookingPrefix}-${bookingDigits}` : "";
+    const selectedBookingPrefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase();
+    const currentBookingNumber = bookingDigits && selectedBookingPrefix ? `${selectedBookingPrefix}-${bookingDigits}` : "";
     const bookingNumbers = [...new Set([...(orderForm.bookingNumbers || []), currentBookingNumber].map(normalizeBookingNumber).filter(Boolean))];
     if (!bookingNumbers.length) {
       setSyncStatus("❌ กรุณากรอกเลขที่ใบสั่งจองอย่างน้อย 1 เลข");
@@ -2674,7 +2677,7 @@ export default function App() {
         const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
         return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
       });
-      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingDigits: "", bookingNumbers: [], shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
+      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
       setSelectedCustomerId("");
       setOrderCustomerSearch("");
       setShowOrderConfirm(false);
@@ -5089,7 +5092,7 @@ export default function App() {
                   <div style={{ color: "#6b7280", fontSize: "12px", textAlign: "center" }}>บาท</div>
                 </div>
               </div>
-              <div style={{ display: "grid", gap: "7px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: "92px 1fr auto", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option></select><input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${orderForm.bookingPrefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#991b1b", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">ตรวจซ้ำจากรหัสเต็ม เช่น CSP-1234 และ CSR-1234 ใช้พร้อมกันได้ · รหัสเดียวกันห้ามซ้ำภายในเดือน</small></div>
+              <div style={{ display: "grid", gap: "7px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: orderForm.bookingPrefix === "custom" ? "92px minmax(92px, .8fr) 1fr auto" : "92px 1fr auto", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value, bookingCustomPrefix: e.target.value === "custom" ? "" : p.bookingCustomPrefix }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>{orderForm.bookingPrefix === "custom" && <input value={orderForm.bookingCustomPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingCustomPrefix: e.target.value.replace(/-/g, "").trim().toUpperCase().slice(0, 20) }))} placeholder="รหัสหน้า" aria-label="กรอกรหัสหน้าเอง" />}<input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); const prefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase(); if (!prefix) return setSyncStatus("❌ กรุณากรอกรหัสหน้า"); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${prefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#991b1b", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">ตรวจซ้ำจากรหัสเต็ม เช่น CSP-1234 และ CSR-1234 ใช้พร้อมกันได้ · กรอกรหัสหน้าเองได้โดยไม่ใช้คำว่า OTHER · รหัสเดียวกันห้ามซ้ำภายในเดือน</small></div>
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
 

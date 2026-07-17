@@ -19,6 +19,7 @@ describe("monthly booking registry", () => {
     expect(bookingRegistryId("2026-07-15", "csp-1234")).toBe("2026-07__CSP-1234");
     expect(bookingRegistryId("2026-07-15", "CSR-1234")).toBe("2026-07__CSR-1234");
     expect(bookingRegistryId("2026-07-15", "TSR-1234")).toBe("2026-07__TSR-1234");
+    expect(bookingRegistryId("2026-07-15", "AS2-1234")).toBe("2026-07__AS2-1234");
     expect(bookingRegistryId("2026-07-15", "CSP-1234")).not.toBe(bookingRegistryId("2026-07-15", "CSR-1234"));
     expect(bookingRegistryId("2026-08-01", "CSP-1234")).toBe("2026-08__CSP-1234");
   });
