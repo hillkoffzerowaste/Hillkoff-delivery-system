@@ -80,11 +80,17 @@ export async function GET(request) {
     const alerts = params.get("alerts") === "true";
     if (alerts) {
       if (profile.role !== "store") return Response.json({ ok: false, error: "Store access required" }, { status: 403 });
-      const alertSnap = await db.collection("store_reports").orderBy("createdAt", "desc").limit(5000).get();
-      const incomplete = alertSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => !item.deletedAt
-        && REPORT_TYPES.includes(item.type)
-        && (["waiting", "partial"].includes(item.status) || ["waiting", "partial", "returned"].includes(item.packStatus))
-      ).sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
+      const [storeIssueSnap, packIssueSnap] = await Promise.all([
+        db.collection("store_reports").where("status", "in", ["waiting", "partial"]).get(),
+        db.collection("store_reports").where("packStatus", "in", ["waiting", "partial", "returned"]).get()
+      ]);
+      const incompleteById = new Map();
+      [...storeIssueSnap.docs, ...packIssueSnap.docs].forEach((doc) => {
+        const item = { id: doc.id, ...doc.data() };
+        if (!item.deletedAt && REPORT_TYPES.includes(item.type)) incompleteById.set(doc.id, item);
+      });
+      const incomplete = [...incompleteById.values()]
+        .sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
       const summarize = (type) => {
         const items = incomplete.filter((item) => item.type === type);
         return { count: items.length, items: items.slice(0, 100) };
@@ -111,7 +117,9 @@ export async function GET(request) {
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     const dateRange = date ? utcRangeForBangkokDate(date) : null;
     if (date && !dateRange) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
-    let query = db.collection("store_reports").orderBy("createdAt", "desc");
+    let query = db.collection("store_reports");
+    if (type) query = query.where("type", "==", type);
+    query = query.orderBy("createdAt", "desc");
     if (dateRange) query = query.startAt(dateRange.end).endAt(dateRange.start);
     const snap = await query.limit(kpi ? 5000 : 500).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
