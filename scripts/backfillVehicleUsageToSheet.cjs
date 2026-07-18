@@ -14,6 +14,7 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 const webAppUrl = process.env.GOOGLE_MILEAGE_WEB_APP_URL || process.env.GOOGLE_SHEETS_WEB_APP_URL;
+const sharedSecret = String(process.env.GOOGLE_SHEETS_SHARED_SECRET || "").trim();
 const dryRun = process.argv.includes("--dry-run");
 const limitIndex = process.argv.indexOf("--limit");
 const limit = limitIndex !== -1 ? Number.parseInt(process.argv[limitIndex + 1], 10) : Infinity;
@@ -24,6 +25,10 @@ if (!serviceAccountJson) {
 }
 if (!dryRun && !webAppUrl) {
   console.error("Missing GOOGLE_MILEAGE_WEB_APP_URL or GOOGLE_SHEETS_WEB_APP_URL in env");
+  process.exit(1);
+}
+if (!dryRun && !sharedSecret) {
+  console.error("Missing GOOGLE_SHEETS_SHARED_SECRET in env");
   process.exit(1);
 }
 
@@ -62,6 +67,7 @@ function buildPayload(doc) {
   const data = doc.data() || {};
   return {
     action: "appendUsageSegment",
+    sharedSecret,
     id: doc.id,
     serviceDate: valueOrBlank(data.serviceDate),
     eventType: valueOrBlank(data.eventType),
@@ -84,7 +90,8 @@ async function postToSheet(payload) {
   const response = await fetch(webAppUrl, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000)
   });
   const text = await response.text();
   if (!response.ok) throw new Error(text || `HTTP ${response.status}`);

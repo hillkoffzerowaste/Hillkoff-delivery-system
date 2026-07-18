@@ -32,7 +32,21 @@ export async function POST(request) {
       await auth.updateUser(user.uid, { password, displayName: name || username, disabled: false });
     }
     const now = new Date().toISOString();
-    await db.collection("users").doc(user.uid).set({ username, email, name: name || username, role, department: role, active: true, createdBy: profile.email, updatedAt: now, createdAt: now }, { merge: true });
+    const userRef = db.collection("users").doc(user.uid);
+    const existing = await userRef.get();
+    await userRef.set({
+      uid: user.uid,
+      username,
+      email,
+      name: name || username,
+      role,
+      department: role,
+      status: "approved",
+      active: true,
+      createdBy: profile.email,
+      updatedAt: now,
+      ...(existing.exists ? {} : { createdAt: now })
+    }, { merge: true });
     return Response.json({ ok: true, data: { uid: user.uid, username, name: name || username, role } });
   } catch (error) { return errorResponse(error); }
 }

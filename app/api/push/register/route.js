@@ -10,11 +10,12 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const token = String(payload?.token || "").trim().slice(0, 4096);
+  const token = String(payload?.token || "").trim();
   const role = String(payload?.role || "").trim();
   const deviceId = String(payload?.deviceId || "").trim().slice(0, 200);
 
   if (!token) return Response.json({ ok: false, error: "Missing token" }, { status: 400 });
+  if (token.length > 1500 || token.includes("/")) return Response.json({ ok: false, error: "Invalid token" }, { status: 400 });
   if (!["driver", "sales"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
   try {
     const { profile, db } = await requireProfile(request, ["driver", "sales"]);

@@ -1,4 +1,7 @@
-# 🚀 Supabase Setup & Reset Guide
+# 🚀 Supabase Setup & Reset Guide (Legacy)
+
+> เอกสารนี้เก็บไว้เพื่ออ้างอิงระบบเก่าเท่านั้น ระบบปัจจุบันใช้ Firebase/Firestore
+> และ backup module ไม่ได้เชื่อมต่อ Supabase แล้ว ดู `README.md` และ `BACKUP_SYSTEM.md`
 
 ## 📋 Checklist: Reset and Configure Supabase
 
@@ -465,4 +468,3 @@ If issues occur:
    # Reload app
    npm run dev
    ```
-

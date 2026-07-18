@@ -1,4 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { BOOKING_NUMBER_PATTERN, bookingRegistryId, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
 
@@ -8,34 +9,59 @@ export async function POST(request) {
     const body = await request.json();
     const orderId = String(body?.orderId || "").trim().slice(0, 200);
     if (!orderId) return Response.json({ ok: false, error: "Missing orderId" }, { status: 400 });
+    if (orderId.includes("/")) return Response.json({ ok: false, error: "Invalid orderId" }, { status: 400 });
 
     const ref = db.collection("orders").doc(orderId);
     const snap = await ref.get();
     if (!snap.exists) return Response.json({ ok: true, data: { id: orderId, alreadyDeleted: true } });
     const order = snap.data() || {};
-    if (profile.role === "store") {
-      const driverStarted = Boolean(order.driverId) || ["queued", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.queueStatus) || ["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
+    if (profile.role !== "admin") {
+      const driverStarted = Boolean(order.driverId)
+        || !["preparing", "ready"].includes(String(order.queueStatus || ""))
+        || ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(String(order.status || ""));
       if (!order.workflowType || driverStarted) {
-        return Response.json({ ok: false, error: "สโตร์ลบได้เฉพาะงานเตรียมที่ยังไม่เข้าคิวคนขับ" }, { status: 403 });
+        return Response.json({ ok: false, error: "ลบได้เฉพาะงานเตรียมที่ยังไม่เข้าคิวและยังไม่มีคนขับรับ" }, { status: 403 });
       }
     }
 
     const activity = await ref.collection("activity").limit(400).get();
-    const batch = db.batch();
-    activity.docs.forEach((doc) => batch.delete(doc.ref));
-    batch.delete(ref);
-    const auditRef = db.collection("audit_logs").doc();
-    batch.set(auditRef, {
-      action: "order_deleted",
-      orderId,
-      orderSnapshot: order,
-      byUid: profile.uid,
-      byRole: profile.role,
-      byName: profile.name,
-      createdAt: new Date().toISOString()
+    const deletedAt = new Date().toISOString();
+    const releasedBookingNumbers = [];
+    await db.runTransaction(async (transaction) => {
+      const currentSnap = await transaction.get(ref);
+      if (!currentSnap.exists) return;
+      const currentOrder = currentSnap.data() || {};
+      const bookingNumbers = [...new Set((Array.isArray(currentOrder.bookingNumbers) ? currentOrder.bookingNumbers : [currentOrder.bookingNumber])
+        .map(normalizeBookingNumber)
+        .filter((bookingNumber) => BOOKING_NUMBER_PATTERN.test(bookingNumber)))];
+      const serviceDate = String(currentOrder.serviceDate || currentOrder.createdAt || "").slice(0, 10);
+      const reservations = bookingNumbers
+        .map((bookingNumber) => ({ bookingNumber, registryId: bookingRegistryId(serviceDate, bookingNumber) }))
+        .filter((reservation) => reservation.registryId)
+        .map((reservation) => ({ ...reservation, ref: db.collection("booking_month_registry").doc(reservation.registryId) }));
+      const reservationSnapshots = await Promise.all(reservations.map((reservation) => transaction.get(reservation.ref)));
+      reservationSnapshots.forEach((reservationSnap, index) => {
+        const reservation = reservations[index];
+        const record = reservationSnap.data() || {};
+        if (reservationSnap.exists && record.source === "orders" && String(record.sourceId || "") === orderId) {
+          transaction.delete(reservation.ref);
+          releasedBookingNumbers.push(reservation.bookingNumber);
+        }
+      });
+      activity.docs.forEach((doc) => transaction.delete(doc.ref));
+      transaction.delete(ref);
+      transaction.set(db.collection("audit_logs").doc(), {
+        action: "order_deleted",
+        orderId,
+        orderSnapshot: currentOrder,
+        releasedBookingNumbers,
+        byUid: profile.uid,
+        byRole: profile.role,
+        byName: profile.name,
+        createdAt: deletedAt
+      });
     });
-    await batch.commit();
-    return Response.json({ ok: true, data: { id: orderId } });
+    return Response.json({ ok: true, data: { id: orderId, releasedBookingNumbers } });
   } catch (error) {
     return errorResponse(error);
   }

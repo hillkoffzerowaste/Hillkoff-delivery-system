@@ -1,14 +1,41 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
 
-const BOOKING_NUMBER_PATTERN = /^\S+-\d{4}$/;
-
 function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
+}
+
+function clean(value, max = 500) {
+  return String(value || "").trim().slice(0, max);
+}
+
+function validDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function safeHttpUrl(value) {
+  const input = clean(value, 1500);
+  if (!input) return "";
+  try {
+    const url = new URL(input);
+    return ["http:", "https:"].includes(url.protocol) ? input : "";
+  } catch {
+    return "";
+  }
+}
+
+function finiteNumber(value, { min = 0, max = Number.MAX_SAFE_INTEGER, integer = false } = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) return null;
+  return integer ? Math.trunc(number) : number;
 }
 
 function toServiceDateKey(dateLike) {
@@ -46,78 +73,134 @@ export async function POST(request) {
 
   const order = payload?.order && typeof payload.order === "object" ? payload.order : null;
 
-  if (!order?.id) return Response.json({ ok: false, error: "Missing order" }, { status: 400 });
+  const orderId = clean(order?.id, 120);
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(orderId)) return Response.json({ ok: false, error: "Invalid order id" }, { status: 400 });
 
   try {
-    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin"]);
-    const bookingNumber = String(order.bookingNumber || "").trim();
-    if (bookingNumber && !BOOKING_NUMBER_PATTERN.test(bookingNumber)) {
-      return Response.json({ ok: false, error: "Booking number must use PREFIX-1234 format" }, { status: 400 });
+    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin", "store"]);
+    const bookingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter(Boolean))].slice(0, 20);
+    if (bookingNumbers.some((value) => !BOOKING_NUMBER_PATTERN.test(value))) {
+      return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
     }
-    const orderRef = db.collection("orders").doc(String(order.id));
-    if ((await orderRef.get()).exists) return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });
+    const bookingNumber = bookingNumbers[0] || "";
+    const customerId = clean(order.customerId, 120);
+    if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "A valid customer is required" }, { status: 400 });
+    const customerSnap = await db.collection("customers").doc(customerId).get();
+    if (!customerSnap.exists) return Response.json({ ok: false, error: "Customer not found" }, { status: 404 });
+    const customer = customerSnap.data() || {};
+    const customerName = clean(customer.name, 200);
+    if (!customerName) return Response.json({ ok: false, error: "Customer profile is incomplete" }, { status: 409 });
+    const boxes = finiteNumber(order.boxes || 0, { min: 0, max: 10000, integer: true });
+    const cod = finiteNumber(order.cod || 0, { min: 0, max: 1_000_000_000 });
+    if (boxes === null || cod === null) return Response.json({ ok: false, error: "Invalid order amounts" }, { status: 400 });
+    const now = new Date().toISOString();
+    const requestedServiceDate = clean(order.serviceDate, 10);
+    const serviceDate = requestedServiceDate || toServiceDateKey(now);
+    if (!validDateKey(serviceDate)) return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
+    const orderRef = db.collection("orders").doc(orderId);
+    const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, value)) }));
+    const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
+    const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_driver" && deliveryMethod === "company_driver" ? "direct_driver" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
+    const directDriver = workflowType === "direct_driver";
+    const storeAssistEntry = profile.role === "store";
+    const createdByName = clean(profile.name || profile.email, 200);
 
     const next = {
-      customerId: String(order.customerId || ""),
-      customerName: String(order.customerName || ""),
-      customerPhone: String(order.customerPhone || ""),
-      customerPhoneDigits: normalizePhoneDigits(order.customerPhone || ""),
-      zone: String(order.zone || ""),
-      address: String(order.address || ""),
-      mapUrl: String(order.mapUrl || ""),
-      window: String(order.window || ""),
-      boxes: Number(order.boxes || 0),
-      paymentType: String(order.paymentType || "COD"),
-      cod: Number(order.cod || 0),
-      driverId: String(order.driverId || ""),
-      driverName: String(order.driverName || ""),
-      salesName: String(profile.name || order.salesName || ""),
-      salesPhone: String(order.salesPhone || ""),
-      status: "รอจัดเตรียมสินค้า",
-      workflowType: order.deliveryMethod === "outstation" ? "store_route" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route",
-      deliveryMethod: ["grab_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver",
+      customerId,
+      customerName,
+      customerPhone: clean(customer.phone, 40),
+      customerPhoneDigits: normalizePhoneDigits(customer.phoneDigits || customer.phone || ""),
+      zone: clean(customer.zone, 200),
+      address: clean(customer.address, 1500),
+      mapUrl: safeHttpUrl(customer.mapUrl),
+      window: clean(order.window, 100),
+      boxes,
+      packageUnit: order.packageUnit === "bag" ? "bag" : "box",
+      paymentType: clean(order.paymentType || "COD", 50),
+      cod,
+      driverId: clean(order.driverId, 120),
+      driverName: clean(order.driverName, 200),
+      salesName: createdByName,
+      salesPhone: clean(profile.phone, 40),
+      orderEntrySource: storeAssistEntry ? "store_assist" : "sales",
+      createdByRole: profile.role,
+      createdByName,
+      storeAssistEntryAt: storeAssistEntry ? now : "",
+      storeAssistEntryNote: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "",
+      status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า",
+      workflowType,
+      deliveryMethod,
       bookingNumber: bookingNumber.slice(0, 100),
+      bookingNumbers,
+      bookingMonthKey: serviceDate.slice(0, 7),
+      bookingNumberMissing: bookingNumbers.length === 0,
+      bookingNumberNotice: bookingNumbers.length === 0 ? (storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
-      storeStatus: order.workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: order.workflowType === "direct_pack" ? "pending" : "blocked",
-      queueStatus: "preparing",
+      storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
+      packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
+      queueStatus: directDriver ? "queued" : "preparing",
+      urgentDelivery: directDriver,
       storePackerName: "",
       storeCheckerName: "",
       packPackerName: "",
       packCheckerName: "",
       packPhotos: [],
       missingItems: [],
-      workflowHistory: [{ action: "created", role: "sales", uid: decoded.uid, at: new Date().toISOString() }],
-      photo: String(order.photo || ""),
-      checkInAt: String(order.checkInAt || ""),
-      deliveredAt: String(order.deliveredAt || ""),
-      complaint: String(order.complaint || ""),
-      salesNote: String(order.salesNote || ""),
-      driverNote: String(order.driverNote || ""),
-      serviceDate: String(order.serviceDate || toServiceDateKey(order.createdAt)),
-      createdAt: String(order.createdAt || new Date().toISOString()),
-      updatedAt: new Date().toISOString(),
+      workflowHistory: [{ action: "created", role: profile.role, uid: decoded.uid, at: now, note: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "" }],
+      photo: "",
+      checkInAt: "",
+      deliveredAt: "",
+      complaint: "",
+      salesNote: clean(order.salesNote, 3000),
+      driverNote: "",
+      serviceDate,
+      createdAt: now,
+      updatedAt: now,
       createdByUid: decoded.uid
     };
 
-    await orderRef.set(next, { merge: true });
-    await orderRef.collection("activity").doc().set(next.workflowHistory[0]);
-    await db.collection("customer_search").doc(String(next.customerId || `legacy-${order.id}`)).set(customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
-    await syncDeliveryOrderToSheet(db, order.id, next);
+    try {
+      const transactionResult = await db.runTransaction(async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        if (orderSnap.exists) {
+          const existing = orderSnap.data() || {};
+          const sameRequest = String(existing.createdByUid || "") === String(decoded.uid || "")
+            && String(existing.customerId || "") === customerId
+            && normalizeBookingNumber(existing.bookingNumber || "") === bookingNumber;
+          if (sameRequest) return { alreadyExists: true };
+          throw Object.assign(new Error("Order id already exists"), { status: 409 });
+        }
+        for (const reservation of bookingRefs) {
+          const bookingSnap = await transaction.get(reservation.ref);
+          if (bookingSnap.exists) throw Object.assign(new Error(bookingConflictMessage(bookingSnap.data())), { status: 409 });
+        }
+        transaction.create(orderRef, next);
+        transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
+        transaction.set(db.collection("customer_search").doc(next.customerId), customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
+        for (const reservation of bookingRefs) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
+        return { alreadyExists: false };
+      });
+      if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });
+    } catch (error) {
+      if (error?.code === 6 || error?.code === "already-exists") {
+        return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });
+      }
+      throw error;
+    }
+    await syncDeliveryOrderToSheet(db, orderId, next);
 
     // New orders stay out of the driver queue until sales explicitly queues them.
     if (next.queueStatus === "queued") try {
       const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
       const tokens = snap.docs.map((d) => d.id).filter(Boolean);
       if (tokens.length) {
-        const admin = await import("firebase-admin");
-        const response = await admin.messaging().sendEachForMulticast({
+        const response = await getAdminMessaging().sendEachForMulticast({
           tokens,
           data: {
             type: "new_order",
             title: "มีออเดอร์ใหม่",
             body: "มีงานใหม่เพิ่มในคิวคนขับ",
-            orderId: String(order.id),
+            orderId,
             customerName: String(next.customerName || ""),
             zone: String(next.zone || "")
           },
@@ -141,7 +224,7 @@ export async function POST(request) {
     }
 
     try {
-      const text = buildLineMessage(String(order.id), next);
+      const text = buildLineMessage(orderId, next);
       const lineResult = await pushLineText({
         text,
         metadata: { orderId: String(order.id), source: "orders.create" }
@@ -149,7 +232,7 @@ export async function POST(request) {
       await db.collection("notifications").add({
         channel: "line",
         type: "new_order",
-        orderId: String(order.id),
+        orderId,
         text,
         result: lineResult,
         createdByUid: decoded.uid,
@@ -159,6 +242,6 @@ export async function POST(request) {
       console.warn("LINE OA notification failed", e?.message || e);
     }
 
-    return Response.json({ ok: true, data: { id: String(order.id) } });
+    return Response.json({ ok: true, data: { id: orderId } });
   } catch (error) { return errorResponse(error); }
 }

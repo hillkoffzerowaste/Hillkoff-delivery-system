@@ -2,6 +2,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
 import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
 import { resolveVerifiedDriver } from "../../../../lib/driverIdentity";
+import { getMileageSheetUrl, postToGoogleAppsScript } from "../../../../lib/googleAppsScript";
+import { errorResponse } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -20,24 +22,7 @@ function toServiceDateKey(dateLike) {
 }
 
 async function syncFuelBillToGoogle(payload) {
-  const webAppUrl = process.env.GOOGLE_MILEAGE_WEB_APP_URL || process.env.GOOGLE_SHEETS_WEB_APP_URL || "";
-  if (!webAppUrl) return { ok: true, skipped: true };
-  try {
-    const response = await fetch(webAppUrl, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "appendFuelBill", ...payload })
-    });
-    const text = await response.text();
-    if (!response.ok) return { ok: false, error: text || `HTTP ${response.status}` };
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { ok: true, raw: text };
-    }
-  } catch (error) {
-    return { ok: false, error: error?.message || String(error) };
-  }
+  return postToGoogleAppsScript(getMileageSheetUrl(), { action: "appendFuelBill", ...payload });
 }
 
 export async function POST(request) {
@@ -67,17 +52,21 @@ export async function POST(request) {
     const liters = Number(payload?.liters || 0);
     const amount = Number(payload?.amount || 0);
     const pricePerLiter = Number(payload?.pricePerLiter || 0);
-    if (!Number.isFinite(odometer) || odometer <= 0) {
+    if (!Number.isFinite(odometer) || odometer <= 0 || odometer > 10_000_000) {
       return Response.json({ ok: false, error: "Odometer required" }, { status: 400 });
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) {
       return Response.json({ ok: false, error: "Amount required" }, { status: 400 });
     }
-    if (!Number.isFinite(liters) || liters <= 0) {
+    if (!Number.isFinite(liters) || liters <= 0 || liters > 10_000) {
       return Response.json({ ok: false, error: "Liters required" }, { status: 400 });
     }
-    if (pricePerLiter < 0) {
+    if (!Number.isFinite(pricePerLiter) || pricePerLiter < 0 || pricePerLiter > 100_000) {
       return Response.json({ ok: false, error: "Invalid fuel values" }, { status: 400 });
+    }
+    const effectivePricePerLiter = pricePerLiter || Number((amount / liters).toFixed(2));
+    if (!Number.isFinite(effectivePricePerLiter) || effectivePricePerLiter > 100_000) {
+      return Response.json({ ok: false, error: "Invalid fuel price" }, { status: 400 });
     }
 
     const serviceDate = toServiceDateKey(new Date());
@@ -101,13 +90,13 @@ export async function POST(request) {
       responsiblePerson: vehicle.responsiblePerson,
       department: vehicle.department,
       odometer,
-      fuelType: String(payload?.fuelType || "").trim() || "ไม่ระบุ",
+      fuelType: String(payload?.fuelType || "").trim().slice(0, 100) || "ไม่ระบุ",
       liters,
       amount,
-      pricePerLiter: pricePerLiter || (liters > 0 ? Number((amount / liters).toFixed(2)) : 0),
-      station: String(payload?.station || "").trim(),
-      receiptNo: String(payload?.receiptNo || "").trim(),
-      note: String(payload?.note || "").trim(),
+      pricePerLiter: effectivePricePerLiter,
+      station: String(payload?.station || "").trim().slice(0, 200),
+      receiptNo: String(payload?.receiptNo || "").trim().slice(0, 100),
+      note: String(payload?.note || "").trim().slice(0, 2000),
       googleSyncStatus: "pending",
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
@@ -130,6 +119,9 @@ export async function POST(request) {
       }
     });
   } catch (error) {
-    return Response.json({ ok: false, error: error?.message || String(error) }, { status: 401 });
+    if (String(error?.code || "").startsWith("auth/")) {
+      return Response.json({ ok: false, error: "Invalid or expired authentication token" }, { status: 401 });
+    }
+    return errorResponse(error);
   }
 }

@@ -1,336 +1,81 @@
 # Hillkoff Delivery System
 
-Operational dashboard for Hillkoff local delivery in Chiang Mai and nearby provinces.
+เว็บแอปจัดการออเดอร์ การเตรียมสินค้า คิวคนขับ งานวิ่ง รายงานสโตร์ และการติดตามสถานะสำหรับลูกค้า
 
-## 📋 Quick Links
+## Technology
 
-- 📖 **[Workflow Documentation](WORKFLOW.md)** - How sales & drivers use the system
-- 📋 **[System Workflow 2026](SYSTEM_WORKFLOW_2026.md)** - แผนภาพระบบ, flow งานคนขับ/ฝ่ายขาย, และ roadmap Google login + OTP
-- 🔄 **[Backup System](BACKUP_SYSTEM.md)** - Automatic data backup & recovery
-- 🚀 **[Supabase Setup](SUPABASE_SETUP.md)** - Database configuration & reset guide
+- Next.js 16 / React 19
+- Firebase Authentication, Cloud Firestore และ Firebase Cloud Messaging
+- LINE Official Account, SMTP OTP และ Google Apps Script/Sheets (optional)
+- Vercel สำหรับ production deployment
 
----
+ข้อมูลหลักทั้งหมดอยู่ใน Firebase/Firestore ไม่ได้ใช้ Supabase แล้ว
 
-## 🎯 Overview
+## Local setup
 
-```
-Hillkoff Delivery System
-├── 👨‍💼 Sales Dashboard (Web)
-│   ├── Add Customers
-│   ├── Create Orders
-│   ├── Manage Drivers
-│   └── View Reports
-│
-├── 🚗 Driver Dashboard (Mobile)
-│   ├── View Order Queue
-│   ├── Accept Orders
-│   ├── Check-in & Delivery
-│   ├── GPS Tracking
-│   └── POD Photos
-│
-├── 💾 Data Storage
-│   └── Supabase (PostgreSQL)
-│       ├── customers
-│       ├── orders
-│       ├── drivers
-│       ├── driver_locations
-│       └── chat_messages
-│
-└── 🔄 Backup System
-    ├── Automatic Daily
-    ├── Cloud Storage (Supabase)
-    ├── Local Snapshots
-    └── Recovery Tools
-```
-
----
-
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Install dependencies
+```powershell
 npm install
-
-# Setup environment
-cp .env.local.example .env.local
-# Edit .env.local with your Supabase credentials
-
-# Start development server
+Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser.
+เปิด `http://localhost:3000` ตัวแปรที่จำเป็นอยู่ใน `.env.example` โดยเฉพาะ
+Firebase client config, `FIREBASE_SERVICE_ACCOUNT_JSON` และ `OTP_SECRET` ที่ต้องยาว
+อย่างน้อย 32 ตัวอักษร ห้าม commit `.env.local` หรือ service-account key
 
----
+## Verification
 
-## 🗂️ Scope & Scale
-
-- **👥 Users**: 5-10 staff (sales + drivers)
-- **📦 Orders**: 20-30 per day
-- **🚗 Drivers**: 5 drivers
-- **📍 Coverage**: Chiang Mai, Lamphun, Lampang, Chiang Rai, Phayao, Mae Hong Son
-- **🌐 Connectivity**: Works offline, syncs when online
-
----
-
-## 🏗️ Architecture
-
-### Technology Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | Next.js 14 + React 18 | UI & Real-time logic |
-| **Database** | Supabase (PostgreSQL) | Primary data storage |
-| **Storage** | Supabase Storage | Backup archives & POD photos |
-| **API** | Next.js API Routes | Backup & sync endpoints |
-| **Location** | Browser Geolocation | GPS tracking |
-| **Maps** | OpenStreetMap | Map display & navigation |
-
-### Data Tables
-
-#### 1. **customers**
-- Store customer information (name, phone, zone, address, map link)
-- Used by: Sales (create/edit), Drivers (view)
-
-#### 2. **orders**
-- Store delivery orders with status tracking
-- Used by: Sales (create/manage), Drivers (accept/complete)
-
-#### 3. **drivers**
-- Store driver information (name, vehicle, phone, zone)
-- Used by: Sales (manage), Drivers (profile)
-
-#### 4. **driver_locations**
-- Real-time GPS locations of drivers
-- Updated every 10-30 seconds when driver is active
-
-#### 5. **chat_messages**
-- Team communication between sales & drivers
-- Supports multiple conversations
-
----
-
-## 💼 Usage Workflows
-
-### For Sales Team
-
-1. **Login**: Select "ขาย" (Sales) role
-2. **Add Customers**: Create customer profiles
-3. **Create Orders**: Assign delivery jobs with:
-   - Customer & address
-   - Time window (morning/midday/afternoon)
-   - Quantity & COD
-4. **Manage Drivers**: View assignments & completion
-5. **Reports**: Export daily summaries
-
-### For Driver Team
-
-1. **Login**: Select "คนขับ" (Driver) role
-2. **Enable GPS**: Allow location tracking
-3. **View Orders**: See pending & assigned orders
-4. **Accept Order**: Take delivery job
-5. **Navigate**: Follow map to customer
-6. **Check-in**: Arrive at location
-7. **Deliver**: Complete delivery & upload photo
-8. **Status**: Mark as completed/problem/returned
-
----
-
-## 🔄 Backup System
-
-### Automatic Backups
-
-- ✅ Daily at 2 AM Bangkok time
-- ✅ Keeps last 30 days of snapshots
-- ✅ Stores in Supabase Cloud
-- ✅ Auto-cleanup of old backups
-
-### Manual Backup
-
-```bash
-npm run backup
-```
-
-### Restore from Backup
-
-```bash
-npm run backup:list              # See available backups
-npm run backup:restore --date 2026-05-25  # Restore specific date
-```
-
-### API Endpoints
-
-```
-POST   /api/backup/now           # Trigger backup
-GET    /api/backup/list          # List backups
-GET    /api/backup/{date}/metadata   # Get backup info
-POST   /api/backup/restore       # Restore from backup
-```
-
----
-
-## 🔐 Configuration
-
-### Required Environment Variables
-
-```env
-# Supabase (Client)
-NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-
-# Supabase (Server - for backups)
-SUPABASE_SERVICE_KEY=eyJ...
-
-# Backup Settings
-BACKUP_DIR=./backups/snapshots
-BACKUP_RETENTION_DAYS=30
-BACKUP_UPLOAD_TO_CLOUD=true
-```
-
-### Get Credentials
-
-1. **SUPABASE_URL & ANON_KEY**:
-   - Supabase Dashboard → Settings → API
-
-2. **SERVICE_KEY**:
-   - Supabase Dashboard → Settings → API → service_role (SECRET)
-
----
-
-## 📱 Features
-
-### ✅ Core Features
-- [x] Customer Management
-- [x] Order Management
-- [x] Driver Assignment
-- [x] Real-time GPS Tracking
-- [x] POD Photo Upload
-- [x] Complaint Management
-- [x] Chat Communication
-- [x] Daily Reports
-
-### ✅ Advanced Features
-- [x] Offline Support (Local Storage)
-- [x] Real-time Sync (Supabase)
-- [x] Automatic Backups
-- [x] Recovery Tools
-- [x] Multi-zone Coverage
-- [x] Driver Performance Metrics
-
-### ✅ Data Storage
-- [x] Supabase (Cloud PostgreSQL)
-- [x] Local Storage (Browser)
-- [x] Cloud Backups (Snapshots)
-- [x] POD Storage (Google Drive / Supabase)
-
----
-
-## 🚀 Deployment
-
-### Development
-
-```bash
-npm run dev
-# Open http://localhost:3000
-```
-
-### Production Build
-
-```bash
+```powershell
+npm run lint
+npm test
+npm run test:rules
 npm run build
-npm start
 ```
 
-### On Vercel
+`npm run test:rules` ใช้ Firestore Emulator และทดสอบการแยกสิทธิ์ของ sales,
+driver, store, pack และ admin
 
-1. Push code to GitHub
-2. Connect Vercel to GitHub repo
-3. Add environment variables in Vercel dashboard
-4. Deploy
+## Firebase data maintenance
 
----
+```powershell
+# ตรวจข้อมูลโดยไม่เขียน
+node scripts/backfill-firebase-integrity.mjs
 
-## 🆘 Troubleshooting
+# เติม search fields, service date และ user mirrors
+npm run firebase:backfill-integrity
+```
 
-### Connection Issues
+Firestore Rules และ indexes อยู่ที่ `firestore.rules` และ `firestore.indexes.json`
 
-**"Supabase connection failed"**
-- Check `.env.local` has correct URL & key
-- Verify Supabase project is active
-- Check browser console for errors
+## Backup and restore
 
-### Data Not Syncing
+ระบบสำรองข้อมูลอ่านทุก root collection รวม `orders/activity` และ
+`store_reports/history` พร้อม metadata ของ Firebase Auth แล้วตรวจ checksum SHA-256
 
-**"Orders don't appear in Supabase"**
-- Check network tab (F12) for API errors
-- Verify RLS policies are enabled
-- Try: F5 refresh, clear browser cache
-- Check: Supabase Dashboard → Table Editor
+```powershell
+npm run backup
+npm run backup:list
+npm run backup:restore -- --id 2026-07-15_00-00-00-000 --confirm YES_REPLACE_FIRESTORE_DATA
+```
 
-### Backup Failures
+ไฟล์อยู่ที่ `backups/snapshots/` และถูก ignore จาก Git Auth passwords/provider
+credentials ไม่สามารถกู้จาก snapshot นี้ได้ จึงสำรองเฉพาะ user metadata;
+Firestore documents กู้ได้ครบ ดูรายละเอียดที่ `BACKUP_SYSTEM.md`
 
-**"Backup failed"**
-- Ensure `.env.local` has `SUPABASE_SERVICE_KEY`
-- Check `backups/` folder has write permissions
-- Run: `npm run backup` manually to see error
-- Check: `backups/logs/backup-*.log` for details
+## Optional integrations
 
----
+- Google Apps Script: ตั้ง `HILLKOFF_SYNC_SHARED_SECRET` ใน Script Properties และใช้ค่าเดียวกันใน `GOOGLE_SHEETS_SHARED_SECRET`
+- LINE OA: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_DEFAULT_TO`
+- SMTP OTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+- Web Push: สร้าง Web Push certificate ใน Firebase Console แล้วตั้ง `NEXT_PUBLIC_FIREBASE_VAPID_KEY`
 
-## 📚 Documentation
+คู่มือ Apps Script อยู่ที่ `google-apps-script/README.md`
 
-- 📖 **[WORKFLOW.md](WORKFLOW.md)** - Step-by-step user workflows
-- 🔄 **[BACKUP_SYSTEM.md](BACKUP_SYSTEM.md)** - Backup architecture & recovery
-- 🚀 **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** - Database setup & configuration
+## Security boundaries
 
----
+- การเขียน customers/orders/workflow/reports ผ่าน server API และตรวจ Firebase ID token
+- Firestore Rules ปิด client writes สำหรับข้อมูลสำคัญ และให้คนขับเห็นเฉพาะงานเข้าคิวหรือของตัวเอง
+- `/api/public/track` เปิดสาธารณะเฉพาะข้อมูลที่ mask แล้วและมี rate limit
+- `/api/line/webhook` ตรวจ LINE signature ก่อนบันทึก
 
-## 👥 Team
-
-- **Sales**: Create orders, manage customers, view reports
-- **Drivers**: Accept orders, track location, upload POD
-- **Admin**: System configuration, backups, monitoring
-
----
-
-## 📞 Support
-
-For issues:
-
-1. Check the relevant documentation file above
-2. Review browser console (F12) for errors
-3. Check Supabase dashboard for data sync status
-4. Try system reload: Menu → "🔄 รีโหลดระบบ"
-
----
-
-## 📝 Version History
-
-- **v2.0** (2026-05-25)
-  - ✅ Supabase backend integration
-  - ✅ Automatic backup system
-  - ✅ Removed Google Sheets (optional)
-  - ✅ Real-time GPS tracking
-  - ✅ Complete workflow documentation
-
-- **v1.0** (2026-05-01)
-  - Initial release with local storage
-  - Google Sheets integration
-
----
-
-## 📄 License
-
-Internal use only - Hillkoff Local Delivery
-
----
-
-## 🔗 Useful Links
-
-- [Supabase Documentation](https://supabase.com/docs)
-- [Next.js Documentation](https://nextjs.org/docs)
-- [React Documentation](https://react.dev)
-- [Supabase Dashboard](https://app.supabase.com)
-
+Internal use only — Hillkoff Local Delivery

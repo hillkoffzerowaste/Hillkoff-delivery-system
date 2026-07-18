@@ -133,7 +133,7 @@ var VEHICLES = [
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.action === "setup") {
-    return serveSetupJson();
+    return jsonResponse({ ok: false, error: "GET setup is disabled" });
   }
   return HtmlService.createTemplateFromFile("Index")
     .evaluate()
@@ -173,6 +173,7 @@ function doPost(e) {
     lock.waitLock(30000);
     payload = parsePayload(e);
     if (!payload.action) throw new Error("Missing action");
+    requireSharedSecret(payload);
 
     if (payload.action === "setupDeliveryWorkbook") {
       var deliverySetup = setupDeliveryWorkbook();
@@ -207,8 +208,7 @@ function doPost(e) {
     return jsonResponse({ ok: true, data: result, spreadsheetUrl: ss.getUrl() });
   } catch (error) {
     try {
-      if (!ss) ss = setupWorkbook();
-      logSync(ss, payload.action || "error", "FAILED", String(error && error.message ? error.message : error), payload.id || "");
+      if (ss) logSync(ss, payload.action || "error", "FAILED", String(error && error.message ? error.message : error), payload.id || "");
     } catch (logError) {}
     return jsonResponse({ ok: false, error: String(error && error.message ? error.message : error) });
   } finally {
@@ -216,6 +216,14 @@ function doPost(e) {
       lock.releaseLock();
     } catch (lockError) {}
   }
+}
+
+function requireSharedSecret(payload) {
+  var expected = String(PropertiesService.getScriptProperties().getProperty("HILLKOFF_SYNC_SHARED_SECRET") || "");
+  var supplied = String(payload && payload.sharedSecret || "");
+  if (!expected) throw new Error("Sync secret is not configured");
+  if (!supplied || supplied !== expected) throw new Error("Unauthorized");
+  delete payload.sharedSecret;
 }
 
 function onOpen() {
@@ -683,7 +691,7 @@ function summarizeWebRows(usageRows, fuelRows) {
     if (row.driverId || row.driverName) drivers[row.driverId || row.driverName] = true;
     if (row.eventType === "start") starts++;
     if (row.eventType === "end") ends++;
-    if (String(row.usageType + " " + row.detail + " " + row.note).indexOf("เธญเธฑเธ•เนเธเธกเธฑเธ•เธด") >= 0) autoEnds++;
+    if (String(row.usageType + " " + row.detail + " " + row.note).indexOf("อัตโนมัติ") >= 0) autoEnds++;
     var key = [row.serviceDate, row.vehicleId || row.plate, row.driverId || row.driverName].join("|");
     latest[key] = row;
     if (row.odometerStart && row.odometer >= row.odometerStart) distance += row.odometer - row.odometerStart;

@@ -1,5 +1,8 @@
 # ✅ Implementation Summary - Supabase Reset & Backup System
 
+> Legacy document: ระบบปัจจุบันใช้ Firebase/Firestore และ Firebase backup module
+> ตาม `README.md`/`BACKUP_SYSTEM.md`; รายละเอียด Supabase ด้านล่างไม่ใช่ขั้นตอนใช้งานปัจจุบัน
+
 ## 📊 What Was Done
 
 ### 🔄 Phase 1: System Architecture (COMPLETE)
@@ -397,4 +400,3 @@ SUPABASE_SETUP.md  - Database setup guide
 **Status**: ✅ READY FOR MANUAL SETUP  
 **Last Updated**: 2026-05-25  
 **Next Step**: Follow SUPABASE_SETUP.md
-

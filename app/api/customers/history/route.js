@@ -19,7 +19,7 @@ function addQuery(queries, seen, db, field, value) {
   const key = `${field}:${normalizedValue}`;
   if (seen.has(key)) return;
   seen.add(key);
-  queries.push(db.collection("orders").where(field, "==", normalizedValue).get());
+  queries.push(db.collection("orders").where(field, "==", normalizedValue).limit(1000).get());
 }
 
 export async function GET(request) {
@@ -28,6 +28,7 @@ export async function GET(request) {
     const params = new URL(request.url).searchParams;
     const customerId = clean(params.get("customerId"), 120);
     if (!customerId) return Response.json({ ok: false, error: "Missing customerId" }, { status: 400 });
+    if (customerId.includes("/")) return Response.json({ ok: false, error: "Invalid customerId" }, { status: 400 });
 
     const customerRef = db.collection("customers").doc(customerId);
     const customerSnap = await customerRef.get();

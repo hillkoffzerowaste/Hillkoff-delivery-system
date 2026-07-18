@@ -4,5 +4,9 @@ node_modules
 out
 .vercel
 next-dev*.log
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
+backups/
 
 .vercel
