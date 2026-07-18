@@ -703,6 +703,10 @@ export default function App() {
   const [chiangmaiHistoryLoading, setChiangmaiHistoryLoading] = useState(false);
   const [chiangmaiHistorySearched, setChiangmaiHistorySearched] = useState(false);
   const [chiangmaiHistoryOrder, setChiangmaiHistoryOrder] = useState(null);
+  const [pickupHistoryQuery, setPickupHistoryQuery] = useState("");
+  const [pickupHistoryResults, setPickupHistoryResults] = useState([]);
+  const [pickupHistoryLoading, setPickupHistoryLoading] = useState(false);
+  const [pickupHistorySearched, setPickupHistorySearched] = useState(false);
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
@@ -3042,6 +3046,21 @@ export default function App() {
     finally { setChiangmaiHistoryLoading(false); }
   };
 
+  const searchPickupHistory = async () => {
+    const query = pickupHistoryQuery.trim();
+    if (query.length < 2) return setSyncStatus("⚠️ กรุณากรอกคำค้นหาอย่างน้อย 2 ตัวอักษร");
+    setPickupHistoryLoading(true);
+    setPickupHistorySearched(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch(`/api/orders/search?q=${encodeURIComponent(query)}&scope=store_pickup`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setPickupHistoryResults(Array.isArray(json.data) ? json.data : []);
+    } catch (error) { setSyncStatus(`❌ ค้นหาประวัติออเดอร์ Grab/รับหน้าร้านไม่สำเร็จ: ${error?.message || error}`); }
+    finally { setPickupHistoryLoading(false); }
+  };
+
   const openChiangmaiHistoryOrder = async (order) => {
     try {
       const idToken = await refreshAuthToken(true);
@@ -5355,6 +5374,7 @@ export default function App() {
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
+              <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
               {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
