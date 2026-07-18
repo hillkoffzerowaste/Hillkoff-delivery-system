@@ -1,9 +1,12 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { FieldPath } from "firebase-admin/firestore";
 
 export const runtime = "nodejs";
 
 const REPORT_TYPES = ["outstation", "online"];
 const REPORT_STATUSES = ["draft", "saved", "waiting", "partial"];
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 50;
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
@@ -34,18 +37,52 @@ export async function GET(request) {
       const history = await ref.collection("history").orderBy("at", "desc").limit(100).get();
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), history: history.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
-    if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
+    if (!REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
-    let query = db.collection("store_reports").orderBy("createdAt", "desc");
-    if (date) query = query.startAt(`${date}T00:00:00.000Z`).endAt(`${date}T23:59:59.999Z`);
-    const snap = await query.limit(500).get();
-    const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
-      if (type && item.type !== type) return false;
+    const requestedPageSize = Number(params.get("pageSize") || DEFAULT_PAGE_SIZE);
+    const pageSize = Number.isInteger(requestedPageSize)
+      ? Math.max(1, Math.min(MAX_PAGE_SIZE, requestedPageSize))
+      : DEFAULT_PAGE_SIZE;
+    const cursorCreatedAt = clean(params.get("cursorCreatedAt"), 100);
+    const cursorId = clean(params.get("cursorId"), 200);
+    if (Boolean(cursorCreatedAt) !== Boolean(cursorId)) {
+      return Response.json({ ok: false, error: "Incomplete pagination cursor" }, { status: 400 });
+    }
+
+    let query = db.collection("store_reports")
+      .where("type", "==", type);
+    if (date) {
+      query = query
+        .where("createdAt", ">=", `${date}T00:00:00.000Z`)
+        .where("createdAt", "<=", `${date}T23:59:59.999Z`);
+    }
+    query = query
+      .orderBy("createdAt", "desc")
+      .orderBy(FieldPath.documentId(), "desc");
+    if (cursorCreatedAt && cursorId) query = query.startAfter(cursorCreatedAt, cursorId);
+
+    const snap = await query.limit(pageSize + 1).get();
+    const hasMore = snap.docs.length > pageSize;
+    const pageDocs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const data = pageDocs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (!includeDeleted && item.deletedAt) return false;
       if (!queryText) return true;
       return [item.bookingNumber, item.detail, item.note, item.status, item.createdBy].join(" ").toLowerCase().includes(queryText);
     });
-    return Response.json({ ok: true, data, requestedBy: profile.name || profile.email });
+    const lastDoc = pageDocs[pageDocs.length - 1] || null;
+    return Response.json({
+      ok: true,
+      data,
+      pagination: {
+        hasMore,
+        nextCursor: hasMore && lastDoc ? {
+          createdAt: String(lastDoc.get("createdAt") || ""),
+          id: lastDoc.id
+        } : null,
+        pageSize
+      },
+      requestedBy: profile.name || profile.email
+    });
   } catch (error) {
     return errorResponse(error);
   }
