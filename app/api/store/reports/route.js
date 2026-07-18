@@ -35,7 +35,7 @@ function utcRangeForBangkokDate(date) {
   };
 }
 
-function reportLog(ref, event, profile, now, before = null, after = null, reason = "") {
+function reportLog(ref, event, profile, now, before = null, after = null, reason = "", checkerName = "") {
   const compact = (value) => {
     if (!value || typeof value !== "object") return value;
     const { workflowHistory, ...rest } = value;
@@ -44,11 +44,11 @@ function reportLog(ref, event, profile, now, before = null, after = null, reason
   };
   return {
     event, at: now, by: profile.name || profile.email, byUid: profile.uid,
-    reason: clean(reason, 1000), before: compact(before), after: compact(after)
+    reason: clean(reason, 1000), checkerName: clean(checkerName, 160), before: compact(before), after: compact(after)
   };
 }
 
-function reportKpiEvent(event, profile, now, after = {}, reason = "") {
+function reportKpiEvent(event, profile, now, after = {}, reason = "", checkerName = "") {
   const row = {
     action: event,
     role: String(event || "").startsWith("pack_") ? "pack" : "store",
@@ -56,7 +56,8 @@ function reportKpiEvent(event, profile, now, after = {}, reason = "") {
     name: profile.name || profile.email,
     status: after.status || "",
     packStatus: after.packStatus || "",
-    reason: clean(reason, 1000)
+    reason: clean(reason, 1000),
+    checkerName: clean(checkerName, 160)
   };
   if (event === "pack_returned") Object.assign(row, { result: "returned", toStatus: "returned" });
   return row;
@@ -244,8 +245,10 @@ export async function PATCH(request) {
       if (body?.action === "bulk_confirm") {
         const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.slice(0, 50).map((id) => String(id || "").trim()).filter(validDocId))] : [];
         const type = clean(body?.type, 30);
+        const checkerName = clean(body?.checkerName, 160);
         if (!ids.length) return Response.json({ ok: false, error: "No report rows selected" }, { status: 400 });
         if (!REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
+        if (!checkerName) return Response.json({ ok: false, error: "Pack checker name is required" }, { status: 400 });
         const snapshots = await db.getAll(...ids.map((id) => db.collection("store_reports").doc(id)));
         const now = new Date().toISOString();
         const batch = db.batch();
@@ -254,10 +257,10 @@ export async function PATCH(request) {
           if (!snap.exists) return;
           const item = snap.data();
           if (item.type !== type || item.deletedAt || item.packStatus !== "pending") return;
-          const patch = { packStatus: "checked", packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, returnReason: "", status: "saved", updatedAt: now };
-          patch.workflowHistory = appendReportHistory(item, reportKpiEvent("pack_checked", profile, now, { ...item, ...patch }));
+          const patch = { packStatus: "checked", packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: "", status: "saved", updatedAt: now };
+          patch.workflowHistory = appendReportHistory(item, reportKpiEvent("pack_checked", profile, now, { ...item, ...patch }, "", checkerName));
           batch.set(snap.ref, patch, { merge: true });
-          batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "pack_checked", profile, now, item, { ...item, ...patch }));
+          batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "pack_checked", profile, now, item, { ...item, ...patch }, "", checkerName));
           updatedIds.push(snap.id);
         });
         if (!updatedIds.length) return Response.json({ ok: false, error: "Selected rows are no longer waiting for pack confirmation" }, { status: 409 });
@@ -266,42 +269,48 @@ export async function PATCH(request) {
       }
       const id = clean(body?.id, 200);
       const packStatus = ["checked", "partial", "returned"].includes(body?.packStatus) ? body.packStatus : "";
+      const checkerName = clean(body?.checkerName, 160);
       if (!validDocId(id) || !packStatus) return Response.json({ ok: false, error: "Invalid online pack update" }, { status: 400 });
+      if (!checkerName) return Response.json({ ok: false, error: "Pack checker name is required" }, { status: 400 });
       const ref = db.collection("store_reports").doc(id); const snap = await ref.get();
       if (!snap.exists || !REPORT_TYPES.includes(snap.data().type)) return Response.json({ ok: false, error: "Preparation report not found" }, { status: 404 });
       const item = snap.data(); const now = new Date().toISOString(); const reason = clean(body?.reason, 1000);
       if (packStatus === "returned" && !reason) return Response.json({ ok: false, error: "Provide return reason" }, { status: 400 });
-      const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
-      patch.workflowHistory = appendReportHistory(item, reportKpiEvent(`pack_${packStatus}`, profile, now, { ...item, ...patch }, reason));
+      const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
+      patch.workflowHistory = appendReportHistory(item, reportKpiEvent(`pack_${packStatus}`, profile, now, { ...item, ...patch }, reason, checkerName));
       const batch = db.batch();
       batch.set(ref, patch, { merge: true });
-      batch.set(ref.collection("history").doc(), reportLog(ref, `pack_${packStatus}`, profile, now, item, { ...item, ...patch }, reason));
+      batch.set(ref.collection("history").doc(), reportLog(ref, `pack_${packStatus}`, profile, now, item, { ...item, ...patch }, reason, checkerName));
       await batch.commit();
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }
     if (body?.action === "resubmit") {
       const id = clean(body?.id, 200);
+      const checkerName = clean(body?.checkerName, 160);
       if (!validDocId(id)) return Response.json({ ok: false, error: "Invalid report id" }, { status: 400 });
+      if (!checkerName) return Response.json({ ok: false, error: "Store checker name is required" }, { status: 400 });
       const ref = db.collection("store_reports").doc(id);
       const snap = await ref.get();
       if (!snap.exists || !REPORT_TYPES.includes(snap.data().type)) return Response.json({ ok: false, error: "Preparation report not found" }, { status: 404 });
       const item = snap.data();
       if (item.deletedAt || !["returned", "partial"].includes(item.packStatus)) return Response.json({ ok: false, error: "Report is not waiting for store correction" }, { status: 409 });
       const now = new Date().toISOString();
-      const patch = { status: "saved", packStatus: "pending", returnReason: "", resubmittedAt: now, resubmittedBy: profile.name || profile.email, updatedAt: now };
-      patch.workflowHistory = appendReportHistory(item, reportKpiEvent("store_resubmitted", profile, now, { ...item, ...patch }, clean(body?.reason, 1000)));
+      const patch = { status: "saved", packStatus: "pending", returnReason: "", resubmittedAt: now, resubmittedBy: profile.name || profile.email, storeCheckerName: checkerName, updatedAt: now };
+      patch.workflowHistory = appendReportHistory(item, reportKpiEvent("store_resubmitted", profile, now, { ...item, ...patch }, clean(body?.reason, 1000), checkerName));
       const batch = db.batch();
       batch.set(ref, patch, { merge: true });
-      batch.set(ref.collection("history").doc(), reportLog(ref, "store_resubmitted", profile, now, item, { ...item, ...patch }, clean(body?.reason, 1000)));
+      batch.set(ref.collection("history").doc(), reportLog(ref, "store_resubmitted", profile, now, item, { ...item, ...patch }, clean(body?.reason, 1000), checkerName));
       await batch.commit();
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }
     const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.slice(0, 50).map((id) => String(id || "").trim()).filter(validDocId))] : [];
     const type = clean(body?.type, 30);
     const date = clean(body?.date, 10);
+    const checkerName = clean(body?.checkerName, 160);
     if (!ids.length) return Response.json({ ok: false, error: "No report rows selected" }, { status: 400 });
     if (!REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     if (!utcRangeForBangkokDate(date)) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
+    if (!checkerName) return Response.json({ ok: false, error: "Store checker name is required" }, { status: 400 });
     const refs = ids.map((id) => db.collection("store_reports").doc(id));
     const snapshots = await db.getAll(...refs);
     const now = new Date().toISOString();
@@ -312,10 +321,10 @@ export async function PATCH(request) {
       if (!snap.exists) return;
       const item = snap.data();
       if (item.type !== type || String(item.serviceDate || bangkokDateKey(item.createdAt)) !== date) return;
-      const after = { ...item, status: item.status === "draft" ? "saved" : item.status, packStatus: item.packStatus === "blocked" || !item.packStatus ? "pending" : item.packStatus, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email };
-      after.workflowHistory = appendReportHistory(item, reportKpiEvent("confirmed", profile, now, after));
+      const after = { ...item, status: item.status === "draft" ? "saved" : item.status, packStatus: item.packStatus === "blocked" || !item.packStatus ? "pending" : item.packStatus, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email, storeCheckerName: checkerName };
+      after.workflowHistory = appendReportHistory(item, reportKpiEvent("confirmed", profile, now, after, "", checkerName));
       batch.update(snap.ref, after);
-      batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "confirmed", profile, now, item, after));
+      batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "confirmed", profile, now, item, after, "", checkerName));
       updated += 1;
       updatedIds.push(snap.id);
     });

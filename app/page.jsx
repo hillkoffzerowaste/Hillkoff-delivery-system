@@ -487,6 +487,7 @@ function PackSalesOrderDetails({ order }) {
     ["ผู้เปิดออเดอร์", order.orderEntrySource === "store_assist" ? `สโตร์ช่วยคีย์: ${order.createdByName || order.salesName || "สโตร์"}` : `ฝ่ายขาย: ${order.createdByName || order.salesName || "-"}`],
     ["เลขที่ใบสั่งจอง", formatOrderBookingNumbers(order) || (order.bookingNumberMissing ? "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์" : "")], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}` : ""], ["ชำระเงิน", order.paymentType],
+    ["ผู้ตรวจสโตร์ล่าสุด", order.storeCheckerName], ["ผู้ตรวจห้องแพ็คล่าสุด", order.packCheckerName],
     ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
   ].filter(([, value]) => String(value || "").trim());
   return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
@@ -558,7 +559,7 @@ function BookingNumberInput({ value, onChange, required = false }) {
   </div>;
 }
 
-function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange, onSearch, onClear, selectedIds, onSelectedIdsChange, onConfirmSelected, onUpdateStatus, updatedAt, date, onDateChange }) {
+function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange, onSearch, onClear, selectedIds, onSelectedIdsChange, onConfirmSelected, onUpdateStatus, updatedAt, date, onDateChange, checkerName, onCheckerNameChange, checkerOptions }) {
   const [statusFilter, setStatusFilter] = useState("active");
   const visibleRows = rows.filter((item) => statusFilter === "all" || (statusFilter === "active" && ["pending", "partial", "returned"].includes(item.packStatus)) || item.packStatus === statusFilter);
   const selectableRows = visibleRows.filter((item) => item.packStatus === "pending");
@@ -582,11 +583,11 @@ function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange,
       <button className="secondary" onClick={onSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={onClear}>ล้าง</button>
     </div>
     <div className="store-report-actions" style={{ marginBottom: "10px" }}>
-      <span className="muted">เลือกงานที่ตรวจครบ แล้วกดยืนยันครั้งเดียว หรือยืนยันทีละงานได้</span>
-      <div><button className="secondary" disabled={!selectableRows.length} onClick={() => toggleAll(!allSelectable)}>{allSelectable ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableRows.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length} onClick={() => onConfirmSelected(selectedVisibleIds)}>ยืนยันที่เลือก ({selectedVisibleIds.length})</button></div>
+      <div><span className="muted">เลือกงานที่ตรวจครบ แล้วกดยืนยันครั้งเดียว หรือยืนยันทีละงานได้</span><select aria-label="ชื่อผู้ตรวจห้องแพ็ค" value={checkerName} onChange={(event) => onCheckerNameChange(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจห้องแพ็ค * --</option>{[...new Set([...(checkerOptions || []), checkerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
+      <div><button className="secondary" disabled={!selectableRows.length} onClick={() => toggleAll(!allSelectable)}>{allSelectable ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableRows.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length || !checkerName.trim()} onClick={() => onConfirmSelected(selectedVisibleIds)}>ยืนยันที่เลือก ({selectedVisibleIds.length})</button></div>
     </div>
     {updatedAt && <small className="muted">อัปเดตล่าสุด {new Date(updatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small>}
-    {loading ? <p className="muted">กำลังโหลดรายการ…</p> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{visibleRows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "#b91c1c" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span></td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!selectable} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!selectable} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!selectable} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
+    {loading ? <p className="muted">กำลังโหลดรายการ…</p> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{visibleRows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; const canInspect = selectable && Boolean(checkerName.trim()); return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "#b91c1c" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span>{item.packCheckerName && <small>ผู้ตรวจล่าสุด: {item.packCheckerName}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!canInspect} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!canInspect} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!canInspect} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
     {!loading && !visibleRows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่ตรงกับตัวกรอง</p>}
   </section>;
 }
@@ -753,6 +754,8 @@ export default function App() {
   const [storeReportConfirmIds, setStoreReportConfirmIds] = useState([]);
   const [packReportSelectedIds, setPackReportSelectedIds] = useState([]);
   const [packReportBulkSubmitting, setPackReportBulkSubmitting] = useState(false);
+  const [reportStoreCheckerName, setReportStoreCheckerName] = useState("");
+  const [reportPackCheckerName, setReportPackCheckerName] = useState("");
   const [reportModal, setReportModal] = useState(null);
   const [reportRows, setReportRows] = useState([{ bookingNumber: "", detail: "", note: "", status: "saved" }]);
   const [reportPhotoPreview, setReportPhotoPreview] = useState("");
@@ -1978,26 +1981,30 @@ export default function App() {
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted, kpiAutoRefresh]);
 
   const updateReportPackStatus = async (item, packStatus, returnReason = "") => {
+    const checkerName = reportPackCheckerName.trim();
+    if (!checkerName) return setSyncStatus("⚠️ กรุณาเลือกชื่อผู้ตรวจห้องแพ็ค");
     if (packStatus === "returned" && !returnReason.trim()) {
       setOnlineReturnTarget(item);
       setOnlineReturnReason("");
       return;
     }
     const reason = packStatus === "returned" ? returnReason.trim() : "";
-    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตผลตรวจของห้องแพ็คแล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตผลตรวจของห้องแพ็คแล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   const confirmSelectedPackReports = async (type, ids) => {
     const uniqueIds = [...new Set(ids || [])];
     if (!uniqueIds.length || packReportBulkSubmitting) return;
+    const checkerName = reportPackCheckerName.trim();
+    if (!checkerName) return setSyncStatus("⚠️ กรุณาเลือกชื่อผู้ตรวจห้องแพ็ค");
     setPackReportBulkSubmitting(true);
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ action: "bulk_confirm", type, ids: uniqueIds }) });
+      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ action: "bulk_confirm", type, ids: uniqueIds, checkerName }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || "ยืนยันรายการไม่สำเร็จ");
       const confirmedAt = json.data.confirmedAt;
-      setStoreReports((items) => items.map((item) => json.data.ids.includes(item.id) ? { ...item, packStatus: "checked", status: "saved", packUpdatedAt: confirmedAt, returnReason: "" } : item));
+      setStoreReports((items) => items.map((item) => json.data.ids.includes(item.id) ? { ...item, packStatus: "checked", status: "saved", packUpdatedAt: confirmedAt, packCheckerName: checkerName, returnReason: "" } : item));
       setPackReportSelectedIds((current) => current.filter((id) => !json.data.ids.includes(id)));
       setSyncStatus(`✅ ห้องแพ็คยืนยันครบ ${json.data.ids.length} รายการแล้ว`);
     } catch (error) { setSyncStatus(`❌ ยืนยันรายการไม่สำเร็จ: ${error?.message || error}`); }
@@ -2005,8 +2012,10 @@ export default function App() {
   };
 
   const resubmitStoreReport = async (item) => {
+    const checkerName = (window.prompt("ชื่อผู้ตรวจสโตร์ที่แก้ไขรายการ:", reportStoreCheckerName || lastCheckerNames.store || auth.name || "") ?? "").trim();
+    if (!checkerName) return setSyncStatus("⚠️ กรุณาระบุชื่อผู้ตรวจสโตร์");
     const reason = window.prompt("ระบุสิ่งที่สโตร์แก้ไขแล้ว (ถ้ามี):", "") ?? "";
-    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, action: "resubmit", reason }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "ส่งตรวจใหม่ไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ สโตร์แก้ไขและส่งให้ห้องแพ็คตรวจใหม่แล้ว"); } catch (e) { setSyncStatus(`❌ ส่งตรวจใหม่ไม่สำเร็จ: ${e?.message || e}`); }
+    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, action: "resubmit", reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "ส่งตรวจใหม่ไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setReportStoreCheckerName(checkerName); setSyncStatus("✅ สโตร์แก้ไขและส่งให้ห้องแพ็คตรวจใหม่แล้ว"); } catch (e) { setSyncStatus(`❌ ส่งตรวจใหม่ไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   useEffect(() => {
@@ -3073,7 +3082,7 @@ export default function App() {
 
   const getOrderTimeline = (order) => {
     const rawActivity = Array.isArray(order?.activity) && order.activity.length ? order.activity : order?.workflowHistory;
-    const workflow = Array.isArray(rawActivity) ? rawActivity.map((item, index) => ({ id: item.id || `workflow-${index}`, at: item.at, title: `${item.action || "updated"} · ${item.role || "system"}`, note: item.note || item.name || "" })) : [];
+    const workflow = Array.isArray(rawActivity) ? rawActivity.map((item, index) => ({ id: item.id || `workflow-${index}`, at: item.at, title: `${item.action || "updated"} · ${item.role || "system"}`, note: item.note || "", checkerName: item.checkerName || (item.role === "store" ? item.storeCheckerName : item.packCheckerName) || "", operatorName: item.packerName || "", performedBy: item.name || item.by || "" })) : [];
     const delivery = [
       order?.queuedAt && { id: "queued", at: order.queuedAt, title: "ส่งเข้าคิวจัดส่ง", note: order.queuedBy || "" },
       order?.grabReadyAt && { id: "grab-ready", at: order.grabReadyAt, title: order.deliveryMethod === "customer_pickup" ? "ห้องแพ็คยืนยัน · รอลูกค้ารับหน้าร้าน" : "ห้องแพ็คยืนยัน · รอ Grab รับสินค้า", note: order.grabReadyBy || "" },
@@ -3083,6 +3092,8 @@ export default function App() {
     ].filter(Boolean);
     return [...workflow, ...delivery].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
   };
+
+  const reportHistoryLabel = (event) => ({ created: "สโตร์สร้างรายการ", created_draft: "สโตร์บันทึกร่าง", confirmed: "สโตร์ยืนยันรายการ", updated: "สโตร์แก้ไขรายการ", pack_checked: "ห้องแพ็คตรวจครบ", pack_partial: "ห้องแพ็คตรวจพบของไม่ครบ", pack_returned: "ห้องแพ็คส่งกลับสโตร์", store_resubmitted: "สโตร์แก้ไขและส่งตรวจใหม่", deleted: "ลบรายการ" }[event] || event || "อัปเดตรายการ");
 
   const loadCheckerLists = useCallback(async () => {
     if (!["store", "pack", "admin"].includes(auth.role)) return;
@@ -3308,13 +3319,15 @@ export default function App() {
   const confirmStoreReports = async () => {
     const ids = storeReportConfirmIds;
     if (!ids.length) return setShowStoreReportConfirm(false);
+    const checkerName = reportStoreCheckerName.trim();
+    if (!checkerName) return setSyncStatus("⚠️ กรุณาเลือกชื่อผู้ตรวจสโตร์");
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ids, type: showStoreReportConfirm, date: storeReportDate }) });
+      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ids, type: showStoreReportConfirm, date: storeReportDate, checkerName }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       const confirmedAt = json.data.confirmedAt;
-      setStoreReports((prev) => prev.map((item) => json.data.ids.includes(item.id) ? { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt } : item));
+      setStoreReports((prev) => prev.map((item) => json.data.ids.includes(item.id) ? { ...item, status: item.status === "draft" ? "saved" : item.status, confirmedAt, confirmedBy: auth.name, storeCheckerName: checkerName } : item));
       setShowStoreReportConfirm(false);
       setStoreReportConfirmIds([]);
       setSyncStatus(`✅ ยืนยันรายงาน ${ids.length} รายการแล้ว`);
@@ -5423,7 +5436,7 @@ export default function App() {
           const rows = storeReportSearchActive ? storeReports.filter((item) => item.type === type && !item.deletedAt) : pendingRows;
           const search = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: storeReportQuery, includeDeleted: true }); };
           const clear = () => { setStoreReportQuery(""); setStoreReportSearchActive(false); setPackReportSelectedIds([]); fetchStoreReports({ type, date: storeReportDate, includeDeleted: false }); };
-          return <PackReportWorkspace type={type} title={title} rows={rows} loading={storeReportsLoading} query={storeReportQuery} onQueryChange={setStoreReportQuery} onSearch={search} onClear={clear} selectedIds={packReportSelectedIds} onSelectedIdsChange={setPackReportSelectedIds} onConfirmSelected={(ids) => confirmSelectedPackReports(type, ids)} onUpdateStatus={updateReportPackStatus} updatedAt={storeReportsUpdatedAt} date={storeReportDate} onDateChange={(nextDate) => { setStoreReportDate(nextDate); setStoreReportSearchActive(false); setPackReportSelectedIds([]); }} />;
+          return <PackReportWorkspace type={type} title={title} rows={rows} loading={storeReportsLoading} query={storeReportQuery} onQueryChange={setStoreReportQuery} onSearch={search} onClear={clear} selectedIds={packReportSelectedIds} onSelectedIdsChange={setPackReportSelectedIds} onConfirmSelected={(ids) => confirmSelectedPackReports(type, ids)} onUpdateStatus={updateReportPackStatus} updatedAt={storeReportsUpdatedAt} date={storeReportDate} onDateChange={(nextDate) => { setStoreReportDate(nextDate); setStoreReportSearchActive(false); setPackReportSelectedIds([]); }} checkerName={reportPackCheckerName} onCheckerNameChange={setReportPackCheckerName} checkerOptions={checkerLists.pack} />;
         })()}
 
         {false && ["pack-booking", "pack-online"].includes(displayTab) && (() => {
@@ -5499,7 +5512,8 @@ export default function App() {
               <div className="panel-head"><h2>ยืนยันบันทึกรายงาน</h2><span>สโตร์</span></div>
               <p>รายการที่ยังไม่ยืนยันทั้งหมดจะถูกปิดสถานะและบันทึกวันเวลายืนยัน</p>
               <p className="muted">รวม {storeReportConfirmIds.length} รายการของวันที่เลือก</p>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setShowStoreReportConfirm(false)}>กลับไปแก้ไข</button><button className="primary" onClick={confirmStoreReports}>ยืนยันบันทึก</button></div>
+              <label className="field-label">ชื่อผู้ตรวจสโตร์ *</label><select value={reportStoreCheckerName} onChange={(event) => setReportStoreCheckerName(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists.store || []), reportStoreCheckerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setShowStoreReportConfirm(false)}>กลับไปแก้ไข</button><button className="primary" disabled={!reportStoreCheckerName.trim()} onClick={confirmStoreReports}>ยืนยันบันทึก</button></div>
             </section>
           </div>
         )}
@@ -5557,7 +5571,7 @@ export default function App() {
                 {auth.role === "store" && chiangmaiHistoryOrder.storeStatus === "returned" && <button className="primary" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "store"); }}>🔧 สโตร์แก้ไขและยืนยัน</button>}
                 {chiangmaiHistoryOrder.storeStatus === "returned" && <span className="muted" style={{ alignSelf: "center" }}>งานนี้ส่งกลับให้สโตร์ตรวจสอบแล้ว · แก้ไขเสร็จให้ยืนยันเพื่อส่งห้องแพ็คตรวจซ้ำ</span>}
               </div>
-              <h3 style={{ marginTop: "16px" }}>Timeline การดำเนินงาน</h3><div style={{ display: "grid", gap: "8px" }}>{getOrderTimeline(chiangmaiHistoryOrder).map(item => <article key={item.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{item.title}</b><div className="muted">{item.at || "-"}</div>{item.note && <div>{item.note}</div>}</article>)}{!getOrderTimeline(chiangmaiHistoryOrder).length && <p className="muted">ออเดอร์เก่ายังไม่มี Timeline ที่ระบบบันทึกไว้</p>}</div>
+              <h3 style={{ marginTop: "16px" }}>Timeline การดำเนินงาน</h3><div style={{ display: "grid", gap: "8px" }}>{getOrderTimeline(chiangmaiHistoryOrder).map(item => <article key={item.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{item.title}</b><div className="muted">{item.at || "-"}</div>{item.checkerName && <div><b>ผู้ตรวจ:</b> {item.checkerName}</div>}{item.operatorName && <div><b>ผู้ดำเนินการ:</b> {item.operatorName}</div>}{item.performedBy && <div className="muted">บันทึกโดยบัญชี: {item.performedBy}</div>}{item.note && <div>{item.note}</div>}</article>)}{!getOrderTimeline(chiangmaiHistoryOrder).length && <p className="muted">ออเดอร์เก่ายังไม่มี Timeline ที่ระบบบันทึกไว้</p>}</div>
             </section>
           </div>
         )}
@@ -5566,8 +5580,8 @@ export default function App() {
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
             <section className="panel" style={{ width: "min(760px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
               <div className="panel-head"><h2>รายละเอียดรายงาน</h2><button className="secondary" onClick={() => setStoreReportDetail(null)}>ปิด</button></div>
-              <div style={{ display: "grid", gap: "7px" }}><b>{storeReportDetail.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{storeReportDetail.linkedOrder && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "7px", padding: "8px" }}><b>เชื่อมกับออเดอร์ฝ่ายขาย</b><div>{storeReportDetail.linkedOrder.id} · {storeReportDetail.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</div><small>{[storeReportDetail.linkedOrder.zone, storeReportDetail.linkedOrder.address].filter(Boolean).join(" · ")}</small></div>}<div>{storeReportDetail.detail || "-"}</div>{storeReportDetail.note && <div className="muted">หมายเหตุ: {storeReportDetail.note}</div>}<div className="muted">สร้างโดย {storeReportDetail.createdBy || "-"} · {storeReportDetail.createdAt || "-"}</div>{storeReportDetail.confirmedAt && <div className="muted">ยืนยัน: {storeReportDetail.confirmedAt} โดย {storeReportDetail.confirmedBy || "-"}</div>}{storeReportDetail.deletedAt && <div style={{ color: "#991b1b" }}>ลบเมื่อ {storeReportDetail.deletedAt} · เหตุผล: {storeReportDetail.deleteReason || "-"}</div>}</div>
-              <h3 style={{ marginTop: "16px" }}>ประวัติการเปลี่ยนแปลง</h3><div style={{ display: "grid", gap: "8px" }}>{(storeReportDetail.history || []).map(log => <article key={log.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{log.event}</b><div className="muted">{log.at} · {log.by || "-"}</div>{log.reason && <div>เหตุผล: {log.reason}</div>}</article>)}{!(storeReportDetail.history || []).length && <p className="muted">รายการเก่าอาจยังไม่มี log ก่อนเริ่มใช้ระบบนี้</p>}</div>
+              <div style={{ display: "grid", gap: "7px" }}><b>{storeReportDetail.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{storeReportDetail.linkedOrder && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "7px", padding: "8px" }}><b>เชื่อมกับออเดอร์ฝ่ายขาย</b><div>{storeReportDetail.linkedOrder.id} · {storeReportDetail.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</div><small>{[storeReportDetail.linkedOrder.zone, storeReportDetail.linkedOrder.address].filter(Boolean).join(" · ")}</small></div>}<div>{storeReportDetail.detail || "-"}</div>{storeReportDetail.note && <div className="muted">หมายเหตุ: {storeReportDetail.note}</div>}<div className="muted">สร้างโดย {storeReportDetail.createdBy || "-"} · {storeReportDetail.createdAt || "-"}</div>{storeReportDetail.confirmedAt && <div className="muted">ยืนยัน: {storeReportDetail.confirmedAt} · ผู้ตรวจสโตร์: {storeReportDetail.storeCheckerName || "ไม่มีข้อมูล"} · บันทึกโดย: {storeReportDetail.confirmedBy || "-"}</div>}{storeReportDetail.packUpdatedAt && <div className="muted">ตรวจห้องแพ็ค: {storeReportDetail.packUpdatedAt} · ผู้ตรวจ: {storeReportDetail.packCheckerName || "ไม่มีข้อมูล"} · บันทึกโดย: {storeReportDetail.packUpdatedBy || "-"}</div>}{storeReportDetail.deletedAt && <div style={{ color: "#991b1b" }}>ลบเมื่อ {storeReportDetail.deletedAt} · เหตุผล: {storeReportDetail.deleteReason || "-"}</div>}</div>
+              <h3 style={{ marginTop: "16px" }}>ประวัติการตรวจสอบ</h3><div style={{ display: "grid", gap: "8px" }}>{(storeReportDetail.history || []).map(log => <article key={log.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{reportHistoryLabel(log.event)}</b><div className="muted">{log.at || "-"}</div><div><b>ผู้ตรวจ:</b> {log.checkerName || log.after?.packCheckerName || log.after?.storeCheckerName || "ไม่มีข้อมูลชื่อผู้ตรวจ"}</div><div className="muted">บันทึกโดยบัญชี: {log.by || "-"}</div>{log.reason && <div>เหตุผล: {log.reason}</div>}</article>)}{!(storeReportDetail.history || []).length && <p className="muted">รายการเก่าอาจยังไม่มี log ก่อนเริ่มใช้ระบบนี้</p>}</div>
             </section>
           </div>
         )}
