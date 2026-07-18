@@ -73,6 +73,7 @@ export async function GET(request) {
     const type = params.get("type");
     if (profile.role === "pack" && type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Pack can view preparation reports only" }, { status: 403 });
     const date = params.get("date");
+    const fromDate = params.get("fromDate");
     const id = clean(params.get("id"), 200);
     const queryText = clean(params.get("q"), 200).toLowerCase();
     const includeDeleted = params.get("includeDeleted") === "true";
@@ -116,9 +117,12 @@ export async function GET(request) {
     }
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
     const dateRange = date ? utcRangeForBangkokDate(date) : null;
+    const fromDateRange = kpi && fromDate ? utcRangeForBangkokDate(fromDate) : null;
     if (date && !dateRange) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
+    if (kpi && (!fromDate || !fromDateRange)) return Response.json({ ok: false, error: "Invalid KPI start date" }, { status: 400 });
     let query = db.collection("store_reports");
     if (type) query = query.where("type", "==", type);
+    if (fromDateRange) query = query.where("createdAt", ">=", fromDateRange.start);
     query = query.orderBy("createdAt", "desc");
     if (dateRange) query = query.startAt(dateRange.end).endAt(dateRange.start);
     const snap = await query.limit(kpi ? 5000 : 500).get();

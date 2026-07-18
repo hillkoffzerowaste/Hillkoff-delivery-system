@@ -1911,7 +1911,10 @@ export default function App() {
       if (date) params.set("date", date);
       if (query.trim()) params.set("q", query.trim());
       if (includeDeleted) params.set("includeDeleted", "true");
-      if (kpi) params.set("kpi", "true");
+      if (kpi) {
+        params.set("kpi", "true");
+        params.set("fromDate", `${currentMonthKey}-01`);
+      }
       if (type) params.set("type", type);
       const res = await fetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
@@ -1959,7 +1962,7 @@ export default function App() {
       if (document.visibilityState !== "visible") return;
       if (isKpi) fetchStoreReports({ includeDeleted: true, kpi: true, silent: true });
       else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: storeReportIncludeDeleted, silent: true });
-    }, 30000);
+    }, isKpi ? 180000 : 30000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted]);
