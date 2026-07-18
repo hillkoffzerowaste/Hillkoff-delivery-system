@@ -4573,7 +4573,7 @@ export default function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p>{displayTab === "store-pickup" ? "Grab/รับหน้าร้าน" : "เชียงใหม่และจังหวัดใกล้เคียง"} · {todayText()}</p>
+            <p>เชียงใหม่และจังหวัดใกล้เคียง · {todayText()}</p>
             <h1>{TAB_TITLES[displayTab] || "ระบบจัดการงาน"}</h1>
           </div>
           <div className="top-actions">
