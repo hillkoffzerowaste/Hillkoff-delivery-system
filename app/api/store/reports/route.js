@@ -5,6 +5,8 @@ export const runtime = "nodejs";
 
 const REPORT_TYPES = ["booking", "online"];
 const REPORT_STATUSES = ["draft", "saved", "waiting", "partial"];
+const REPORT_PAGE_LIMIT = 250;
+const KPI_REPORT_LIMIT = 1000;
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
@@ -126,7 +128,7 @@ export async function GET(request) {
     if (fromDateRange) query = query.where("createdAt", ">=", fromDateRange.start);
     query = query.orderBy("createdAt", "desc");
     if (dateRange) query = query.startAt(dateRange.end).endAt(dateRange.start);
-    const snap = await query.limit(kpi ? 5000 : 500).get();
+    const snap = await query.limit(kpi ? KPI_REPORT_LIMIT : REPORT_PAGE_LIMIT).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
       // ห้องแพ็คใช้รายการออเดอร์ฝ่ายขายต้นทางอยู่แล้ว จึงไม่แสดงแถวซ้ำจากสโตร์

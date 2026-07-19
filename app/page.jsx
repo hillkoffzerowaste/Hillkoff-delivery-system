@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
+import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
 import {
   AlertTriangle,
   Camera,
@@ -34,8 +35,6 @@ import {
 } from "lucide-react";
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
-const DRIVER_ORDERS_HISTORY_LIMIT = 1000;
-
 const initialDrivers = [];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
@@ -779,7 +778,7 @@ export default function App() {
   const [reportExportDate, setReportExportDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
-  const [ordersLimit, setOrdersLimit] = useState(20);
+  const [ordersLimit, setOrdersLimit] = useState(100);
   const customersLimit = 200;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
@@ -864,6 +863,7 @@ export default function App() {
   const lastDriverLocationsPullRef = useRef(null);
   const refreshInFlightRef = useRef(false);
   const driverOrdersSnapshotsRef = useRef({ assigned: [], queued: [] });
+  const operationalOrdersSnapshotsRef = useRef({ recent: [], active: [] });
   
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
   const ordersToSyncRef = useRef(new Set());
@@ -1018,12 +1018,7 @@ export default function App() {
 	    };
 
     const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
-    const isKpiDashboard = ["store-dashboard", "pack-dashboard"].includes(String(displayTab || ""));
-    const needsCompleteOperationalQueue = ["sales", "sales-outstation", "chiangmai", "store-work", "store-pickup", "pack-work", "pack-pickup", "pack-outstation"].includes(String(displayTab || ""));
-	    const effectiveOrdersLimit = state.auth?.role === "driver"
-	      ? Math.max(ordersLimit, DRIVER_ORDERS_HISTORY_LIMIT)
-	      : (isKpiDashboard || needsCompleteOperationalQueue) ? Math.max(ordersLimit, 5000)
-	      : ["reports", "settings"].includes(String(displayTab || "")) ? Math.max(ordersLimit, 500) : ordersLimit;
+	    const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
     // Store searches customers through the authenticated API; its Firestore rules intentionally
     // do not grant a broad realtime read of the full customer collection.
@@ -1068,6 +1063,15 @@ export default function App() {
 	            rows = [...byId.values()]
 	              .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
 	              .slice(0, effectiveOrdersLimit);
+	          } else if (state.auth?.role !== "driver" && source !== "all") {
+	            operationalOrdersSnapshotsRef.current[source] = incomingRows;
+	            const byId = new Map();
+	            [...operationalOrdersSnapshotsRef.current.active, ...operationalOrdersSnapshotsRef.current.recent]
+	              .forEach((order) => {
+	                const current = byId.get(order.id);
+	                if (!current || String(order.updatedAt || "") >= String(current.updatedAt || "")) byId.set(order.id, order);
+	              });
+	            rows = [...byId.values()].sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
 	          }
 	              setState((prev) => {
 	                const prevById = {};
@@ -1094,8 +1098,11 @@ export default function App() {
 	          const queuedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", ""), fb.where("queueStatus", "==", "queued"), fb.limit(effectiveOrdersLimit));
 	          unsubs.push(fb.onSnapshot(queuedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "queued"), onOrderError));
 	        } else {
+	          operationalOrdersSnapshotsRef.current = { recent: [], active: [] };
 	          const ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
-	          unsubs.push(fb.onSnapshot(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }))), onOrderError));
+	          unsubs.push(fb.onSnapshot(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "recent"), onOrderError));
+	          const activeOrdersQ = fb.query(fb.collection(db, "orders"), fb.where("queueStatus", "in", ["preparing", "ready", "queued"]), fb.limit(250));
+	          unsubs.push(fb.onSnapshot(activeOrdersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "active"), onOrderError));
 	        }
 	      } catch (e) {
 	        console.warn("orders onSnapshot error", e);
@@ -1969,7 +1976,7 @@ export default function App() {
   useEffect(() => {
     if (auth.role !== "store") return;
     fetchStoreReportIssues();
-    const timer = window.setInterval(fetchStoreReportIssues, 30000);
+    const timer = window.setInterval(fetchStoreReportIssues, REPORT_REFRESH_INTERVALS.issues);
     return () => window.clearInterval(timer);
   }, [auth.role, fetchStoreReportIssues]);
   useEffect(() => {
@@ -1985,7 +1992,7 @@ export default function App() {
       if (document.visibilityState !== "visible") return;
       if (isKpi) fetchStoreReports({ includeDeleted: true, kpi: true, silent: true });
       else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: storeReportIncludeDeleted, silent: true });
-    }, isKpi ? 300000 : 180000);
+    }, isKpi ? REPORT_REFRESH_INTERVALS.kpi : REPORT_REFRESH_INTERVALS.reports);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted, kpiAutoRefresh]);
@@ -5378,7 +5385,7 @@ export default function App() {
 
         {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
-            {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 5 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
+            {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
             {displayTab !== "store-dashboard" && <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>}
             {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "10px" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
             {displayTab === "store-work" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
@@ -5395,6 +5402,7 @@ export default function App() {
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
               </article>})}
+              {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
             </div>}
             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
@@ -5438,7 +5446,7 @@ export default function App() {
 
         {displayTab === "pack-dashboard" && (() => { const pending = packTodayOrders.filter(order => order.packStatus === "pending").length; const working = packTodayOrders.filter(order => order.packStatus === "working").length; const waiting = packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length; const monthOrders = packKpiOrders.filter(order => getOrderServiceDate(order).startsWith(currentMonthKey)); const monthCompleted = monthOrders.filter(order => ["checked", "partial"].includes(order.packStatus)); const monthReturned = packKpiOrders.flatMap(getReturnEvents).filter(event => String(event.at || "").startsWith(currentMonthKey)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอแพ็ค", working: "กำลังแพ็ค", checked: "แพ็คเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับสโตร์" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = packTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.packStatus] || "รอแพ็ค", statusTone: statusTones[order.packStatus] })); let activityRows = buildKpiActivityRows(packKpiOrders, "pack"); if (!activityRows.length) activityRows = packTodayOrders.map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "อัปเดตออเดอร์ห้องแพ็ค", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard cards={[{ icon: "📦", value: packTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่เข้าสู่ห้องแพ็ค", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอแพ็ค", detail: "ยังไม่ได้เริ่มแพ็ค", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังแพ็ค", detail: "ห้องแพ็คกำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: packTodayCompleted, label: "แพ็คเสร็จ", detail: "ตรวจและยืนยันแล้ว", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={packTodayCompleted} total={packTodayOrders.length} followUps={[{ label: "งานส่งกลับสโตร์", emptyLabel: "ไม่มีงานส่งกลับ", value: packKpiReturned.length }, { label: "งานค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: packKpiOverdue.length }, { label: "งานรอดำเนินการ / รอของ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "แพ็คเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับสโตร์", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราแพ็คครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows} reportActions={{ copyDaily: () => copyPackSummary("daily"), shareDaily: () => sharePackSummary("daily"), copyMonthly: () => copyPackSummary("monthly"), shareMonthly: () => sharePackSummary("monthly") }} information="KPI ห้องแพ็คอ้างอิง Log การตรวจจริงแบบเรียลไทม์ เคสส่งกลับที่แก้เสร็จแล้วยังคงอยู่ในสถิติย้อนหลัง แต่ไม่แสดงเป็นงานค้าง" progressTitle="ความคืบหน้าการแพ็คสินค้า" progressLabel="แพ็คเสร็จ" />;</section>; })()}
 
-        {displayTab === "pack-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 5 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
+        {displayTab === "pack-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
 
         {["pack-booking", "pack-online"].includes(displayTab) && (() => {
           const type = displayTab === "pack-booking" ? "booking" : "online";
@@ -5513,6 +5521,7 @@ export default function App() {
                   )}
                 </article>
               ))}
+              {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
               {todayPreparationOrders.length === 0 && <p className="muted">ยังไม่มีออเดอร์ของวันนี้ในขั้นตอนนี้</p>}
             </div>
           </section>
@@ -5628,8 +5637,8 @@ export default function App() {
               </div>}
               <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "10px" }}>
-                <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setOrdersLimit((n) => n + 20)}>
-                  โหลดเพิ่ม (+20)
+                <button className="secondary" disabled={ordersLimit >= MAX_RECENT_ORDERS_LIMIT} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setOrdersLimit(nextOrdersLimit)}>
+                  {ordersLimit >= MAX_RECENT_ORDERS_LIMIT ? "แสดงครบตามขีดจำกัด" : "ดูออเดอร์เก่าเพิ่ม"}
                 </button>
               </div>
               <div className="filters dispatch-filters">

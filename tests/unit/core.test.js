@@ -12,6 +12,32 @@ import { createOtpCode, hashOtp, isOtpExpired, otpHashesEqual } from "../../lib/
 import { getDeliverySheetUrl, postToGoogleAppsScript } from "../../lib/googleAppsScript.js";
 import { findVehicleById, vehicleDisplayName } from "../../lib/vehicleMaster.js";
 import { BOOKING_NUMBER_PATTERN, bookingRegistryId, normalizeBookingNumber } from "../../lib/bookingRegistry.js";
+import {
+  MAX_RECENT_ORDERS_LIMIT,
+  REPORT_REFRESH_INTERVALS,
+  nextOrdersLimit,
+  recentOrdersLimit
+} from "../../lib/firestoreReadPolicy.js";
+
+describe("Firestore read policy", () => {
+  it("keeps realtime order windows bounded and gives drivers a smaller operational history", () => {
+    expect(recentOrdersLimit(20, "sales")).toBe(100);
+    expect(recentOrdersLimit(20, "driver")).toBe(200);
+    expect(recentOrdersLimit(5000, "sales")).toBe(MAX_RECENT_ORDERS_LIMIT);
+  });
+
+  it("loads older orders in bounded steps", () => {
+    expect(nextOrdersLimit(20)).toBe(200);
+    expect(nextOrdersLimit(200)).toBe(400);
+    expect(nextOrdersLimit(MAX_RECENT_ORDERS_LIMIT)).toBe(MAX_RECENT_ORDERS_LIMIT);
+  });
+
+  it("uses conservative visibility-aware report refresh intervals", () => {
+    expect(REPORT_REFRESH_INTERVALS.issues).toBe(300_000);
+    expect(REPORT_REFRESH_INTERVALS.kpi).toBe(900_000);
+    expect(REPORT_REFRESH_INTERVALS.reports).toBe(600_000);
+  });
+});
 
 describe("monthly booking registry", () => {
   it("normalizes booking numbers and scopes uniqueness by month", () => {
