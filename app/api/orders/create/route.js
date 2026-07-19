@@ -2,7 +2,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
-import { customerSearchRecord } from "../../../../lib/customerSearchIndex";
+import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
@@ -86,8 +86,12 @@ export async function POST(request) {
     const customerId = clean(order.customerId, 120);
     if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "A valid customer is required" }, { status: 400 });
     const customerSnap = await db.collection("customers").doc(customerId).get();
-    if (!customerSnap.exists) return Response.json({ ok: false, error: "Customer not found" }, { status: 404 });
-    const customer = customerSnap.data() || {};
+    const indexedCustomerSnap = customerSnap.exists ? null : await db.collection("customer_search").doc(customerId).get();
+    const customer = resolveCustomerRecord(
+      customerSnap.exists ? customerSnap.data() || {} : null,
+      indexedCustomerSnap?.exists ? indexedCustomerSnap.data() || {} : null
+    );
+    if (!customer) return Response.json({ ok: false, error: "Customer not found" }, { status: 404 });
     const customerName = clean(customer.name, 200);
     if (!customerName) return Response.json({ ok: false, error: "Customer profile is incomplete" }, { status: 409 });
     const boxes = finiteNumber(order.boxes || 0, { min: 0, max: 10000, integer: true });

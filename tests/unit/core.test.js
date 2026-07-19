@@ -4,7 +4,8 @@ import {
   customerSearchKeys,
   customerSearchRecord,
   customerSearchTerms,
-  normalizeCustomerSearch
+  normalizeCustomerSearch,
+  resolveCustomerRecord
 } from "../../lib/customerSearchIndex.js";
 import { driverIdentityPatch, resolveVerifiedDriver } from "../../lib/driverIdentity.js";
 import { createOtpCode, hashOtp, isOtpExpired, otpHashesEqual } from "../../lib/otp.js";
@@ -33,6 +34,13 @@ describe("customer search indexing", () => {
     expect(customerSearchTerms(customer)).toContain("081");
     expect(customerSearchKeys(customer)).toContain("234");
     expect(customerSearchRecord(customer)).toMatchObject({ name: "ร้าน กาแฟ", phoneDigits: "0812345678" });
+  });
+
+  it("uses a legacy search-index customer when the primary customer record is missing", () => {
+    const indexedCustomer = { name: "Legacy Customer", phone: "0812345678" };
+    expect(resolveCustomerRecord(null, indexedCustomer)).toBe(indexedCustomer);
+    expect(resolveCustomerRecord({ name: "Primary Customer" }, indexedCustomer)).toEqual({ name: "Primary Customer" });
+    expect(resolveCustomerRecord(null, { phone: "0812345678" })).toBeNull();
   });
 });
 
