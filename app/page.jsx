@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
+import { authenticatedFetch } from "../lib/authenticatedFetch";
 import {
   AlertTriangle,
   Camera,
@@ -1413,6 +1414,10 @@ export default function App() {
     return token;
   }, []);
 
+  const authenticatedApiFetch = useCallback((input, init = {}) => (
+    authenticatedFetch(input, init, { getToken: refreshAuthToken })
+  ), [refreshAuthToken]);
+
   const sendToChatbot = async (text) => {
     const q = String(text || "").trim();
     if (!q) return;
@@ -1935,7 +1940,6 @@ export default function App() {
     storeReportsFetchInFlightRef.current = true;
     if (!silent) setStoreReportsLoading(true);
     try {
-      const idToken = await refreshAuthToken(true);
       const params = new URLSearchParams();
       if (date) params.set("date", date);
       if (query.trim()) params.set("q", query.trim());
@@ -1945,7 +1949,7 @@ export default function App() {
         params.set("fromDate", `${currentMonthKey}-01`);
       }
       if (type) params.set("type", type);
-      const res = await fetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const res = await authenticatedApiFetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`);
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports(Array.isArray(json.data) ? json.data : []);
@@ -1961,8 +1965,7 @@ export default function App() {
     if (auth.role !== "store") return;
     if (document.visibilityState !== "visible") return;
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports?alerts=true", { headers: { Authorization: `Bearer ${idToken}` } });
+      const res = await authenticatedApiFetch("/api/store/reports?alerts=true");
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReportIssues({
@@ -1972,7 +1975,7 @@ export default function App() {
     } catch (error) {
       setSyncStatus(`⚠️ โหลดรายการของไม่ครบไม่สำเร็จ: ${error?.message || error}`);
     }
-  }, [auth.role, refreshAuthToken]);
+  }, [auth.role, authenticatedApiFetch]);
   useEffect(() => {
     if (auth.role !== "store") return;
     fetchStoreReportIssues();
@@ -2006,7 +2009,7 @@ export default function App() {
       return;
     }
     const reason = packStatus === "returned" ? returnReason.trim() : "";
-    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, packStatus, reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตผลตรวจของห้องแพ็คแล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
+    try { const res = await authenticatedApiFetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, packStatus, reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "อัปเดตไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setSyncStatus("✅ อัปเดตผลตรวจของห้องแพ็คแล้ว"); } catch (e) { setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   const confirmSelectedPackReports = async (type, ids) => {
@@ -2016,8 +2019,7 @@ export default function App() {
     if (!checkerName) return setSyncStatus("⚠️ กรุณาเลือกชื่อผู้ตรวจห้องแพ็ค");
     setPackReportBulkSubmitting(true);
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ action: "bulk_confirm", type, ids: uniqueIds, checkerName }) });
+      const res = await authenticatedApiFetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "bulk_confirm", type, ids: uniqueIds, checkerName }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || "ยืนยันรายการไม่สำเร็จ");
       const confirmedAt = json.data.confirmedAt;
@@ -2032,7 +2034,7 @@ export default function App() {
     const checkerName = (window.prompt("ชื่อผู้ตรวจสโตร์ที่แก้ไขรายการ:", reportStoreCheckerName || lastCheckerNames.store || auth.name || "") ?? "").trim();
     if (!checkerName) return setSyncStatus("⚠️ กรุณาระบุชื่อผู้ตรวจสโตร์");
     const reason = window.prompt("ระบุสิ่งที่สโตร์แก้ไขแล้ว (ถ้ามี):", "") ?? "";
-    try { const idToken = await refreshAuthToken(true); const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id, action: "resubmit", reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "ส่งตรวจใหม่ไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setReportStoreCheckerName(checkerName); setSyncStatus("✅ สโตร์แก้ไขและส่งให้ห้องแพ็คตรวจใหม่แล้ว"); } catch (e) { setSyncStatus(`❌ ส่งตรวจใหม่ไม่สำเร็จ: ${e?.message || e}`); }
+    try { const res = await authenticatedApiFetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, action: "resubmit", reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "ส่งตรวจใหม่ไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setReportStoreCheckerName(checkerName); setSyncStatus("✅ สโตร์แก้ไขและส่งให้ห้องแพ็คตรวจใหม่แล้ว"); } catch (e) { setSyncStatus(`❌ ส่งตรวจใหม่ไม่สำเร็จ: ${e?.message || e}`); }
   };
 
   useEffect(() => {
@@ -3288,8 +3290,7 @@ export default function App() {
     if (!reportModal) return;
     if (reportRows.some((row) => row.bookingNumber.trim() && !isValidBookingNumber(row.bookingNumber))) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ type: reportModal, rows: reportRows }) });
+      const res = await authenticatedApiFetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: reportModal, rows: reportRows }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => [...json.data, ...prev]);
@@ -3311,8 +3312,7 @@ export default function App() {
     if (!rows.length) return [];
     if (rows.some((row) => row.bookingNumber.trim() && !isValidBookingNumber(row.bookingNumber))) { setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก"); return null; }
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ type, rows, draft: true }) });
+      const res = await authenticatedApiFetch("/api/store/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, rows, draft: true }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => [...json.data, ...prev]);
@@ -3339,8 +3339,7 @@ export default function App() {
     const checkerName = reportStoreCheckerName.trim();
     if (!checkerName) return setSyncStatus("⚠️ กรุณาเลือกชื่อผู้ตรวจสโตร์");
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ids, type: showStoreReportConfirm, date: storeReportDate, checkerName }) });
+      const res = await authenticatedApiFetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, type: showStoreReportConfirm, date: storeReportDate, checkerName }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       const confirmedAt = json.data.confirmedAt;
@@ -3356,8 +3355,7 @@ export default function App() {
     const normalizedBookingNumber = normalizeBookingNumber(editingStoreReport.bookingNumber || "");
     if (normalizedBookingNumber && !isValidBookingNumber(normalizedBookingNumber)) return setSyncStatus("❌ เลขที่ใบสั่งจองต้องมีคำนำหน้า ตามด้วย - และตัวเลข 4 หลัก");
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ...editingStoreReport, bookingNumber: normalizedBookingNumber }) });
+      const res = await authenticatedApiFetch("/api/store/reports", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...editingStoreReport, bookingNumber: normalizedBookingNumber }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => prev.map((item) => item.id === json.data.id ? json.data : item));
@@ -3368,8 +3366,7 @@ export default function App() {
 
   const openStoreReportDetail = async (item) => {
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch(`/api/store/reports?id=${encodeURIComponent(item.id)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const res = await authenticatedApiFetch(`/api/store/reports?id=${encodeURIComponent(item.id)}`);
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReportDetail(json.data);
@@ -3379,8 +3376,7 @@ export default function App() {
   const deleteStoreReport = async (item) => {
     if (!window.confirm(`ยืนยันลบรายการ ${item.bookingNumber || "นี้"} หรือไม่?\nรายการจะถูกซ่อน แต่ประวัติยังคงเก็บในระบบ`)) return;
     try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/store/reports", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: item.id }) });
+      const res = await authenticatedApiFetch("/api/store/reports", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setStoreReports((prev) => prev.map((report) => report.id === item.id ? json.data : report).filter((report) => storeReportIncludeDeleted || !report.deletedAt));

@@ -18,6 +18,25 @@ import {
   nextOrdersLimit,
   recentOrdersLimit
 } from "../../lib/firestoreReadPolicy.js";
+import { authenticatedFetch } from "../../lib/authenticatedFetch.js";
+
+describe("authenticated API requests", () => {
+  it("adds a fresh bearer token and retries once when the API reports missing authorization", async () => {
+    const getToken = vi.fn()
+      .mockResolvedValueOnce("first-token")
+      .mockResolvedValueOnce("second-token");
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error: "Missing authorization token" }), { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    const response = await authenticatedFetch("/api/store/reports", { method: "POST" }, { getToken, fetchImpl });
+
+    expect(response.status).toBe(200);
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0][1].headers.get("Authorization")).toBe("Bearer first-token");
+    expect(fetchImpl.mock.calls[1][1].headers.get("Authorization")).toBe("Bearer second-token");
+  });
+});
 
 describe("Firestore read policy", () => {
   it("keeps realtime order windows bounded and gives drivers a smaller operational history", () => {
