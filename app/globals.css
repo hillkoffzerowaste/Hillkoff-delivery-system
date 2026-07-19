@@ -2050,6 +2050,23 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
 
 .prep-order-details[open] { padding-bottom: 10px; }
 
+.sales-note-alert {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 2px solid #f97316;
+  border-left-width: 6px;
+  border-radius: 9px;
+  background: #fff7ed;
+  color: #7c2d12;
+  box-shadow: 0 3px 10px rgba(194, 65, 12, .12);
+  font-size: 13px;
+}
+
+.sales-note-alert b { color: #c2410c; font-size: 13px; }
+.sales-note-alert span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sales-note-alert.is-compact { padding: 8px 10px; font-size: 12px; }
+
 /* Store reports: dense WMS-style work queue. */
 .store-report-workspace { display:grid; gap:12px; }
 .store-report-header { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; padding:18px; border:1px solid #c9e0c8; border-radius:16px; background:linear-gradient(135deg,#edf9ea,#fff); }

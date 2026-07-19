@@ -481,6 +481,15 @@ function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, r
   </div>;
 }
 
+function SalesNoteAlert({ order, compact = false }) {
+  const note = String(order?.salesNote || "").trim();
+  if (!note) return null;
+  return <div className={`sales-note-alert${compact ? " is-compact" : ""}`} role="note" aria-label="หมายเหตุจากฝ่ายขาย">
+    <b>📝 หมายเหตุจากฝ่ายขาย</b>
+    <span>{note}</span>
+  </div>;
+}
+
 function PackSalesOrderDetails({ order }) {
   const fields = [
     ["วันที่และเวลาเปิดออเดอร์", order.createdAt ? formatThaiDateTime(order.createdAt) : ""],
@@ -488,10 +497,11 @@ function PackSalesOrderDetails({ order }) {
     ["เลขที่ใบสั่งจอง", formatOrderBookingNumbers(order) || (order.bookingNumberMissing ? "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์" : "")], ["ลูกค้า", order.customerName], ["โทร", order.customerPhone], ["โซน", order.zone], ["ที่อยู่", order.address],
     ["ช่วงเวลา", order.window], ["จำนวน", order.boxes != null ? `${order.boxes} ${order.packageUnit === "bag" ? "ถุง" : "กล่อง"}` : ""], ["ชำระเงิน", order.paymentType],
     ["ผู้ตรวจสโตร์ล่าสุด", order.storeCheckerName], ["ผู้ตรวจห้องแพ็คล่าสุด", order.packCheckerName],
-    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier], ["หมายเหตุฝ่ายขาย", order.salesNote]
+    ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier]
   ].filter(([, value]) => String(value || "").trim());
   return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
     <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
+    <SalesNoteAlert order={order} />
     {fields.map(([label, value]) => <div key={label}><b>{label}:</b> {value}</div>)}
     {Array.isArray(order.storeBookingSupplements) && order.storeBookingSupplements.length > 0 && <div style={{ marginTop: "4px", paddingTop: "7px", borderTop: "1px solid #dbe4ee", display: "grid", gap: "4px" }}><b style={{ color: "#1d4ed8" }}>รายละเอียดใบสั่งจองเพิ่มจากสโตร์</b>{order.storeBookingSupplements.map((item, index) => <div key={item.reportId || `${item.bookingNumber}-${index}`}><b>{item.bookingNumber || "ใบสั่งจอง"}:</b> {[item.detail, item.note].filter(Boolean).join(" · ") || "ไม่มีรายละเอียด"}<small className="muted"> · {item.createdBy || "สโตร์"}</small></div>)}</div>}
     {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>เปิดแผนที่ลูกค้า</a>}
@@ -5381,6 +5391,7 @@ export default function App() {
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
+                <SalesNoteAlert order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
               </article>})}
@@ -5388,7 +5399,7 @@ export default function App() {
             </div>}
             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
+              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><SalesNoteAlert order={order} compact /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
             {["store-booking", "store-online"].includes(displayTab) && <div className="store-report-workspace">
@@ -5417,7 +5428,7 @@ export default function App() {
               {chiangmaiPreparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}{order.shippingCarrier ? ` · ขนส่ง: ${order.shippingCarrier}` : ""}</div>
-                {order.salesNote && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>หมายเหตุฝ่ายขาย:</b> {order.salesNote}</div>}
+                <SalesNoteAlert order={order} compact />
                 {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
               </article>)}
               {!chiangmaiPreparationOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/ใกล้เคียงที่อยู่ระหว่างเตรียม</p>}
@@ -5491,6 +5502,7 @@ export default function App() {
                     {order.packPackerName && <> · ผู้แพ็ค: {order.packPackerName}</>}
                     {order.packCheckerName && <> · ผู้ตรวจแพ็ค: {order.packCheckerName}</>}
                   </div>
+                  {displayTab === "chiangmai" && <SalesNoteAlert order={order} compact />}
                   {displayTab === "chiangmai" && <><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div className="prep-note-store"><b>หมายเหตุสโตร์</b><span>{order.storeWorkDetails.note}</span></div>}{order.packWorkDetails?.note && <div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div>}</div>}</>}
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
                   {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && (
@@ -5524,6 +5536,7 @@ export default function App() {
               <div className="panel-head"><h2>{workModal.role === "store" ? "รับงานสโตร์" : "รับงานห้องแพ็ค"}</h2><span>{workModal.order.id}</span></div>
               <div style={{ display: "grid", gap: "10px" }}>
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
+                <SalesNoteAlert order={workModal.order} />
                 <details className="prep-order-details"><summary>ดูรายละเอียดลูกค้าและออเดอร์</summary><PackSalesOrderDetails order={workModal.order} /></details>
                 {workModal.role === "store" ? <><label className="field-label">เลขที่ใบสั่งจอง *</label><BookingNumberInput value={workForm.bookingNumber} onChange={bookingNumber => setWorkForm(p => ({ ...p, bookingNumber }))} required /><small className="muted">เลขท้าย 4 ตัวซ้ำได้เมื่อหัวรหัสต่างกัน เช่น CSP-1234 / CSR-1234</small>{getOrderBookingNumbers(workModal.order).length > 1 && <small className="muted">มีเลขร่วมในออเดอร์นี้: {formatOrderBookingNumbers(workModal.order)}</small>}</> : <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุจากฝ่ายขาย"}</div>}
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
