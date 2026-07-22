@@ -5,6 +5,7 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
+import { isReadyOrderWaitingForDispatch } from "../lib/preparationWorkflow";
 import {
   AlertTriangle,
   Camera,
@@ -1815,7 +1816,7 @@ export default function App() {
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const chiangmaiPreparationOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation");
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
-  const isReadyDriverBacklog = order => isPreparationReadyForDriver(order) && getOrderServiceDate(order) === previousServiceDate && !order.driverId && ["", "preparing", "ready"].includes(String(order.queueStatus || ""));
+  const isReadyDriverBacklog = order => isReadyOrderWaitingForDispatch(order);
   const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
@@ -5518,7 +5519,7 @@ export default function App() {
                 </article>
               ))}
               {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
-              {todayPreparationOrders.length === 0 && <p className="muted">ยังไม่มีออเดอร์ของวันนี้ในขั้นตอนนี้</p>}
+              {todayPreparationOrders.length === 0 && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
           </section>
         )}

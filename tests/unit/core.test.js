@@ -19,6 +19,16 @@ import {
   recentOrdersLimit
 } from "../../lib/firestoreReadPolicy.js";
 import { authenticatedFetch } from "../../lib/authenticatedFetch.js";
+import { isReadyOrderWaitingForDispatch } from "../../lib/preparationWorkflow.js";
+
+describe("sales order preparation workflow", () => {
+  it("keeps a completed sales order visible while it waits for dispatch across multiple days", () => {
+    expect(isReadyOrderWaitingForDispatch({ packStatus: "checked", queueStatus: "ready", driverId: "" })).toBe(true);
+    expect(isReadyOrderWaitingForDispatch({ packStatus: "partial", queueStatus: "ready", driverId: "" })).toBe(true);
+    expect(isReadyOrderWaitingForDispatch({ packStatus: "checked", queueStatus: "queued", driverId: "" })).toBe(false);
+    expect(isReadyOrderWaitingForDispatch({ packStatus: "checked", queueStatus: "ready", driverId: "driver-1" })).toBe(false);
+  });
+});
 
 describe("authenticated API requests", () => {
   it("adds a fresh bearer token and retries once when the API reports missing authorization", async () => {
