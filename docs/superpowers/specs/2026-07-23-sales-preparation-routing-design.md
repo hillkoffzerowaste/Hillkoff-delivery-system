@@ -10,6 +10,7 @@ Make the sales preparation workspace show store waiting/incomplete alerts as rea
 - Show store `waiting` and `partial` orders in a prominent read-only alert section at the top of the sales Chiang Mai preparation page.
 - Keep the existing dispatch action gated by the pack workflow status.
 - Keep every order whose delivery method is `outstation` out of the Chiang Mai preparation page.
+- Let sales choose whether an outstation order goes directly to pack or passes store before pack; direct-to-pack remains the default.
 - After pack inspection, show an outstation order in the ready/history section of the sales outstation page.
 - Do not change Firestore schemas, persisted status meanings, or staff permissions.
 
@@ -42,6 +43,22 @@ This section is read-only. It will not expose store/pack update controls. Sales 
 
 The **ส่งเข้าคิวคนขับ** button remains governed by the pack-ready workflow rule. An order still waiting for pack inspection will not receive the dispatch button.
 
+## Outstation Order Creation
+
+When sales chooses `deliveryMethod: "outstation"`, the confirmation screen will expose two mutually exclusive preparation routes:
+
+- **ส่งตรงห้องแพ็ค** (`workflowType: "direct_pack"`) — default and current behavior;
+- **ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค** (`workflowType: "store_route"`).
+
+The selected route must be included in the confirmed order payload and preserved by the create API. The API must no longer force every outstation order to `direct_pack`; it must accept only `direct_pack` or `store_route` for outstation and fall back to `direct_pack` when an older client omits a valid choice.
+
+Initial statuses follow the selected route:
+
+- direct pack: `storeStatus: "skipped"`, `packStatus: "pending"`;
+- via store: `storeStatus: "pending"`, `packStatus: "blocked"` until store confirms and releases it to pack.
+
+This route choice changes the preparation sequence only. Both variants retain `deliveryMethod: "outstation"`, remain excluded from Chiang Mai, and appear on the sales outstation page.
+
 ## Outstation Experience
 
 Outstation orders must never enter `chiangmaiPreparationOrders`, `todayPreparationOrders`, or the Chiang Mai sidebar count.
@@ -52,6 +69,8 @@ The sales outstation page keeps two sections:
 - ready/history: pack has completed inspection and `queueStatus === "outstation_ready"`.
 
 When pack confirms an outstation order, the existing API transition continues to set `outstation_ready`. Realtime state then moves the card from active preparation to ready/history on the same sales outstation page.
+
+The active card displays whether the order is **ส่งตรงห้องแพ็ค** or **ผ่านสโตร์ก่อน**. For the via-store route, the pack action remains blocked until store inspection reaches an allowed completion state.
 
 ## Permissions and Data Flow
 
@@ -76,8 +95,11 @@ Use TDD with unit tests for the pure classification functions:
 3. An order does not become dispatchable until the existing pack-ready condition is satisfied.
 4. A canonical outstation order never enters the Chiang Mai preparation set.
 5. A legacy direct-pack order with outstation carrier evidence never enters the Chiang Mai preparation set.
-6. An outstation order moves from active preparation to outstation ready/history after pack confirmation.
-7. Completed and archived orders do not remain in warning counts.
+6. A new outstation order defaults to `direct_pack` when no route is selected.
+7. A selected outstation `store_route` preserves that route and starts with store pending / pack blocked.
+8. Both outstation route variants remain excluded from Chiang Mai.
+9. An outstation order moves from active preparation to outstation ready/history after pack confirmation.
+10. Completed and archived orders do not remain in warning counts.
 
 After implementation, run the full unit suite, lint, production build, and diff validation.
 
@@ -86,5 +108,7 @@ After implementation, run the full unit suite, lint, production build, and diff 
 - Sales sees a warning badge on **เตรียมออเดอร์เชียงใหม่** whenever relevant store/pack waiting work exists.
 - The Chiang Mai sales page shows the same operational warning information as store, without update controls.
 - Sales cannot dispatch an order that still awaits the required pack inspection.
+- Sales can choose direct-to-pack or via-store preparation for each outstation order, with direct-to-pack as the default.
+- Via-store outstation orders must complete store inspection before pack can inspect them.
 - Outstation orders appear only on the sales outstation page before and after pack confirmation.
 - Existing realtime behavior and Firestore read limits remain unchanged.
