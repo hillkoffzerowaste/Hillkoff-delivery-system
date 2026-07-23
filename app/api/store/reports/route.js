@@ -1,5 +1,6 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
 
@@ -131,9 +132,7 @@ export async function GET(request) {
     const snap = await query.limit(kpi ? KPI_REPORT_LIMIT : REPORT_PAGE_LIMIT).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
-      // ห้องแพ็คใช้รายการออเดอร์ฝ่ายขายต้นทางอยู่แล้ว จึงไม่แสดงแถวซ้ำจากสโตร์
-      if (profile.role === "pack" && item.registryShared && item.linkedOrderId) return false;
-      if (!includeDeleted && item.deletedAt) return false;
+      if (!isStoreReportVisibleToRole(item, profile.role, includeDeleted)) return false;
       if (!queryText) return true;
       return [item.bookingNumber, item.detail, item.note, item.status, item.createdBy].join(" ").toLowerCase().includes(queryText);
     });

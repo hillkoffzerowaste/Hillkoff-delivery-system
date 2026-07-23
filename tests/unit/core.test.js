@@ -26,6 +26,7 @@ import {
   isOutstationOrder,
   isReadyOrderWaitingForDispatch,
   isSalesWaitingAlert,
+  isStoreReportVisibleToRole,
   resolvePreparationRoute
 } from "../../lib/preparationWorkflow.js";
 
@@ -62,6 +63,20 @@ describe("sales order preparation workflow", () => {
     expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "กำลังจัดส่ง", queueStatus: "queued" }, "driver-1")).toBe(true);
     expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "ส่งสำเร็จ", queueStatus: "completed" }, "driver-1")).toBe(false);
     expect(isDriverDeliveryOrder({ driverId: "driver-2", status: "กำลังส่ง", queueStatus: "queued" }, "driver-1")).toBe(false);
+  });
+
+  it("keeps a booking report visible to pack even when it is linked to a sales order", () => {
+    const report = {
+      type: "booking",
+      bookingNumber: "CSP-1112",
+      registryShared: true,
+      linkedOrderId: "order-1112",
+      confirmedAt: "2026-07-23T03:00:00.000Z",
+      packStatus: "pending"
+    };
+    expect(isStoreReportVisibleToRole(report, "store")).toBe(true);
+    expect(isStoreReportVisibleToRole(report, "pack")).toBe(true);
+    expect(isStoreReportVisibleToRole({ ...report, deletedAt: "2026-07-23T04:00:00.000Z" }, "pack")).toBe(false);
   });
 });
 
