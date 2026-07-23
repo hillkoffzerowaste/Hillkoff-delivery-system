@@ -5,6 +5,8 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
+import { expandOrderToLabelItems } from "../lib/outstationLabels";
+import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
 import {
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -748,6 +750,8 @@ export default function App() {
   const [orderConfirmError, setOrderConfirmError] = useState("");
   const [shareNewOrderToLine, setShareNewOrderToLine] = useState(false);
   const [showOutstationCarrierModal, setShowOutstationCarrierModal] = useState(false);
+  const [outstationLabelSelectedIds, setOutstationLabelSelectedIds] = useState([]);
+  const [outstationLabelItems, setOutstationLabelItems] = useState([]);
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
   const [workPhotoPreviews, setWorkPhotoPreviews] = useState([]);
@@ -1841,6 +1845,28 @@ export default function App() {
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && order.queueStatus === "outstation_ready");
+  const outstationLabelSelectedSet = new Set(outstationLabelSelectedIds);
+  const selectedOutstationLabelOrders = salesOutstationOrders.filter(order => outstationLabelSelectedSet.has(order.id));
+  const selectedOutstationLabelBoxes = selectedOutstationLabelOrders.reduce((sum, order) => sum + Math.max(1, Number(order.boxes || 0)), 0);
+
+  function toggleOutstationLabelOrder(orderId, checked) {
+    setOutstationLabelSelectedIds(previous => checked
+      ? [...new Set([...previous, orderId])]
+      : previous.filter(id => id !== orderId));
+  }
+
+  function toggleAllOutstationLabelOrders(checked) {
+    setOutstationLabelSelectedIds(checked ? salesOutstationOrders.map(order => order.id) : []);
+  }
+
+  function openOutstationLabelDialog() {
+    if (!selectedOutstationLabelOrders.length) {
+      setSyncStatus("⚠️ กรุณาเลือกออเดอร์ต่างจังหวัดอย่างน้อย 1 รายการ");
+      return;
+    }
+    const labels = selectedOutstationLabelOrders.flatMap(order => expandOrderToLabelItems(order));
+    setOutstationLabelItems(labels);
+  }
   const reportToKpiOrder = (report, department) => ({
     ...report,
     id: `report:${report.id}`,
@@ -5340,9 +5366,52 @@ export default function App() {
           <section className="panel role-workspace">
             <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งานที่กำลังเตรียม</span></div>
             <p className="muted">งานต่างจังหวัดเลือกได้ทั้งส่งตรงห้องแพ็คหรือผ่านสโตร์ก่อน สถานะอัปเดตทันทีตามขั้นตอนตรวจสินค้า</p>
-            <div style={{ display: "grid", gap: "10px" }}>{salesOutstationOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span></div><div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>{order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}</article>)}{!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}</div>
+            <div className="outstation-label-toolbar">
+              <label className="outstation-label-select-all">
+                <input
+                  type="checkbox"
+                  checked={salesOutstationOrders.length > 0 && selectedOutstationLabelOrders.length === salesOutstationOrders.length}
+                  disabled={!salesOutstationOrders.length}
+                  onChange={event => toggleAllOutstationLabelOrders(event.target.checked)}
+                />
+                เลือกทั้งหมด
+              </label>
+              <span>เลือก {selectedOutstationLabelOrders.length} ออเดอร์ · {selectedOutstationLabelBoxes} กล่อง · {Math.ceil(selectedOutstationLabelBoxes / 5)} หน้า A4</span>
+              <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
+            </div>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {salesOutstationOrders.map(order => (
+                <article key={order.id} className="role-order-card">
+                  <label className="outstation-label-order-select">
+                    <input type="checkbox" checked={outstationLabelSelectedSet.has(order.id)} onChange={event => toggleOutstationLabelOrder(order.id, event.target.checked)} />
+                    เลือกพิมพ์ใบปะหน้า · {Math.max(1, Number(order.boxes || 0))} กล่อง
+                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                    <div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div>
+                    <span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div>
+                  <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>
+                  {order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}
+                </article>
+              ))}
+              {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
+            </div>
             <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>สำเร็จ · พร้อมส่งขนส่ง</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
+        )}
+
+        {outstationLabelItems.length > 0 && (
+          <OutstationLabelPrintDialog
+            initialItems={outstationLabelItems}
+            apiFetch={authenticatedApiFetch}
+            onClose={() => setOutstationLabelItems([])}
+            onPrinted={jobId => {
+              setOutstationLabelItems([]);
+              setOutstationLabelSelectedIds([]);
+              setSyncStatus(`✅ บันทึกการพิมพ์ใบปะหน้าแล้ว (${jobId})`);
+            }}
+          />
         )}
 
         {auth.role === "admin" && displayTab === "settings" && (
