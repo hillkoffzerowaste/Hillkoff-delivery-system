@@ -4,6 +4,7 @@ import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { initialPreparationStatuses } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
 
@@ -104,8 +105,8 @@ export async function POST(request) {
     const orderRef = db.collection("orders").doc(orderId);
     const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, value)) }));
     const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
-    const workflowType = deliveryMethod === "outstation" ? "direct_pack" : order.workflowType === "direct_driver" && deliveryMethod === "company_driver" ? "direct_driver" : order.workflowType === "direct_pack" ? "direct_pack" : "store_route";
-    const directDriver = workflowType === "direct_driver";
+    const preparation = initialPreparationStatuses(deliveryMethod, order.workflowType);
+    const workflowType = preparation.workflowType;
     const storeAssistEntry = profile.role === "store";
     const createdByName = clean(profile.name || profile.email, 200);
 
@@ -131,7 +132,7 @@ export async function POST(request) {
       createdByName,
       storeAssistEntryAt: storeAssistEntry ? now : "",
       storeAssistEntryNote: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "",
-      status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า",
+      status: preparation.status,
       workflowType,
       deliveryMethod,
       bookingNumber: bookingNumber.slice(0, 100),
@@ -140,10 +141,10 @@ export async function POST(request) {
       bookingNumberMissing: bookingNumbers.length === 0,
       bookingNumberNotice: bookingNumbers.length === 0 ? (storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
       shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
-      storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
-      queueStatus: directDriver ? "queued" : "preparing",
-      urgentDelivery: directDriver,
+      storeStatus: preparation.storeStatus,
+      packStatus: preparation.packStatus,
+      queueStatus: preparation.queueStatus,
+      urgentDelivery: preparation.urgentDelivery,
       storePackerName: "",
       storeCheckerName: "",
       packPackerName: "",

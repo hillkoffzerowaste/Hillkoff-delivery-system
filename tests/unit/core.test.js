@@ -19,7 +19,15 @@ import {
   recentOrdersLimit
 } from "../../lib/firestoreReadPolicy.js";
 import { authenticatedFetch } from "../../lib/authenticatedFetch.js";
-import { isReadyOrderWaitingForDispatch } from "../../lib/preparationWorkflow.js";
+import {
+  initialPreparationStatuses,
+  isChiangmaiPreparationOrder,
+  isDriverDeliveryOrder,
+  isOutstationOrder,
+  isReadyOrderWaitingForDispatch,
+  isSalesWaitingAlert,
+  resolvePreparationRoute
+} from "../../lib/preparationWorkflow.js";
 
 describe("sales order preparation workflow", () => {
   it("keeps a completed sales order visible while it waits for dispatch across multiple days", () => {
@@ -27,6 +35,33 @@ describe("sales order preparation workflow", () => {
     expect(isReadyOrderWaitingForDispatch({ packStatus: "partial", queueStatus: "ready", driverId: "" })).toBe(true);
     expect(isReadyOrderWaitingForDispatch({ packStatus: "checked", queueStatus: "queued", driverId: "" })).toBe(false);
     expect(isReadyOrderWaitingForDispatch({ packStatus: "checked", queueStatus: "ready", driverId: "driver-1" })).toBe(false);
+  });
+
+  it("keeps every outstation route out of Chiang Mai preparation", () => {
+    expect(isOutstationOrder({ deliveryMethod: "outstation" })).toBe(true);
+    expect(isOutstationOrder({ workflowType: "direct_pack", shippingCarrier: "Flash" })).toBe(true);
+    expect(isChiangmaiPreparationOrder({ deliveryMethod: "outstation", workflowType: "store_route", queueStatus: "preparing" })).toBe(false);
+    expect(isReadyOrderWaitingForDispatch({ deliveryMethod: "outstation", packStatus: "checked", queueStatus: "ready", driverId: "" })).toBe(false);
+  });
+
+  it("shows active waiting and incomplete orders to sales but excludes terminal work", () => {
+    expect(isSalesWaitingAlert({ workflowType: "store_route", deliveryMethod: "company_driver", storeStatus: "waiting", packStatus: "blocked", queueStatus: "preparing" })).toBe(true);
+    expect(isSalesWaitingAlert({ workflowType: "store_route", deliveryMethod: "company_driver", storeStatus: "partial", packStatus: "pending", queueStatus: "preparing" })).toBe(true);
+    expect(isSalesWaitingAlert({ workflowType: "store_route", storeStatus: "partial", queueStatus: "completed", status: "ส่งสำเร็จ" })).toBe(false);
+  });
+
+  it("defaults outstation to direct pack but preserves an explicit store route", () => {
+    expect(resolvePreparationRoute("outstation", "")).toBe("direct_pack");
+    expect(resolvePreparationRoute("outstation", "store_route")).toBe("store_route");
+    expect(initialPreparationStatuses("outstation", "store_route")).toMatchObject({ workflowType: "store_route", storeStatus: "pending", packStatus: "blocked", queueStatus: "preparing" });
+    expect(initialPreparationStatuses("outstation", "direct_pack")).toMatchObject({ workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending" });
+  });
+
+  it("removes a delivered order from the driver's active delivery list", () => {
+    expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "กำลังส่ง", queueStatus: "queued" }, "driver-1")).toBe(true);
+    expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "กำลังจัดส่ง", queueStatus: "queued" }, "driver-1")).toBe(true);
+    expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "ส่งสำเร็จ", queueStatus: "completed" }, "driver-1")).toBe(false);
+    expect(isDriverDeliveryOrder({ driverId: "driver-2", status: "กำลังส่ง", queueStatus: "queued" }, "driver-1")).toBe(false);
   });
 });
 

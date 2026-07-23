@@ -5,7 +5,14 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
-import { isReadyOrderWaitingForDispatch } from "../lib/preparationWorkflow";
+import {
+  initialPreparationStatuses,
+  isChiangmaiPreparationOrder,
+  isDriverDeliveryOrder,
+  isOutstationOrder,
+  isReadyOrderWaitingForDispatch,
+  isSalesWaitingAlert
+} from "../lib/preparationWorkflow";
 import {
   AlertTriangle,
   Camera,
@@ -1814,7 +1821,7 @@ export default function App() {
   const orders = state.orders;
   const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived", "driver_archived"];
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
-  const chiangmaiPreparationOrders = preparationOrders.filter(order => order.deliveryMethod !== "outstation");
+  const chiangmaiPreparationOrders = (orders || []).filter(isChiangmaiPreparationOrder);
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
   const isReadyDriverBacklog = order => isReadyOrderWaitingForDispatch(order);
   const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
@@ -1827,13 +1834,13 @@ export default function App() {
   });
   const isOpenStoreQueueStatus = (status) => ["pending", "working", "waiting", "partial", "returned"].includes(status || "pending");
   const isOpenPackQueueStatus = (status) => ["pending", "working", "waiting"].includes(status || "pending");
-  const storeWorkOrders = (orders || []).filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
+  const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const packPickupOrders = preparationOrders.filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
-  const salesOutstationOrders = (orders || []).filter(order => order.deliveryMethod === "outstation" && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
-  const salesOutstationHistory = (orders || []).filter(order => order.deliveryMethod === "outstation" && order.queueStatus === "outstation_ready");
+  const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
+  const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && order.queueStatus === "outstation_ready");
   const reportToKpiOrder = (report, department) => ({
     ...report,
     id: `report:${report.id}`,
@@ -1904,11 +1911,7 @@ export default function App() {
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const salesWaitingOrders = (orders || [])
-    .filter(order => {
-      if (!order.workflowType || order.status === "ส่งสำเร็จ" || ["completed", "pack_archived", "driver_archived", "grab_completed", "grab_picked_up", "outstation_ready"].includes(String(order.queueStatus || ""))) return false;
-      if (order.packStatus === "returned") return false;
-      return ["waiting", "partial"].includes(order.storeStatus) || ["waiting", "partial"].includes(order.packStatus);
-    })
+    .filter(isSalesWaitingAlert)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
   const salesWaitingOrdersVisible = salesWaitingOrders.slice(0, 30);
   const storeTodayOrders = storeKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
@@ -2219,8 +2222,8 @@ export default function App() {
       return String(b.id || "").localeCompare(String(a.id || ""));
     });
   const driverTodayCompletedOrders = driverTodayOrders.filter(order => order.status === "ส่งสำเร็จ");
-  const driverCurrentDeliveryOrders = (orders || []).filter(order => order.driverId === driverId && order.status === "กำลังจัดส่ง");
-  const driverReorderableOrders = (orders || []).filter(order => order.driverId === driverId && order.status === "กำลังส่ง")
+  const driverCurrentDeliveryOrders = (orders || []).filter(order => isDriverDeliveryOrder(order, driverId) && order.status === "กำลังจัดส่ง");
+  const driverReorderableOrders = (orders || []).filter(order => isDriverDeliveryOrder(order, driverId) && order.status === "กำลังส่ง")
     .slice()
     .sort((a, b) => {
       const av = Number(a.driverSequence);
@@ -2656,8 +2659,8 @@ export default function App() {
     }
     const currentBookingNumber = bookingDigits && selectedBookingPrefix ? `${selectedBookingPrefix}-${bookingDigits}` : "";
     const bookingNumbers = [...new Set([...(orderForm.bookingNumbers || []), currentBookingNumber, orderForm.urgentBookingNumber].map(normalizeBookingNumber).filter(Boolean))];
-    const workflowType = orderForm.workflowType;
-    const directDriver = workflowType === "direct_driver" && orderForm.deliveryMethod === "company_driver";
+    const preparation = initialPreparationStatuses(orderForm.deliveryMethod, orderForm.workflowType);
+    const workflowType = preparation.workflowType;
     
     const id = generateOrderId();
     const serviceDate = toServiceDateKey(new Date());
@@ -2679,7 +2682,7 @@ export default function App() {
       driverName: "",
       salesName: auth.name,
       salesPhone: auth.phone,
-      status: "รอจัดเตรียมสินค้า",
+      status: preparation.status,
       workflowType, deliveryMethod: orderForm.deliveryMethod,
       bookingNumber: bookingNumbers[0] || "",
       bookingNumbers,
@@ -2687,10 +2690,10 @@ export default function App() {
       bookingNumberNotice: bookingNumbers.length === 0 ? "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "",
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
       shippingCarrierOther: String(orderForm.shippingCarrierOther || "").trim(),
-      storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending",
-      packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked",
-      queueStatus: directDriver ? "queued" : "preparing",
-      urgentDelivery: directDriver,
+      storeStatus: preparation.storeStatus,
+      packStatus: preparation.packStatus,
+      queueStatus: preparation.queueStatus,
+      urgentDelivery: preparation.urgentDelivery,
       photo: "",
       checkInAt: "",
       deliveredAt: "",
@@ -2712,9 +2715,8 @@ export default function App() {
       setSyncStatus(`❌ ${message}`);
       return;
     }
-    const directDriver = pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType === "direct_driver";
-    const workflowType = pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : directDriver ? "direct_driver" : pendingOrder.workflowType;
-    const orderToCreate = { ...pendingOrder, workflowType, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "", storeStatus: directDriver || workflowType === "direct_pack" ? "skipped" : "pending", packStatus: directDriver ? "skipped" : workflowType === "direct_pack" ? "pending" : "blocked", queueStatus: directDriver ? "queued" : "preparing", status: directDriver ? "รอคนขับรับ" : "รอจัดเตรียมสินค้า", urgentDelivery: directDriver };
+    const preparation = initialPreparationStatuses(pendingOrder.deliveryMethod, pendingOrder.workflowType);
+    const orderToCreate = { ...pendingOrder, ...preparation, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "" };
     delete orderToCreate.shippingCarrierOther;
     const shouldShareLine = shareNewOrderToLine;
     setOrderConfirmError("");
@@ -3999,11 +4001,6 @@ export default function App() {
   };
 
 	  const shareOrderToLine = (order, noteDraft) => {
-	        if (!navigator?.share) {
-	          alert("อุปกรณ์/บราวเซอร์นี้ไม่รองรับการแชร์ กรุณาเปิดผ่านมือถือ");
-	          return;
-	        }
-
 	    (async () => {
 	      let completedOrder = null;
 	      let text = "";
@@ -4022,28 +4019,35 @@ export default function App() {
             podPhotoCount: files.length
           };
 	        text = buildLineMessageForOrder(completedOrder);
-	        try { await navigator.clipboard?.writeText?.(text); } catch {}
-	        const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
-	        const filesToShare = photoSheet ? [photoSheet] : files;
-
-	        if (filesToShare.length && navigator.canShare?.({ files: filesToShare })) {
-	          await navigator.share({ files: filesToShare, text });
-	        } else {
-	          await navigator.share({ text });
-	        }
         const saved = await completeDriverDeliveryOrder(order, {
           deliveredAt: completedOrder.deliveredAt,
           driverNote: completedOrder.driverNote,
           podPhotoCount: files.length || Number(order.podPhotoCount) || 0
         });
 	        if (!saved.ok) throw new Error(saved.error);
-	        // ล้างไฟล์และ preview หลังบันทึกส่งสำเร็จ เช่นเดียวกับ flow ห้องแพ็ค
+	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว กำลังเปิดแชร์ LINE (${order.id})`);
+      } catch (error) {
+        setSyncStatus(`❌ บันทึกส่งสำเร็จไม่สำเร็จ: ${error?.message || error} (${order.id})`);
+        return;
+	      }
+
+	      try {
+	        try { await navigator.clipboard?.writeText?.(text); } catch {}
+	        if (!navigator?.share) {
+	          setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว และคัดลอกข้อความ LINE แล้ว (${order.id})`);
+	          return;
+	        }
+	        const files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
+	        const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
+	        const filesToShare = photoSheet ? [photoSheet] : files;
+	        if (filesToShare.length && navigator.canShare?.({ files: filesToShare })) await navigator.share({ files: filesToShare, text });
+	        else await navigator.share({ text });
+	        setSyncStatus(`✅ ส่งสำเร็จและเปิดแชร์ LINE แล้ว ${files.length} รูป (${order.id})`);
+	      } catch {
+	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว แต่การแชร์ LINE ถูกยกเลิก (${order.id})`);
+	      } finally {
 	        clearPodPhotos(order.id);
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
-	        setSyncStatus(`✅ ส่งสำเร็จและส่งพร้อม LINE แล้ว ${files.length} รูป (${order.id})`);
-      } catch (error) {
-        try { await navigator.clipboard?.writeText?.(text); } catch {}
-        setSyncStatus(`⚠️ ยังไม่บันทึกส่งสำเร็จ: แชร์ LINE ถูกยกเลิก/ไม่สำเร็จ (${order.id})`);
 	      }
 	    })();
 	  };
@@ -4572,7 +4576,7 @@ export default function App() {
               <button type="button" className={displayTab === "sales" ? "active" : ""} onClick={() => selectAppTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
               <button type="button" className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => selectAppTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button type="button" className={displayTab === "dispatch" ? "active" : ""} onClick={() => selectAppTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
-              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}{salesWaitingOrders.length > 0 && <span className="nav-count-badge" style={{ background: "#dc2626", color: "white" }} aria-label={`ออเดอร์รอสินค้าหรือของไม่ครบ ${salesWaitingOrders.length} งาน`}>! {salesWaitingOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
           )}
@@ -5335,9 +5339,9 @@ export default function App() {
         {displayTab === "sales-outstation" && (
           <section className="panel role-workspace">
             <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งานที่กำลังเตรียม</span></div>
-            <p className="muted">งานต่างจังหวัดส่งตรงห้องแพ็ค สถานะอัปเดตทันทีเมื่อห้องแพ็คยืนยันงาน</p>
-            <div style={{ display: "grid", gap: "10px" }}>{salesOutstationOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span></div><div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: ส่งตรงห้องแพ็ค</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>{order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}</article>)}{!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}</div>
-            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>สำเร็จ · พร้อมส่งขนส่ง</span></div><div className="muted">ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <p className="muted">งานต่างจังหวัดเลือกได้ทั้งส่งตรงห้องแพ็คหรือผ่านสโตร์ก่อน สถานะอัปเดตทันทีตามขั้นตอนตรวจสินค้า</p>
+            <div style={{ display: "grid", gap: "10px" }}>{salesOutstationOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span></div><div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>{order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}</article>)}{!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}</div>
+            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>สำเร็จ · พร้อมส่งขนส่ง</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 
@@ -5471,7 +5475,7 @@ export default function App() {
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 <OrderCreatedAt order={order} />
-                {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>เส้นทาง: ส่งตรงห้องแพ็ค · ข้ามสโตร์</span>}
+                {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
                 {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -5491,6 +5495,7 @@ export default function App() {
               <span>{todayPreparationOrders.length} งานที่ต้องดำเนินการ{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
+            {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "12px", border: "2px solid #f97316", borderLeftWidth: "6px", background: "#fff7ed", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><b style={{ color: "#9a3412" }}>⚠️ ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "#9a3412", background: "#ffedd5" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid #fed7aa", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
               {sortedPreparationOrders.map(order => (
                 <article key={order.id} className={displayTab === "chiangmai" ? "role-order-card" : undefined} style={displayTab === "chiangmai" ? (isPreparationReadyForDriver(order) ? { borderColor: "#ef4444", borderLeftColor: "#dc2626", background: "linear-gradient(145deg, #ffffff 0%, #fff1f1 100%)" } : undefined) : { border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
@@ -7143,7 +7148,7 @@ export default function App() {
           {orderConfirmError && <div role="alert" style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "6px", color: "#991b1b", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>❌ ยังบันทึกออเดอร์ไม่ได้</b><span style={{ fontSize: "13px" }}>{orderConfirmError}</span><small>ตรวจสอบข้อมูลด้านล่าง แล้วกดยืนยันอีกครั้งได้ทันที</small></div>}
           {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "#fff1f2", border: "2px solid #e11d48", borderLeftWidth: "6px", color: "#9f1239", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>⚠️ ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
           <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
-            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.deliveryMethod === "outstation" ? "direct_pack" : pendingOrder.workflowType} disabled={pendingOrder.deliveryMethod === "outstation"} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">งานต่างจังหวัดส่งเข้าห้องแพ็คโดยตรงอัตโนมัติ</small>}</label>
+            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}>{pendingOrder.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">เลือกได้ว่าจะส่งตรงห้องแพ็ค หรือให้สโตร์ตรวจสอบก่อน</small>}</label>
             <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
             {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "#fee2e2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "10px", padding: "12px", fontWeight: 800 }}><div style={{ fontSize: "15px" }}>🚨 ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "4px" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
             {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
@@ -7157,6 +7162,7 @@ export default function App() {
             <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
             <p><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(pendingOrder) || "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์"}</p>
             {pendingOrder.shippingCarrier && <p><b>ขนส่งต่างจังหวัด:</b> {pendingOrder.shippingCarrier}</p>}
+            {pendingOrder.deliveryMethod === "outstation" && <p><b>เส้นทางตรวจสินค้า:</b> {pendingOrder.workflowType === "store_route" ? "ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค" : "ส่งตรงห้องแพ็ค"}</p>}
             {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
           </div>
           <label style={{ display: "flex", gap: "8px", alignItems: "flex-start", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px", color: "#1d4ed8", fontSize: "13px", fontWeight: 800 }}>

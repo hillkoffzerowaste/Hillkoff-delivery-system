@@ -129,7 +129,7 @@ export async function PATCH(request) {
       }
     } else if (profile.role === "pack" && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
-      const storeReady = order.deliveryMethod === "outstation" || order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
+      const storeReady = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       if (!storeReady) throw Object.assign(new Error("ออเดอร์ยังไม่ได้รับการยืนยันจากสโตร์"), { status: 409 });
       if (["checked", "partial", "waiting"].includes(body.packStatus) && !String(body.packCheckerName || "").trim()) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบห้องแพ็ค"), { status: 400 });
