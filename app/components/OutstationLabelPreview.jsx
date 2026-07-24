@@ -45,7 +45,7 @@ function LabelItem({ item, onEditItem, index }) {
       </div>
       <RecipientBlock item={item} />
       <div className="outstation-label-footer">
-        <span className="outstation-label-note">{item.boxLabel === "1/1" ? "มีเอกสาร" : item.note || ""}</span>
+        <span className="outstation-label-note">{String(item.boxLabel || "").startsWith("1/") ? "มีเอกสาร/บิล" : item.note || ""}</span>
         <strong className="outstation-label-box">{item.boxLabel}</strong>
       </div>
       {onEditItem && <button type="button" className="outstation-label-edit no-print" onClick={() => onEditItem(index)}>แก้ไขใบนี้</button>}

@@ -45,12 +45,16 @@ describe("outstation label preview", () => {
     expect(codPosition).toBeGreaterThan(carrierPosition);
   });
 
-  it("prints the มีเอกสาร note only on a 1/1 label", () => {
+  it("prints มีเอกสาร/บิล on the first box of every order", () => {
     const singleBox = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 1)]} />);
-    const multiBox = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 2)]} />);
+    const firstOfTwo = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 2)]} />);
+    const firstOfMany = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 12)]} />);
+    const laterBox = renderToStaticMarkup(<OutstationLabelPreview items={[label(2, 2)]} />);
 
-    expect(singleBox).toContain("มีเอกสาร");
-    expect(multiBox).not.toContain("มีเอกสาร");
+    expect(singleBox).toContain("มีเอกสาร/บิล");
+    expect(firstOfTwo).toContain("มีเอกสาร/บิล");
+    expect(firstOfMany).toContain("มีเอกสาร/บิล");
+    expect(laterBox).not.toContain("มีเอกสาร/บิล");
   });
 
   it("renders editable sender, recipient, carrier, tracking, and COD controls", () => {
