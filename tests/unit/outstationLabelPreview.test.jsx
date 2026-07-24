@@ -54,4 +54,17 @@ describe("outstation label preview", () => {
     expect(html).toContain("รายละเอียด COD");
     expect(html).toContain("ดูตัวอย่างก่อนพิมพ์");
   });
+
+  it("shows recipient names instead of order IDs in the label selector and omits sender line-count copy", () => {
+    const item = { ...label(1, 1), orderId: "DO-260723-181353681-B91774B7", recipientName: "คุณฉันทนา แซ่หลี่" };
+    const html = renderToStaticMarkup(
+      <OutstationLabelPrintDialog initialItems={[item]} apiFetch={async () => new Response()} onClose={() => {}} />
+    );
+    const selector = html.match(/<aside class="outstation-label-item-list">([\s\S]*?)<\/aside>/)?.[0] || "";
+
+    expect(selector).toContain("คุณฉันทนา แซ่หลี่");
+    expect(selector).not.toContain("DO-260723-181353681-B91774B7");
+    expect(html).not.toContain("ที่อยู่ผู้ส่ง 3 บรรทัด");
+    expect(html).toContain("จำนวนกล่อง");
+  });
 });

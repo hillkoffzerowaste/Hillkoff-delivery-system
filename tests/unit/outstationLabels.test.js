@@ -5,6 +5,7 @@ import {
   expandOrderToLabelItems,
   normalizeLabelDraft,
   paginateLabelItems,
+  replaceOrderLabelItems,
   validateLabelDraft
 } from "../../lib/outstationLabels.js";
 
@@ -43,6 +44,15 @@ describe("outstation label domain", () => {
     const pages = paginateLabelItems(Array.from({ length: 11 }, (_, index) => ({ id: index })));
 
     expect(pages.map(page => page.length)).toEqual([5, 5, 1]);
+  });
+
+  it("rebuilds only the selected order when a popup box count changes", () => {
+    const otherOrder = { ...order, id: "BU003932", boxes: 1 };
+    const items = [...expandOrderToLabelItems(order), ...expandOrderToLabelItems(otherOrder)];
+    const rebuilt = replaceOrderLabelItems(items, "BU003931", 3);
+
+    expect(rebuilt.filter(item => item.orderId === "BU003931").map(item => item.boxLabel)).toEqual(["1/3", "2/3", "3/3"]);
+    expect(rebuilt.filter(item => item.orderId === "BU003932").map(item => item.boxLabel)).toEqual(["1/1"]);
   });
 
   it("keeps the tracking code blank and places COD details in the printable snapshot", () => {

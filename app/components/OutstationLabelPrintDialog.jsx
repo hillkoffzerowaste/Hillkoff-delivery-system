@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { validateLabelDraft } from "../../lib/outstationLabels";
+import { replaceOrderLabelItems, validateLabelDraft } from "../../lib/outstationLabels";
 import OutstationLabelPreview from "./OutstationLabelPreview";
 
 const CARRIERS = ["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"];
@@ -73,6 +73,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
     pageCount: Math.ceil(items.length / 5)
   }), [items]);
   const visibleRecipientHistory = recipientHistoryCustomerId === current?.customerId ? recipientHistory : [];
+  const currentOrderBoxTotal = items.filter(item => item.orderId === current?.orderId).length;
 
   function updateCurrent(patch) {
     setItems(previous => previous.map((item, index) => index === selectedIndex ? { ...item, ...patch } : item));
@@ -87,6 +88,15 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
   function applyRecipientToOrder(patch) {
     if (!current) return;
     setItems(previous => previous.map(item => item.orderId === current.orderId ? { ...item, ...patch } : item));
+    setJobId("");
+  }
+
+  function updateOrderBoxTotal(value) {
+    if (!current) return;
+    const total = Math.max(1, Math.min(10_000, Math.trunc(Number(value || 1))));
+    const nextItems = replaceOrderLabelItems(items, current.orderId, total);
+    setItems(nextItems);
+    setSelectedIndex(Math.max(0, nextItems.findIndex(item => item.orderId === current.orderId)));
     setJobId("");
   }
 
@@ -187,7 +197,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
             <aside className="outstation-label-item-list">
               {items.map((item, index) => (
                 <button type="button" key={`${item.orderId}-${item.boxIndex}`} className={index === selectedIndex ? "active" : ""} onClick={() => setSelectedIndex(index)}>
-                  <b>{item.orderId}</b><span>กล่อง {item.boxLabel}</span>
+                  <b>{item.recipientName || "ไม่ระบุชื่อผู้รับ"}</b><span>กล่อง {item.boxLabel}</span>
                 </button>
               ))}
             </aside>
@@ -195,7 +205,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
               <section>
                 <h3>ข้อมูลผู้ส่ง</h3>
                 <InputField label="ชื่อผู้ส่ง"><input value={current.senderName || ""} onChange={event => updateSender({ senderName: event.target.value })} /></InputField>
-                <InputField label="ที่อยู่ผู้ส่ง 3 บรรทัด"><textarea rows={3} value={linesToText(current.senderAddressLines)} onChange={event => updateSender({ senderAddressLines: textToLines(event.target.value, 3) })} /></InputField>
+                <InputField label="ที่อยู่ผู้ส่ง"><textarea rows={3} value={linesToText(current.senderAddressLines)} onChange={event => updateSender({ senderAddressLines: textToLines(event.target.value, 3) })} /></InputField>
                 <button type="button" className="secondary" disabled={busy} onClick={saveSenderDefault}>บันทึกเป็นผู้ส่งเริ่มต้น</button>
               </section>
 
@@ -213,6 +223,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
 
               <section>
                 <h3>ข้อมูลขนส่งและ COD</h3>
+                <InputField label="จำนวนกล่อง"><input type="number" min="1" max="10000" value={currentOrderBoxTotal || 1} onChange={event => updateOrderBoxTotal(event.target.value)} /></InputField>
                 <InputField label="บริษัทขนส่ง"><input list="outstation-carriers" value={current.carrier || ""} onChange={event => updateCurrent({ carrier: event.target.value })} /><datalist id="outstation-carriers">{CARRIERS.map(carrier => <option key={carrier} value={carrier} />)}</datalist></InputField>
                 <InputField label="รหัสขนส่ง"><input value={current.trackingCode || ""} onChange={event => updateCurrent({ trackingCode: event.target.value })} placeholder="เว้นว่างไว้กรอกภายหลังได้" /></InputField>
                 <label className="outstation-label-checkbox"><input type="checkbox" checked={Boolean(current.codEnabled)} onChange={event => updateCurrent({ codEnabled: event.target.checked })} /> มี COD</label>
