@@ -2417,7 +2417,7 @@ summary:focus-visible {
 .outstation-label-recipient strong { font-size: 14pt; }
 .outstation-label-phone { font-weight: 800; }
 .outstation-label-qr { position: absolute; left: 5mm; bottom: 12mm; z-index: 1; display: grid; justify-items: start; margin: 0; }
-.outstation-label-qr img { display: block; width: 20mm; height: 20mm; image-rendering: pixelated; }
+.outstation-label-qr img { display: block; width: 30mm; height: 30mm; image-rendering: pixelated; }
 .outstation-label-qr span { font-size: 7pt; max-width: 60mm; overflow-wrap: anywhere; }
 .outstation-label-footer { position: absolute; left: 5mm; right: 5mm; bottom: 2.5mm; display: flex; justify-content: space-between; align-items: end; gap: 8px; }
 .outstation-label-note { font-size: 10pt; }

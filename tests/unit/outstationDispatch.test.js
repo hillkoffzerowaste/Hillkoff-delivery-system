@@ -5,11 +5,28 @@ import {
   parseOutstationQrPayload,
   validateOutstationDispatchOrder
 } from "../../lib/outstationDispatch.js";
+import {
+  createOutstationCameraScanConfig,
+  outstationQrRenderOptions
+} from "../../lib/outstationQr.js";
 
 const actor = { role: "pack", name: "ผู้แพ็ค", uid: "pack-1" };
 const now = "2026-07-24T04:00:00.000Z";
 
 describe("outstation QR dispatch", () => {
+  it("uses a print-safe QR image and scans only the QR format", () => {
+    expect(outstationQrRenderOptions).toEqual({
+      errorCorrectionLevel: "H",
+      margin: 4,
+      width: 240
+    });
+    expect(createOutstationCameraScanConfig("QR_CODE")).toEqual({
+      fps: 10,
+      qrbox: { width: 280, height: 280 },
+      formatsToSupport: ["QR_CODE"]
+    });
+  });
+
   it("creates and parses a versioned order-and-box QR payload", () => {
     const payload = createOutstationQrPayload({ orderId: "DO-260724-093803260-B81E54A1", boxIndex: 1, boxTotal: 3 });
 

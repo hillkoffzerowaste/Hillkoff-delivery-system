@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createOutstationCameraScanConfig } from "../../lib/outstationQr";
 
 async function responseData(response) {
   const json = await response.json().catch(() => null);
@@ -33,7 +34,7 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
     if (lastPayloadRef.current.value === qrPayload && now - lastPayloadRef.current.at < 1400) return;
     lastPayloadRef.current = { value: qrPayload, at: now };
     setBusy(true);
-    setStatus("");
+    setStatus("อ่าน QR แล้ว กำลังบันทึกการส่งมอบ...");
     try {
       const data = await responseData(await apiFetch("/api/outstation-dispatch/scan", {
         method: "POST",
@@ -54,13 +55,22 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
 
   async function startCamera() {
     if (cameraActive || busy) return;
-    setStatus("");
+    setStatus("กำลังเปิดกล้อง...");
     try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode(cameraId, { verbose: false });
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      const scanner = new Html5Qrcode(cameraId, {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false
+      });
       scannerRef.current = scanner;
-      await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 240, height: 240 } }, decodedText => submitPayload(decodedText), () => {});
+      await scanner.start(
+        { facingMode: "environment" },
+        createOutstationCameraScanConfig(Html5QrcodeSupportedFormats.QR_CODE),
+        decodedText => submitPayload(decodedText),
+        () => {}
+      );
       setCameraActive(true);
+      setStatus("กล้องพร้อมอ่าน QR — วาง QR ให้อยู่ในกรอบ");
     } catch (error) {
       await stopCamera();
       setStatus(`เปิดกล้องไม่สำเร็จ: ${error?.message || "กรุณาอนุญาตใช้กล้อง หรือกรอกรหัส QR"}`);
