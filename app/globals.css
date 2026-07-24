@@ -2416,10 +2416,21 @@ summary:focus-visible {
 .outstation-label-recipient-heading { color: #555; font-size: 10.5pt; font-weight: 800; }
 .outstation-label-recipient strong { font-size: 14pt; }
 .outstation-label-phone { font-weight: 800; }
+.outstation-label-qr { display: grid; justify-items: end; margin-bottom: 1mm; }
+.outstation-label-qr img { display: block; width: 25mm; height: 25mm; image-rendering: pixelated; }
+.outstation-label-qr span { font-size: 7pt; max-width: 60mm; overflow-wrap: anywhere; }
 .outstation-label-footer { position: absolute; left: 5mm; right: 5mm; bottom: 2.5mm; display: flex; justify-content: space-between; align-items: end; gap: 8px; }
 .outstation-label-note { font-size: 10pt; }
 .outstation-label-box { margin-left: auto; font-size: 17pt; line-height: 1; }
 .outstation-label-edit { position: absolute; left: 5mm; top: 24mm; padding: 4px 8px; border: 1px solid #cbd5cc; border-radius: 6px; background: #fff; color: #2f6848; font-weight: 700; }
+.outstation-qr-scanner-overlay { z-index: 2600; }
+.outstation-qr-scanner-dialog { width: min(560px, 100%); padding: 18px; display: grid; gap: 14px; }
+.outstation-qr-camera { min-height: 240px; border-radius: 12px; overflow: hidden; background: #102419; }
+.outstation-qr-camera video { width: 100% !important; border-radius: 12px; }
+.outstation-qr-scanner-actions, .outstation-qr-manual { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+.outstation-qr-manual label { flex: 1 1 280px; display: grid; gap: 5px; }
+.outstation-qr-manual input { width: 100%; }
+.outstation-qr-scan-status { margin: 0; padding: 10px 12px; border-radius: 8px; background: #edf8ef; color: #1e5634; font-weight: 800; }
 
 @media (max-width: 900px) {
   .outstation-label-editor { grid-template-columns: 1fr; }

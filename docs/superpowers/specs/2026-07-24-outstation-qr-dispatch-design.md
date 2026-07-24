@@ -33,7 +33,7 @@ The server validates every segment. The order ID is looked up server-side; the c
 
 ## Completion and Audit Rules
 
-- Expected box count is the QR payload total and must equal the order's stored box count after normalization.
+- The first accepted QR scan records its payload total as the order's `outstationDispatchBoxTotal`, because the label editor can change the actual box count without modifying the original order. Every later QR scan must use that same total.
 - A box may be scanned only once; duplicates are recorded as no-op results.
 - Partial scans retain `พร้อมส่งขนส่ง` and the existing queue state.
 - The final unique scan sets `status: ส่งสำเร็จ`, `queueStatus: completed`, `outstationDispatchedAt`, and `outstationDispatchedBy`.

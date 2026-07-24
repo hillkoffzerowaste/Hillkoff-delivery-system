@@ -1,4 +1,6 @@
 import { paginateLabelItems } from "../../lib/outstationLabels";
+import { createOutstationQrPayload } from "../../lib/outstationDispatch";
+import OutstationQrCode from "./OutstationQrCode";
 
 function formatMoney(value) {
   return Number(value || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
@@ -17,8 +19,10 @@ function SenderBlock({ item }) {
 }
 
 function RecipientBlock({ item }) {
+  const qrPayload = createOutstationQrPayload(item);
   return (
     <div className="outstation-label-recipient">
+      <OutstationQrCode payload={qrPayload} />
       <span className="outstation-label-recipient-heading">ผู้รับ</span>
       <strong>{item.recipientName}</strong>
       {(item.recipientAddressLines || []).map((line, index) => <span key={`${line}-${index}`}>{line}</span>)}

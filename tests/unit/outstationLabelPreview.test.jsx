@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import OutstationLabelPrintDialog from "../../app/components/OutstationLabelPrintDialog.jsx";
 import OutstationLabelPreview from "../../app/components/OutstationLabelPreview.jsx";
+import OutstationQrScannerDialog from "../../app/components/OutstationQrScannerDialog.jsx";
 
 function label(index, total = 6) {
   return {
@@ -55,6 +56,20 @@ describe("outstation label preview", () => {
     expect(firstOfTwo).toContain("มีเอกสาร/บิล");
     expect(firstOfMany).toContain("มีเอกสาร/บิล");
     expect(laterBox).not.toContain("มีเอกสาร/บิล");
+  });
+
+  it("renders a QR payload for every printable label", () => {
+    const html = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 3)]} />);
+
+    expect(html).toContain("outstation-label-qr");
+    expect(html).toContain("HKO1|BU000001|1|3");
+  });
+
+  it("renders a mobile scanner opener and manual QR fallback", () => {
+    const html = renderToStaticMarkup(<OutstationQrScannerDialog apiFetch={async () => new Response()} onClose={() => {}} onScanned={() => {}} />);
+
+    expect(html).toContain("เปิดกล้องสแกน QR");
+    expect(html).toContain("กรอกรหัส QR");
   });
 
   it("renders editable sender, recipient, carrier, tracking, and COD controls", () => {

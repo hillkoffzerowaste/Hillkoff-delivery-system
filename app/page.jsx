@@ -7,6 +7,7 @@ import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, rec
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { expandOrderToLabelItems } from "../lib/outstationLabels";
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
+import OutstationQrScannerDialog from "./components/OutstationQrScannerDialog";
 import {
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -752,6 +753,7 @@ export default function App() {
   const [showOutstationCarrierModal, setShowOutstationCarrierModal] = useState(false);
   const [outstationLabelSelectedIds, setOutstationLabelSelectedIds] = useState([]);
   const [outstationLabelItems, setOutstationLabelItems] = useState([]);
+  const [showOutstationQrScanner, setShowOutstationQrScanner] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
   const [workPhotoPreviews, setWorkPhotoPreviews] = useState([]);
@@ -1844,7 +1846,7 @@ export default function App() {
   const packPickupOrders = preparationOrders.filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
-  const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && order.queueStatus === "outstation_ready");
+  const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && ["outstation_ready", "completed"].includes(order.queueStatus));
   const outstationLabelSelectedSet = new Set(outstationLabelSelectedIds);
   const selectedOutstationLabelOrders = salesOutstationOrders.filter(order => outstationLabelSelectedSet.has(order.id));
   const selectedOutstationLabelBoxes = selectedOutstationLabelOrders.reduce((sum, order) => sum + Math.max(1, Number(order.boxes || 0)), 0);
@@ -1866,6 +1868,11 @@ export default function App() {
     }
     const labels = selectedOutstationLabelOrders.flatMap(order => expandOrderToLabelItems(order));
     setOutstationLabelItems(labels);
+  }
+
+  function applyOutstationQrScan(order) {
+    setState(previous => ({ ...previous, orders: previous.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
+    setSyncStatus(`✅ บันทึกการส่งมอบขนส่ง ${order.customerName || order.id} แล้ว`);
   }
   const reportToKpiOrder = (report, department) => ({
     ...report,
@@ -5377,6 +5384,7 @@ export default function App() {
                 เลือกทั้งหมด
               </label>
               <span>เลือก {selectedOutstationLabelOrders.length} ออเดอร์ · {selectedOutstationLabelBoxes} กล่อง · {Math.ceil(selectedOutstationLabelBoxes / 5)} หน้า A4</span>
+              <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>
               <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
             </div>
             <div style={{ display: "grid", gap: "10px" }}>
@@ -5397,7 +5405,7 @@ export default function App() {
               ))}
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
-            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>สำเร็จ · พร้อมส่งขนส่ง</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 
@@ -5413,6 +5421,7 @@ export default function App() {
             }}
           />
         )}
+        {showOutstationQrScanner && <OutstationQrScannerDialog apiFetch={authenticatedApiFetch} onClose={() => setShowOutstationQrScanner(false)} onScanned={applyOutstationQrScan} />}
 
         {auth.role === "admin" && displayTab === "settings" && (
           <section className="panel" style={{ marginBottom: "16px", borderLeft: "4px solid #7c3aed" }}>
@@ -5538,7 +5547,7 @@ export default function App() {
 
         {["pack-work", "pack-pickup", "pack-outstation"].includes(displayTab) && (
           <section className="panel role-workspace ops-workspace">
-            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length} งาน</span></div>
+            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length} งาน</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
             <OrderHistorySearch title="ค้นหาประวัติออเดอร์ห้องแพ็ค" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
             <div className="ops-pack-work" style={{ display: "grid", gap: "10px" }}>
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
