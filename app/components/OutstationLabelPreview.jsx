@@ -1,5 +1,6 @@
-import { paginateLabelItems } from "../../lib/outstationLabels";
+import { OUTSTATION_LABELS_PER_PAGE, paginateLabelItems } from "../../lib/outstationLabels";
 import { createOutstationQrPayload } from "../../lib/outstationDispatch";
+import { HILLKOFF_LINE_URL } from "../../lib/outstationQr";
 import OutstationQrCode from "./OutstationQrCode";
 
 function formatMoney(value) {
@@ -46,7 +47,8 @@ function LabelItem({ item, onEditItem, index }) {
           )}
         </div>
       </div>
-      <OutstationQrCode payload={qrPayload} />
+      <OutstationQrCode payload={qrPayload} className="outstation-label-dispatch-qr" />
+      <OutstationQrCode payload={HILLKOFF_LINE_URL} className="outstation-label-line-qr" caption="Add line Hillkoff" />
       <RecipientBlock item={item} />
       <div className="outstation-label-footer">
         <span className="outstation-label-note">{String(item.boxLabel || "").startsWith("1/") ? "มีเอกสาร/บิล" : item.note || ""}</span>
@@ -64,7 +66,7 @@ export default function OutstationLabelPreview({ items = [], onEditItem }) {
       {pages.map((page, pageIndex) => (
         <div className="outstation-label-print-page" key={`page-${pageIndex}`} data-page={`${pageIndex + 1}/${pages.length}`}>
           {page.map((item, index) => {
-            const currentIndex = (pageIndex * 5) + index;
+            const currentIndex = (pageIndex * OUTSTATION_LABELS_PER_PAGE) + index;
             return <LabelItem key={`${item.orderId}-${item.boxIndex}-${currentIndex}`} item={item} index={currentIndex} onEditItem={onEditItem} />;
           })}
         </div>

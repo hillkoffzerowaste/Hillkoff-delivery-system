@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { outstationQrRenderOptions } from "../../lib/outstationQr";
 
-export default function OutstationQrCode({ payload }) {
+export default function OutstationQrCode({ payload, className = "", caption = "" }) {
   const [imageSrc, setImageSrc] = useState("");
 
   useEffect(() => {
@@ -16,8 +16,9 @@ export default function OutstationQrCode({ payload }) {
   }, [payload]);
 
   return (
-    <div className="outstation-label-qr" data-qr-payload={payload}>
+    <div className={["outstation-label-qr", className].filter(Boolean).join(" ")} data-qr-payload={payload}>
       {imageSrc ? <img src={imageSrc} alt={`QR ${payload}`} /> : <span>QR: {payload}</span>}
+      {caption && <small className="outstation-label-qr-caption">{caption}</small>}
     </div>
   );
 }

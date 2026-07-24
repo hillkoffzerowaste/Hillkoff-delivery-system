@@ -40,10 +40,10 @@ describe("outstation label domain", () => {
     expect(items[6]).toMatchObject({ orderId: "BU003931", boxIndex: 7, boxTotal: 7, boxLabel: "7/7" });
   });
 
-  it("splits generated labels into five rows per A4 page", () => {
+  it("splits generated labels into four rows per A4 page", () => {
     const pages = paginateLabelItems(Array.from({ length: 11 }, (_, index) => ({ id: index })));
 
-    expect(pages.map(page => page.length)).toEqual([5, 5, 1]);
+    expect(pages.map(page => page.length)).toEqual([4, 4, 3]);
   });
 
   it("rebuilds only the selected order when a popup box count changes", () => {

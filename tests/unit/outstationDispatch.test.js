@@ -9,6 +9,7 @@ import {
 } from "../../lib/outstationDispatch.js";
 import {
   createOutstationCameraScanConfig,
+  HILLKOFF_LINE_URL,
   outstationQrRenderOptions
 } from "../../lib/outstationQr.js";
 
@@ -33,6 +34,10 @@ describe("outstation QR dispatch", () => {
     await expect(
       QRCode.toDataURL("HKO1|DO-260724-093803260-B81E54A1|1|1", outstationQrRenderOptions)
     ).resolves.toMatch(/^data:image\/png;base64,/);
+  });
+
+  it("creates a QR PNG for the Hillkoff Line URL", async () => {
+    await expect(QRCode.toDataURL(HILLKOFF_LINE_URL, { ...outstationQrRenderOptions })).resolves.toMatch(/^data:image\/png;base64,/);
   });
 
   it("creates and parses a versioned order-and-box QR payload", () => {

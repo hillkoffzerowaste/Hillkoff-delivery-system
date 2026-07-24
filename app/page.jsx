@@ -5,7 +5,7 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
-import { expandOrderToLabelItems } from "../lib/outstationLabels";
+import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
 import OutstationQrScannerDialog from "./components/OutstationQrScannerDialog";
 import {
@@ -5383,7 +5383,7 @@ export default function App() {
                 />
                 เลือกทั้งหมด
               </label>
-              <span>เลือก {selectedOutstationLabelOrders.length} ออเดอร์ · {selectedOutstationLabelBoxes} กล่อง · {Math.ceil(selectedOutstationLabelBoxes / 5)} หน้า A4</span>
+              <span>เลือก {selectedOutstationLabelOrders.length} ออเดอร์ · {selectedOutstationLabelBoxes} กล่อง · {Math.ceil(selectedOutstationLabelBoxes / OUTSTATION_LABELS_PER_PAGE)} หน้า A4</span>
               <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>
               <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
             </div>

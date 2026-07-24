@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import OutstationLabelPrintDialog from "../../app/components/OutstationLabelPrintDialog.jsx";
 import OutstationLabelPreview from "../../app/components/OutstationLabelPreview.jsx";
 import OutstationQrScannerDialog from "../../app/components/OutstationQrScannerDialog.jsx";
+import { OUTSTATION_LABELS_PER_PAGE, paginateLabelItems } from "../../lib/outstationLabels.js";
+import { HILLKOFF_LINE_URL } from "../../lib/outstationQr.js";
 
 function label(index, total = 6) {
   return {
@@ -24,9 +26,11 @@ function label(index, total = 6) {
 }
 
 describe("outstation label preview", () => {
-  it("renders five label rows per A4 page and keeps receiver lines right aligned", () => {
+  it("renders four label rows per A4 page and keeps receiver lines right aligned", () => {
     const html = renderToStaticMarkup(<OutstationLabelPreview items={Array.from({ length: 6 }, (_, index) => label(index + 1))} />);
 
+    expect(OUTSTATION_LABELS_PER_PAGE).toBe(4);
+    expect(paginateLabelItems(Array.from({ length: 6 }, (_, index) => label(index + 1))).map(page => page.length)).toEqual([4, 2]);
     expect((html.match(/outstation-label-print-page/g) || [])).toHaveLength(2);
     expect((html.match(/outstation-label-item/g) || [])).toHaveLength(6);
     expect(html).toContain("outstation-label-recipient");
@@ -58,13 +62,17 @@ describe("outstation label preview", () => {
     expect(laterBox).not.toContain("มีเอกสาร/บิล");
   });
 
-  it("renders each QR before, but outside, the recipient block so it cannot push recipient lines", () => {
+  it("renders separate dispatch and Line QR blocks outside the recipient flow", () => {
     const html = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 3)]} />);
-    const qrPosition = html.indexOf("outstation-label-qr");
+    const qrPosition = html.indexOf("outstation-label-dispatch-qr");
     const recipientPosition = html.indexOf("outstation-label-recipient");
 
-    expect(html).toContain("outstation-label-qr");
+    expect(html).toContain("outstation-label-dispatch-qr");
+    expect(html).toContain("outstation-label-line-qr");
     expect(html).toContain("HKO1|BU000001|1|3");
+    expect(html).toContain("page.line.me/769svedb");
+    expect(html).toContain("Add line Hillkoff");
+    expect(HILLKOFF_LINE_URL).toBe("https://page.line.me/769svedb?oat_content=url&openQrModal=true");
     expect(qrPosition).toBeLessThan(recipientPosition);
   });
 
