@@ -19,10 +19,8 @@ function SenderBlock({ item }) {
 }
 
 function RecipientBlock({ item }) {
-  const qrPayload = createOutstationQrPayload(item);
   return (
     <div className="outstation-label-recipient">
-      <OutstationQrCode payload={qrPayload} />
       <span className="outstation-label-recipient-heading">ผู้รับ</span>
       <strong>{item.recipientName}</strong>
       {(item.recipientAddressLines || []).map((line, index) => <span key={`${line}-${index}`}>{line}</span>)}
@@ -32,6 +30,7 @@ function RecipientBlock({ item }) {
 }
 
 function LabelItem({ item, onEditItem, index }) {
+  const qrPayload = createOutstationQrPayload(item);
   return (
     <article className="outstation-label-item">
       <div className="outstation-label-top-row">
@@ -47,6 +46,7 @@ function LabelItem({ item, onEditItem, index }) {
           )}
         </div>
       </div>
+      <OutstationQrCode payload={qrPayload} />
       <RecipientBlock item={item} />
       <div className="outstation-label-footer">
         <span className="outstation-label-note">{String(item.boxLabel || "").startsWith("1/") ? "มีเอกสาร/บิล" : item.note || ""}</span>

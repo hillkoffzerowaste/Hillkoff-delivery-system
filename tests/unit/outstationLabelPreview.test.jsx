@@ -58,11 +58,14 @@ describe("outstation label preview", () => {
     expect(laterBox).not.toContain("มีเอกสาร/บิล");
   });
 
-  it("renders a QR payload for every printable label", () => {
+  it("renders each QR before, but outside, the recipient block so it cannot push recipient lines", () => {
     const html = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 3)]} />);
+    const qrPosition = html.indexOf("outstation-label-qr");
+    const recipientPosition = html.indexOf("outstation-label-recipient");
 
     expect(html).toContain("outstation-label-qr");
     expect(html).toContain("HKO1|BU000001|1|3");
+    expect(qrPosition).toBeLessThan(recipientPosition);
   });
 
   it("renders a mobile scanner opener and manual QR fallback", () => {
