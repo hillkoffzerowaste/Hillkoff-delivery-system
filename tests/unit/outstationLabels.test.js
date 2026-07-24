@@ -55,7 +55,7 @@ describe("outstation label domain", () => {
     expect(rebuilt.filter(item => item.orderId === "BU003932").map(item => item.boxLabel)).toEqual(["1/1"]);
   });
 
-  it("keeps the tracking code blank and places COD details in the printable snapshot", () => {
+  it("keeps COD details in the printable snapshot alongside the เมล์เขียว tracking default", () => {
     const snapshot = buildLabelSnapshot(order, {
       codEnabled: true,
       codAmount: 1250,
@@ -63,11 +63,22 @@ describe("outstation label domain", () => {
     });
 
     expect(snapshot).toMatchObject({
-      trackingCode: "",
+      trackingCode: "BU003931",
       carrier: "เมล์เขียว",
       codEnabled: true,
       codAmount: 1250,
       codDetail: "เก็บเงินปลายทาง"
+    });
+  });
+
+  it("uses BU003931 as the tracking default for เมล์เขียว only", () => {
+    expect(buildLabelSnapshot(order, {})).toMatchObject({
+      carrier: "เมล์เขียว",
+      trackingCode: "BU003931"
+    });
+    expect(buildLabelSnapshot({ ...order, shippingCarrier: "Flash" }, {})).toMatchObject({
+      carrier: "Flash",
+      trackingCode: ""
     });
   });
 

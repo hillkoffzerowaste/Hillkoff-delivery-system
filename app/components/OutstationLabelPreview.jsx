@@ -33,7 +33,7 @@ function LabelItem({ item, onEditItem, index }) {
       <div className="outstation-label-top-row">
         <SenderBlock item={item} />
         <div className="outstation-label-shipping">
-          <span className="outstation-label-tracking">รหัสขนส่ง: {item.trackingCode || "________________"}</span>
+          {item.trackingCode && <span className="outstation-label-tracking">รหัสขนส่ง: {item.trackingCode}</span>}
           <strong className="outstation-label-carrier">{item.carrier}</strong>
           {item.codEnabled && (
             <div className="outstation-label-cod">
@@ -45,7 +45,7 @@ function LabelItem({ item, onEditItem, index }) {
       </div>
       <RecipientBlock item={item} />
       <div className="outstation-label-footer">
-        <span className="outstation-label-note">{item.note || ""}</span>
+        <span className="outstation-label-note">{item.boxLabel === "1/1" ? "มีเอกสาร" : item.note || ""}</span>
         <strong className="outstation-label-box">{item.boxLabel}</strong>
       </div>
       {onEditItem && <button type="button" className="outstation-label-edit no-print" onClick={() => onEditItem(index)}>แก้ไขใบนี้</button>}

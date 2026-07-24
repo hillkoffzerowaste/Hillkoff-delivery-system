@@ -33,14 +33,24 @@ describe("outstation label preview", () => {
     expect(html).toContain("6/6");
   });
 
-  it("shows a blank tracking field and COD directly below the carrier", () => {
-    const html = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 1)]} />);
-    const carrierPosition = html.indexOf("Flash");
-    const codPosition = html.indexOf("COD 1,250 บาท");
+  it("shows tracking only when supplied and keeps COD directly below the carrier", () => {
+    const withTracking = renderToStaticMarkup(<OutstationLabelPreview items={[{ ...label(1, 1), trackingCode: "TRACK-001" }]} />);
+    const withoutTracking = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 1)]} />);
+    const carrierPosition = withTracking.indexOf("Flash");
+    const codPosition = withTracking.indexOf("COD 1,250 บาท");
 
-    expect(html).toContain("รหัสขนส่ง");
+    expect(withTracking).toContain("รหัสขนส่ง: TRACK-001");
+    expect(withoutTracking).not.toContain("รหัสขนส่ง");
     expect(carrierPosition).toBeGreaterThan(-1);
     expect(codPosition).toBeGreaterThan(carrierPosition);
+  });
+
+  it("prints the มีเอกสาร note only on a 1/1 label", () => {
+    const singleBox = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 1)]} />);
+    const multiBox = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 2)]} />);
+
+    expect(singleBox).toContain("มีเอกสาร");
+    expect(multiBox).not.toContain("มีเอกสาร");
   });
 
   it("renders editable sender, recipient, carrier, tracking, and COD controls", () => {

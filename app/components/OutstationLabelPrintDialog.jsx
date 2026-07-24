@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { replaceOrderLabelItems, validateLabelDraft } from "../../lib/outstationLabels";
+import { getDefaultTrackingCode, replaceOrderLabelItems, validateLabelDraft } from "../../lib/outstationLabels";
 import OutstationLabelPreview from "./OutstationLabelPreview";
 
 const CARRIERS = ["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"];
@@ -224,7 +224,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
               <section>
                 <h3>ข้อมูลขนส่งและ COD</h3>
                 <InputField label="จำนวนกล่อง"><input type="number" min="1" max="10000" value={currentOrderBoxTotal || 1} onChange={event => updateOrderBoxTotal(event.target.value)} /></InputField>
-                <InputField label="บริษัทขนส่ง"><input list="outstation-carriers" value={current.carrier || ""} onChange={event => updateCurrent({ carrier: event.target.value })} /><datalist id="outstation-carriers">{CARRIERS.map(carrier => <option key={carrier} value={carrier} />)}</datalist></InputField>
+                <InputField label="บริษัทขนส่ง"><input list="outstation-carriers" value={current.carrier || ""} onChange={event => updateCurrent({ carrier: event.target.value, trackingCode: current.trackingCode || getDefaultTrackingCode(event.target.value) })} /><datalist id="outstation-carriers">{CARRIERS.map(carrier => <option key={carrier} value={carrier} />)}</datalist></InputField>
                 <InputField label="รหัสขนส่ง"><input value={current.trackingCode || ""} onChange={event => updateCurrent({ trackingCode: event.target.value })} placeholder="เว้นว่างไว้กรอกภายหลังได้" /></InputField>
                 <label className="outstation-label-checkbox"><input type="checkbox" checked={Boolean(current.codEnabled)} onChange={event => updateCurrent({ codEnabled: event.target.checked })} /> มี COD</label>
                 {current.codEnabled && <><InputField label="ยอด COD"><input type="number" min="0" value={current.codAmount || ""} onChange={event => updateCurrent({ codAmount: Number(event.target.value || 0) })} /></InputField><InputField label="รายละเอียด COD"><input value={current.codDetail || ""} onChange={event => updateCurrent({ codDetail: event.target.value })} /></InputField></>}
