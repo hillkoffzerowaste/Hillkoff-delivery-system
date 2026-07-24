@@ -1845,7 +1845,7 @@ export default function App() {
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const packPickupOrders = preparationOrders.filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
-  const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "pack_archived"].includes(order.queueStatus));
+  const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "completed", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && ["outstation_ready", "completed"].includes(order.queueStatus));
   const outstationLabelSelectedSet = new Set(outstationLabelSelectedIds);
   const selectedOutstationLabelOrders = salesOutstationOrders.filter(order => outstationLabelSelectedSet.has(order.id));
@@ -5563,6 +5563,15 @@ export default function App() {
               </article>)}
               {!(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
+            {displayTab === "pack-outstation" && (
+              <details className="prep-order-details" style={{ marginTop: "14px" }}>
+                <summary>สถานะส่งมอบขนส่ง ({salesOutstationHistory.length})</summary>
+                <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+                  {salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">สแกน {order.outstationDispatchScannedCount || 0}/{order.outstationDispatchBoxTotal || order.boxes || 1} กล่อง · {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={order.queueStatus === "completed" ? { color: "#166534", background: "#dcfce7" } : undefined}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div></article>)}
+                  {!salesOutstationHistory.length && <p className="muted">ยังไม่มีออเดอร์ที่พร้อมส่งหรือส่งมอบขนส่งแล้ว</p>}
+                </div>
+              </details>
+            )}
           </section>
         )}
 

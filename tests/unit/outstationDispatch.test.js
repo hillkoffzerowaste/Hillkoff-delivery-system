@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import {
   applyOutstationBoxScan,
   createOutstationQrPayload,
+  getOutstationScanOutcome,
   parseOutstationQrPayload,
   validateOutstationDispatchOrder
 } from "../../lib/outstationDispatch.js";
@@ -69,8 +70,16 @@ describe("outstation QR dispatch", () => {
     expect(() => applyOutstationBoxScan(order, { orderId: order.id, boxIndex: 2, boxTotal: 2 }, actor, now)).toThrow("box total does not match");
   });
 
-  it("accepts only outstation orders that are ready for carrier handoff", () => {
+  it("accepts every outstation order for a QR handoff, including a completed duplicate", () => {
     expect(validateOutstationDispatchOrder({ deliveryMethod: "outstation", queueStatus: "outstation_ready" })).toBe(true);
+    expect(validateOutstationDispatchOrder({ deliveryMethod: "outstation", queueStatus: "preparing" })).toBe(true);
+    expect(validateOutstationDispatchOrder({ deliveryMethod: "outstation", queueStatus: "completed" })).toBe(true);
     expect(validateOutstationDispatchOrder({ deliveryMethod: "company_driver", queueStatus: "ready" })).toBe(false);
+  });
+
+  it("distinguishes a new scan, a completed scan, and a duplicate for feedback", () => {
+    expect(getOutstationScanOutcome({ duplicate: false, complete: false })).toBe("scanned");
+    expect(getOutstationScanOutcome({ duplicate: false, complete: true })).toBe("complete");
+    expect(getOutstationScanOutcome({ duplicate: true, complete: true })).toBe("duplicate");
   });
 });

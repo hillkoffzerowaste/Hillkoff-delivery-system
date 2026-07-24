@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createOutstationCameraScanConfig } from "../../lib/outstationQr";
+import { getOutstationScanOutcome } from "../../lib/outstationDispatch";
 
 async function responseData(response) {
   const json = await response.json().catch(() => null);
@@ -12,6 +13,7 @@ async function responseData(response) {
 export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned }) {
   const cameraId = `outstation-qr-camera-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const scannerRef = useRef(null);
+  const audioContextRef = useRef(null);
   const lastPayloadRef = useRef({ value: "", at: 0 });
   const [manualValue, setManualValue] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
@@ -25,6 +27,33 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
     try { await scanner.stop(); } catch {}
     try { await scanner.clear(); } catch {}
     setCameraActive(false);
+  }
+
+  function playScanFeedback(outcome) {
+    if (typeof window === "undefined") return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    let context = audioContextRef.current;
+    if (!context || context.state === "closed") {
+      context = new AudioContext();
+      audioContextRef.current = context;
+    }
+    void context.resume?.().catch(() => {});
+    const notes = outcome === "duplicate" ? [260, 220] : outcome === "complete" ? [660, 880] : [660];
+    const startedAt = context.currentTime + 0.01;
+    notes.forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const at = startedAt + (index * 0.15);
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.12, at + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.13);
+    });
+    navigator.vibrate?.(outcome === "duplicate" ? [70, 45, 70] : outcome === "complete" ? [55, 35, 90] : 55);
   }
 
   async function submitPayload(rawValue) {
@@ -42,9 +71,11 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
         body: JSON.stringify({ qrPayload })
       }));
       setManualValue("");
-      setStatus(data.duplicate
+      const outcome = getOutstationScanOutcome(data);
+      playScanFeedback(outcome);
+      setStatus(outcome === "duplicate"
         ? `${data.order.customerName || data.order.id} สแกนแล้ว · ${data.scannedCount}/${data.expectedCount} กล่อง`
-        : data.complete
+        : outcome === "complete"
           ? `${data.order.customerName || data.order.id} ส่งสำเร็จ · ${data.scannedCount}/${data.expectedCount} กล่อง`
           : `${data.order.customerName || data.order.id} · ${data.scannedCount}/${data.expectedCount} กล่อง`);
       onScanned?.(data.order);
@@ -79,7 +110,11 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
 
   useEffect(() => {
     const startTimer = window.setTimeout(() => { void startCamera(); }, 0);
-    return () => { window.clearTimeout(startTimer); void stopCamera(); };
+    return () => {
+      window.clearTimeout(startTimer);
+      void stopCamera();
+      void audioContextRef.current?.close?.().catch(() => {});
+    };
   // The dialog starts exactly once; later state changes must not restart its camera stream.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
