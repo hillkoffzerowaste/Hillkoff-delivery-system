@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import QRCode from "qrcode";
 import {
   applyOutstationBoxScan,
   createOutstationQrPayload,
@@ -25,6 +26,12 @@ describe("outstation QR dispatch", () => {
       qrbox: { width: 280, height: 280 },
       formatsToSupport: ["QR_CODE"]
     });
+  });
+
+  it("creates a QR PNG from the print-safe options", async () => {
+    await expect(
+      QRCode.toDataURL("HKO1|DO-260724-093803260-B81E54A1|1|1", outstationQrRenderOptions)
+    ).resolves.toMatch(/^data:image\/png;base64,/);
   });
 
   it("creates and parses a versioned order-and-box QR payload", () => {
