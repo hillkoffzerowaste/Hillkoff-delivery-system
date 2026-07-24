@@ -73,6 +73,7 @@ describe("outstation label preview", () => {
 
     expect(html).toContain("เปิดกล้องสแกน QR");
     expect(html).toContain("กรอกรหัส QR");
+    expect(html).toContain('data-camera-autostart="true"');
   });
 
   it("renders editable sender, recipient, carrier, tracking, and COD controls", () => {

@@ -26,8 +26,6 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
     setCameraActive(false);
   }
 
-  useEffect(() => () => { stopCamera(); }, []);
-
   async function submitPayload(rawValue) {
     const qrPayload = String(rawValue || "").trim();
     if (!qrPayload || busy) return;
@@ -69,11 +67,18 @@ export default function OutstationQrScannerDialog({ apiFetch, onClose, onScanned
     }
   }
 
+  useEffect(() => {
+    const startTimer = window.setTimeout(() => { void startCamera(); }, 0);
+    return () => { window.clearTimeout(startTimer); void stopCamera(); };
+  // The dialog starts exactly once; later state changes must not restart its camera stream.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="modal-overlay outstation-qr-scanner-overlay" role="dialog" aria-modal="true" aria-label="สแกนส่งมอบขนส่ง">
       <div className="modal outstation-qr-scanner-dialog">
         <div className="panel-head"><div><h2>สแกนส่งมอบขนส่ง</h2><span>สแกนได้ทุกกล่อง ระบบค้นหาออเดอร์ให้อัตโนมัติ</span></div><button type="button" className="secondary" onClick={async () => { await stopCamera(); onClose?.(); }}>ปิด</button></div>
-        <div id={cameraId} className="outstation-qr-camera" />
+        <div id={cameraId} className="outstation-qr-camera" data-camera-autostart="true" />
         <div className="outstation-qr-scanner-actions">
           <button type="button" className="primary" disabled={cameraActive || busy} onClick={startCamera}>เปิดกล้องสแกน QR</button>
           {cameraActive && <button type="button" className="secondary" onClick={stopCamera}>หยุดกล้อง</button>}
