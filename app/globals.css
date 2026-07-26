@@ -2563,7 +2563,7 @@ summary:focus-visible {
 
 .vehicle-report-filter {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 10px;
 }
 
@@ -2594,43 +2594,112 @@ summary:focus-visible {
 }
 
 .vehicle-report-tabs {
-  display: flex;
-  width: fit-content;
-  max-width: 100%;
-  gap: 8px;
-  padding: 8px;
-  overflow-x: auto;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  overflow: visible;
 }
 
-.vehicle-report-tabs .report-tab {
-  flex: 0 0 auto;
-  min-height: 42px;
-  padding: 9px 16px;
+.vehicle-report-tabs .vehicle-report-menu-card {
+  min-width: 0;
+  min-height: 116px;
+  padding: 15px;
   border: 1px solid #cbd5e1;
-  border-radius: 9px;
-  background: #f8fafc;
+  border-radius: 13px;
+  background: #ffffff;
   color: #1e293b;
   font-weight: 800;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+  justify-items: start;
+  gap: 7px;
+  text-align: left;
+  box-shadow: 0 5px 15px rgba(15, 23, 42, 0.07);
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.vehicle-report-tabs .report-tab.is-active {
+.vehicle-report-menu-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vehicle-report-tabs .vehicle-report-menu-card.is-active {
   border-color: #166534;
   background: #166534;
   color: #ffffff;
   box-shadow: 0 3px 9px rgba(22, 101, 52, 0.28);
 }
 
-.vehicle-report-tabs .report-tab.is-inactive:hover,
-.vehicle-report-tabs .report-tab.is-inactive:focus-visible {
+.vehicle-report-menu-card.is-active span {
+  color: #dcfce7;
+}
+
+.vehicle-report-tabs .vehicle-report-menu-card.is-inactive:hover,
+.vehicle-report-tabs .vehicle-report-menu-card.is-inactive:focus-visible {
   border-color: #16a34a;
   background: #ecfdf5;
   color: #14532d;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(22, 101, 52, 0.13);
+}
+
+.vehicle-report-empty {
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  text-align: center;
+  color: #64748b;
+  border: 1px dashed #94a3b8;
+  background: #f8fafc;
+}
+
+.vehicle-report-empty h3,
+.vehicle-report-empty p {
+  margin: 0;
+}
+
+.vehicle-report-apply {
+  align-self: end;
+  min-height: 42px;
+}
+
+.odometer-edit-actions {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 4px !important;
+}
+
+.odometer-edit-actions button {
+  padding: 4px 7px;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vehicle-odometer-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  padding: 16px;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.vehicle-odometer-modal > .panel {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 10px;
 }
 
 .sales-round-queue-panel {
@@ -2809,6 +2878,10 @@ summary:focus-visible {
 }
 
 @media (max-width: 900px) {
+  .vehicle-report-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .vehicle-report-filter,
   .vehicle-report-cards,
   .dispatch-eight-cards,
@@ -2818,6 +2891,15 @@ summary:focus-visible {
 }
 
 @media (max-width: 560px) {
+  .vehicle-report-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vehicle-report-tabs .vehicle-report-menu-card {
+    min-height: 108px;
+    padding: 12px;
+  }
+
   .vehicle-report-filter,
   .vehicle-report-cards,
   .dispatch-eight-cards,

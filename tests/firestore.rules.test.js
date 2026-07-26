@@ -81,6 +81,11 @@ describe("Firestore role isolation", () => {
     const db = dbFor("accounting-1");
     await assertFails(getDoc(doc(db, "orders/O-ACCOUNTING")));
     await assertFails(getDoc(doc(db, "vehicle_usage_events/U-ACCOUNTING")));
+    await assertFails(setDoc(doc(db, "vehicle_odometer_audits/A-ACCOUNTING"), {
+      eventId: "U-ACCOUNTING",
+      previousOdometer: 1000,
+      nextOdometer: 1100
+    }));
   });
 
   it("allows only the assigned driver to read an assigned order", async () => {

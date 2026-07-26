@@ -9,11 +9,13 @@ describe("operations replacement workspaces", () => {
   it("renders the completely replaced vehicle report controls", () => {
     const html = renderToStaticMarkup(<VehicleInspectionReport apiFetch={apiFetch} role="accounting" />);
     expect(html).toContain("รายงานการตรวจรถและการใช้รถ");
-    expect(html).toContain("ส่งออกทั้งหมดตามตัวกรอง");
     expect(html).toContain("จัดการข้อมูล");
-    expect(html).toContain('class="report-tab is-active"');
-    expect(html).toContain('class="report-tab is-inactive"');
-    expect(html).toContain('aria-selected="true"');
+    expect(html.match(/vehicle-report-menu-card/g)).toHaveLength(5);
+    expect(html).toContain("เลือกเมนูรายงาน");
+    expect(html).not.toContain("vehicle-report-filter");
+    expect(html).not.toContain("vehicle-report-table");
+    expect(html).not.toContain("ส่งออกทั้งหมดตามตัวกรอง");
+    expect(html).not.toContain('aria-selected="true"');
     expect(html).not.toContain("ดาวน์โหลด TXT");
   });
 

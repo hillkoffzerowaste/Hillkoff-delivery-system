@@ -6512,7 +6512,7 @@ export default function App() {
         )}
 
         {["sales", "admin", "accounting"].includes(auth.role) && displayTab === "driver-sop-report" && (
-          <VehicleInspectionReport apiFetch={authenticatedApiFetch} role={auth.role} />
+          <VehicleInspectionReport apiFetch={authenticatedApiFetch} role={auth.role} email={auth.email} />
         )}
 
         {auth.role === "driver" && displayTab === "driver-sop" && (

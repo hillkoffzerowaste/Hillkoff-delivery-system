@@ -25,7 +25,9 @@ describe("vehicle report aggregation", () => {
       deliveredOrders: 2,
       cityOrders: 1,
       outstationOrders: 1,
-      inspectionStatus: "completed"
+      inspectionStatus: "completed",
+      odometerStartEventId: "s",
+      odometerEndEventId: "e"
     });
     expect(report.summary).toMatchObject({ distanceKm: 50, deliveredOrders: 2, fuelLiters: 20 });
   });
