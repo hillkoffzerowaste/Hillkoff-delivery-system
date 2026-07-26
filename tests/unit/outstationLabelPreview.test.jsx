@@ -4,7 +4,6 @@ import OutstationLabelPrintDialog from "../../app/components/OutstationLabelPrin
 import OutstationLabelPreview from "../../app/components/OutstationLabelPreview.jsx";
 import OutstationQrScannerDialog from "../../app/components/OutstationQrScannerDialog.jsx";
 import { OUTSTATION_LABELS_PER_PAGE, paginateLabelItems } from "../../lib/outstationLabels.js";
-import { HILLKOFF_LINE_URL } from "../../lib/outstationQr.js";
 
 function label(index, total = 6) {
   return {
@@ -62,17 +61,18 @@ describe("outstation label preview", () => {
     expect(laterBox).not.toContain("มีเอกสาร/บิล");
   });
 
-  it("renders separate dispatch and Line QR blocks outside the recipient flow", () => {
+  it("renders one dispatch QR with the Line caption beside it", () => {
     const html = renderToStaticMarkup(<OutstationLabelPreview items={[label(1, 3)]} />);
     const qrPosition = html.indexOf("outstation-label-dispatch-qr");
     const recipientPosition = html.indexOf("outstation-label-recipient");
 
     expect(html).toContain("outstation-label-dispatch-qr");
-    expect(html).toContain("outstation-label-line-qr");
+    expect((html.match(/class="outstation-label-qr outstation-label-dispatch-qr"/g) || [])).toHaveLength(1);
+    expect(html).not.toContain("outstation-label-line-qr");
     expect(html).toContain("HKO1|BU000001|1|3");
-    expect(html).toContain("page.line.me/769svedb");
     expect(html).toContain("Add line Hillkoff");
-    expect(HILLKOFF_LINE_URL).toBe("https://page.line.me/769svedb?oat_content=url&openQrModal=true");
+    expect(html.indexOf("Add line Hillkoff")).toBeGreaterThan(qrPosition);
+    expect(html.indexOf("Add line Hillkoff")).toBeLessThan(recipientPosition);
     expect(qrPosition).toBeLessThan(recipientPosition);
   });
 

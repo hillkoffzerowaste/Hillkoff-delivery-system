@@ -2419,10 +2419,8 @@ summary:focus-visible {
 .outstation-label-qr { position: absolute; z-index: 1; display: grid; margin: 0; }
 .outstation-label-qr img { display: block; width: 30mm; height: 30mm; image-rendering: pixelated; }
 .outstation-label-qr span { font-size: 7pt; max-width: 60mm; overflow-wrap: anywhere; }
-.outstation-label-dispatch-qr { left: 5mm; bottom: 12mm; justify-items: start; }
-.outstation-label-line-qr { left: 42%; top: 28mm; width: 28mm; transform: translateX(-50%); justify-items: center; gap: .5mm; text-align: center; }
-.outstation-label-line-qr img { width: 15mm; height: 15mm; }
-.outstation-label-line-qr span { max-width: 26mm; font-size: 4.5pt; line-height: 1; }
+.outstation-label-dispatch-qr { left: 5mm; bottom: 12mm; display: flex; align-items: center; gap: 2mm; }
+.outstation-label-dispatch-qr .outstation-label-qr-caption { max-width: 24mm; white-space: normal; }
 .outstation-label-qr-caption { font-size: 7pt; line-height: 1; font-weight: 700; white-space: nowrap; }
 .outstation-label-footer { position: absolute; left: 5mm; right: 5mm; bottom: 2.5mm; display: flex; justify-content: space-between; align-items: end; gap: 8px; }
 .outstation-label-note { font-size: 10pt; }

@@ -1,6 +1,5 @@
 import { OUTSTATION_LABELS_PER_PAGE, paginateLabelItems } from "../../lib/outstationLabels";
 import { createOutstationQrPayload } from "../../lib/outstationDispatch";
-import { HILLKOFF_LINE_URL } from "../../lib/outstationQr";
 import OutstationQrCode from "./OutstationQrCode";
 
 function formatMoney(value) {
@@ -47,8 +46,7 @@ function LabelItem({ item, onEditItem, index }) {
           )}
         </div>
       </div>
-      <OutstationQrCode payload={qrPayload} className="outstation-label-dispatch-qr" />
-      <OutstationQrCode payload={HILLKOFF_LINE_URL} className="outstation-label-line-qr" caption="Add line Hillkoff" />
+      <OutstationQrCode payload={qrPayload} className="outstation-label-dispatch-qr" caption="Add line Hillkoff" />
       <RecipientBlock item={item} />
       <div className="outstation-label-footer">
         <span className="outstation-label-note">{String(item.boxLabel || "").startsWith("1/") ? "มีเอกสาร/บิล" : item.note || ""}</span>
