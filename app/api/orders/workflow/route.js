@@ -2,6 +2,7 @@ import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { driverReworkPatch } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function PATCH(request) {
     let bookingReservation = null;
     let previousBookingReservationRef = null;
 
-    if (profile.role === "driver" && ["driver_cancel", "driver_complete"].includes(action)) {
+    if (profile.role === "driver" && ["driver_cancel", "driver_complete", "driver_rework"].includes(action)) {
       if (String(order.driverId || "") !== String(profile.driverId || "")) {
         throw Object.assign(new Error("Driver can update only an assigned order"), { status: 403 });
       }
@@ -48,6 +49,20 @@ export async function PATCH(request) {
         patch.driverSequenceUpdatedAt = "";
         patch.driverSequenceUpdatedBy = "";
         Object.assign(history, { result: "returned_to_queue", reason });
+      } else if (action === "driver_rework") {
+        if (!["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || ""))) {
+          throw Object.assign(new Error("Order is not in an active delivery state"), { status: 409 });
+        }
+        if (String(body.deliveryCompleteness || "") !== "incomplete") {
+          throw Object.assign(new Error("Incomplete delivery confirmation is required"), { status: 400 });
+        }
+        const driverNote = String(body.driverNote || "").trim().slice(0, 2000);
+        if (!driverNote) throw Object.assign(new Error("Driver rework note is required"), { status: 400 });
+        Object.assign(patch, driverReworkPatch(order, profile, driverNote, now));
+        patch.complaint = driverNote;
+        const podPhotoCount = Number(body.podPhotoCount);
+        patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
+        Object.assign(history, { result: "delivery_rework", reworkRoute: patch.reworkRoute, reworkStatus: patch.reworkStatus, podPhotoCount: patch.podPhotoCount });
       } else {
         if (!["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(String(order.status || ""))) {
           throw Object.assign(new Error("Order is not in a delivery state"), { status: 409 });
@@ -58,6 +73,7 @@ export async function PATCH(request) {
         patch.queueStatus = "completed";
         patch.deliveredAt = deliveredAt;
         patch.driverNote = driverNote;
+        patch.deliveryCompleteness = "complete";
         patch.sharedToLine = true;
         const podPhotoCount = Number(body.podPhotoCount);
         patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
@@ -119,6 +135,9 @@ export async function PATCH(request) {
       };
       if (["checked", "partial"].includes(body.storeStatus) && !["working", "checked", "partial"].includes(order.packStatus)) patch.packStatus = "pending";
       else if (body.storeStatus === "waiting") patch.packStatus = "waiting";
+      if (order.reworkRequired && order.reworkRoute === "store_route" && ["checked", "partial"].includes(body.storeStatus)) {
+        patch.reworkStatus = "waiting_pack";
+      }
       if (order.storeStatus === "returned" && ["checked", "partial"].includes(body.storeStatus)) {
         patch.queueStatus = "preparing";
         patch.status = "สโตร์แก้ไขแล้ว · รอห้องแพ็คตรวจซ้ำ";
@@ -158,6 +177,17 @@ export async function PATCH(request) {
           patch.outstationCompletedAt = now;
           patch.outstationCompletedBy = profile.name || profile.email;
         }
+        if (order.reworkRequired && body.packStatus === "checked") {
+          patch.reworkRequired = false;
+          patch.reworkStatus = "resolved";
+          patch.reworkResolvedAt = now;
+          patch.reworkResolvedBy = profile.name || profile.email;
+          patch.status = "รอคนขับรับ";
+        } else if (order.reworkRequired && body.packStatus === "partial") {
+          patch.queueStatus = "preparing";
+          patch.status = "ติดปัญหา";
+          patch.reworkStatus = "waiting_pack";
+        }
       }
       if (body.packStatus === "returned") {
         if (order.workflowType === "direct_pack" || order.deliveryMethod === "outstation") {
@@ -180,6 +210,7 @@ export async function PATCH(request) {
       const storeOk = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       const packOk = ["checked", "partial"].includes(order.packStatus);
       if (!storeOk || !packOk) throw Object.assign(new Error("Order is not ready for driver queue"), { status: 409 });
+      if (order.reworkRequired) throw Object.assign(new Error("Order rework must be resolved before driver queue"), { status: 409 });
       if (["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod)) throw Object.assign(new Error("Pickup and outstation orders do not enter the driver queue"), { status: 409 });
       patch.queueStatus = "queued"; patch.status = "รอคนขับรับ"; patch.queuedAt = now; patch.queuedBy = profile.name || profile.email;
     } else {

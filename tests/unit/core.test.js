@@ -21,6 +21,7 @@ import {
 import { authenticatedFetch } from "../../lib/authenticatedFetch.js";
 import {
   initialPreparationStatuses,
+  driverReworkPatch,
   isChiangmaiPreparationOrder,
   isDriverDeliveryOrder,
   isOutstationOrder,
@@ -56,6 +57,61 @@ describe("sales order preparation workflow", () => {
     expect(resolvePreparationRoute("outstation", "store_route")).toBe("store_route");
     expect(initialPreparationStatuses("outstation", "store_route")).toMatchObject({ workflowType: "store_route", storeStatus: "pending", packStatus: "blocked", queueStatus: "preparing" });
     expect(initialPreparationStatuses("outstation", "direct_pack")).toMatchObject({ workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending" });
+  });
+
+  it("routes incomplete store-route deliveries back through store before pack", () => {
+    expect(driverReworkPatch(
+      { workflowType: "store_route", deliveryMethod: "company_driver" },
+      { name: "คนขับหนึ่ง", driverId: "driver-1" },
+      "สินค้าไม่ครบ 1 รายการ",
+      "2026-07-26T01:00:00.000Z"
+    )).toMatchObject({
+      reworkRequired: true,
+      reworkRoute: "store_route",
+      reworkStatus: "waiting_store",
+      storeStatus: "returned",
+      packStatus: "blocked",
+      queueStatus: "preparing",
+      driverId: "",
+      reworkNote: "สินค้าไม่ครบ 1 รายการ"
+    });
+  });
+
+  it("routes incomplete direct-pack deliveries to pack without store", () => {
+    expect(driverReworkPatch(
+      { workflowType: "direct_pack", deliveryMethod: "company_driver" },
+      { name: "คนขับหนึ่ง", driverId: "driver-1" },
+      "ขาดกาแฟ 2 ถุง",
+      "2026-07-26T01:00:00.000Z"
+    )).toMatchObject({
+      reworkRequired: true,
+      reworkRoute: "direct_pack",
+      reworkStatus: "waiting_pack",
+      storeStatus: "skipped",
+      packStatus: "waiting",
+      queueStatus: "preparing",
+      driverId: "",
+      reworkNote: "ขาดกาแฟ 2 ถุง"
+    });
+  });
+
+  it("requires a clear driver note before creating incomplete rework", () => {
+    expect(() => driverReworkPatch(
+      { workflowType: "store_route" },
+      { name: "คนขับหนึ่ง" },
+      "   "
+    )).toThrow(/note/i);
+  });
+
+  it("keeps rework orders visible in the sales waiting alert", () => {
+    expect(isSalesWaitingAlert({
+      workflowType: "store_route",
+      status: "ติดปัญหา",
+      queueStatus: "preparing",
+      reworkRequired: true,
+      storeStatus: "returned",
+      packStatus: "blocked"
+    })).toBe(true);
   });
 
   it("removes a delivered order from the driver's active delivery list", () => {

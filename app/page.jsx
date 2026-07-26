@@ -414,10 +414,11 @@ function privacySafeName(name) {
 
 function buildLineMessageForOrder(order) {
   const lines = [];
-  lines.push("✅ ส่งของสำเร็จ");
+  lines.push(order.deliveryCompleteness === "incomplete" ? "⚠️ สินค้าไม่ครบ · ต้องส่งแก้ไข" : "✅ ส่งของสำเร็จ");
   lines.push(`งาน: ${order.id}`);
   if (order.customerName) lines.push(`ลูกค้า: ${order.customerName}`);
   if (order.zone) lines.push(`โซน: ${order.zone}`);
+  if (order.deliveryCompleteness === "incomplete") lines.push(`เส้นทางแก้ไข: ${order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน แล้วเข้าห้องแพ็ค" : "ส่งตรงห้องแพ็ค"}`);
   if (order.deliveredAt) lines.push(`เวลา: ${order.deliveredAt}`);
   if (order.driverNote) lines.push(`หมายเหตุคนขับ: ${order.driverNote}`);
   return lines.join("\n");
@@ -498,6 +499,18 @@ function SalesNoteAlert({ order, compact = false }) {
   return <div className={`sales-note-alert${compact ? " is-compact" : ""}`} role="note" aria-label="หมายเหตุจากฝ่ายขาย">
     <b>📝 หมายเหตุจากฝ่ายขาย</b>
     <span>{note}</span>
+  </div>;
+}
+
+function ReworkNotice({ order, compact = false }) {
+  if (!order?.reworkRequired) return null;
+  const route = order.reworkRoute === "store_route" ? "ผ่านสโตร์ก่อน แล้วเข้าห้องแพ็ค" : "ส่งตรงห้องแพ็ค";
+  const nextStep = order.reworkStatus === "waiting_store" ? "รอสโตร์แก้ไขและยืนยัน" : order.reworkStatus === "waiting_pack" ? "รอห้องแพ็คแก้ไขและตรวจซ้ำ" : "รอดำเนินการตามขั้นตอน";
+  return <div role="alert" aria-label="ออเดอร์ต้องส่งแก้ไข" style={{ background: compact ? "#fff7ed" : "#fef2f2", border: "1px solid #fca5a5", borderLeft: "5px solid #dc2626", borderRadius: "8px", padding: compact ? "8px" : "10px", display: "grid", gap: "4px", color: "#991b1b", fontSize: "12px" }}>
+    <b>🔴 งานแก้ไขจากคนขับ · สินค้าไม่ครบ</b>
+    <span><b>เส้นทาง:</b> {route} · <b>ขั้นตอนถัดไป:</b> {nextStep}</span>
+    {order.reworkNote && <span><b>หมายเหตุ:</b> {order.reworkNote}</span>}
+    {(order.reworkReportedBy || order.reworkReportedAt) && <small>แจ้งโดย {order.reworkReportedBy || "คนขับ"}{order.reworkReportedAt ? ` · ${formatThaiDateTime(order.reworkReportedAt)}` : ""}</small>}
   </div>;
 }
 
@@ -630,6 +643,7 @@ export default function App() {
   const [driverId, setDriverId] = useState("D1");
   const [driverSequenceDragId, setDriverSequenceDragId] = useState("");
   const [driverNoteDrafts, setDriverNoteDrafts] = useState({});
+  const [driverDeliveryCompleteness, setDriverDeliveryCompleteness] = useState({});
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", username: "", password: "" });
   const [driverLoginSubmitting, setDriverLoginSubmitting] = useState(false);
   const driverLoginInFlightRef = useRef(false);
@@ -1828,7 +1842,7 @@ export default function App() {
   const transferredQueueStatuses = ["queued", "completed", "outstation_ready", "grab_completed", "grab_ready", "grab_picked_up", "pack_archived", "driver_archived"];
   const preparationOrders = (orders || []).filter(order => order.workflowType && !transferredQueueStatuses.includes(order.queueStatus));
   const chiangmaiPreparationOrders = (orders || []).filter(isChiangmaiPreparationOrder);
-  const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus);
+  const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus) && order.reworkRequired !== true;
   const isReadyDriverBacklog = order => isReadyOrderWaitingForDispatch(order);
   const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
@@ -1843,6 +1857,8 @@ export default function App() {
   const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
+  const packReworkOrders = (orders || []).filter(order => order.reworkRequired === true && !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod));
+  const packBlockedReworkOrders = packReworkOrders.filter(order => order.packStatus === "blocked");
   const packPickupOrders = preparationOrders.filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "completed", "pack_archived"].includes(order.queueStatus));
@@ -3076,11 +3092,12 @@ export default function App() {
     finally { pendingOrderUpdatesRef.current.delete(order.id); }
   };
 
-  const completeDriverDeliveryOrder = async (order, { deliveredAt, driverNote, podPhotoCount }) => {
+  const completeDriverDeliveryOrder = async (order, { deliveredAt, driverNote, podPhotoCount, deliveryCompleteness }) => {
     if (pendingOrderUpdatesRef.current.has(order.id)) return { ok: false, error: "Order update in progress" };
     pendingOrderUpdatesRef.current.add(order.id);
     try {
-      return await updatePreparationWorkflow(order, "driver_complete", { deliveredAt, driverNote, podPhotoCount });
+      const action = deliveryCompleteness === "incomplete" ? "driver_rework" : "driver_complete";
+      return await updatePreparationWorkflow(order, action, { deliveredAt, driverNote, podPhotoCount, deliveryCompleteness });
     } finally {
       pendingOrderUpdatesRef.current.delete(order.id);
     }
@@ -3697,6 +3714,12 @@ export default function App() {
   };
 
   const uploadPod = async (order, selectedFiles) => {
+    const completeness = driverDeliveryCompleteness[order.id] || "";
+    const note = String(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim();
+    if (!completeness || !note) {
+      setSyncStatus("⚠️ กรุณาระบุว่าสินค้าครบหรือไม่ครบและกรอกหมายเหตุก่อนถ่ายรูป");
+      return;
+    }
     const incoming = Array.from(selectedFiles || []).filter(file => file?.type?.startsWith("image/"));
     if (!incoming.length) return;
     try {
@@ -4033,32 +4056,43 @@ export default function App() {
     })();
   };
 
-	  const shareOrderToLine = (order, noteDraft) => {
-	    (async () => {
-	      let completedOrder = null;
-	      let text = "";
+  const shareOrderToLine = (order, noteDraft) => {
+    (async () => {
+      let completedOrder = null;
+      let text = "";
       try {
+          const isActiveDelivery = ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status);
+          const deliveryCompleteness = driverDeliveryCompleteness[order.id] || order.deliveryCompleteness || (order.status === "ส่งสำเร็จ" ? "complete" : "");
+          const driverNote = String(noteDraft ?? order.driverNote ?? "").trim();
+          if (isActiveDelivery && !deliveryCompleteness) throw new Error("กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูปและส่ง LINE");
+          if (isActiveDelivery && !driverNote) throw new Error("กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
           const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
           const files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
           completedOrder = {
             ...order,
-            status: "ส่งสำเร็จ",
-            queueStatus: "completed",
+            status: deliveryCompleteness === "incomplete" ? "ติดปัญหา" : "ส่งสำเร็จ",
+            queueStatus: deliveryCompleteness === "incomplete" ? "preparing" : "completed",
             deliveredAt,
-	            driverNote: String(noteDraft ?? order.driverNote ?? "").trim(),
+	            deliveryCompleteness,
+	            driverNote,
             driverName: order.driverName || state.auth?.name || "",
             driverId: order.driverId || state.auth?.driverId || driverId || "",
             sharedToLine: true,
+            reworkRequired: deliveryCompleteness === "incomplete",
+            reworkRoute: order.workflowType === "store_route" ? "store_route" : "direct_pack",
+            reworkStatus: deliveryCompleteness === "incomplete" ? (order.workflowType === "store_route" ? "waiting_store" : "waiting_pack") : "",
+            reworkNote: deliveryCompleteness === "incomplete" ? driverNote : "",
             podPhotoCount: files.length
           };
 	        text = buildLineMessageForOrder(completedOrder);
         const saved = await completeDriverDeliveryOrder(order, {
           deliveredAt: completedOrder.deliveredAt,
           driverNote: completedOrder.driverNote,
-          podPhotoCount: files.length || Number(order.podPhotoCount) || 0
+          podPhotoCount: files.length || Number(order.podPhotoCount) || 0,
+          deliveryCompleteness
         });
 	        if (!saved.ok) throw new Error(saved.error);
-	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว กำลังเปิดแชร์ LINE (${order.id})`);
+	        setSyncStatus(deliveryCompleteness === "incomplete" ? `⚠️ บันทึกงานแก้ไขแล้ว กำลังเปิดแชร์ LINE (${order.id})` : `✅ บันทึกส่งสำเร็จแล้ว กำลังเปิดแชร์ LINE (${order.id})`);
       } catch (error) {
         setSyncStatus(`❌ บันทึกส่งสำเร็จไม่สำเร็จ: ${error?.message || error} (${order.id})`);
         return;
@@ -4081,9 +4115,10 @@ export default function App() {
 	      } finally {
 	        clearPodPhotos(order.id);
 	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
+	        setDriverDeliveryCompleteness((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
 	      }
-	    })();
-	  };
+    })();
+  };
 
   const checkIn = id => {
     if (!driverId) {
@@ -4633,7 +4668,7 @@ export default function App() {
           )}
           {auth.role === "pack" && (
             <>
-              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{packWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอห้องแพ็ค ${packWorkOrders.length} งาน`}>{packWorkOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{packWorkOrders.length + packBlockedReworkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอห้องแพ็ค ${packWorkOrders.length + packBlockedReworkOrders.length} งาน`}>{packWorkOrders.length + packBlockedReworkOrders.length}</span>}</button>
               <button type="button" className={displayTab === "pack-pickup" ? "active" : ""} onClick={() => selectAppTab("pack-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{packPickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอห้องแพ็ค ${packPickupOrders.length} งาน`}>{packPickupOrders.length}</span>}</button>
               <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> <span>ออเดอร์ต่างจังหวัด</span>{salesOutstationPackOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์ต่างจังหวัดที่รอห้องแพ็ค ${salesOutstationPackOrders.length} งาน`}>{salesOutstationPackOrders.length}</span>}</button>
               <button type="button" className={displayTab === "pack-booking" ? "active" : ""} onClick={() => selectAppTab("pack-booking")}><FileText size={18} /> ใบสั่งจอง</button>
@@ -4807,7 +4842,7 @@ export default function App() {
             )}
             <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #dc2626", background: "#fffafa" }}>
               <div className="panel-head"><h2>⏳ งานรอของ / ของไม่ครบ</h2><span>{salesWaitingOrders.length} งาน{salesWaitingOrders.length > salesWaitingOrdersVisible.length ? ` · แสดง ${salesWaitingOrdersVisible.length} งานล่าสุด` : ""}</span></div>
-              {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div style={{ display: "grid", gap: "8px" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><div style={{ display: "flex", gap: "7px", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
+              {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div style={{ display: "grid", gap: "8px" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><ReworkNotice order={order} compact /><div style={{ display: "flex", gap: "7px", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
             </section>
             <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
               <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
@@ -5477,6 +5512,7 @@ export default function App() {
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
+                <ReworkNotice order={order} compact />
                 <SalesNoteAlert order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
@@ -5547,8 +5583,9 @@ export default function App() {
 
         {["pack-work", "pack-pickup", "pack-outstation"].includes(displayTab) && (
           <section className="panel role-workspace ops-workspace">
-            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length} งาน</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
+            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length + (displayTab === "pack-work" ? packBlockedReworkOrders.length : 0)} งาน</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
             <OrderHistorySearch title="ค้นหาประวัติออเดอร์ห้องแพ็ค" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
+            {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "12px", display: "grid", gap: "8px", background: "#fff7ed", border: "2px solid #f97316", borderLeftWidth: "6px", borderRadius: "10px", padding: "12px" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "#9a3412" }}>⚠️ ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrders.length} งาน</span></div>{packReworkOrders.map(order => <ReworkNotice key={`pack-rework-${order.id}`} order={order} />)}</div>}
             <div className="ops-pack-work" style={{ display: "grid", gap: "10px" }}>
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
@@ -5558,6 +5595,7 @@ export default function App() {
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
+                <ReworkNotice order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button><button className="secondary danger" onClick={() => archivePackOrder(order)}>นำออกจากคิว</button></div>
               </article>)}
@@ -5582,7 +5620,7 @@ export default function App() {
               <span>{todayPreparationOrders.length} งานที่ต้องดำเนินการ{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
-            {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "12px", border: "2px solid #f97316", borderLeftWidth: "6px", background: "#fff7ed", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><b style={{ color: "#9a3412" }}>⚠️ ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "#9a3412", background: "#ffedd5" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid #fed7aa", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
+            {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "12px", border: "2px solid #f97316", borderLeftWidth: "6px", background: "#fff7ed", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><b style={{ color: "#9a3412" }}>⚠️ ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "#9a3412", background: "#ffedd5" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid #fed7aa", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><ReworkNotice order={order} compact />{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
               {sortedPreparationOrders.map(order => (
                 <article key={order.id} className={displayTab === "chiangmai" ? "role-order-card" : undefined} style={displayTab === "chiangmai" ? (isPreparationReadyForDriver(order) ? { borderColor: "#ef4444", borderLeftColor: "#dc2626", background: "linear-gradient(145deg, #ffffff 0%, #fff1f1 100%)" } : undefined) : { border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
@@ -6122,11 +6160,21 @@ export default function App() {
                         )}
                         {order.status === "กำลังจัดส่ง" && (
                           <>
+	                            <div style={{ gridColumn: "1 / -1", display: "grid", gap: "7px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "9px" }}>
+	                              <b style={{ color: "#1e3a8a", fontSize: "12px" }}>1. ตรวจสอบสินค้าและบันทึกหมายเหตุ *</b>
+	                              <select value={driverDeliveryCompleteness[order.id] || ""} onChange={event => setDriverDeliveryCompleteness(previous => ({ ...previous, [order.id]: event.target.value }))} disabled={(podPreviewsByOrder[order.id] || []).length > 0}>
+	                                <option value="">-- เลือกผลตรวจสินค้า --</option>
+	                                <option value="complete">✅ สินค้าครบ</option>
+	                                <option value="incomplete">⚠️ สินค้าไม่ครบ / ต้องส่งแก้ไข</option>
+	                              </select>
+	                              <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={event => setDriverNoteDrafts(drafts => ({ ...drafts, [order.id]: event.target.value }))} placeholder="หมายเหตุชัดเจน เช่น ครบทุกกล่อง หรือขาดสินค้าอะไร จำนวนเท่าไร" rows={2} disabled={(podPreviewsByOrder[order.id] || []).length > 0} />
+	                              <small style={{ color: "#1e40af" }}>ต้องเลือกผลตรวจและกรอกหมายเหตุก่อนถ่ายรูป/ส่ง LINE</small>
+	                            </div>
 	                            <label 
 	                              className="primary" 
-	                              style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white" }}>
-	                              📷 ถ่ายรูป ({(podPreviewsByOrder[order.id] || []).length}/5)
-	                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5} onChange={(e) => {
+	                              style={{ padding: "8px", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: !driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim() ? 0.55 : 1 }}>
+	                              2. 📷 ถ่ายรูป ({(podPreviewsByOrder[order.id] || []).length}/5)
+                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5 || !driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()} onChange={(e) => {
 	                                if (e.target.files?.length) uploadPod(order, e.target.files);
 	                                e.target.value = "";
 	                              }} />
@@ -6137,14 +6185,14 @@ export default function App() {
 	                              disabled={false}
                               onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
                           </>
-                        )}
-	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={e => setDriverNoteDrafts((drafts) => ({ ...drafts, [order.id]: e.target.value }))} placeholder="หมายเหตุจากคนขับ (ถ้ามี)" rows={2} style={{ gridColumn: "1 / -1", width: "100%", boxSizing: "border-box", padding: "8px", borderRadius: "8px", border: "1px solid #bfdbfe" }} />}
+	                        )}
 	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && (
 	                          <button
 	                            className="primary"
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
+	                            disabled={!driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()}
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
-	                          >✅ ส่งสำเร็จ + ส่งพร้อม LINE</button>
+	                          >{driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button 
