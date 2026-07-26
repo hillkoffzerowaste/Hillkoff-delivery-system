@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDispatchDashboard } from "../../lib/dispatchDashboard.js";
+import { buildDispatchDashboard, dispatchDashboardReadPlan } from "../../lib/dispatchDashboard.js";
 
 describe("sales dispatch dashboard", () => {
   it("filters by order creation date and returns eight cards plus daily driver loads", () => {
@@ -21,5 +21,12 @@ describe("sales dispatch dashboard", () => {
       { id: "READY", createdAt: "2026-07-25T01:00:00.000Z", deliveryMethod: "outstation", queueStatus: "outstation_ready" }
     ], "2026-07-26");
     expect(result.cards.outstationWaiting).toBe(0);
+  });
+
+  it("reads only the selected date and open delivery queues", () => {
+    expect(dispatchDashboardReadPlan("2026-07-26")).toEqual([
+      { collection: "orders", field: "serviceDate", op: "==", value: "2026-07-26" },
+      { collection: "orders", field: "queueStatus", op: "in", value: ["preparing", "ready", "queued", "grab_ready"] }
+    ]);
   });
 });

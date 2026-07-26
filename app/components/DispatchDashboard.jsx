@@ -26,7 +26,7 @@ export default function DispatchDashboard({ apiFetch, role, onDeleteOrder, onRes
   }, [apiFetch, selectedDate]);
   useEffect(() => {
     const initial = setTimeout(() => { void load(); }, 0);
-    const interval = setInterval(() => { if (document.visibilityState === "visible") load(); }, 60_000);
+    const interval = setInterval(() => { if (document.visibilityState === "visible") load(); }, 300_000);
     return () => { clearTimeout(initial); clearInterval(interval); };
   }, [load]);
   const orders = useMemo(() => data.orders.filter((order) => {

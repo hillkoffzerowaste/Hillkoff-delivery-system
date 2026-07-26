@@ -7,7 +7,8 @@ import {
   isOutstationWaitingForDate,
   orderCreatedDateKey,
   orderDeliveryDateKey,
-  resolveDeliveryVehicleSnapshotFromEvents
+  resolveDeliveryVehicleSnapshotFromEvents,
+  vehicleReportReadPlan
 } from "../../lib/operationsReporting.js";
 
 describe("operations reporting policies", () => {
@@ -41,5 +42,21 @@ describe("operations reporting policies", () => {
     ], "2026-07-26");
     expect(exact).toMatchObject({ deliveryVehicleId: "V1", deliveryVehicleSource: "driver-usage-exact" });
     expect(ambiguous).toMatchObject({ deliveryVehicleId: "", deliveryVehicleSource: "unresolved" });
+  });
+
+  it("scopes vehicle report reads to the selected Bangkok date range", () => {
+    expect(vehicleReportReadPlan({ from: "2026-07-01", to: "2026-07-31" })).toEqual([
+      { collection: "vehicle_usage_events", field: "serviceDate", from: "2026-07-01", to: "2026-07-31" },
+      { collection: "fuel_bills", field: "serviceDate", from: "2026-07-01", to: "2026-07-31" },
+      { collection: "driver_daily_assessments", field: "serviceDate", from: "2026-07-01", to: "2026-07-31" },
+      { collection: "orders", field: "serviceDate", from: "2026-07-01", to: "2026-07-31" },
+      { collection: "orders", field: "deliveryServiceDate", from: "2026-07-01", to: "2026-07-31" },
+      {
+        collection: "orders",
+        field: "updatedAt",
+        from: "2026-06-30T17:00:00.000Z",
+        toExclusive: "2026-07-31T17:00:00.000Z"
+      }
+    ]);
   });
 });

@@ -1,4 +1,5 @@
 import { buildVehicleReport } from "../../../../lib/vehicleReport";
+import { vehicleReportReadPlan } from "../../../../lib/operationsReporting";
 import { listVehicles } from "../../../../lib/vehicleRepository";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
@@ -6,23 +7,36 @@ export const runtime = "nodejs";
 const ROLES = ["sales", "admin", "accounting"];
 const rows = (snap) => snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-async function readCollection(db, name, limit = 5000) {
-  return rows(await db.collection(name).limit(limit).get());
+async function executeRead(db, spec) {
+  let query = db.collection(spec.collection).where(spec.field, ">=", spec.from);
+  query = spec.toExclusive
+    ? query.where(spec.field, "<", spec.toExclusive)
+    : query.where(spec.field, "<=", spec.to);
+  return rows(await query.limit(5000).get());
+}
+
+function uniqueRows(groups) {
+  const unique = new Map();
+  for (const group of groups) for (const row of group) unique.set(String(row.id), row);
+  return [...unique.values()];
 }
 
 export async function POST(request) {
   try {
     const { db } = await requireProfile(request, ROLES);
     const body = await request.json();
-    const [usageEvents, fuelBills, assessments, orders, vehicles] = await Promise.all([
-      readCollection(db, "vehicle_usage_events"),
-      readCollection(db, "fuel_bills"),
-      readCollection(db, "driver_daily_assessments"),
-      readCollection(db, "orders"),
+    const filters = {
+      from: String(body.from || "").slice(0, 10),
+      to: String(body.to || "").slice(0, 10)
+    };
+    const plan = vehicleReportReadPlan(filters);
+    const [usageEvents, fuelBills, assessments, ordersByServiceDate, ordersByDeliveryDate, ordersByUpdatedAt, vehicles] = await Promise.all([
+      ...plan.map((spec) => executeRead(db, spec)),
       listVehicles(db, { includeInactive: true })
     ]);
+    const orders = uniqueRows([ordersByServiceDate, ordersByDeliveryDate, ordersByUpdatedAt]);
     const data = buildVehicleReport({
-      from: String(body.from || "").slice(0, 10), to: String(body.to || "").slice(0, 10),
+      ...filters,
       vehicleId: String(body.vehicleId || ""), driverId: String(body.driverId || ""),
       usageEvents, fuelBills, assessments, orders, vehicles
     });
