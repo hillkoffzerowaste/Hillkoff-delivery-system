@@ -4821,16 +4821,6 @@ export default function App() {
           </div>
         )}
 
-        {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && !["store", "pack", "driver"].includes(auth.role) && <div className="stats">
-          <>
-            <StoreMetricCard icon={PackagePlus} title="ออเดอร์วันนี้" value={totals.jobs} suffix=" งาน" description="ฝ่ายขายเปิดงานส่ง" />
-            <StoreMetricCard icon={UserCheck} title="รอคนขับรับ" value={totals.waiting} suffix=" งาน" description="เด้งเข้าหน้าคนขับ" tone="#92400e" />
-            <StoreMetricCard icon={Navigation} title="กำลังส่ง" value={totals.active} suffix=" งาน" description="เช็คอินได้จากหน้างาน" tone="#1d4ed8" />
-            <StoreMetricCard icon={CheckCircle2} title="ส่งสำเร็จ" value={totals.done} suffix=" งาน" description="ต้องมีหลักฐานรูปถ่าย" tone="#166534" />
-            <StoreMetricCard icon={MapPinned} title="งานวิ่งวันนี้" value={todayRouteTasks.length} suffix=" งาน" description="วิ่งสาขาและงานวิ่งไกล" tone="#0e7490" />
-          </>
-        </div>}
-
         {displayTab === "sales" && (
           <>
             <SalesRoundQueuePanel
