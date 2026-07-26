@@ -10,6 +10,7 @@ Print four outstation labels per A4 page, preserve readable sender and recipient
 - Keep the dispatch QR absolutely positioned in the lower-left free area of each label. It remains independent of the sender and recipient document flow.
 - Place the caption `Add line Hillkoff` beside the main dispatch QR in the lower-left free area.
 - Do not generate a separate Line@ QR on the label.
+- Encode the main QR as a URL under `/outstation-qr?t=...`; the web app parses the token for dispatch confirmation, while the public route redirects valid tokens to Line@.
 - Keep the dispatch QR block fixed so it cannot move sender or recipient text.
 - Preserve the recipient block on the right and the footer note/box count at the bottom.
 

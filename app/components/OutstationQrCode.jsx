@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { outstationQrRenderOptions } from "../../lib/outstationQr";
+import { createOutstationQrUrl, outstationQrRenderOptions } from "../../lib/outstationQr";
 
 export default function OutstationQrCode({ payload, className = "", caption = "" }) {
   const [imageSrc, setImageSrc] = useState("");
 
   useEffect(() => {
     let active = true;
-    QRCode.toDataURL(payload, outstationQrRenderOptions)
+    let qrValue = payload;
+    try {
+      qrValue = createOutstationQrUrl(window.location.origin, payload);
+    } catch {}
+    QRCode.toDataURL(qrValue, outstationQrRenderOptions)
       .then(value => { if (active) setImageSrc(value); })
       .catch(() => { if (active) setImageSrc(""); });
     return () => { active = false; };

@@ -9,6 +9,8 @@ import {
 } from "../../lib/outstationDispatch.js";
 import {
   createOutstationCameraScanConfig,
+  createOutstationQrUrl,
+  HILLKOFF_LINE_URL,
   outstationQrRenderOptions
 } from "../../lib/outstationQr.js";
 
@@ -41,6 +43,15 @@ describe("outstation QR dispatch", () => {
     expect(payload).toBe("HKO1|DO-260724-093803260-B81E54A1|1|3");
     expect(parseOutstationQrPayload(payload)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", boxIndex: 1, boxTotal: 3 });
     expect(() => parseOutstationQrPayload("HKO1|bad/order|1|3")).toThrow("Invalid outstation QR payload");
+  });
+
+  it("creates one public QR URL and parses it like the legacy payload", () => {
+    const payload = "HKO1|DO-260724-093803260-B81E54A1|1|3";
+    const qrUrl = createOutstationQrUrl("https://delivery.example", payload);
+
+    expect(qrUrl).toBe("https://delivery.example/outstation-qr?t=HKO1%7CDO-260724-093803260-B81E54A1%7C1%7C3");
+    expect(parseOutstationQrPayload(qrUrl)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", boxIndex: 1, boxTotal: 3 });
+    expect(HILLKOFF_LINE_URL).toBe("https://page.line.me/769svedb?oat_content=url&openQrModal=true");
   });
 
   it("uses the first scan total, records unique boxes, and completes only on the final box", () => {
