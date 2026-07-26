@@ -11,6 +11,9 @@ describe("operations replacement workspaces", () => {
     expect(html).toContain("รายงานการตรวจรถและการใช้รถ");
     expect(html).toContain("ส่งออกทั้งหมดตามตัวกรอง");
     expect(html).toContain("จัดการข้อมูล");
+    expect(html).toContain('class="report-tab is-active"');
+    expect(html).toContain('class="report-tab is-inactive"');
+    expect(html).toContain('aria-selected="true"');
     expect(html).not.toContain("ดาวน์โหลด TXT");
   });
 

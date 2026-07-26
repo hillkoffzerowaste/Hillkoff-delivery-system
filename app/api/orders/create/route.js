@@ -4,7 +4,7 @@ import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
-import { initialPreparationStatuses, resolveNextRoundDate, validateChiangmaiRound } from "../../../../lib/preparationWorkflow";
+import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
 
@@ -110,7 +110,7 @@ export async function POST(request) {
     const storeAssistEntry = profile.role === "store";
     const createdByName = clean(profile.name || profile.email, 200);
     const requestedRoundCode = clean(order.chiangmaiRoundCode, 20);
-    const roundCode = requestedRoundCode ? validateChiangmaiRound({ deliveryMethod, queueStatus: preparation.queueStatus }, requestedRoundCode) : "";
+    const roundCode = resolveOptionalChiangmaiRound({ deliveryMethod, queueStatus: preparation.queueStatus }, requestedRoundCode);
     const roundDate = roundCode ? resolveNextRoundDate(toServiceDateKey(now), roundCode) : "";
 
     const next = {

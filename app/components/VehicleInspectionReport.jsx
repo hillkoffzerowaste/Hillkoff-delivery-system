@@ -114,8 +114,8 @@ export default function VehicleInspectionReport({ apiFetch, role }) {
       <span>กำกวม {report.dataQuality.ambiguousOrders || 0} ออเดอร์ · ไม่พบการใช้รถ {report.dataQuality.unallocatedOrders || 0} ออเดอร์</span>
       <small>ระบบไม่เดาทะเบียนรถให้กับข้อมูลที่ยืนยันไม่ได้</small>
     </section>
-    <nav className="segmented vehicle-report-tabs">
-      {["summary", "daily", "monthly", "fuel", "master"].map((key) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{({ summary: "สรุป", daily: "รายวัน", monthly: "รายเดือน", fuel: "น้ำมัน", master: "จัดการข้อมูล" })[key]}</button>)}
+    <nav className="vehicle-report-tabs" role="tablist" aria-label="เมนูรายงานตรวจรถ">
+      {["summary", "daily", "monthly", "fuel", "master"].map((key) => <button type="button" role="tab" aria-selected={tab === key} key={key} className={`report-tab ${tab === key ? "is-active" : "is-inactive"}`} onClick={() => setTab(key)}>{({ summary: "สรุป", daily: "รายวัน", monthly: "รายเดือน", fuel: "น้ำมัน", master: "จัดการข้อมูล" })[key]}</button>)}
     </nav>
     {["summary", "daily", "fuel"].includes(tab) && <section className="panel">
       <div className="panel-head"><h2>{tab === "fuel" ? "การเติมน้ำมัน" : "การใช้รถรายวัน"}</h2><span>{report.rows.length} รายการ</span></div>

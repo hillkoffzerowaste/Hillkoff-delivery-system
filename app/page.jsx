@@ -11,6 +11,7 @@ import OutstationQrScannerDialog from "./components/OutstationQrScannerDialog";
 import OrderReviewQrCode from "./components/OrderReviewQrCode";
 import VehicleInspectionReport from "./components/VehicleInspectionReport";
 import DispatchDashboard from "./components/DispatchDashboard";
+import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
 import {
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -760,7 +761,7 @@ export default function App() {
     bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "",
     workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: ""
   });
-  const [chiangmaiRoundFilter, setChiangmaiRoundFilter] = useState("tuesday");
+  const [chiangmaiRoundFilter, setChiangmaiRoundFilter] = useState("normal");
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ กำลังเชื่อมต่อระบบ...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
@@ -1856,7 +1857,7 @@ export default function App() {
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
   const visibleRoundPreparationOrders = state.auth?.role === "sales" || state.auth?.role === "admin"
-    ? todayPreparationOrders.filter((order) => chiangmaiRoundFilter === "unassigned" ? !order.chiangmaiRoundCode : order.chiangmaiRoundCode === chiangmaiRoundFilter)
+    ? todayPreparationOrders.filter((order) => chiangmaiRoundFilter === "normal" ? !order.chiangmaiRoundCode : order.chiangmaiRoundCode === chiangmaiRoundFilter)
     : todayPreparationOrders;
   const sortedPreparationOrders = visibleRoundPreparationOrders.slice().sort((a, b) => {
     const readyDifference = Number(isPreparationReadyForDriver(b)) - Number(isPreparationReadyForDriver(a));
@@ -2778,12 +2779,6 @@ export default function App() {
       setSyncStatus(`❌ ${message}`);
       return;
     }
-    if (pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && !pendingOrder.chiangmaiRoundCode) {
-      const message = "กรุณาเลือกรอบจัดส่งเชียงใหม่: วันอังคาร วันพุธ หรือวันศุกร์";
-      setOrderConfirmError(message);
-      setSyncStatus(`❌ ${message}`);
-      return;
-    }
     const preparation = initialPreparationStatuses(pendingOrder.deliveryMethod, pendingOrder.workflowType);
     const orderToCreate = { ...pendingOrder, ...preparation, shippingCarrier: pendingOrder.deliveryMethod === "outstation" ? resolvedShippingCarrier : "" };
     delete orderToCreate.shippingCarrierOther;
@@ -3113,31 +3108,6 @@ export default function App() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || "กำหนดรอบไม่สำเร็จ");
       setState((prev) => ({ ...prev, orders: prev.orders.map((item) => item.id === order.id ? { ...item, ...json.data } : item) }));
       setSyncStatus(`✅ กำหนดรอบ ${json.data.chiangmaiRoundDate} ให้ ${order.id} แล้ว`);
-    } catch (error) {
-      setSyncStatus(`❌ ${error?.message || error}`);
-    }
-  };
-
-  const queueChiangmaiRound = async (roundCode, roundDate) => {
-    if (!window.confirm(`ส่งออเดอร์ที่พร้อมทั้งหมดในรอบ ${roundDate} เข้าคิวคนขับพร้อมกันหรือไม่?`)) return;
-    try {
-      const res = await authenticatedApiFetch("/api/orders/chiangmai-rounds/queue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roundCode, roundDate })
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        const blocked = Array.isArray(json?.blockingOrderIds) ? ` · ติดเงื่อนไข: ${json.blockingOrderIds.join(", ")}` : "";
-        throw new Error(`${json?.error || "ส่งรอบไม่สำเร็จ"}${blocked}`);
-      }
-      setState((prev) => ({
-        ...prev,
-        orders: prev.orders.map((order) => order.chiangmaiRoundCode === roundCode && order.chiangmaiRoundDate === roundDate
-          ? { ...order, queueStatus: "queued", status: "รอคนขับรับ" }
-          : order)
-      }));
-      setSyncStatus(`✅ ส่งเข้าคิวพร้อมกัน ${json.data.count} ออเดอร์`);
     } catch (error) {
       setSyncStatus(`❌ ${error?.message || error}`);
     }
@@ -4863,6 +4833,20 @@ export default function App() {
 
         {displayTab === "sales" && (
           <>
+            <SalesRoundQueuePanel
+              apiFetch={authenticatedApiFetch}
+              orders={orders}
+              onQueued={(queuedIds, result) => {
+                const queuedSet = new Set(queuedIds);
+                setState((prev) => ({
+                  ...prev,
+                  orders: prev.orders.map((order) => queuedSet.has(order.id)
+                    ? { ...order, queueStatus: "queued", status: "รอคนขับรับ" }
+                    : order)
+                }));
+                setSyncStatus(`✅ ส่งเข้าคิวพร้อมกัน ${result.count} ออเดอร์`);
+              }}
+            />
             <div className="sales-grid">
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
@@ -5648,7 +5632,7 @@ export default function App() {
               <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
               <span>{todayPreparationOrders.length} งานที่ต้องดำเนินการ{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
-            {displayTab === "chiangmai" && <><div className="segmented" style={{ marginBottom: "10px" }}>{[["tuesday", "รอบวันอังคาร"], ["wednesday", "รอบวันพุธ"], ["friday", "รอบวันศุกร์"], ["unassigned", "ยังไม่กำหนดรอบ"]].map(([code, label]) => <button key={code} className={chiangmaiRoundFilter === code ? "active" : ""} onClick={() => setChiangmaiRoundFilter(code)}>{label}</button>)}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>{[...new Set(sortedPreparationOrders.map((order) => order.chiangmaiRoundDate).filter(Boolean))].map((roundDate) => { const roundOrders = sortedPreparationOrders.filter((order) => order.chiangmaiRoundDate === roundDate); const ready = roundOrders.filter(isPreparationReadyForDriver).length; const allReady = roundOrders.length > 0 && ready === roundOrders.length; return <button key={roundDate} className="primary" disabled={!allReady} onClick={() => queueChiangmaiRound(chiangmaiRoundFilter, roundDate)}>พร้อมจัดส่งทั้งหมด · {roundDate} ({ready}/{roundOrders.length})</button>; })}</div></>}
+            {displayTab === "chiangmai" && <div className="segmented" style={{ marginBottom: "10px" }}>{[["normal", "ออเดอร์ปกติ"], ["tuesday", "รอบวันอังคาร"], ["wednesday", "รอบวันพุธ"], ["friday", "รอบวันศุกร์"]].map(([code, label]) => <button key={code} className={chiangmaiRoundFilter === code ? "active" : ""} onClick={() => setChiangmaiRoundFilter(code)}>{label}</button>)}</div>}
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
             {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "12px", border: "2px solid #f97316", borderLeftWidth: "6px", background: "#fff7ed", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><b style={{ color: "#9a3412" }}>⚠️ ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "#9a3412", background: "#ffedd5" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid #fed7aa", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><ReworkNotice order={order} compact />{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
@@ -5671,7 +5655,7 @@ export default function App() {
                   {displayTab === "chiangmai" && <label style={{ display: "grid", gap: "5px", maxWidth: "360px" }}><b>รอบจัดส่งของฝ่ายขาย</b><select value={order.chiangmaiRoundCode || ""} onChange={(event) => assignChiangmaiRound(order, event.target.value)}><option value="">ยังไม่กำหนดรอบ</option><option value="tuesday">รอบวันอังคาร</option><option value="wednesday">รอบวันพุธ</option><option value="friday">รอบวันศุกร์</option></select>{order.chiangmaiRoundDate && <small className="muted">วันที่รอบ: {order.chiangmaiRoundDate}</small>}</label>}
                   {displayTab === "chiangmai" && <><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div className="prep-note-store"><b>หมายเหตุสโตร์</b><span>{order.storeWorkDetails.note}</span></div>}{order.packWorkDetails?.note && <div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div>}</div>}</>}
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
-                  {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && !order.chiangmaiRoundCode && <span className="status-chip" style={{ width: "fit-content", color: "#92400e", background: "#fef3c7" }}>กำหนดรอบก่อนส่งพร้อมกัน</span>}
+                  {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && !order.chiangmaiRoundCode && <button className="primary" onClick={() => updatePreparationWorkflow(order, "queue")}>ส่งเข้าคิวคนขับ</button>}
                   {displayTab === "chiangmai" && canDeleteBeforeDriverQueue(order) && (
                     <button className="secondary danger" onClick={() => deleteOrder(order.id)}>ลบออเดอร์ที่กรอกผิด</button>
                   )}
@@ -7211,7 +7195,7 @@ export default function App() {
           <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
             <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}>{pendingOrder.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">เลือกได้ว่าจะส่งตรงห้องแพ็ค หรือให้สโตร์ตรวจสอบก่อน</small>}</label>
             <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "", chiangmaiRoundCode: deliveryMethod === "company_driver" ? order.chiangmaiRoundCode : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
-            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "6px" }}><b>รอบจัดส่งเชียงใหม่ *</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">-- เลือกรอบจัดส่ง --</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">ฝ่ายขายเป็นผู้กำหนดรอบ สโตร์และห้องแพ็คตรวจตาม flow เดิม</small></label>}
+            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "6px" }}><b>รอบจัดส่งเชียงใหม่ (ไม่บังคับ)</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">ไม่กำหนดรอบ · ออเดอร์ปกติ</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">หากไม่เลือกรอบ ออเดอร์จะทำงานแบบออเดอร์เชียงใหม่ปกติ ส่วนสโตร์และห้องแพ็คตรวจตาม flow เดิม</small></label>}
             {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "#fee2e2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "10px", padding: "12px", fontWeight: 800 }}><div style={{ fontSize: "15px" }}>🚨 ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "4px" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
             {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
             <label style={{ display: "grid", gap: "6px" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>

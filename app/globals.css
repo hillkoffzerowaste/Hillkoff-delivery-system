@@ -2594,9 +2594,142 @@ summary:focus-visible {
 }
 
 .vehicle-report-tabs {
+  display: flex;
   width: fit-content;
   max-width: 100%;
+  gap: 8px;
+  padding: 8px;
   overflow-x: auto;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+.vehicle-report-tabs .report-tab {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #1e293b;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vehicle-report-tabs .report-tab.is-active {
+  border-color: #166534;
+  background: #166534;
+  color: #ffffff;
+  box-shadow: 0 3px 9px rgba(22, 101, 52, 0.28);
+}
+
+.vehicle-report-tabs .report-tab.is-inactive:hover,
+.vehicle-report-tabs .report-tab.is-inactive:focus-visible {
+  border-color: #16a34a;
+  background: #ecfdf5;
+  color: #14532d;
+}
+
+.sales-round-queue-panel {
+  margin-bottom: 12px;
+  border-left: 5px solid #166534;
+}
+
+.sales-round-queue-panel .panel-head p {
+  margin: 4px 0 0;
+}
+
+.sales-round-groups,
+.sales-round-order-list {
+  display: grid;
+  gap: 9px;
+}
+
+.sales-round-group {
+  overflow: hidden;
+  border: 1px solid #bbd8c2;
+  border-radius: 11px;
+  background: #f8fff9;
+}
+
+.sales-round-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  color: #14532d;
+}
+
+.sales-round-group-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.sales-round-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sales-round-order {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #dbe7de;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.sales-round-order span:first-of-type {
+  display: grid;
+  gap: 3px;
+}
+
+.sales-round-order small {
+  color: #64748b;
+}
+
+.sales-round-order.is-blocked {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.sales-round-order-state {
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-round-order.is-blocked .sales-round-order-state {
+  color: #9a3412;
+}
+
+.sales-round-message {
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #166534;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .sales-round-order {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .sales-round-order-state {
+    grid-column: 2;
+  }
 }
 
 .report-actions {
