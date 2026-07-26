@@ -2877,6 +2877,12 @@ summary:focus-visible {
   font-size: 25px;
 }
 
+.dispatch-eight-cards small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 @media (max-width: 900px) {
   .vehicle-report-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));

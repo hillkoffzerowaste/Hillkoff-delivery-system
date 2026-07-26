@@ -31,6 +31,13 @@ describe("operations reporting policies", () => {
     expect(isChiangmaiWaitingForDate({ ...cityToday, queueStatus: "completed" }, "2026-07-26")).toBe(false);
   });
 
+  it("excludes Grab and customer pickup from Chiang Mai delivery cards", () => {
+    const grabToday = { createdAt: "2026-07-26T02:00:00.000Z", deliveryMethod: "grab_pickup", queueStatus: "grab_ready" };
+    const pickupOld = { createdAt: "2026-07-25T02:00:00.000Z", deliveryMethod: "customer_pickup", queueStatus: "grab_ready" };
+    expect(isChiangmaiWaitingForDate(grabToday, "2026-07-26")).toBe(false);
+    expect(isChiangmaiBacklogForDate(pickupOld, "2026-07-26")).toBe(false);
+  });
+
   it("never guesses a vehicle when a driver used more than one vehicle", () => {
     const exact = resolveDeliveryVehicleSnapshotFromEvents([
       { vehicleId: "V1", plate: "กข 1", serviceDate: "2026-07-26" },

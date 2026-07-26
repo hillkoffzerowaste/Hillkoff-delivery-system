@@ -28,4 +28,12 @@ describe("operations replacement workspaces", () => {
     expect(html).toContain("ออเดอร์ปัจจุบันแบบรายวัน");
     expect(html).not.toContain("วิธีใช้งานเร็ว");
   });
+
+  it("labels today and previous-day Chiang Mai delivery cards unambiguously", () => {
+    const html = renderToStaticMarkup(<DispatchDashboard apiFetch={apiFetch} role="sales" onDeleteOrder={() => {}} onResetOrders={() => {}} />);
+    expect(html).toContain("เชียงใหม่รอจัดส่งวันนี้");
+    expect(html).toContain("คนขับบริษัท · สร้างในวันที่เลือก · ยังส่งไม่สำเร็จ");
+    expect(html).toContain("เชียงใหม่ค้างส่งจากวันก่อน");
+    expect(html).toContain("คนขับบริษัท · สร้างก่อนวันที่เลือก · ยังส่งไม่สำเร็จ");
+  });
 });

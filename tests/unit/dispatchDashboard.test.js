@@ -23,10 +23,21 @@ describe("sales dispatch dashboard", () => {
     expect(result.cards.outstationWaiting).toBe(0);
   });
 
+  it("keeps Chiang Mai waiting and backlog cards limited to company-driver orders", () => {
+    const result = buildDispatchDashboard([
+      { id: "TODAY", createdAt: "2026-07-26T01:00:00.000Z", deliveryMethod: "company_driver", queueStatus: "preparing" },
+      { id: "OLD", createdAt: "2026-07-25T01:00:00.000Z", deliveryMethod: "company_driver", queueStatus: "queued" },
+      { id: "GRAB", createdAt: "2026-07-26T02:00:00.000Z", deliveryMethod: "grab_pickup", queueStatus: "grab_ready" },
+      { id: "PICKUP", createdAt: "2026-07-25T02:00:00.000Z", deliveryMethod: "customer_pickup", queueStatus: "grab_ready" }
+    ], "2026-07-26");
+    expect(result.cards.chiangmaiWaiting).toBe(1);
+    expect(result.cards.chiangmaiBacklog).toBe(1);
+  });
+
   it("reads only the selected date and open delivery queues", () => {
     expect(dispatchDashboardReadPlan("2026-07-26")).toEqual([
       { collection: "orders", field: "serviceDate", op: "==", value: "2026-07-26" },
-      { collection: "orders", field: "queueStatus", op: "in", value: ["preparing", "ready", "queued", "grab_ready"] }
+      { collection: "orders", field: "queueStatus", op: "in", value: ["preparing", "ready", "queued"] }
     ]);
   });
 });
