@@ -75,6 +75,7 @@ service cloud.firestore {
       allow read: if hasRole(["sales", "admin", "store", "pack"]) ||
         (hasRole(["driver"]) && (
           resource.data.driverId == driverId() ||
+          resource.data.lastDeliveryDriverId == driverId() ||
           (resource.data.driverId == "" && resource.data.queueStatus == "queued")
         ));
       allow update: if salesOrderUpdate() || driverOrderUpdate();

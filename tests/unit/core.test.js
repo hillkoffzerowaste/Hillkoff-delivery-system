@@ -77,6 +77,20 @@ describe("sales order preparation workflow", () => {
     });
   });
 
+  it("preserves the latest delivery driver when opening incomplete rework", () => {
+    expect(driverReworkPatch(
+      { workflowType: "store_route", deliveryAttemptNumber: 0 },
+      { name: "Driver One", driverId: "driver-1" },
+      "Missing one item",
+      "2026-07-26T01:00:00.000Z"
+    )).toMatchObject({
+      deliveryAttemptNumber: 1,
+      lastDeliveryDriverId: "driver-1",
+      lastDeliveryDriverName: "Driver One",
+      lastDeliveryAt: "2026-07-26T01:00:00.000Z"
+    });
+  });
+
   it("routes incomplete direct-pack deliveries to pack without store", () => {
     expect(driverReworkPatch(
       { workflowType: "direct_pack", deliveryMethod: "company_driver" },

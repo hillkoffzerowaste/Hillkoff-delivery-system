@@ -82,6 +82,12 @@ describe("Firestore role isolation", () => {
     await assertFails(getDoc(doc(dbFor("driver-2"), "orders/O-1")));
   });
 
+  it("allows the prior delivery driver to read an incomplete review order", async () => {
+    await seedProfile("driver-1", "driver", { phone: "0812222222", phoneDigits: "0812222222", driverId: "driver_0812222222" });
+    await seed("orders/INCOMPLETE", { driverId: "", lastDeliveryDriverId: "driver_0812222222", status: "ติดปัญหา", deliveryCompleteness: "incomplete" });
+    await assertSucceeds(getDoc(doc(dbFor("driver-1"), "orders/INCOMPLETE")));
+  });
+
   it("allows a driver to claim a queued order and blocks hidden preparation work", async () => {
     await seedProfile("driver-1", "driver", { phone: "0812222222", phoneDigits: "0812222222", driverId: "driver_0812222222" });
     await seed("orders/QUEUED", { driverId: "", driverName: "", status: "รอคนขับรับ", queueStatus: "queued", customerName: "A" });

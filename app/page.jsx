@@ -8,6 +8,7 @@ import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
 import OutstationQrScannerDialog from "./components/OutstationQrScannerDialog";
+import OrderReviewQrCode from "./components/OrderReviewQrCode";
 import {
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -16,6 +17,7 @@ import {
   isReadyOrderWaitingForDispatch,
   isSalesWaitingAlert
 } from "../lib/preparationWorkflow";
+import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import {
   AlertTriangle,
   Camera,
@@ -162,6 +164,7 @@ const TAB_TITLES = {
   "driver-prep": "เช็คออเดอร์เชียงใหม่",
   driver: "แอปคนขับ",
   "driver-dashboard": "รายงาน KPI คนขับ",
+  "driver-ratings": "KPI คะแนนคนขับ",
   "driver-vehicle": "บันทึกการใช้รถ",
   "driver-sop": "ตรวจรถประจำวัน",
   "driver-sop-report": "รายงานตรวจรถ",
@@ -891,7 +894,7 @@ export default function App() {
   const lastCustomersPullRef = useRef(null);
   const lastDriverLocationsPullRef = useRef(null);
   const refreshInFlightRef = useRef(false);
-  const driverOrdersSnapshotsRef = useRef({ assigned: [], queued: [] });
+  const driverOrdersSnapshotsRef = useRef({ assigned: [], queued: [], rework: [] });
   const operationalOrdersSnapshotsRef = useRef({ recent: [], active: [] });
   
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
@@ -1046,7 +1049,7 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "driver-ratings", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
     // Store searches customers through the authenticated API; its Firestore rules intentionally
@@ -1082,7 +1085,7 @@ export default function App() {
 	          if (state.auth?.role === "driver" && source !== "all") {
 	            driverOrdersSnapshotsRef.current[source] = incomingRows;
 	            const byId = new Map();
-	            [...driverOrdersSnapshotsRef.current.queued, ...driverOrdersSnapshotsRef.current.assigned]
+	            [...driverOrdersSnapshotsRef.current.queued, ...driverOrdersSnapshotsRef.current.assigned, ...driverOrdersSnapshotsRef.current.rework]
 	              .forEach((order) => {
 	                const current = byId.get(order.id);
 	                const currentUpdatedAt = Date.parse(current?.updatedAt || 0) || 0;
@@ -1119,10 +1122,12 @@ export default function App() {
 	        const onOrderError = (err) => setSyncStatus?.(`⚠️ Firestore orders error: ${err.message || err}`);
 	        if (state.auth?.role === "driver") {
 	          const did = state.auth?.driverId || driverId || "";
-	          driverOrdersSnapshotsRef.current = { assigned: [], queued: [] };
+	          driverOrdersSnapshotsRef.current = { assigned: [], queued: [], rework: [] };
 	          if (did) {
 	            const assignedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", did), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
 	            unsubs.push(fb.onSnapshot(assignedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "assigned"), onOrderError));
+	            const reworkQ = fb.query(fb.collection(db, "orders"), fb.where("lastDeliveryDriverId", "==", did), fb.limit(effectiveOrdersLimit));
+	            unsubs.push(fb.onSnapshot(reworkQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "rework"), onOrderError));
 	          }
 	          const queuedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", ""), fb.where("queueStatus", "==", "queued"), fb.limit(effectiveOrdersLimit));
 	          unsubs.push(fb.onSnapshot(queuedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "queued"), onOrderError));
@@ -2301,8 +2306,7 @@ export default function App() {
     const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
     const complaints = orders.filter(order => order.status === "ติดปัญหา" || order.complaint);
     const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
-    // Note: driverScore is now skipped since drivers table is intentionally empty
-    return { delivered: delivered.length, complaints, cod, driverScore: [] };
+    return { delivered: delivered.length, complaints, cod, driverScore: aggregateLatestDriverReviews(orders) };
   }, [orders]);
 
   const filteredCustomers = customers.filter(customer => customerMatchesQuery(customer, customerQuery));
@@ -4644,6 +4648,7 @@ export default function App() {
               <button type="button" className={displayTab === "sales" ? "active" : ""} onClick={() => selectAppTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
               <button type="button" className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => selectAppTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button type="button" className={displayTab === "dispatch" ? "active" : ""} onClick={() => selectAppTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
+              <button type="button" className={displayTab === "driver-ratings" ? "active" : ""} onClick={() => selectAppTab("driver-ratings")}><Star size={18} /> KPI คะแนนคนขับ{report.driverScore.length > 0 && <span className="nav-count-badge" aria-label={`มีคะแนนคนขับ ${report.driverScore.length} คน`}>{report.driverScore.length}</span>}</button>
               <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}{salesWaitingOrders.length > 0 && <span className="nav-count-badge" style={{ background: "#dc2626", color: "white" }} aria-label={`ออเดอร์รอสินค้าหรือของไม่ครบ ${salesWaitingOrders.length} งาน`}>! {salesWaitingOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
@@ -5841,6 +5846,7 @@ export default function App() {
           const driverMonthCompletedRoutes = driverMonthRouteTasks.filter(task => task.status === "เสร็จงาน");
           const backlog = (orders || []).filter(order => order.driverId === driverId && getOrderServiceDate(order) < todayServiceDate && ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status));
           const issues = (orders || []).filter(order => order.driverId === driverId && order.status === "ติดปัญหา");
+          const driverReview = report.driverScore.find((item) => item.id === driverId) || null;
           const statusTones = { "กำลังส่ง": "is-amber", "กำลังจัดส่ง": "is-blue", "ส่งสำเร็จ": "is-green", "ติดปัญหา": "is-red" };
           const recentOrders = driverTodayOrders.slice(0, 6).map(order => ({ ...order, statusLabel: order.status || "รอจัดส่ง", statusTone: statusTones[order.status] || "is-primary" }));
           const activities = driverTodayOrders.flatMap(order => [
@@ -5848,7 +5854,7 @@ export default function App() {
             order.checkInAt && { id: `${order.id}-checkin`, at: order.checkInAt, title: "ถึงจุดจัดส่ง", note: order.customerName || order.id },
             order.deliveredAt && { id: `${order.id}-delivered`, at: order.updatedAt || order.deliveredAt, title: "จัดส่งสำเร็จ", note: order.customerName || order.id }
           ].filter(Boolean)).sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)).slice(0, 12);
-          return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard
+          return <div style={{ display: "grid", gap: "16px" }}><section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard
             cards={[
               { value: driverTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่รับไว้วันนี้", tone: "is-primary" },
               { value: waiting, label: "รอจัดส่ง", detail: "รับงานแล้วและรอออกส่ง", tone: "is-amber" },
@@ -5872,8 +5878,27 @@ export default function App() {
             recentOrders={recentOrders} activities={activities}
             information="KPI คนขับคำนวณจากออเดอร์และงานวิ่งที่ผูกกับบัญชีคนขับปัจจุบันแบบเรียลไทม์ โดยไม่เปลี่ยนขั้นตอนรับงานหรือจัดส่ง"
             progressTitle="ความคืบหน้างานจัดส่งวันนี้" progressLabel="เสร็จแล้ว"
-          /></section>;
+          /></section><section className="panel" style={{ borderLeft: "4px solid #f59e0b" }}>
+            <div className="panel-head"><h2>คะแนนจากลูกค้า</h2><span>ใช้รีวิวล่าสุดของแต่ละออเดอร์</span></div>
+            {driverReview ? <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><strong style={{ fontSize: "28px", color: "#a16207" }}>★ {driverReview.average}</strong><span className="muted">จาก {driverReview.count} รีวิว</span></div>
+              {driverReview.latestFeedback && <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px" }}><b>ข้อเสนอแนะล่าสุด</b><p style={{ margin: "5px 0 0" }}>{driverReview.latestFeedback}</p></div>}
+            </div> : <p className="muted" style={{ margin: 0 }}>ยังไม่มีรีวิวจากลูกค้า</p>}
+          </section></div>;
         })()}
+
+        {(["sales", "admin"].includes(auth.role)) && displayTab === "driver-ratings" && (
+          <section className="panel role-workspace ops-workspace">
+            <div className="panel-head"><div><h2 style={{ margin: 0 }}>⭐ KPI คะแนนคนขับจากลูกค้า</h2><span>รีวิวล่าสุดของแต่ละออเดอร์เท่านั้น · รีวิวเก็บประวัติไว้ในระบบ</span></div><span>{report.driverScore.length} คน</span></div>
+            {report.driverScore.length ? <div style={{ display: "grid", gap: "10px" }}>
+              {report.driverScore.map((driver) => <article key={driver.id} style={{ border: "1px solid #e5e7eb", borderRadius: "9px", padding: "12px", display: "grid", gap: "7px", background: "#fffdf5" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline", flexWrap: "wrap" }}><b>{driver.name}</b><strong style={{ color: "#a16207", fontSize: "20px" }}>★ {driver.average}</strong></div>
+                <small className="muted">{driver.count} รีวิวที่มีผลต่อ KPI · รหัสคนขับ {driver.id}</small>
+                {driver.latestFeedback ? <div style={{ color: "#374151", background: "white", borderRadius: "6px", padding: "8px" }}>“{driver.latestFeedback}”</div> : <small className="muted">ไม่มีข้อเสนอแนะ</small>}
+              </article>)}
+            </div> : <div className="empty"><Star size={22} /> ยังไม่มีคะแนนจากลูกค้า</div>}
+          </section>
+        )}
 
         {auth.role === "driver" && displayTab === "driver" && (
           <div style={{ display: "grid", gap: "16px" }}>
@@ -6135,6 +6160,12 @@ export default function App() {
                       </div>
                       
                       {order.address && <small style={{ color: "#999", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "8px" }}>📬 {order.address}</small>}
+
+                      <div style={{ background: "#fffdf5", border: "1px solid #f5d78e", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px", justifyItems: "center" }}>
+                        <b style={{ color: "#8a5a00", fontSize: "12px" }}>QR รีวิวออเดอร์นี้</b>
+                        <OrderReviewQrCode orderId={order.id} />
+                        <small style={{ color: "#6b7280", textAlign: "center" }}>ลูกค้าสแกนหลังรับสินค้า · กรณีของไม่ครบก็รีวิวได้</small>
+                      </div>
                       
                       {/* Status Actions */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
@@ -6286,6 +6317,10 @@ export default function App() {
 	                            <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{order.customerName}</b>
 	                            <small style={{ color: "#6b7280" }}>📍 {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
 	                            {order.deliveredAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
+	                          </div>
+	                          <div style={{ background: "#fffdf5", border: "1px solid #f5d78e", borderRadius: "8px", padding: "8px", display: "grid", justifyItems: "center", gap: "5px" }}>
+	                            <b style={{ color: "#8a5a00", fontSize: "12px" }}>ให้ลูกค้าสแกนรีวิว</b>
+	                            <OrderReviewQrCode orderId={order.id} />
 	                          </div>
 	                          {order.photo?.startsWith?.("data:") && (
 	                            <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid #e5e7eb" }}>

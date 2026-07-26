@@ -58,7 +58,8 @@ export async function PATCH(request) {
         }
         const driverNote = String(body.driverNote || "").trim().slice(0, 2000);
         if (!driverNote) throw Object.assign(new Error("Driver rework note is required"), { status: 400 });
-        Object.assign(patch, driverReworkPatch(order, profile, driverNote, now));
+        const deliveredAt = String(body.deliveredAt || now).trim().slice(0, 80) || now;
+        Object.assign(patch, driverReworkPatch(order, profile, driverNote, now), { lastDeliveryAt: deliveredAt });
         patch.complaint = driverNote;
         const podPhotoCount = Number(body.podPhotoCount);
         patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
@@ -74,6 +75,10 @@ export async function PATCH(request) {
         patch.deliveredAt = deliveredAt;
         patch.driverNote = driverNote;
         patch.deliveryCompleteness = "complete";
+        patch.deliveryAttemptNumber = (Number(order.deliveryAttemptNumber) || 0) + 1;
+        patch.lastDeliveryDriverId = String(profile.driverId || order.driverId || "").trim().slice(0, 120);
+        patch.lastDeliveryDriverName = String(profile.name || order.driverName || "").trim().slice(0, 200);
+        patch.lastDeliveryAt = deliveredAt;
         patch.sharedToLine = true;
         const podPhotoCount = Number(body.podPhotoCount);
         patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
