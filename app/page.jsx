@@ -9,6 +9,8 @@ import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outs
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
 import OutstationQrScannerDialog from "./components/OutstationQrScannerDialog";
 import OrderReviewQrCode from "./components/OrderReviewQrCode";
+import VehicleInspectionReport from "./components/VehicleInspectionReport";
+import DispatchDashboard from "./components/DispatchDashboard";
 import {
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -16,7 +18,8 @@ import {
   isOutstationOrder,
   isReadyOrderWaitingForDispatch,
   isSalesWaitingAlert,
-  requiresDriverDeliveryNote
+  requiresDriverDeliveryNote,
+  resolveNextRoundDate
 } from "../lib/preparationWorkflow";
 import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import {
@@ -737,7 +740,6 @@ export default function App() {
     }
   };
   const [driverForm, setDriverForm] = useState({ firstName: "", lastName: "", phone: "", vehicle: "รถยนต์", plate: "", zone: "เมืองเชียงใหม่" });
-  const [orderQuery, setOrderQuery] = useState("");
   const [chiangmaiHistoryQuery, setChiangmaiHistoryQuery] = useState("");
   const [chiangmaiHistoryResults, setChiangmaiHistoryResults] = useState([]);
   const [chiangmaiHistoryLoading, setChiangmaiHistoryLoading] = useState(false);
@@ -747,8 +749,6 @@ export default function App() {
   const [pickupHistoryResults, setPickupHistoryResults] = useState([]);
   const [pickupHistoryLoading, setPickupHistoryLoading] = useState(false);
   const [pickupHistorySearched, setPickupHistorySearched] = useState(false);
-  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
-  const [orderZoneFilter, setOrderZoneFilter] = useState("all");
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({
     pickupWaitMinutes: "5",
@@ -758,8 +758,9 @@ export default function App() {
     codAmount: "",
     salesNote: "",
     bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "",
-    workflowType: "store_route", deliveryMethod: "company_driver"
+    workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: ""
   });
+  const [chiangmaiRoundFilter, setChiangmaiRoundFilter] = useState("tuesday");
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ กำลังเชื่อมต่อระบบ...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
@@ -868,6 +869,7 @@ export default function App() {
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : tab === "driver-dashboard" ? "driver-dashboard" : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? (["pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
+    : state.auth?.role === "accounting" ? "driver-sop-report"
     : (tab === "driver" ? "sales" : tab);
 
   const todayServiceDate = toServiceDateKey(appClock);
@@ -1057,7 +1059,7 @@ export default function App() {
     // do not grant a broad realtime read of the full customer collection.
     const needsCustomers = String(displayTab || "") === "sales";
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
-	    const needsDriverAssessments = ["driver-sop-report", "settings"].includes(String(displayTab || ""));
+	    const needsDriverAssessments = String(displayTab || "") === "settings";
 	    const needsChat = Boolean(chatOpen);
 
       if (needsChat) {
@@ -1853,7 +1855,10 @@ export default function App() {
   const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
   const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
-  const sortedPreparationOrders = todayPreparationOrders.slice().sort((a, b) => {
+  const visibleRoundPreparationOrders = state.auth?.role === "sales" || state.auth?.role === "admin"
+    ? todayPreparationOrders.filter((order) => chiangmaiRoundFilter === "unassigned" ? !order.chiangmaiRoundCode : order.chiangmaiRoundCode === chiangmaiRoundFilter)
+    : todayPreparationOrders;
+  const sortedPreparationOrders = visibleRoundPreparationOrders.slice().sort((a, b) => {
     const readyDifference = Number(isPreparationReadyForDriver(b)) - Number(isPreparationReadyForDriver(a));
     if (readyDifference) return readyDifference;
     return Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0);
@@ -2184,9 +2189,18 @@ export default function App() {
     return `hillkoff_latest_vehicle:${driverKey}`;
   }, [auth.role, auth.driverId, auth.phone, driverId]);
   const [latestDriverVehicleId, setLatestDriverVehicleId] = useState("");
+  const [availableVehicles, setAvailableVehicles] = useState(HILLKOFF_VEHICLES);
+  useEffect(() => {
+    if (auth.role !== "driver" || !["driver-vehicle", "driver-sop", "driver"].includes(displayTab)) return;
+    authenticatedApiFetch("/api/vehicle-master")
+      .then((response) => response.json())
+      .then((json) => { if (json?.ok && Array.isArray(json.data) && json.data.length) setAvailableVehicles(json.data); })
+      .catch(() => {});
+  }, [auth.role, displayTab, authenticatedApiFetch]);
   const selectedDriverVehicle = useMemo(() => {
-    return findVehicleById(driverVehicleId) || defaultDriverVehicle || HILLKOFF_VEHICLES[0] || null;
-  }, [driverVehicleId, defaultDriverVehicle]);
+    return availableVehicles.find((vehicle) => vehicle.id === driverVehicleId || vehicle.assetCode === driverVehicleId)
+      || findVehicleById(driverVehicleId) || defaultDriverVehicle || availableVehicles[0] || HILLKOFF_VEHICLES[0] || null;
+  }, [availableVehicles, driverVehicleId, defaultDriverVehicle]);
   const selectedDriverVehicleId = selectedDriverVehicle?.id || "";
   const selectedDriverVehicleIsDefault = Boolean(defaultDriverVehicle?.id && selectedDriverVehicle?.id === defaultDriverVehicle.id);
   const dailyVehicleStartKey = useMemo(() => {
@@ -2321,14 +2335,6 @@ export default function App() {
     return counts;
   }, [customers]);
   const customerPreviewCount = 3;
-  const filteredOrders = orders.filter(order => {
-    const queryText = [order.id, order.customerName, order.phone, order.zone, order.address, order.salesNote].join(" ").toLowerCase();
-    const matchesQuery = queryText.includes(orderQuery.toLowerCase());
-    const matchesStatus = orderStatusFilter === "all" || order.status === orderStatusFilter;
-    const matchesZone = orderZoneFilter === "all" || order.zone === orderZoneFilter;
-    return matchesQuery && matchesStatus && matchesZone;
-  });
-
   const saveCustomer = async () => {
 	    const normalizedName = String(customerForm.name || "").trim();
 	    if (!normalizedName) {
@@ -2428,6 +2434,8 @@ export default function App() {
         return;
       }
       setTab("driver");
+    } else if (newAuthState.role === "accounting") {
+      setTab("driver-sop-report");
     } else {
       setTab("sales");
     }
@@ -2753,6 +2761,7 @@ export default function App() {
       deliveredAt: "",
       complaint: "",
       salesNote: orderForm.salesNote,
+      chiangmaiRoundCode: orderForm.chiangmaiRoundCode,
       createdAt: new Date().toISOString()
     };
     setPendingOrder(nextOrder);
@@ -2763,8 +2772,14 @@ export default function App() {
 	  const confirmOrder = async () => {
 	    if (!pendingOrder || orderConfirmSubmitting) return;
 	    const resolvedShippingCarrier = pendingOrder.shippingCarrier === "อื่นๆ" ? String(pendingOrder.shippingCarrierOther || "").trim() : String(pendingOrder.shippingCarrier || "").trim();
-	    if (pendingOrder.deliveryMethod === "outstation" && !resolvedShippingCarrier) {
+    if (pendingOrder.deliveryMethod === "outstation" && !resolvedShippingCarrier) {
       const message = "กรุณาเลือกบริษัทขนส่งสำหรับออเดอร์ต่างจังหวัดก่อนยืนยัน";
+      setOrderConfirmError(message);
+      setSyncStatus(`❌ ${message}`);
+      return;
+    }
+    if (pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && !pendingOrder.chiangmaiRoundCode) {
+      const message = "กรุณาเลือกรอบจัดส่งเชียงใหม่: วันอังคาร วันพุธ หรือวันศุกร์";
       setOrderConfirmError(message);
       setSyncStatus(`❌ ${message}`);
       return;
@@ -2802,7 +2817,7 @@ export default function App() {
         const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
         return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
       });
-      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver" });
+      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "" });
       setSelectedCustomerId("");
       setOrderCustomerSearch("");
       setShowOrderConfirm(false);
@@ -3084,6 +3099,47 @@ export default function App() {
       const error = e?.message || String(e);
       setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${error}`);
       return { ok: false, error };
+    }
+  };
+
+  const assignChiangmaiRound = async (order, roundCode) => {
+    try {
+      const res = await authenticatedApiFetch("/api/orders/chiangmai-rounds", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, roundCode })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "กำหนดรอบไม่สำเร็จ");
+      setState((prev) => ({ ...prev, orders: prev.orders.map((item) => item.id === order.id ? { ...item, ...json.data } : item) }));
+      setSyncStatus(`✅ กำหนดรอบ ${json.data.chiangmaiRoundDate} ให้ ${order.id} แล้ว`);
+    } catch (error) {
+      setSyncStatus(`❌ ${error?.message || error}`);
+    }
+  };
+
+  const queueChiangmaiRound = async (roundCode, roundDate) => {
+    if (!window.confirm(`ส่งออเดอร์ที่พร้อมทั้งหมดในรอบ ${roundDate} เข้าคิวคนขับพร้อมกันหรือไม่?`)) return;
+    try {
+      const res = await authenticatedApiFetch("/api/orders/chiangmai-rounds/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roundCode, roundDate })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        const blocked = Array.isArray(json?.blockingOrderIds) ? ` · ติดเงื่อนไข: ${json.blockingOrderIds.join(", ")}` : "";
+        throw new Error(`${json?.error || "ส่งรอบไม่สำเร็จ"}${blocked}`);
+      }
+      setState((prev) => ({
+        ...prev,
+        orders: prev.orders.map((order) => order.chiangmaiRoundCode === roundCode && order.chiangmaiRoundDate === roundDate
+          ? { ...order, queueStatus: "queued", status: "รอคนขับรับ" }
+          : order)
+      }));
+      setSyncStatus(`✅ ส่งเข้าคิวพร้อมกัน ${json.data.count} ออเดอร์`);
+    } catch (error) {
+      setSyncStatus(`❌ ${error?.message || error}`);
     }
   };
 
@@ -4491,46 +4547,6 @@ export default function App() {
     copyToClipboard(reportText);
   };
 
-  const buildDriverAssessmentReport = () => {
-    const completed = driverAssessmentRoster.filter(driver => todayAssessmentByDriver.has(driver.id));
-    const missing = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
-    const lines = [
-      "รายงานแบบประเมินตรวจรถประจำวัน",
-      `วันที่: ${todayServiceDate}`,
-      `สร้างเมื่อ: ${new Date().toLocaleString("th-TH")}`,
-      "",
-      `สรุป: ทำแล้ว ${completed.length}/${driverAssessmentRoster.length} คน | ยังไม่ทำ ${missing.length} คน`,
-      "",
-      "ทำแบบประเมินแล้ว:"
-    ];
-    completed.forEach((driver, index) => {
-      const assessment = todayAssessmentByDriver.get(driver.id) || {};
-      const notes = assessment.notes ? ` | หมายเหตุ: ${assessment.notes}` : "";
-      const vehicle = assessment.plate ? ` | รถ: ${assessment.plate} ${assessment.brand || ""} ${assessment.model || ""}` : "";
-      const odometer = assessment.odometerStart ? ` | เลขไมล์: ${money(assessment.odometerStart)}` : " | เลขไมล์: -";
-      lines.push(`${index + 1}. ${driver.name || driver.id}${driver.phone ? ` (${driver.phone})` : ""}${vehicle}${odometer}${notes}`);
-    });
-    if (!completed.length) lines.push("-");
-    lines.push("", "ยังไม่ได้ทำ:");
-    missing.forEach((driver, index) => {
-      lines.push(`${index + 1}. ${driver.name || driver.id}${driver.phone ? ` (${driver.phone})` : ""}`);
-    });
-    if (!missing.length) lines.push("-");
-    return lines.join("\n");
-  };
-
-  const exportDriverAssessmentReport = (mode = "copy") => {
-    const reportText = buildDriverAssessmentReport();
-    if (mode === "download") {
-      const element = document.createElement("a");
-      element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
-      element.setAttribute("download", `Hillkoff-Driver-Inspection-${todayServiceDate}.txt`);
-      element.click();
-      return;
-    }
-    copyToClipboard(reportText);
-  };
-
   const exportSelectedServiceReport = (mode = "download") => {
     const isRange = reportExportMode === "range";
     const reportText = isRange
@@ -4568,6 +4584,7 @@ export default function App() {
               <div className="panel-head"><h1>เข้าสู่ระบบ</h1><span>{loginForm.role === "driver" ? "Username + Password" : "บัญชีพนักงาน"}</span></div>
               <div className="segmented">
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
+                <button className={loginForm.role === "accounting" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "accounting" }))}>บัญชี</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
                 <button className={["store", "pack"].includes(loginForm.role) ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "store" }))}>สโตร์/ห้องแพ็ค</button>
               </div>
@@ -4580,9 +4597,9 @@ export default function App() {
                 </>
               ) : (
               <>
-              {loginForm.role === "sales" && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ใช้งานฝ่ายขาย" />}
+              {["sales", "accounting"].includes(loginForm.role) && <input value={loginForm.name} onChange={e => setLoginForm(p => ({ ...p, name: e.target.value }))} placeholder={loginForm.role === "accounting" ? "ชื่อผู้ใช้งานฝ่ายบัญชี" : "ชื่อผู้ใช้งานฝ่ายขาย"} />}
               {loginForm.role === "driver" && <input value={loginForm.phone} onChange={e => setLoginForm(p => ({ ...p, phone: e.target.value }))} placeholder="Username (เบอร์โทร)" inputMode="tel" autoComplete="username" />}
-              {loginForm.role === "sales" && (googleOtpStage === "otp" ? (
+              {["sales", "accounting"].includes(loginForm.role) && (googleOtpStage === "otp" ? (
                 <>
                   <input value={googleOtpCode} onChange={e => setGoogleOtpCode(e.target.value)} placeholder="OTP 6 หลัก" inputMode="numeric" />
                   {googleOtpDevCode && (
@@ -4597,6 +4614,7 @@ export default function App() {
                 </button>
               ))}
               {loginForm.role === "sales" && <p className="login-note">ฝ่ายขายเข้าสู่ระบบด้วย Google อีเมล @hillkoff.com เท่านั้น</p>}
+              {loginForm.role === "accounting" && <p className="login-note">ฝ่ายบัญชีใช้ Google อีเมล @hillkoff.com ที่ได้รับอนุมัติ และเข้าได้เฉพาะหน้ารายงานตรวจรถ</p>}
               {loginForm.role === "driver" && <>
                 <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" autoComplete="current-password" />
                 <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
@@ -4655,6 +4673,9 @@ export default function App() {
               <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}{salesWaitingOrders.length > 0 && <span className="nav-count-badge" style={{ background: "#dc2626", color: "white" }} aria-label={`ออเดอร์รอสินค้าหรือของไม่ครบ ${salesWaitingOrders.length} งาน`}>! {salesWaitingOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
+          )}
+          {auth.role === "accounting" && (
+            <button type="button" className="active" onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
           )}
           {auth.role === "driver" && (
             <>
@@ -4727,7 +4748,7 @@ export default function App() {
                       setDriverVehicleChangedToday(true);
                     }}
                   >
-                    {HILLKOFF_VEHICLES.map(vehicle => (
+                    {availableVehicles.map(vehicle => (
                       <option key={vehicle.id} value={vehicle.id}>
                         {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
                       </option>
@@ -5627,6 +5648,7 @@ export default function App() {
               <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
               <span>{todayPreparationOrders.length} งานที่ต้องดำเนินการ{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
+            {displayTab === "chiangmai" && <><div className="segmented" style={{ marginBottom: "10px" }}>{[["tuesday", "รอบวันอังคาร"], ["wednesday", "รอบวันพุธ"], ["friday", "รอบวันศุกร์"], ["unassigned", "ยังไม่กำหนดรอบ"]].map(([code, label]) => <button key={code} className={chiangmaiRoundFilter === code ? "active" : ""} onClick={() => setChiangmaiRoundFilter(code)}>{label}</button>)}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>{[...new Set(sortedPreparationOrders.map((order) => order.chiangmaiRoundDate).filter(Boolean))].map((roundDate) => { const roundOrders = sortedPreparationOrders.filter((order) => order.chiangmaiRoundDate === roundDate); const ready = roundOrders.filter(isPreparationReadyForDriver).length; const allReady = roundOrders.length > 0 && ready === roundOrders.length; return <button key={roundDate} className="primary" disabled={!allReady} onClick={() => queueChiangmaiRound(chiangmaiRoundFilter, roundDate)}>พร้อมจัดส่งทั้งหมด · {roundDate} ({ready}/{roundOrders.length})</button>; })}</div></>}
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
             {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "12px", border: "2px solid #f97316", borderLeftWidth: "6px", background: "#fff7ed", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><b style={{ color: "#9a3412" }}>⚠️ ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "#9a3412", background: "#ffedd5" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid #fed7aa", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><ReworkNotice order={order} compact />{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
@@ -5646,11 +5668,10 @@ export default function App() {
                     {order.packCheckerName && <> · ผู้ตรวจแพ็ค: {order.packCheckerName}</>}
                   </div>
                   {displayTab === "chiangmai" && <SalesNoteAlert order={order} compact />}
+                  {displayTab === "chiangmai" && <label style={{ display: "grid", gap: "5px", maxWidth: "360px" }}><b>รอบจัดส่งของฝ่ายขาย</b><select value={order.chiangmaiRoundCode || ""} onChange={(event) => assignChiangmaiRound(order, event.target.value)}><option value="">ยังไม่กำหนดรอบ</option><option value="tuesday">รอบวันอังคาร</option><option value="wednesday">รอบวันพุธ</option><option value="friday">รอบวันศุกร์</option></select>{order.chiangmaiRoundDate && <small className="muted">วันที่รอบ: {order.chiangmaiRoundDate}</small>}</label>}
                   {displayTab === "chiangmai" && <><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div className="prep-note-store"><b>หมายเหตุสโตร์</b><span>{order.storeWorkDetails.note}</span></div>}{order.packWorkDetails?.note && <div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div>}</div>}</>}
                   {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
-                  {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && (
-                    <button className="primary" onClick={() => updatePreparationWorkflow(order, "queue")}>ส่งเข้าคิวคนขับ</button>
-                  )}
+                  {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && !order.chiangmaiRoundCode && <span className="status-chip" style={{ width: "fit-content", color: "#92400e", background: "#fef3c7" }}>กำหนดรอบก่อนส่งพร้อมกัน</span>}
                   {displayTab === "chiangmai" && canDeleteBeforeDriverQueue(order) && (
                     <button className="secondary danger" onClick={() => deleteOrder(order.id)}>ลบออเดอร์ที่กรอกผิด</button>
                   )}
@@ -5765,77 +5786,12 @@ export default function App() {
         )}
 
         {displayTab === "dispatch" && (
-          <div className="dispatch-grid">
-            <section className="panel">
-              {auth.role === "admin" && <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
-                <button type="button" className="secondary" onClick={resetAllOrders} style={{ padding: "8px 14px", fontSize: "13px", fontWeight: "bold" }}>🔄 รีเซ็ตออเดอร์</button>
-              </div>}
-              <div className="panel-head"><h2>คิวงานส่งของ</h2><span>{filteredOrders.length} งาน</span></div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "10px" }}>
-                <button className="secondary" disabled={ordersLimit >= MAX_RECENT_ORDERS_LIMIT} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setOrdersLimit(nextOrdersLimit)}>
-                  {ordersLimit >= MAX_RECENT_ORDERS_LIMIT ? "แสดงครบตามขีดจำกัด" : "ดูออเดอร์เก่าเพิ่ม"}
-                </button>
-              </div>
-              <div className="filters dispatch-filters">
-                <label className="search"><Search size={16} /><input value={orderQuery} onChange={e => setOrderQuery(e.target.value)} placeholder="ค้นหาเลขงาน ลูกค้า พื้นที่ หมายเหตุ" /></label>
-                <select value={orderStatusFilter} onChange={e => setOrderStatusFilter(e.target.value)}>
-                  <option value="all">ทุกสถานะ</option>
-                  {STATUS.map(status => <option key={status} value={status}>{status}</option>)}
-                </select>
-                <select value={orderZoneFilter} onChange={e => setOrderZoneFilter(e.target.value)}>
-                  <option value="all">ทุกพื้นที่</option>
-                  {ZONES.map(zone => <option key={zone} value={zone}>{zone}</option>)}
-                </select>
-              </div>
-              <div className="dispatch-table">
-                <div className="dispatch-head">
-                  <span>งาน</span>
-                  <span>ลูกค้า/พื้นที่</span>
-                  <span>สถานะ</span>
-                  <span>COD</span>
-                  <span></span>
-                </div>
-                {filteredOrders.map(order => {
-                  const assignedDriver = drivers.find(driver => driver.id === order.driverId);
-                  const loc = (state.driverLocations || {})[order.driverId] || null;
-                  const driverName = order.driverName || assignedDriver?.name || loc?.driverName || "";
-                  return (
-                    <article key={order.id} className="dispatch-row">
-                      <div><b>{order.id}</b><span>{order.window} · {order.boxes} กล่อง</span></div>
-                      <div><b>{order.customerName}</b><span>{order.zone} · {order.address}</span>{order.complaint && <span style={{ marginLeft: "8px", background: "#fca5a5", color: "#7f1d1d", padding: "2px 6px", borderRadius: "3px", fontSize: "11px", fontWeight: "bold" }}>⚠️ {order.complaint}</span>}</div>
-                      <div className="status-stack">
-                        <span className="status-chip" style={{ color: statusColor[order.status], background: `${statusColor[order.status]}14` }}>{order.status}</span>
-                        <small>{driverName || "ยังไม่รับงาน"}</small>
-                      </div>
-                      <strong>{money(order.cod)} บาท</strong>
-                      <button className="secondary danger" aria-label={`ลบออเดอร์ ${order.id}`} style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>ลบ</button>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>โหลดงานคนขับ</h2><span>วันนี้</span></div>
-              {report.driverScore.map(driver => {
-                const driverJobs = orders.filter(order => order.driverId === driver.id && order.status !== "ส่งสำเร็จ");
-                return (
-                  <div key={driver.id} className="driver-load-row">
-                    <div>
-                      <b>{driver.name}</b>
-                      <span>{driver.plate} · {driver.zone}</span>
-                    </div>
-                    <strong>{driverJobs.length} งาน</strong>
-                  </div>
-                );
-              })}
-              <div className="google-box">
-                <b>วิธีใช้งานเร็ว</b>
-                <p>ฝ่ายขายสร้างออเดอร์จากหน้า Sales แล้วงานจะเข้าคิวนี้ทันที</p>
-                <p>แอดมินเลือกคนขับจากคอลัมน์คนขับ หรือปล่อยให้คนขับกดรับเองจากหน้า Driver</p>
-              </div>
-            </section>
-          </div>
+          <DispatchDashboard
+            apiFetch={authenticatedApiFetch}
+            role={auth.role}
+            onDeleteOrder={deleteOrder}
+            onResetOrders={resetAllOrders}
+          />
         )}
 
         {auth.role === "driver" && displayTab === "driver-dashboard" && (() => {
@@ -6404,7 +6360,7 @@ export default function App() {
                           setDriverVehicleChangedToday(true);
                         }}
                       >
-                        {HILLKOFF_VEHICLES.map(vehicle => (
+                        {availableVehicles.map(vehicle => (
                           <option key={vehicle.id} value={vehicle.id}>
                             {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
                           </option>
@@ -6571,76 +6527,8 @@ export default function App() {
           </div>
         )}
 
-        {auth.role !== "driver" && displayTab === "driver-sop-report" && (
-          <div style={{ display: "grid", gap: "14px" }}>
-            {(() => {
-              const completed = driverAssessmentRoster.filter(driver => todayAssessmentByDriver.has(driver.id));
-              const missing = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
-              const completeRate = driverAssessmentRoster.length ? Math.round((completed.length / driverAssessmentRoster.length) * 100) : 0;
-              return (
-                <>
-                  <section className="panel" style={{ background: missing.length ? "#fff7ed" : "#f0fdf4", borderLeft: `4px solid ${missing.length ? "#f97316" : "#22c55e"}` }}>
-                    <div className="panel-head">
-                      <h2>สรุปแบบประเมินตรวจรถวันนี้</h2>
-                      <span>{todayServiceDate}</span>
-                    </div>
-                    <div className="analytics-cards">
-                      <div><span>ทำแล้ว</span><b>{completed.length}/{driverAssessmentRoster.length}</b></div>
-                      <div><span>ครบถ้วน</span><b>{completeRate}%</b></div>
-                    </div>
-                    <p className="muted" style={{ margin: "10px 0 0" }}>
-                      รายชื่ออ้างอิงจากคนขับที่พบในระบบ, งานจัดส่ง, ตำแหน่งล่าสุด และแบบประเมินที่ส่งเข้ามา
-                    </p>
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
-                      <button className="secondary" onClick={() => exportDriverAssessmentReport("copy")}>คัดลอกรายงาน</button>
-                      <button className="primary" onClick={() => exportDriverAssessmentReport("download")}><Download size={16} /> ดาวน์โหลด TXT</button>
-                    </div>
-                  </section>
-
-                  <section className="panel">
-                    <div className="panel-head">
-                      <h2>ทำแบบประเมินแล้ว</h2>
-                      <span>{completed.length} คน</span>
-                    </div>
-                    <div className="dispatch-table">
-                      {completed.length === 0 ? (
-                        <div className="empty">ยังไม่มีคนขับส่งแบบประเมินวันนี้</div>
-                      ) : completed.map(driver => {
-                        const assessment = todayAssessmentByDriver.get(driver.id) || {};
-                        return (
-                          <div key={driver.id} className="dispatch-row" style={{ gridTemplateColumns: "1fr 0.8fr 1.2fr 0.9fr 1.3fr" }}>
-                            <div><b>{driver.name || driver.id}</b><span>{driver.phone || "-"}</span></div>
-                            <span>{assessment.readiness === "ready" ? "พร้อมใช้งาน" : "ส่งแบบแล้ว"}</span>
-                            <span>{assessment.plate ? `${assessment.plate} · ${assessment.brand || ""} ${assessment.model || ""}` : "-"}</span>
-                            <span>{assessment.odometerStart ? `เลขไมล์ ${money(assessment.odometerStart)}` : "ยังไม่มีเลขไมล์"}</span>
-                            <span>{assessment.notes || "ไม่มีหมายเหตุ"}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-
-                  <section className="panel">
-                    <div className="panel-head">
-                      <h2>ยังไม่ได้ทำ</h2>
-                      <span>{missing.length} คน</span>
-                    </div>
-                    <div className="dispatch-table">
-                      {missing.length === 0 ? (
-                        <div className="empty">ครบทุกคนแล้ว</div>
-                      ) : missing.map(driver => (
-                        <div key={driver.id} className="dispatch-row" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
-                          <div><b>{driver.name || driver.id}</b><span>{driver.phone || "-"}</span></div>
-                          <span>{driver.plate || "-"}</span>
-                          <span>{driver.zone || "-"}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                </>
-              );
-            })()}
-          </div>
+        {["sales", "admin", "accounting"].includes(auth.role) && displayTab === "driver-sop-report" && (
+          <VehicleInspectionReport apiFetch={authenticatedApiFetch} role={auth.role} />
         )}
 
         {auth.role === "driver" && displayTab === "driver-sop" && (
@@ -7322,7 +7210,8 @@ export default function App() {
           {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "#fff1f2", border: "2px solid #e11d48", borderLeftWidth: "6px", color: "#9f1239", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>⚠️ ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
           <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
             <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}>{pendingOrder.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">เลือกได้ว่าจะส่งตรงห้องแพ็ค หรือให้สโตร์ตรวจสอบก่อน</small>}</label>
-            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "", chiangmaiRoundCode: deliveryMethod === "company_driver" ? order.chiangmaiRoundCode : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "6px" }}><b>รอบจัดส่งเชียงใหม่ *</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">-- เลือกรอบจัดส่ง --</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">ฝ่ายขายเป็นผู้กำหนดรอบ สโตร์และห้องแพ็คตรวจตาม flow เดิม</small></label>}
             {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "#fee2e2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "10px", padding: "12px", fontWeight: 800 }}><div style={{ fontSize: "15px" }}>🚨 ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "4px" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
             {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
             <label style={{ display: "grid", gap: "6px" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>

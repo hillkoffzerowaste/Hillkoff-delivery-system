@@ -3,6 +3,7 @@ import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { driverReworkPatch } from "../../../../lib/preparationWorkflow";
+import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
 
 export const runtime = "nodejs";
 
@@ -80,6 +81,10 @@ export async function PATCH(request) {
         patch.lastDeliveryDriverName = String(profile.name || order.driverName || "").trim().slice(0, 200);
         patch.lastDeliveryAt = deliveredAt;
         patch.sharedToLine = true;
+        Object.assign(patch, await resolveDeliveryVehicleSnapshot(db, {
+          driverId: String(profile.driverId || order.driverId || ""),
+          deliveryServiceDate: bangkokDateKey(now)
+        }));
         const podPhotoCount = Number(body.podPhotoCount);
         patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
         Object.assign(history, { result: "delivered", podPhotoCount: patch.podPhotoCount });

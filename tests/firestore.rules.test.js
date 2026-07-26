@@ -74,6 +74,15 @@ describe("Firestore role isolation", () => {
     await assertFails(setDoc(doc(db, "users/sales-1"), { role: "admin" }, { merge: true }));
   });
 
+  it("keeps accounting report-only by denying direct operational Firestore reads", async () => {
+    await seedProfile("accounting-1", "accounting", { email: "accounting@hillkoff.com" });
+    await seed("orders/O-ACCOUNTING", { driverId: "", status: "waiting", queueStatus: "queued" });
+    await seed("vehicle_usage_events/U-ACCOUNTING", { serviceDate: "2026-07-26", vehicleId: "V1" });
+    const db = dbFor("accounting-1");
+    await assertFails(getDoc(doc(db, "orders/O-ACCOUNTING")));
+    await assertFails(getDoc(doc(db, "vehicle_usage_events/U-ACCOUNTING")));
+  });
+
   it("allows only the assigned driver to read an assigned order", async () => {
     await seedProfile("driver-1", "driver", { phone: "0812222222", phoneDigits: "0812222222", driverId: "driver_0812222222" });
     await seedProfile("driver-2", "driver", { phone: "0813333333", phoneDigits: "0813333333", driverId: "driver_0813333333" });

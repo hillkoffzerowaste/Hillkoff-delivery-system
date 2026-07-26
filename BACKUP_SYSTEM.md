@@ -44,3 +44,13 @@ API restore รองรับ merge ด้วย `YES_MERGE_FIRESTORE_DATA` แ
 - ถ้าโปรเจกต์ยังไม่มี Storage bucket ให้ใช้ local snapshots หรือสร้าง bucket ก่อนเปิด option นี้
 
 ก่อน restore ให้สร้าง snapshot ใหม่ ตรวจ metadata/checksum และทดลองกับ project แยกก่อนเสมอ
+# Operations rollout backup and rollback
+
+Before enabling accounting access, seeding `vehicle_master`, or deploying the eight-phase operations update:
+
+1. Run `npm.cmd run backup`.
+2. Confirm backup metadata and storage location.
+3. Run `node scripts/seed-vehicle-master.mjs` and review the dry-run count.
+4. Apply with `node scripts/seed-vehicle-master.mjs --apply` only after backup approval.
+
+Rollback is application-only: deploy the previous commit. All new Firestore fields and collections are additive, master-data deletion is a soft disable, and the previous application ignores `vehicle_master`.

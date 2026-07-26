@@ -4,7 +4,7 @@ import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
-import { initialPreparationStatuses } from "../../../../lib/preparationWorkflow";
+import { initialPreparationStatuses, resolveNextRoundDate, validateChiangmaiRound } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
 
@@ -109,6 +109,9 @@ export async function POST(request) {
     const workflowType = preparation.workflowType;
     const storeAssistEntry = profile.role === "store";
     const createdByName = clean(profile.name || profile.email, 200);
+    const requestedRoundCode = clean(order.chiangmaiRoundCode, 20);
+    const roundCode = requestedRoundCode ? validateChiangmaiRound({ deliveryMethod, queueStatus: preparation.queueStatus }, requestedRoundCode) : "";
+    const roundDate = roundCode ? resolveNextRoundDate(toServiceDateKey(now), roundCode) : "";
 
     const next = {
       customerId,
@@ -167,6 +170,12 @@ export async function POST(request) {
       updatedAt: now,
       createdByUid: decoded.uid
     };
+    if (roundCode) Object.assign(next, {
+      chiangmaiRoundCode: roundCode,
+      chiangmaiRoundDate: roundDate,
+      chiangmaiRoundAssignedAt: now,
+      chiangmaiRoundAssignedBy: createdByName
+    });
 
     try {
       const transactionResult = await db.runTransaction(async (transaction) => {

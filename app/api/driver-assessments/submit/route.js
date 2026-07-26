@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
-import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
+import { vehicleDisplayName } from "../../../../lib/vehicleMaster";
+import { resolveVehicle } from "../../../../lib/vehicleRepository";
 import { resolveVerifiedDriver } from "../../../../lib/driverIdentity";
 import { getMileageSheetUrl, postToGoogleAppsScript } from "../../../../lib/googleAppsScript";
 import { errorResponse } from "../../../../lib/workflowAuth";
@@ -78,7 +79,7 @@ export async function POST(request) {
     const dailyChecks = cleanChecks(payload?.dailyChecks, DAILY_CHECK_IDS);
     const weeklyChecks = cleanChecks(payload?.weeklyChecks, WEEKLY_CHECK_IDS);
     const rawVehicle = payload?.vehicle && typeof payload.vehicle === "object" ? payload.vehicle : {};
-    const vehicle = findVehicleById(rawVehicle.id || rawVehicle.assetCode) || null;
+    const vehicle = await resolveVehicle(db, rawVehicle.id || rawVehicle.assetCode);
     const odometerStart = Number(payload?.odometerStart || 0);
 
     if (assessmentType === "daily") {

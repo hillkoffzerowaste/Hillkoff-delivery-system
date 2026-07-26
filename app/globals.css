@@ -2535,3 +2535,160 @@ summary:focus-visible {
   .muted, .small, .field-label { font-size: 13px; }
   input, select, textarea { font-size: 16px; }
 }
+.vehicle-report-workspace,
+.dispatch-dashboard-new {
+  display: grid;
+  gap: 14px;
+}
+
+.vehicle-report-hero,
+.dispatch-dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.vehicle-report-hero h2,
+.dispatch-dashboard-toolbar h2 {
+  margin: 0 0 4px;
+}
+
+.vehicle-report-hero p,
+.dispatch-dashboard-toolbar p {
+  margin: 0;
+  color: #64748b;
+}
+
+.vehicle-report-filter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.vehicle-report-filter label,
+.dispatch-dashboard-toolbar label {
+  display: grid;
+  gap: 5px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.vehicle-report-cards,
+.dispatch-eight-cards {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+}
+
+.vehicle-report-cards > div {
+  display: grid;
+  gap: 5px;
+}
+
+.vehicle-data-quality {
+  display: grid;
+  gap: 4px;
+  border-left: 5px solid #f59e0b;
+  background: #fffbeb;
+}
+
+.vehicle-report-tabs {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.vehicle-report-table {
+  overflow-x: auto;
+}
+
+.vehicle-report-row {
+  min-width: 1050px;
+  display: grid;
+  grid-template-columns: 32px 1.15fr 1fr 1fr .75fr .85fr .9fr .85fr;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 6px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+
+.vehicle-report-row span {
+  display: grid;
+  gap: 2px;
+}
+
+.vehicle-report-row small {
+  color: #64748b;
+}
+
+.vehicle-report-head {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 800;
+  position: sticky;
+  top: 0;
+}
+
+.vehicle-master-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+
+.dispatch-dashboard-toolbar {
+  display: flex;
+}
+
+.dispatch-eight-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.dispatch-eight-cards > div {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 13px;
+  display: grid;
+  gap: 5px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .05);
+}
+
+.dispatch-eight-cards span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dispatch-eight-cards b {
+  color: #174b36;
+  font-size: 25px;
+}
+
+@media (max-width: 900px) {
+  .vehicle-report-filter,
+  .vehicle-report-cards,
+  .dispatch-eight-cards,
+  .vehicle-master-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .vehicle-report-filter,
+  .vehicle-report-cards,
+  .dispatch-eight-cards,
+  .vehicle-master-grid {
+    grid-template-columns: 1fr;
+  }
+}

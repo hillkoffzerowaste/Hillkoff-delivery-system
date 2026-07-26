@@ -26,7 +26,7 @@ export async function POST(request) {
     }
     const email = String(decoded.email || profile?.email || "").toLowerCase();
     const role = isAdminEmail(email) ? "admin" : profile?.role || null;
-    if (!profile || !["admin", "sales", "driver", "store", "pack"].includes(role)) {
+    if (!profile || !["admin", "sales", "driver", "store", "pack", "accounting"].includes(role)) {
       return Response.json({ ok: true, valid: false, error: "PROFILE_NOT_FOUND" }, { status: 200 });
     }
     if (profile.active === false || ["disabled", "rejected"].includes(profile.status)) {

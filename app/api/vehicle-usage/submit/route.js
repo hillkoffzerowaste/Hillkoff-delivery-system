@@ -1,7 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { after } from "next/server";
 import { getAdminAuth, getAdminDb } from "../../../../lib/firebaseAdmin";
-import { findVehicleById, vehicleDisplayName } from "../../../../lib/vehicleMaster";
+import { vehicleDisplayName } from "../../../../lib/vehicleMaster";
+import { resolveVehicle } from "../../../../lib/vehicleRepository";
 import { resolveVerifiedDriver } from "../../../../lib/driverIdentity";
 import { getMileageSheetUrl, postToGoogleAppsScript } from "../../../../lib/googleAppsScript";
 import { errorResponse } from "../../../../lib/workflowAuth";
@@ -86,7 +87,7 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
     }
 
-    const vehicle = findVehicleById(payload?.vehicle?.id || payload?.vehicle?.assetCode || payload?.vehicleId);
+    const vehicle = await resolveVehicle(db, payload?.vehicle?.id || payload?.vehicle?.assetCode || payload?.vehicleId);
     if (!vehicle) return Response.json({ ok: false, error: "Vehicle required" }, { status: 400 });
 
     const eventType = String(payload?.eventType || "").trim();

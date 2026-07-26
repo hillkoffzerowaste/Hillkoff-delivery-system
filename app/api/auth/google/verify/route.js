@@ -57,7 +57,7 @@ export async function POST(request) {
 
     const email = String(decoded.email || "").toLowerCase();
     const role = isAdminEmail(email) ? "admin" : String(session.role || "");
-    if (!["sales", "driver", "admin"].includes(role)) throw httpError("Invalid role", 403);
+    if (!["sales", "driver", "admin", "accounting"].includes(role)) throw httpError("Invalid role", 403);
     if (role === "driver") throw httpError("DRIVER_GOOGLE_LOGIN_DISABLED", 403);
     const phoneDigits = normalizePhoneDigits(session.phoneDigits);
     const profileRef = phoneDigits

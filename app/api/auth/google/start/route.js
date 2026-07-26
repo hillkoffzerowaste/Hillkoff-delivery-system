@@ -1,7 +1,7 @@
 import { getAdminAuth, getAdminDb } from "../../../../../lib/firebaseAdmin";
 import { createOtpSessionPayload, normalizeEmail, normalizePhoneDigits } from "../../../../../lib/otp";
 import { sendOtpEmail } from "../../../../../lib/otpEmail";
-import { isAdminEmail } from "../../../../../lib/workflowAuth";
+import { isAdminEmail, isApprovedAccountingEmail, isHillkoffEmail } from "../../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -14,7 +14,8 @@ function httpError(message, status) {
 }
 
 function isAllowed(role, email) {
-  if (role === "sales") return email.endsWith("@hillkoff.com");
+  if (role === "sales") return isHillkoffEmail(email);
+  if (role === "accounting") return isApprovedAccountingEmail(email);
   if (role === "driver") return true;
   if (role === "admin") return isAdminEmail(email);
   return false;
@@ -64,7 +65,7 @@ export async function POST(request) {
   const phoneDigits = normalizePhoneDigits(payload?.phone);
   const name = String(payload?.name || "").trim().slice(0, 160);
   if (!idToken) return Response.json({ ok: false, error: "Missing idToken" }, { status: 400 });
-  if (!["sales", "driver", "admin"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
+  if (!["sales", "driver", "admin", "accounting"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
   if (role === "driver") return Response.json({ ok: false, error: "DRIVER_GOOGLE_LOGIN_DISABLED" }, { status: 403 });
   if (role === "driver" && (phoneDigits.length < 9 || phoneDigits.length > 15)) {
     return Response.json({ ok: false, error: "Invalid driver phone" }, { status: 400 });

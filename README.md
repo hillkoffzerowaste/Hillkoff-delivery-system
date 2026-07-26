@@ -79,3 +79,15 @@ Firestore documents กู้ได้ครบ ดูรายละเอี�
 - `/api/line/webhook` ตรวจ LINE signature ก่อนบันทึก
 
 Internal use only — Hillkoff Local Delivery
+# Operations reporting and delivery rounds
+
+The vehicle report is server-backed and available to sales, admin, and allowlisted accounting users. Accounting is report-only and has no direct Firestore access. Configure `ACCOUNTING_EMAIL_ALLOWLIST` in the deployment environment.
+
+Before enabling the live vehicle master:
+
+```powershell
+node scripts/seed-vehicle-master.mjs
+node scripts/seed-vehicle-master.mjs --apply
+```
+
+Run the second command only after a production backup. The seed uses merge writes and never deletes vehicles. See `docs/vehicle-report-data-quality.md` for historical allocation rules and `docs/uat/2026-07-26-operations-eight-phase-checklist.md` for release UAT.
