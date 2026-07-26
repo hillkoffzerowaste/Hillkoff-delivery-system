@@ -15,7 +15,8 @@ import {
   isDriverDeliveryOrder,
   isOutstationOrder,
   isReadyOrderWaitingForDispatch,
-  isSalesWaitingAlert
+  isSalesWaitingAlert,
+  requiresDriverDeliveryNote
 } from "../lib/preparationWorkflow";
 import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import {
@@ -3720,8 +3721,10 @@ export default function App() {
   const uploadPod = async (order, selectedFiles) => {
     const completeness = driverDeliveryCompleteness[order.id] || "";
     const note = String(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim();
-    if (!completeness || !note) {
-      setSyncStatus("⚠️ กรุณาระบุว่าสินค้าครบหรือไม่ครบและกรอกหมายเหตุก่อนถ่ายรูป");
+    if (!completeness || (requiresDriverDeliveryNote(completeness) && !note)) {
+      setSyncStatus(requiresDriverDeliveryNote(completeness)
+        ? "⚠️ กรณีสินค้าไม่ครบ กรุณากรอกหมายเหตุก่อนถ่ายรูป"
+        : "⚠️ กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูป");
       return;
     }
     const incoming = Array.from(selectedFiles || []).filter(file => file?.type?.startsWith("image/"));
@@ -4069,7 +4072,7 @@ export default function App() {
           const deliveryCompleteness = driverDeliveryCompleteness[order.id] || order.deliveryCompleteness || (order.status === "ส่งสำเร็จ" ? "complete" : "");
           const driverNote = String(noteDraft ?? order.driverNote ?? "").trim();
           if (isActiveDelivery && !deliveryCompleteness) throw new Error("กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูปและส่ง LINE");
-          if (isActiveDelivery && !driverNote) throw new Error("กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
+          if (isActiveDelivery && requiresDriverDeliveryNote(deliveryCompleteness) && !driverNote) throw new Error("กรณีสินค้าไม่ครบ กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
           const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
           const files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
           completedOrder = {
@@ -6199,13 +6202,13 @@ export default function App() {
 	                                <option value="incomplete">⚠️ สินค้าไม่ครบ / ต้องส่งแก้ไข</option>
 	                              </select>
 	                              <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={event => setDriverNoteDrafts(drafts => ({ ...drafts, [order.id]: event.target.value }))} placeholder="หมายเหตุชัดเจน เช่น ครบทุกกล่อง หรือขาดสินค้าอะไร จำนวนเท่าไร" rows={2} disabled={(podPreviewsByOrder[order.id] || []).length > 0} />
-	                              <small style={{ color: "#1e40af" }}>ต้องเลือกผลตรวจและกรอกหมายเหตุก่อนถ่ายรูป/ส่ง LINE</small>
+	                              <small style={{ color: "#1e40af" }}>{requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) ? "กรณีสินค้าไม่ครบ ต้องกรอกหมายเหตุก่อนถ่ายรูป/ส่ง LINE" : "เลือกผลตรวจสินค้าแล้วถ่ายรูป/ส่ง LINE ได้เลย"}</small>
 	                            </div>
 	                            <label 
 	                              className="primary" 
-	                              style={{ padding: "8px", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: !driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim() ? 0.55 : 1 }}>
+	                              style={{ padding: "8px", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? 0.55 : 1 }}>
 	                              2. 📷 ถ่ายรูป ({(podPreviewsByOrder[order.id] || []).length}/5)
-                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5 || !driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()} onChange={(e) => {
+	                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5 || !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())} onChange={(e) => {
 	                                if (e.target.files?.length) uploadPod(order, e.target.files);
 	                                e.target.value = "";
 	                              }} />
@@ -6221,7 +6224,7 @@ export default function App() {
 	                          <button
 	                            className="primary"
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
-	                            disabled={!driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()}
+	                            disabled={!driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())}
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
 	                          >{driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
 	                        )}

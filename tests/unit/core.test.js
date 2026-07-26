@@ -26,6 +26,7 @@ import {
   isDriverDeliveryOrder,
   isOutstationOrder,
   isReadyOrderWaitingForDispatch,
+  requiresDriverDeliveryNote,
   isSalesWaitingAlert,
   isStoreReportVisibleToRole,
   resolvePreparationRoute
@@ -133,6 +134,12 @@ describe("sales order preparation workflow", () => {
     expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "กำลังจัดส่ง", queueStatus: "queued" }, "driver-1")).toBe(true);
     expect(isDriverDeliveryOrder({ driverId: "driver-1", status: "ส่งสำเร็จ", queueStatus: "completed" }, "driver-1")).toBe(false);
     expect(isDriverDeliveryOrder({ driverId: "driver-2", status: "กำลังส่ง", queueStatus: "queued" }, "driver-1")).toBe(false);
+  });
+
+  it("requires a driver note only for incomplete deliveries", () => {
+    expect(requiresDriverDeliveryNote("complete")).toBe(false);
+    expect(requiresDriverDeliveryNote("incomplete")).toBe(true);
+    expect(requiresDriverDeliveryNote("")).toBe(false);
   });
 
   it("keeps a booking report visible to pack even when it is linked to a sales order", () => {
