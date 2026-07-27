@@ -690,12 +690,12 @@ export default function App() {
   const [staffAccountForm, setStaffAccountForm] = useState({ username: "", password: "", name: "", role: "store" });
   const [notificationPermission, setNotificationPermission] = useState("default");
 
-  // Settings tab: account list, vehicle master, checker names, backup/restore
+  // Settings tab: account list, outstation sender defaults, checker names, backup/restore
   const [staffAccounts, setStaffAccounts] = useState([]);
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false);
-  const [vehicleMasterList, setVehicleMasterList] = useState([]);
-  const [vehicleMasterLoading, setVehicleMasterLoading] = useState(false);
-  const [vehicleMasterForm, setVehicleMasterForm] = useState({ id: "", plate: "", vehicleType: "", brand: "", model: "", responsiblePerson: "", department: "" });
+  const [outstationSenderForm, setOutstationSenderForm] = useState({ name: "", addressLines: ["", "", ""] });
+  const [outstationSenderLoading, setOutstationSenderLoading] = useState(false);
+  const [outstationSenderSaving, setOutstationSenderSaving] = useState(false);
   const [settingsNewCheckerName, setSettingsNewCheckerName] = useState({ store: "", pack: "" });
   const [backupList, setBackupList] = useState([]);
   const [backupSummary, setBackupSummary] = useState(null);
@@ -3257,7 +3257,7 @@ export default function App() {
   useEffect(() => {
     if (displayTab !== "settings" || auth.role !== "admin") return;
     loadStaffAccounts();
-    loadVehicleMasterList();
+    loadOutstationSenderSettings();
     loadBackupList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayTab, auth.role]);
@@ -3668,42 +3668,33 @@ export default function App() {
     } catch (e) { setSyncStatus(`❌ อัปเดตบัญชีไม่สำเร็จ: ${e?.message || e}`); }
   };
 
-  const loadVehicleMasterList = async () => {
-    setVehicleMasterLoading(true);
+  const loadOutstationSenderSettings = async () => {
+    setOutstationSenderLoading(true);
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/vehicle-master?includeInactive=true", { headers: { Authorization: `Bearer ${idToken}` } });
+      const res = await fetch("/api/outstation-labels/settings", { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setVehicleMasterList(Array.isArray(json.data) ? json.data : []);
-    } catch (e) { setSyncStatus(`❌ โหลดรายการรถไม่สำเร็จ: ${e?.message || e}`); }
-    finally { setVehicleMasterLoading(false); }
+      const lines = Array.isArray(json.data?.addressLines) ? json.data.addressLines : [];
+      setOutstationSenderForm({ name: json.data?.name || "", addressLines: [0, 1, 2].map((i) => lines[i] || "") });
+    } catch (e) { setSyncStatus(`❌ โหลดที่อยู่ผู้ส่งไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setOutstationSenderLoading(false); }
   };
 
-  const saveVehicleMasterRecord = async () => {
-    const id = vehicleMasterForm.id.trim() || vehicleMasterForm.plate.trim();
-    if (!id) return setSyncStatus("⚠️ กรุณากรอกทะเบียนรถหรือรหัสทรัพย์สิน");
+  const saveOutstationSenderSettings = async () => {
+    const name = outstationSenderForm.name.trim();
+    const addressLines = outstationSenderForm.addressLines.map((line) => line.trim()).filter(Boolean);
+    if (!name) return setSyncStatus("⚠️ กรุณากรอกชื่อผู้ส่ง");
+    if (!addressLines.length) return setSyncStatus("⚠️ กรุณากรอกที่อยู่ผู้ส่งอย่างน้อย 1 บรรทัด");
+    setOutstationSenderSaving(true);
     try {
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/vehicle-master", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ...vehicleMasterForm, id }) });
+      const res = await fetch("/api/outstation-labels/settings", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ name, addressLines }) });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setVehicleMasterForm({ id: "", plate: "", vehicleType: "", brand: "", model: "", responsiblePerson: "", department: "" });
-      setSyncStatus(`✅ บันทึกข้อมูลรถ "${json.data.plate || json.data.id}" แล้ว`);
-      await loadVehicleMasterList();
-    } catch (e) { setSyncStatus(`❌ บันทึกข้อมูลรถไม่สำเร็จ: ${e?.message || e}`); }
-  };
-
-  const disableVehicleMasterRecord = async (vehicle) => {
-    if (!window.confirm(`ยืนยันปิดใช้งานรถ "${vehicle.plate || vehicle.id}"?`)) return;
-    try {
-      const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/vehicle-master", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: vehicle.id }) });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setVehicleMasterList((prev) => prev.map((item) => item.id === vehicle.id ? { ...item, active: false } : item));
-      setSyncStatus(`✅ ปิดใช้งานรถ "${vehicle.plate || vehicle.id}" แล้ว`);
-    } catch (e) { setSyncStatus(`❌ ปิดใช้งานรถไม่สำเร็จ: ${e?.message || e}`); }
+      setSyncStatus("✅ บันทึกที่อยู่ผู้ส่งเริ่มต้นแล้ว");
+    } catch (e) { setSyncStatus(`❌ บันทึกที่อยู่ผู้ส่งไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setOutstationSenderSaving(false); }
   };
 
   const loadBackupList = async () => {
@@ -6987,105 +6978,7 @@ export default function App() {
 		                element.click();
 		                document.body.removeChild(element);
 		              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
-		              {(() => {
-		                const todayOrders = todayOrdersOnly;
-		                const total = todayOrders.length;
-		                const waiting = todayOrders.filter(o => o.status === "รอคนขับรับ").length;
-		                const active = todayOrders.filter(o => o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง").length;
-		                const done = todayOrders.filter(o => o.status === "ส่งสำเร็จ").length;
-		                const canceled = todayOrders.filter(o => o.status === "ยกเลิก").length;
-		                const codAll = todayOrders.reduce((sum, o) => sum + Number(o.cod || 0), 0);
-		                const codDone = todayOrders.filter(o => o.status === "ส่งสำเร็จ").reduce((sum, o) => sum + Number(o.cod || 0), 0);
-		                const now = new Date();
-		                const weekStart = new Date(now);
-		                weekStart.setHours(0, 0, 0, 0);
-		                // Monday start (local)
-		                const day = weekStart.getDay(); // 0..6 (Sun..Sat)
-		                const diffToMon = (day + 6) % 7;
-		                weekStart.setDate(weekStart.getDate() - diffToMon);
-		                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-		                const yearStart = new Date(now.getFullYear(), 0, 1);
-
-		                const isOnOrAfter = (d, start) => d && d.getTime() >= start.getTime();
-		                const byRange = (start) => (orders || []).filter((o) => {
-		                  const key = String(o?.serviceDate || "");
-		                  const d = parseServiceDateKey(key);
-		                  if (!d) return false;
-		                  // compare in local by converting UTC date to local midnight-ish
-		                  const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-		                  return isOnOrAfter(local, start);
-		                });
-		                const weekOrders = byRange(weekStart);
-		                const monthOrders = byRange(monthStart);
-		                const yearOrders = byRange(yearStart);
-		                const sumBlock = (list) => ({
-		                  total: list.length,
-		                  done: list.filter((o) => o.status === "ส่งสำเร็จ").length,
-		                  cod: list.reduce((sum, o) => sum + Number(o.cod || 0), 0),
-		                });
-		                const weekSum = sumBlock(weekOrders);
-		                const monthSum = sumBlock(monthOrders);
-		                const yearSum = sumBlock(yearOrders);
-		                const completedAssessments = driverAssessmentRoster.filter(driver => todayAssessmentByDriver.has(driver.id));
-		                const missingAssessments = driverAssessmentRoster.filter(driver => !todayAssessmentByDriver.has(driver.id));
-		                const assessmentRate = driverAssessmentRoster.length ? Math.round((completedAssessments.length / driverAssessmentRoster.length) * 100) : 0;
-		                const issueOrders = todayOrders.filter(o => o.status === "ติดปัญหา" || o.complaint);
-		                const dailyFollowUps = [
-		                  issueOrders.length > 0 ? `ตามงานติดปัญหาวันนี้ ${issueOrders.length} งาน: ${issueOrders.slice(0, 3).map(o => o.id).join(", ")}${issueOrders.length > 3 ? "..." : ""}` : "",
-		                  backlogUndelivered.length > 0 ? `ตามงานค้างจากวันก่อน ${backlogUndelivered.length} งาน ให้ปิดสถานะหรือมอบหมายคนขับต่อ` : "",
-		                  waiting > 0 ? `ยังมีงานรอคนขับรับ ${waiting} งาน ควรตรวจว่าคนขับเห็นคิวครบหรือยัง` : "",
-		                  active > 0 ? `มีงานกำลังส่ง ${active} งาน ควรติดตามก่อนปิดรอบวันนี้` : "",
-		                  missingAssessments.length > 0 ? `ตรวจสภาพรถยังขาด ${missingAssessments.length} คน: ${missingAssessments.slice(0, 4).map(driver => driver.name || driver.id).join(", ")}${missingAssessments.length > 4 ? "..." : ""}` : "",
-		                  todayRouteTasks.length > 0 ? `งานวิ่งวันนี้ ${todayRouteTasks.length} รอบ · เสร็จแล้ว ${completedTodayRouteTasks.length} รอบ · กำลังดำเนินการ ${activeTodayRouteTasks.length} รอบ` : ""
-		                ].filter(Boolean);
-		                if (!dailyFollowUps.length) {
-		                  dailyFollowUps.push("วันนี้ยังไม่มีงานค้าง งานติดปัญหา หรือรายการตรวจรถที่ต้องเร่งตาม");
-		                }
-		                const overviewUpdatedAt = formatThaiDateTime(appClock);
-		                return (
-		                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #eee" }}>
-		                    <b>ภาพรวมวันนี้ ({todayText()})</b>
-		                    <div className="report-lines" style={{ marginTop: "8px" }}>
-		                      <p>ออเดอร์วันนี้ <b>{total}</b> งาน</p>
-		                      <p>รอคนขับรับ <b>{waiting}</b> · กำลังส่ง <b>{active}</b> · ส่งสำเร็จ <b>{done}</b> · ยกเลิก <b>{canceled}</b></p>
-		                      <p>COD วันนี้รวม <b>{money(codAll)}</b> บาท · ส่งสำเร็จ <b>{money(codDone)}</b> บาท</p>
-		                      {backlogUndelivered.length > 0 && (
-		                        <p>งานค้างส่งจากวันก่อน <b>{backlogUndelivered.length}</b> งาน (นับเฉพาะรอคนขับรับ/กำลังส่ง/กำลังจัดส่ง)</p>
-		                      )}
-		                    </div>
-		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
-		                      <b>สรุปช่วงเวลา</b>
-		                      <div className="report-lines" style={{ marginTop: "8px" }}>
-		                        <p>สัปดาห์นี้ (จ.-วันนี้) <b>{weekSum.total}</b> งาน · ส่งสำเร็จ <b>{weekSum.done}</b> · COD ฿<b>{money(weekSum.cod)}</b></p>
-		                        <p>เดือนนี้ <b>{monthSum.total}</b> งาน · ส่งสำเร็จ <b>{monthSum.done}</b> · COD ฿<b>{money(monthSum.cod)}</b></p>
-		                        <p>ปีนี้ <b>{yearSum.total}</b> งาน · ส่งสำเร็จ <b>{yearSum.done}</b> · COD ฿<b>{money(yearSum.cod)}</b></p>
-		                      </div>
-		                    </div>
-		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
-		                      <b>รายงานประเมินตรวจสภาพรถวันนี้</b>
-		                      <div className="report-lines" style={{ marginTop: "8px" }}>
-		                        <p>ทำแล้ว <b>{completedAssessments.length}/{driverAssessmentRoster.length}</b> คน · คิดเป็น <b>{assessmentRate}%</b></p>
-		                        <p>ทำแล้ว: <b>{completedAssessments.length ? completedAssessments.map(driver => driver.name || driver.id).join(", ") : "-"}</b></p>
-		                        <p>ยังขาด: <b>{missingAssessments.length ? missingAssessments.map(driver => driver.name || driver.id).join(", ") : "ครบทุกคนแล้ว"}</b></p>
-		                      </div>
-		                    </div>
-		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
-		                      <b>ภาพรวมปัญหาการใช้งานและความต่อเนื่องของแอพ</b>
-		                      <div className="report-lines" style={{ marginTop: "8px" }}>
-		                        <p>สถานะระบบ: <b>{syncStatus || "กำลังตรวจสอบ"}</b></p>
-		                        <p>งานติดปัญหาวันนี้ <b>{issueOrders.length}</b> งาน · งานค้างจากวันก่อน <b>{backlogUndelivered.length}</b> งาน</p>
-		                        <p>อัปเดตล่าสุด: <b>{overviewUpdatedAt}</b> · ข้อมูลคำนวณจากออเดอร์, งานวิ่ง, ตรวจรถ และ Firestore realtime ของวันนี้</p>
-		                      </div>
-		                    </div>
-		                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
-		                      <b>รายการติดตามประจำวันที่เปลี่ยนตามข้อมูลจริง</b>
-		                      <div className="report-lines" style={{ marginTop: "8px" }}>
-		                        {dailyFollowUps.map(item => <p key={item}>• {item}</p>)}
-		                      </div>
-		                    </div>
-		                  </div>
-		                );
-		              })()}
+		              <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ดูตัวเลขวันนี้/สัปดาห์/เดือนแบบละเอียดได้ที่แท็บ &ldquo;รายงานประจำวัน&rdquo; — ปุ่มด้านบนสร้างสรุปข้อความพร้อมคัดลอก/ส่งต่อทาง LINE เท่านั้น</p>
 		            </section>
 
             {auth.role === "admin" && (
@@ -7120,35 +7013,9 @@ export default function App() {
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2>🚚 ข้อมูลรถ (Vehicle Master)</h2><span>{vehicleMasterList.length} คัน</span></div>
-                  <div className="form-grid two">
-                    <input value={vehicleMasterForm.plate} onChange={e => setVehicleMasterForm(p => ({ ...p, plate: e.target.value }))} placeholder="ทะเบียนรถ" />
-                    <input value={vehicleMasterForm.vehicleType} onChange={e => setVehicleMasterForm(p => ({ ...p, vehicleType: e.target.value }))} placeholder="ประเภทรถ" />
-                    <input value={vehicleMasterForm.brand} onChange={e => setVehicleMasterForm(p => ({ ...p, brand: e.target.value }))} placeholder="ยี่ห้อ" />
-                    <input value={vehicleMasterForm.model} onChange={e => setVehicleMasterForm(p => ({ ...p, model: e.target.value }))} placeholder="รุ่น" />
-                    <input value={vehicleMasterForm.responsiblePerson} onChange={e => setVehicleMasterForm(p => ({ ...p, responsiblePerson: e.target.value }))} placeholder="ผู้รับผิดชอบ" />
-                    <input value={vehicleMasterForm.department} onChange={e => setVehicleMasterForm(p => ({ ...p, department: e.target.value }))} placeholder="แผนก" />
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
-                    <button className="primary" onClick={saveVehicleMasterRecord}>บันทึกรถ</button>
-                    <button className="secondary" onClick={loadVehicleMasterList} disabled={vehicleMasterLoading}>{vehicleMasterLoading ? "กำลังโหลด..." : "รีเฟรชรายการ"}</button>
-                  </div>
-                  <div style={{ marginTop: "12px", display: "grid", gap: "6px" }}>
-                    {vehicleMasterList.length === 0 ? (
-                      <p className="muted" style={{ margin: 0 }}>{vehicleMasterLoading ? "กำลังโหลด..." : "ยังไม่มีข้อมูลรถ หรือยังไม่ได้โหลด"}</p>
-                    ) : vehicleMasterList.map((vehicle) => (
-                      <div key={vehicle.id} className="score-row">
-                        <div>
-                          <b>{vehicle.plate || vehicle.id}</b>
-                          <span> {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson || "ยังไม่ระบุผู้รับผิดชอบ"} · {vehicle.active === false ? "ปิดใช้งาน" : "ใช้งานอยู่"}</span>
-                        </div>
-                        <div style={{ display: "flex", gap: "6px" }}>
-                          <button type="button" className="secondary compact-btn" onClick={() => setVehicleMasterForm({ id: vehicle.id, plate: vehicle.plate || "", vehicleType: vehicle.vehicleType || "", brand: vehicle.brand || "", model: vehicle.model || "", responsiblePerson: vehicle.responsiblePerson || "", department: vehicle.department || "" })}>แก้ไข</button>
-                          {vehicle.active !== false && <button type="button" className="secondary compact-btn" onClick={() => disableVehicleMasterRecord(vehicle)}>ปิดใช้งาน</button>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <div className="panel-head"><h2>🚚 ข้อมูลรถและคนขับ</h2><span>ย้ายไปแท็บรายงานตรวจรถ</span></div>
+                  <p className="muted" style={{ margin: 0 }}>จัดการรถและคนขับ (เพิ่ม/แก้ไข/ปิดใช้งาน) ย้ายไปรวมอยู่ที่แท็บ &ldquo;รายงานตรวจรถ&rdquo; มุมมอง &ldquo;จัดการข้อมูล&rdquo; แล้ว เพื่อไม่ให้มีหน้าจัดการซ้ำกัน 2 ที่</p>
+                  <button className="secondary wide" style={{ marginTop: "10px" }} onClick={() => selectAppTab("driver-sop-report")}>ไปที่รายงานตรวจรถ</button>
                 </section>
 
                 <section className="panel">
@@ -7224,50 +7091,30 @@ export default function App() {
               </>
             )}
 
-		            <section className="panel">
-		              {(() => {
-		                const locs = state.driverLocations || {};
-		                const idsWithLocation = Object.keys(locs).filter(did => locs[did]?.lat && locs[did]?.lng);
-		                const defaultCenter = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
-		                const effectiveId = selectedMapDriverId || idsWithLocation[0] || "";
-		                const selected = effectiveId ? locs[effectiveId] : null;
-		                const centerLat = selected?.lat ?? defaultCenter.lat;
-		                const centerLng = selected?.lng ?? defaultCenter.lng;
-		                const embed = osmEmbedUrl(centerLat, centerLng, 15, Boolean(selected));
-
-		                return (
-		                  <>
-		                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{idsWithLocation.length} จุดเช็คอิน</span></div>
-		                    {idsWithLocation.length === 0 ? (
-		                      <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับเช็คอินพิกัด (ให้คนขับกด “ไปถึงแล้ว” ที่หน้างาน และอนุญาต GPS)</p>
-		                    ) : (
-		                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-		                        {idsWithLocation.map(did => {
-		                          const d = locs[did];
-		                          const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
-		                          return (
-		                            <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
-		                              📍 {name}
-		                            </button>
-		                          );
-		                        })}
-		                      </div>
-		                    )}
-
-		                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
-		                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
-		                        <b>{selected?.driverName ? `📍 ${selected.driverName}` : "แผนที่ภาพรวม"}</b>
-		                        <small style={{ color: "#6b7280" }}>{selected?.zone || "เชียงใหม่"}</small>
-		                      </div>
-		                      <iframe title="osm-mini-map-settings" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
-		                      <a href={osmPageUrl(centerLat, centerLng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
-		                        เปิดแผนที่เต็ม (OpenStreetMap)
-		                      </a>
-		                    </div>
-		                  </>
-		                );
-		              })()}
-		            </section>
+            {auth.role === "admin" && (
+              <section className="panel">
+                <div className="panel-head"><h2>📦 ที่อยู่ผู้ส่งเริ่มต้น (ใบปะหน้าต่างจังหวัด)</h2><span>Outstation label</span></div>
+                <p className="muted" style={{ marginTop: 0 }}>ใช้เป็นชื่อ/ที่อยู่ต้นทางเริ่มต้นเมื่อพิมพ์ใบปะหน้าต่างจังหวัด (แก้ไขได้ทีละใบระหว่างพิมพ์อยู่แล้ว อันนี้คือค่าเริ่มต้น)</p>
+                <input value={outstationSenderForm.name} onChange={(e) => setOutstationSenderForm((p) => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ส่ง" style={{ marginBottom: "8px" }} />
+                {outstationSenderForm.addressLines.map((line, index) => (
+                  <input
+                    key={index}
+                    value={line}
+                    onChange={(e) => setOutstationSenderForm((p) => {
+                      const addressLines = [...p.addressLines];
+                      addressLines[index] = e.target.value;
+                      return { ...p, addressLines };
+                    })}
+                    placeholder={`ที่อยู่ บรรทัดที่ ${index + 1}`}
+                    style={{ marginBottom: "8px" }}
+                  />
+                ))}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button className="primary" onClick={saveOutstationSenderSettings} disabled={outstationSenderSaving}>{outstationSenderSaving ? "กำลังบันทึก..." : "บันทึก"}</button>
+                  <button className="secondary" onClick={loadOutstationSenderSettings} disabled={outstationSenderLoading}>{outstationSenderLoading ? "กำลังโหลด..." : "รีเฟรช"}</button>
+                </div>
+              </section>
+            )}
 
 		            {SUPER_ADMIN_EMAILS.includes(auth.email) && (
 		              <section className="panel">
@@ -7289,23 +7136,6 @@ export default function App() {
               </section>
             )}
             
-            <section className="panel">
-              <div className="panel-head"><h2>🟢 Online Status</h2><span>{Object.keys(state.onlineDrivers || {}).length} online</span></div>
-              <div className="report-lines">
-                {Object.keys(state.onlineDrivers || {}).length === 0 ? (
-                  <p className="muted">ไม่มีคนขับออนไลน์</p>
-                ) : (
-                  drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
-                    const lastSeen = state.onlineDrivers?.[driver.id];
-                    const timeDiff = Math.floor((new Date().getTime() - lastSeen) / 60000);
-                    return (
-                      <p key={driver.id}><b>🟢 {driver.name}</b><br/><small>{driver.plate} ({driver.zone}) - {timeDiff}m ago</small></p>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-
 	            <section className="panel">
 	              <div className="panel-head"><h2>ประวัติการเข้าสู่ระบบ</h2><span>{(state.loginHistory || []).length} รายการ</span></div>
 	              <div className="report-lines" style={{ maxHeight: "400px", overflowY: "auto" }}>
