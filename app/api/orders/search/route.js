@@ -1,4 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { isOutstationOrder } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function GET(request) {
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), activity: activity.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
     const scope = clean(params.get("scope"), 40);
-    if (scope && scope !== "store_pickup") return Response.json({ ok: false, error: "Invalid search scope" }, { status: 400 });
+    if (scope && !["store_pickup", "outstation"].includes(scope)) return Response.json({ ok: false, error: "Invalid search scope" }, { status: 400 });
     const queryText = clean(params.get("q")).toLowerCase();
     if (queryText.length < 2) return Response.json({ ok: false, error: "Enter at least 2 characters" }, { status: 400 });
     const data = [];
@@ -41,6 +42,7 @@ export async function GET(request) {
         const order = { id: doc.id, ...(doc.data() || {}) };
         if (!order.workflowType) continue;
         if (scope === "store_pickup" && !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod)) continue;
+        if (scope === "outstation" && !isOutstationOrder(order)) continue;
         const haystack = [order.id, order.bookingNumber, ...(Array.isArray(order.bookingNumbers) ? order.bookingNumbers : []), order.customerName, order.customerPhone, order.zone, order.address, order.salesNote, order.driverNote, order.status, order.storeStatus, order.packStatus].join(" ").toLowerCase();
         if (haystack.includes(queryText)) data.push(order);
         if (data.length >= MAX_SEARCH_RESULTS) break;

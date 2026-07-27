@@ -750,6 +750,10 @@ export default function App() {
   const [pickupHistoryResults, setPickupHistoryResults] = useState([]);
   const [pickupHistoryLoading, setPickupHistoryLoading] = useState(false);
   const [pickupHistorySearched, setPickupHistorySearched] = useState(false);
+  const [outstationHistoryQuery, setOutstationHistoryQuery] = useState("");
+  const [outstationHistoryResults, setOutstationHistoryResults] = useState([]);
+  const [outstationHistoryLoading, setOutstationHistoryLoading] = useState(false);
+  const [outstationHistorySearched, setOutstationHistorySearched] = useState(false);
   const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
   const [orderForm, setOrderForm] = useState({
     pickupWaitMinutes: "5",
@@ -3173,6 +3177,21 @@ export default function App() {
     finally { setPickupHistoryLoading(false); }
   };
 
+  const searchOutstationHistory = async () => {
+    const query = outstationHistoryQuery.trim();
+    if (query.length < 2) return setSyncStatus("⚠️ กรุณากรอกคำค้นหาอย่างน้อย 2 ตัวอักษร");
+    setOutstationHistoryLoading(true);
+    setOutstationHistorySearched(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch(`/api/orders/search?q=${encodeURIComponent(query)}&scope=outstation`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setOutstationHistoryResults(Array.isArray(json.data) ? json.data : []);
+    } catch (error) { setSyncStatus(`❌ ค้นหาประวัติออเดอร์ต่างจังหวัดไม่สำเร็จ: ${error?.message || error}`); }
+    finally { setOutstationHistoryLoading(false); }
+  };
+
   const openChiangmaiHistoryOrder = async (order) => {
     try {
       const idToken = await refreshAuthToken(true);
@@ -5444,6 +5463,7 @@ export default function App() {
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
             <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <OrderHistorySearch title="ค้นหาออเดอร์ต่างจังหวัดย้อนหลัง" query={outstationHistoryQuery} onQueryChange={setOutstationHistoryQuery} onSearch={searchOutstationHistory} onClear={() => { setOutstationHistoryQuery(""); setOutstationHistoryResults([]); setOutstationHistorySearched(false); }} loading={outstationHistoryLoading} searched={outstationHistorySearched} results={outstationHistoryResults} onOpen={openChiangmaiHistoryOrder} />
           </section>
         )}
 
