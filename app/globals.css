@@ -825,11 +825,23 @@ h2 {
   }
 }
 
-.report-export-controls {
-  display: grid;
-  grid-template-columns: 130px repeat(2, minmax(0, 1fr)) auto auto;
+.report-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 10px;
+}
+
+.report-control-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #587a61;
+  white-space: nowrap;
+}
+
+.report-control-spacer {
+  flex: 1 1 auto;
 }
 
 .daily-accordion {
@@ -1707,8 +1719,13 @@ textarea {
     justify-content: center;
   }
 
-  .report-export-controls {
-    grid-template-columns: 1fr;
+  .report-control-row .report-control-spacer {
+    display: none;
+  }
+
+  .report-control-row select,
+  .report-control-row input {
+    flex: 1 1 auto;
   }
 
   .daily-accordion-trigger {

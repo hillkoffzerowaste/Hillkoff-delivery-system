@@ -42,6 +42,7 @@ import {
   PackageX,
   PackagePlus,
   BellRing,
+  RefreshCw,
   Search,
   SearchCheck,
   Star,
@@ -6780,11 +6781,12 @@ export default function App() {
                   <h2>รายงานประจำวัน</h2>
                   <span>แยกตามวัน</span>
                 </div>
-                <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("download")}>
-                  <Download size={14} /> ส่งออกรายงาน
+                <button className="secondary compact-btn" onClick={fetchReportRangeOrders} disabled={reportRangeLoading}>
+                  <RefreshCw size={14} /> {reportRangeLoading ? "กำลังโหลด..." : "รีเฟรช"}
                 </button>
               </div>
-              <div className="report-export-controls">
+              <div className="report-control-row">
+                <span className="report-control-label">ช่วงวันที่:</span>
                 <select value={reportExportMode} onChange={e => setReportExportMode(e.target.value)}>
                   <option value="single">เลือกวันที่</option>
                   <option value="range">เลือกช่วงวันที่</option>
@@ -6797,16 +6799,17 @@ export default function App() {
                 ) : (
                   <input type="date" value={reportExportDate} onChange={e => setReportExportDate(e.target.value)} />
                 )}
+                <span className="report-control-spacer" />
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("copy")}>คัดลอก</button>
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("download")}>TXT</button>
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("csv")}>CSV</button>
-                <button className="secondary compact-btn" onClick={fetchReportRangeOrders} disabled={reportRangeLoading}>{reportRangeLoading ? "กำลังโหลด..." : "รีเฟรช"}</button>
               </div>
               {(() => {
                 const zoneOptions = [...new Set(reportRangeOrders.map((o) => o.zone).filter(Boolean))].sort();
                 const deliveryMethodLabels = { company_driver: "คนขับบริษัท", grab_pickup: "Grab รับที่ร้าน", customer_pickup: "ลูกค้ารับหน้าร้าน", outstation: "ต่างจังหวัด" };
                 return (
-                  <div className="report-export-controls">
+                  <div className="report-control-row">
+                    <span className="report-control-label">กรอง:</span>
                     <select aria-label="กรองตามคนขับ" value={dailyReportDriverFilter} onChange={(e) => setDailyReportDriverFilter(e.target.value)}>
                       <option value="">ทุกคนขับ</option>
                       {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name || driver.id}</option>)}
@@ -6866,33 +6869,6 @@ export default function App() {
                   })}
                 </div>
               )}
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>คะแนนคนขับ</h2><span>สะสมทั้งหมด · จากงานสำเร็จ รูปยืนยัน และปัญหา</span></div>
-              {report.driverScore.map(driver => (
-                <div key={driver.id} className="score-row">
-                  <div><b>{driver.name}</b><span>{driver.jobs} งาน · สำเร็จ {driver.done} · ปัญหา {driver.issues}</span></div>
-                  <strong><Star size={16} /> {driver.score}</strong>
-                </div>
-              ))}
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><h2>ปัญหาและการร้องเรียนที่ยังไม่ปิด</h2><span>{report.complaints.length} รายการ · ทุกวัน</span></div>
-              {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
-                <div key={order.id} className="complaint-card">
-                  <b>{order.customerName}</b>
-                  <small style={{ color: "#6b7280", display: "block", marginTop: "4px" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>
-                  <p>{order.complaint || order.status || "ติดปัญหา"}</p>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-                    <span>{order.id}</span>
-                    <button type="button" className="secondary compact-btn" disabled={resolvingComplaintId === order.id} onClick={() => resolveComplaint(order)}>
-                      {resolvingComplaintId === order.id ? "กำลังปิด..." : "ปิดปัญหา"}
-                    </button>
-                  </div>
-                </div>
-              ))}
             </section>
 
             <section className="panel analytics-panel">
@@ -6962,6 +6938,33 @@ export default function App() {
                   );
                 })}
               </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>คะแนนคนขับ</h2><span>สะสมทั้งหมด · จากงานสำเร็จ รูปยืนยัน และปัญหา</span></div>
+              {report.driverScore.map(driver => (
+                <div key={driver.id} className="score-row">
+                  <div><b>{driver.name}</b><span>{driver.jobs} งาน · สำเร็จ {driver.done} · ปัญหา {driver.issues}</span></div>
+                  <strong><Star size={16} /> {driver.score}</strong>
+                </div>
+              ))}
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><h2>ปัญหาและการร้องเรียนที่ยังไม่ปิด</h2><span>{report.complaints.length} รายการ · ทุกวัน</span></div>
+              {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
+                <div key={order.id} className="complaint-card">
+                  <b>{order.customerName}</b>
+                  <small style={{ color: "#6b7280", display: "block", marginTop: "4px" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>
+                  <p>{order.complaint || order.status || "ติดปัญหา"}</p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                    <span>{order.id}</span>
+                    <button type="button" className="secondary compact-btn" disabled={resolvingComplaintId === order.id} onClick={() => resolveComplaint(order)}>
+                      {resolvingComplaintId === order.id ? "กำลังปิด..." : "ปิดปัญหา"}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </section>
           </div>
         )}
