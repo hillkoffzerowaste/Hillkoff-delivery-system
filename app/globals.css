@@ -490,6 +490,13 @@ h2 {
   min-height: 0;
 }
 
+.scroll-box {
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
 .track-page {
   min-height: 100svh;
   display: grid;
@@ -2736,10 +2743,18 @@ summary:focus-visible {
   margin: 4px 0 0;
 }
 
-.sales-round-groups,
+.sales-round-groups {
+  display: grid;
+  gap: 9px;
+}
+
 .sales-round-order-list {
   display: grid;
   gap: 9px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
 }
 
 .sales-round-group {

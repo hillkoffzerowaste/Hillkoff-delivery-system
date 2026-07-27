@@ -4953,7 +4953,7 @@ export default function App() {
             )}
             <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #dc2626", background: "#fffafa" }}>
               <div className="panel-head"><h2>⏳ งานรอของ / ของไม่ครบ</h2><span>{salesWaitingOrders.length} งาน{salesWaitingOrders.length > salesWaitingOrdersVisible.length ? ` · แสดง ${salesWaitingOrdersVisible.length} งานล่าสุด` : ""}</span></div>
-              {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div style={{ display: "grid", gap: "8px" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><ReworkNotice order={order} compact /><div style={{ display: "flex", gap: "7px", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
+              {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><ReworkNotice order={order} compact /><div style={{ display: "flex", gap: "7px", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
             </section>
             <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
               <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
@@ -5110,7 +5110,7 @@ export default function App() {
                     {inProgress.length === 0 ? (
                       <p className="muted" style={{ textAlign: "center", padding: "8px 0" }}>ยังไม่มีงานที่กำลังส่ง</p>
                     ) : (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+                      <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
                         {Object.keys(byDriver).map(did => {
                           const driver = drivers.find(d => d.id === did);
                           const items = byDriver[did] || [];
@@ -5167,7 +5167,7 @@ export default function App() {
                   </div>
 
                   <label className="search" style={{ marginTop: "8px" }}><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร ผู้ติดต่อ หรือพื้นที่" /></label>
-                  <div className="customer-list">
+                  <div className="customer-list scroll-box">
                     {(() => {
                       const q = customerQuery.trim();
                       const displayCustomers = q ? filteredCustomers.slice(0, 30) : (showAllCustomers ? customers : customers.slice(0, customerPreviewCount));
@@ -5221,7 +5221,7 @@ export default function App() {
                       {customerHistoryLoading ? <p className="muted" style={{ margin: 0 }}>กำลังค้นหาออเดอร์เก่าจาก Firestore…</p> : customerHistory.length === 0 ? (
                         <p className="muted" style={{ margin: 0 }}>ยังไม่พบออเดอร์ของลูกค้ารายนี้</p>
                       ) : (
-                        <div style={{ display: "grid", gap: "7px", maxHeight: "420px", overflowY: "auto" }}>
+                        <div className="scroll-box" style={{ display: "grid", gap: "7px" }}>
                           {customerHistory.map(order => (
                             <article key={order.id} style={{ background: "#fff", border: "1px solid #d1fae5", borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
                               <div style={{ minWidth: 0 }}>
@@ -5386,7 +5386,8 @@ export default function App() {
               {Object.keys(state.driverLocations || {}).length === 0 ? (
                 <p className="muted">ยังไม่มีคนขับเช็คอิน</p>
               ) : (
-                Object.values(state.driverLocations || {})
+                <div className="scroll-box">
+                {Object.values(state.driverLocations || {})
                   .sort((a, b) => b.timestamp - a.timestamp)
                   .map(location => {
                     const currentOrder = orders.find(o => o.driverId === location.driverId && (o.status === "กำลังส่ง" || o.status === "กำลังจัดส่ง"));
@@ -5428,7 +5429,8 @@ export default function App() {
                         )}
                       </div>
                     );
-                  })
+                  })}
+                </div>
               )}
             </section>
 
@@ -5437,7 +5439,7 @@ export default function App() {
               {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
                 <p className="muted">ไม่มีออเดอร์ใหม่</p>
               ) : (
-                <div style={{ display: "grid", gap: "8px" }}>
+                <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>
                   {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").map(order => (
                     <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
                       <div style={{ flex: 1 }}>
@@ -5466,7 +5468,7 @@ export default function App() {
                   <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
-              <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+              <div className="scroll-box">
                 {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 && completedTodayRouteTasks.length === 0 ? (
                   <p className="muted">ยังไม่มีการส่ง</p>
                 ) : (
@@ -5534,7 +5536,7 @@ export default function App() {
               <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>
               <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
             </div>
-            <div style={{ display: "grid", gap: "10px" }}>
+            <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
               {salesOutstationOrders.map(order => (
                 <article key={order.id} className="role-order-card">
                   <label className="outstation-label-order-select">
@@ -5552,7 +5554,7 @@ export default function App() {
               ))}
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
-            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 
