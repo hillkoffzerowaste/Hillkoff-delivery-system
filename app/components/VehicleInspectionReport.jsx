@@ -210,7 +210,7 @@ export default function VehicleInspectionReport({ apiFetch, role, email = "" }) 
         <button className="secondary" disabled={!selected.length} onClick={() => exportCsv(true)}><Download size={16} /> ส่งออกที่เลือก ({selected.length})</button>
         <button className="primary" onClick={() => exportCsv(false)}><Download size={16} /> ส่งออกทั้งหมดตามตัวกรอง</button>
       </div>
-      {report.rows.length === 0 ? <p className="muted">ไม่พบข้อมูลในช่วงเวลาที่เลือก</p> : <div className="vehicle-report-table">
+      {report.rows.length === 0 ? <p className="muted">ไม่พบข้อมูลในช่วงเวลาที่เลือก</p> : <div className="vehicle-report-table scroll-box">
         <div className="vehicle-report-row vehicle-report-head"><input type="checkbox" checked={allSelected} onChange={(event) => setSelected(event.target.checked ? report.rows.map((row) => row.id) : [])} /><span>วันที่/รถ</span><span>คนขับ</span><span>เลขไมล์</span><span>ระยะทาง</span><span>ออเดอร์</span><span>น้ำมัน</span><span>ตรวจรถ</span></div>
         {report.rows.map((row) => <div className="vehicle-report-row" key={row.id}>
           <input type="checkbox" checked={selected.includes(row.id)} onChange={(event) => setSelected((items) => event.target.checked ? [...new Set([...items, row.id])] : items.filter((id) => id !== row.id))} />
@@ -282,13 +282,17 @@ export default function VehicleInspectionReport({ apiFetch, role, email = "" }) 
         <div className="panel-head"><h2>รถและผู้ครอบครองทรัพย์สิน</h2><span>{vehicles.length} คัน</span></div>
         <div className="form-grid two"><input placeholder="รหัสทรัพย์สิน" value={vehicleForm.assetCode} onChange={(event) => setVehicleForm((value) => ({ ...value, id: event.target.value, assetCode: event.target.value }))} /><input placeholder="ทะเบียนรถ" value={vehicleForm.plate} onChange={(event) => setVehicleForm((value) => ({ ...value, plate: event.target.value }))} /><input placeholder="ยี่ห้อ" value={vehicleForm.brand} onChange={(event) => setVehicleForm((value) => ({ ...value, brand: event.target.value }))} /><input placeholder="รุ่น" value={vehicleForm.model} onChange={(event) => setVehicleForm((value) => ({ ...value, model: event.target.value }))} /><input placeholder="ผู้ครอบครองทรัพย์สิน" value={vehicleForm.responsiblePerson} onChange={(event) => setVehicleForm((value) => ({ ...value, responsiblePerson: event.target.value }))} /><input placeholder="หน่วยงาน" value={vehicleForm.department} onChange={(event) => setVehicleForm((value) => ({ ...value, department: event.target.value }))} /></div>
         <button className="primary" onClick={() => saveMaster("vehicle")}><Plus size={16} /> บันทึกรถ</button>
+        <div className="scroll-box">
         {vehicles.map((vehicle) => <div className="driver-load-row" key={vehicle.id}><div><b>{vehicle.plate} · {vehicle.assetCode}</b><span>{vehicle.responsiblePerson || "-"} · {vehicle.active === false ? "ปิดใช้งาน" : "ใช้งาน"}</span></div><div><button className="secondary" onClick={() => setVehicleForm(vehicle)}><Pencil size={14} /></button> <button className="secondary danger" onClick={() => disableMaster("vehicle", vehicle)}><Trash2 size={14} /></button></div></div>)}
+        </div>
       </section>
       <section className="panel">
         <div className="panel-head"><h2>คนขับ</h2><span>{drivers.length} คน</span></div>
         <div className="form-grid two"><input placeholder="ชื่อคนขับ" value={driverForm.name} onChange={(event) => setDriverForm((value) => ({ ...value, name: event.target.value }))} /><input placeholder="เบอร์โทร" value={driverForm.phone} onChange={(event) => setDriverForm((value) => ({ ...value, phone: event.target.value, phoneDigits: event.target.value.replace(/\D/g, "") }))} /></div>
         <button className="primary" onClick={() => saveMaster("driver")}><Plus size={16} /> บันทึกคนขับ</button>
+        <div className="scroll-box">
         {drivers.map((driver) => <div className="driver-load-row" key={driver.id}><div><b>{driver.name}</b><span>{driver.phone || driver.phoneDigits} · {driver.active === false ? "ปิดใช้งาน" : "ใช้งาน"}</span></div><div><button className="secondary" onClick={() => setDriverForm(driver)}><Pencil size={14} /></button> <button className="secondary danger" onClick={() => disableMaster("driver", driver)}><Trash2 size={14} /></button></div></div>)}
+        </div>
       </section>
     </div>}
 
