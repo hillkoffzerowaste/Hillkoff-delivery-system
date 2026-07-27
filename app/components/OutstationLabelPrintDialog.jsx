@@ -211,10 +211,19 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
 
               <section>
                 <h3>ข้อมูลผู้รับ</h3>
-                {visibleRecipientHistory.length > 0 && <InputField label="ประวัติชื่อ/ที่อยู่"><select defaultValue="" onChange={event => {
-                  const record = visibleRecipientHistory.find(item => item.id === event.target.value);
-                  if (record) applyRecipientToOrder({ recipientName: record.recipientName, recipientAddressLines: record.recipientAddressLines, recipientPhone: record.recipientPhone });
-                }}><option value="">เลือกข้อมูลเดิม</option>{visibleRecipientHistory.map(record => <option key={record.id} value={record.id}>{record.recipientName} · {(record.recipientAddressLines || []).join(" ")}</option>)}</select></InputField>}
+                <InputField label="ประวัติชื่อ/ที่อยู่">
+                  <select
+                    defaultValue=""
+                    disabled={visibleRecipientHistory.length === 0}
+                    onChange={event => {
+                      const record = visibleRecipientHistory.find(item => item.id === event.target.value);
+                      if (record) applyRecipientToOrder({ recipientName: record.recipientName, recipientAddressLines: record.recipientAddressLines, recipientPhone: record.recipientPhone });
+                    }}
+                  >
+                    <option value="">{visibleRecipientHistory.length > 0 ? "เลือกข้อมูลเดิม" : "ยังไม่มีที่อยู่บันทึกไว้"}</option>
+                    {visibleRecipientHistory.map(record => <option key={record.id} value={record.id}>{record.recipientName} · {(record.recipientAddressLines || []).join(" ")}</option>)}
+                  </select>
+                </InputField>
                 <InputField label="ชื่อผู้รับ"><input value={current.recipientName || ""} onChange={event => updateCurrent({ recipientName: event.target.value })} /></InputField>
                 <InputField label="ที่อยู่ผู้รับ 3–4 บรรทัด"><textarea rows={4} value={linesToText(current.recipientAddressLines)} onChange={event => updateCurrent({ recipientAddressLines: textToLines(event.target.value, 4) })} /></InputField>
                 <InputField label="โทรศัพท์"><input value={current.recipientPhone || ""} onChange={event => updateCurrent({ recipientPhone: event.target.value })} /></InputField>
