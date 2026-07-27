@@ -6,6 +6,7 @@ import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicl
 import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
+import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
 import OutstationQrScannerDialog from "./components/OutstationQrScannerDialog";
 import OrderReviewQrCode from "./components/OrderReviewQrCode";
@@ -696,6 +697,7 @@ export default function App() {
   const [outstationSenderForm, setOutstationSenderForm] = useState({ name: "", addressLines: ["", "", ""] });
   const [outstationSenderLoading, setOutstationSenderLoading] = useState(false);
   const [outstationSenderSaving, setOutstationSenderSaving] = useState(false);
+  const [deliverySheetUrl, setDeliverySheetUrl] = useState("");
   const [settingsNewCheckerName, setSettingsNewCheckerName] = useState({ store: "", pack: "" });
   const [backupList, setBackupList] = useState([]);
   const [backupSummary, setBackupSummary] = useState(null);
@@ -3637,8 +3639,12 @@ export default function App() {
       const res = await fetch("/api/admin/delivery-sheet/setup", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setSyncStatus(`✅ ตั้งค่า Google Sheet แล้ว: ${json?.data?.spreadsheetUrl || json?.spreadsheetUrl || ""}`);
-      if (json?.data?.spreadsheetUrl || json?.spreadsheetUrl) window.open(json.data?.spreadsheetUrl || json.spreadsheetUrl, "_blank", "noopener");
+      const spreadsheetUrl = json?.data?.spreadsheetUrl || json?.spreadsheetUrl || "";
+      setSyncStatus(`✅ ตั้งค่า Google Sheet แล้ว: ${spreadsheetUrl}`);
+      if (spreadsheetUrl) {
+        setDeliverySheetUrl(spreadsheetUrl);
+        window.open(spreadsheetUrl, "_blank", "noopener");
+      }
     } catch (e) { setSyncStatus(`❌ ตั้งค่า Google Sheet ไม่สำเร็จ: ${e?.message || e}`); }
   };
 
@@ -7084,9 +7090,22 @@ export default function App() {
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2>🔗 ระบบภายนอก</h2><span>ใช้ครั้งแรกเท่านั้น</span></div>
-                  <button className="secondary wide" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่</button>
-                  <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ</p>
+                  <div className="panel-head"><h2>🔗 ระบบภายนอก</h2><span>ลิงก์ที่ใช้บ่อย</span></div>
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <a href={HILLKOFF_LINE_URL} target="_blank" rel="noreferrer" className="secondary wide" style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "10px" }}>
+                      เปิด LINE Official Account
+                    </a>
+                    {deliverySheetUrl && (
+                      <a href={deliverySheetUrl} target="_blank" rel="noreferrer" className="secondary wide" style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "10px" }}>
+                        เปิด Google Sheet ระบบส่งของเชียงใหม่
+                      </a>
+                    )}
+                    <button className="secondary wide" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่ (ใช้ครั้งแรกเท่านั้น)</button>
+                  </div>
+                  <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>
+                    ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ
+                    {!deliverySheetUrl && " ลิงก์เปิด Sheet จะโผล่ที่นี่หลังกดตั้งค่า/รันซ้ำ (ระบบยังไม่เก็บลิงก์ไว้ถาวร ต้องกดปุ่มอีกครั้งถ้าปิดหน้าไปแล้ว)"}
+                  </p>
                 </section>
               </>
             )}
