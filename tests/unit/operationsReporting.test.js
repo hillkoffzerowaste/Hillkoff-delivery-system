@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bangkokDateKey,
   classifyOrderArea,
+  dailyOrdersReadPlan,
   isChiangmaiBacklogForDate,
   isChiangmaiWaitingForDate,
   isOutstationWaitingForDate,
@@ -65,5 +66,13 @@ describe("operations reporting policies", () => {
         toExclusive: "2026-07-31T17:00:00.000Z"
       }
     ]);
+  });
+
+  it("scopes the daily report read to a single serviceDate range on orders", () => {
+    expect(dailyOrdersReadPlan({ from: "2026-07-01", to: "2026-07-31" })).toEqual([
+      { collection: "orders", field: "serviceDate", from: "2026-07-01", to: "2026-07-31" }
+    ]);
+    expect(() => dailyOrdersReadPlan({ from: "2026-07-31", to: "2026-07-01" })).toThrow("Invalid report date range");
+    expect(() => dailyOrdersReadPlan({ from: "bad", to: "2026-07-31" })).toThrow("Invalid report date range");
   });
 });

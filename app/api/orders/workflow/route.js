@@ -43,6 +43,7 @@ export async function PATCH(request) {
         patch.status = "รอคนขับรับ";
         patch.queueStatus = "queued";
         patch.complaint = reason;
+        patch.complaintStatus = "open";
         patch.sharedToLine = false;
         patch.acceptedAt = "";
         patch.driverSequence = 0;
@@ -62,6 +63,7 @@ export async function PATCH(request) {
         const deliveredAt = String(body.deliveredAt || now).trim().slice(0, 80) || now;
         Object.assign(patch, driverReworkPatch(order, profile, driverNote, now), { lastDeliveryAt: deliveredAt });
         patch.complaint = driverNote;
+        patch.complaintStatus = "open";
         const podPhotoCount = Number(body.podPhotoCount);
         patch.podPhotoCount = Number.isFinite(podPhotoCount) ? Math.max(0, Math.min(5, podPhotoCount)) : Math.max(0, Math.min(5, Number(order.podPhotoCount) || 0));
         Object.assign(history, { result: "delivery_rework", reworkRoute: patch.reworkRoute, reworkStatus: patch.reworkStatus, podPhotoCount: patch.podPhotoCount });
@@ -224,6 +226,12 @@ export async function PATCH(request) {
       if (order.reworkRequired) throw Object.assign(new Error("Order rework must be resolved before driver queue"), { status: 409 });
       if (["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod)) throw Object.assign(new Error("Pickup and outstation orders do not enter the driver queue"), { status: 409 });
       patch.queueStatus = "queued"; patch.status = "รอคนขับรับ"; patch.queuedAt = now; patch.queuedBy = profile.name || profile.email;
+    } else if (["sales", "admin"].includes(profile.role) && action === "complaint_resolve") {
+      const note = String(body.note || "").trim().slice(0, 1000);
+      if (!note) throw Object.assign(new Error("กรุณาระบุเหตุผลหรือวิธีแก้ไขก่อนปิดปัญหา"), { status: 400 });
+      if (!order.complaint) throw Object.assign(new Error("ออเดอร์นี้ไม่มีปัญหาที่ต้องปิด"), { status: 409 });
+      patch.complaintStatus = "resolved";
+      Object.assign(history, { note, result: "complaint_resolved" });
     } else {
       throw Object.assign(new Error("Action not allowed"), { status: 403 });
     }

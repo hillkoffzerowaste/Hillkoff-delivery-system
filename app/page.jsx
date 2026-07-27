@@ -824,12 +824,17 @@ export default function App() {
   const [onlineReturnTarget, setOnlineReturnTarget] = useState(null);
   const [onlineReturnReason, setOnlineReturnReason] = useState("");
   const [selectedMapDriverId, setSelectedMapDriverId] = useState("");
-  const [openReportDate, setOpenReportDate] = useState("");
   const [reportExportMode, setReportExportMode] = useState("single");
   const [reportExportDate, setReportExportDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
   const [dailyReportDriverFilter, setDailyReportDriverFilter] = useState("");
+  const [reportZoneFilter, setReportZoneFilter] = useState("");
+  const [reportDeliveryMethodFilter, setReportDeliveryMethodFilter] = useState("");
+  const [reportRangeOrders, setReportRangeOrders] = useState([]);
+  const [reportRangeLoading, setReportRangeLoading] = useState(false);
+  const [reportRangeError, setReportRangeError] = useState("");
+  const [resolvingComplaintId, setResolvingComplaintId] = useState("");
   const [ordersLimit, setOrdersLimit] = useState(100);
   const customersLimit = 200;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
@@ -1458,6 +1463,60 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
+
+  const fetchReportRangeOrders = useCallback(async () => {
+    if (!["sales", "admin"].includes(state.auth?.role)) return;
+    const today = toServiceDateKey(new Date());
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const weekStart = toServiceDateKey(new Date(Date.parse(`${today}T12:00:00+07:00`) - 6 * 86400000));
+    const viewFrom = reportExportMode === "range" ? reportExportStartDate : reportExportDate;
+    const viewTo = reportExportMode === "range" ? reportExportEndDate : reportExportDate;
+    const from = [monthStart, weekStart, viewFrom].filter(Boolean).sort()[0] || monthStart;
+    const to = [today, viewTo].filter(Boolean).sort().slice(-1)[0] || today;
+    setReportRangeLoading(true);
+    setReportRangeError("");
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/orders/report-range", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ from, to })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setReportRangeOrders(Array.isArray(json.data) ? json.data : []);
+    } catch (error) {
+      setReportRangeError(error?.message || String(error));
+    } finally {
+      setReportRangeLoading(false);
+    }
+  }, [state.auth?.role, reportExportMode, reportExportDate, reportExportStartDate, reportExportEndDate, refreshAuthToken]);
+
+  useEffect(() => {
+    if (displayTab !== "reports") return;
+    fetchReportRangeOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayTab, reportExportMode, reportExportDate, reportExportStartDate, reportExportEndDate, state.auth?.role]);
+
+  const resolveComplaint = async (order) => {
+    const note = window.prompt(`ระบุเหตุผล/วิธีแก้ไขก่อนปิดปัญหาออเดอร์ "${order.id}":`, "");
+    if (note === null) return;
+    if (!note.trim()) return setSyncStatus("⚠️ กรุณาระบุเหตุผลก่อนปิดปัญหา");
+    setResolvingComplaintId(order.id);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/orders/workflow", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ orderId: order.id, action: "complaint_resolve", note: note.trim() })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setReportRangeOrders((prev) => prev.map((item) => item.id === order.id ? { ...item, complaintStatus: "resolved" } : item));
+      setSyncStatus(`✅ ปิดปัญหาออเดอร์ "${order.id}" แล้ว`);
+    } catch (error) { setSyncStatus(`❌ ปิดปัญหาไม่สำเร็จ: ${error?.message || error}`); }
+    finally { setResolvingComplaintId(""); }
+  };
 
   const parseChatTime = (v) => {
     try {
@@ -2271,11 +2330,12 @@ export default function App() {
   };
 
   const report = useMemo(() => {
-    const delivered = orders.filter(order => order.status === "ส่งสำเร็จ");
-    const complaints = orders.filter(order => order.status === "ติดปัญหา" || order.complaint);
-    const cod = orders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
-    return { delivered: delivered.length, complaints, cod, driverScore: aggregateLatestDriverReviews(orders) };
-  }, [orders]);
+    const source = reportRangeOrders.length ? reportRangeOrders : orders;
+    const delivered = source.filter(order => order.status === "ส่งสำเร็จ");
+    const complaints = source.filter(order => (order.status === "ติดปัญหา" || order.complaint) && order.complaintStatus !== "resolved");
+    const cod = source.reduce((sum, order) => sum + Number(order.cod || 0), 0);
+    return { delivered: delivered.length, complaints, cod, driverScore: aggregateLatestDriverReviews(source) };
+  }, [reportRangeOrders, orders]);
 
   const filteredCustomers = customers.filter(customer => customerMatchesQuery(customer, customerQuery));
   const customerNameCounts = useMemo(() => {
@@ -4414,7 +4474,7 @@ export default function App() {
 
   const ordersByServiceDate = useMemo(() => {
     const groups = {};
-    (state.orders || []).forEach((o) => {
+    (reportRangeOrders || []).forEach((o) => {
       const k = getOrderServiceDate(o);
       if (!k) return;
       groups[k] = groups[k] || [];
@@ -4422,7 +4482,7 @@ export default function App() {
     });
     const keys = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1)); // desc
     return { keys, groups };
-  }, [state.orders]);
+  }, [reportRangeOrders]);
 
   const todaySummary = useMemo(() => summarizeOrders(todayOrdersOnly), [todayOrdersOnly]);
   const currentMonthKey = todayServiceDate.slice(0, 7);
@@ -4666,12 +4726,6 @@ export default function App() {
     }
     copyToClipboard(reportText);
   };
-
-  useEffect(() => {
-    if (openReportDate) return;
-    const first = ordersByServiceDate.keys[0] || "";
-    if (first) setOpenReportDate(first);
-  }, [openReportDate, ordersByServiceDate.keys]);
 
   if (!auth.role || auth.role === "driver-register") {
     return (
@@ -6746,59 +6800,53 @@ export default function App() {
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("copy")}>คัดลอก</button>
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("download")}>TXT</button>
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("csv")}>CSV</button>
+                <button className="secondary compact-btn" onClick={fetchReportRangeOrders} disabled={reportRangeLoading}>{reportRangeLoading ? "กำลังโหลด..." : "รีเฟรช"}</button>
               </div>
-              {ordersByServiceDate.keys.length === 0 ? (
-                <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงาน</p>
+              {(() => {
+                const zoneOptions = [...new Set(reportRangeOrders.map((o) => o.zone).filter(Boolean))].sort();
+                const deliveryMethodLabels = { company_driver: "คนขับบริษัท", grab_pickup: "Grab รับที่ร้าน", customer_pickup: "ลูกค้ารับหน้าร้าน", outstation: "ต่างจังหวัด" };
+                return (
+                  <div className="report-export-controls">
+                    <select aria-label="กรองตามคนขับ" value={dailyReportDriverFilter} onChange={(e) => setDailyReportDriverFilter(e.target.value)}>
+                      <option value="">ทุกคนขับ</option>
+                      {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name || driver.id}</option>)}
+                    </select>
+                    <select aria-label="กรองตามโซน" value={reportZoneFilter} onChange={(e) => setReportZoneFilter(e.target.value)}>
+                      <option value="">ทุกโซน</option>
+                      {zoneOptions.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                    </select>
+                    <select aria-label="กรองตามประเภทการส่ง" value={reportDeliveryMethodFilter} onChange={(e) => setReportDeliveryMethodFilter(e.target.value)}>
+                      <option value="">ทุกประเภทการส่ง</option>
+                      {Object.entries(deliveryMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </div>
+                );
+              })()}
+              {reportRangeError && <p className="muted" style={{ color: "#b91c1c" }}>❌ โหลดข้อมูลรายงานไม่สำเร็จ: {reportRangeError}</p>}
+              {reportRangeLoading && ordersByServiceDate.keys.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>กำลังโหลดข้อมูลรายงาน...</p>
+              ) : ordersByServiceDate.keys.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงานในช่วงที่เลือก</p>
               ) : (
-                <div className="daily-report-scroll">
-                  {(() => {
-                    const selectedKey = openReportDate || ordersByServiceDate.keys[0] || "";
-                    const dayOrders = ordersByServiceDate.groups[selectedKey] || [];
-                    const list = dailyReportDriverFilter ? dayOrders.filter((order) => order.driverId === dailyReportDriverFilter) : dayOrders;
+                <div className="daily-report-scroll" style={{ display: "grid", gap: "10px" }}>
+                  {ordersByServiceDate.keys.map((key) => {
+                    const dayOrders = ordersByServiceDate.groups[key] || [];
+                    const list = dayOrders
+                      .filter((order) => !dailyReportDriverFilter || order.driverId === dailyReportDriverFilter)
+                      .filter((order) => !reportZoneFilter || order.zone === reportZoneFilter)
+                      .filter((order) => !reportDeliveryMethodFilter || order.deliveryMethod === reportDeliveryMethodFilter);
                     const stats = summarizeOrders(list);
-                    const selectedDate = parseServiceDateKey(selectedKey);
-                    const selectedTitle = selectedDate ? selectedDate.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : selectedKey;
-                    const isRecentKey = ordersByServiceDate.keys.slice(0, 3).includes(selectedKey);
-                    const cacheAtLimit = orders.length >= recentOrdersLimit(ordersLimit, auth.role);
+                    const dt = parseServiceDateKey(key);
+                    const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : key;
                     return (
-                      <div className="daily-accordion open">
-                        <div className="daily-accordion-trigger">
-                          <select
-                            className="daily-title"
-                            value={selectedKey}
-                            onChange={(e) => {
-                              setOpenReportDate(e.target.value);
-                              setReportExportDate(e.target.value);
-                            }}
-                            aria-label="เลือกวันที่รายงาน"
-                          >
-                            {ordersByServiceDate.keys.map((k) => {
-                              const dt = parseServiceDateKey(k);
-                              const title = dt ? dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : k;
-                              return <option key={k} value={k}>{title}</option>;
-                            })}
-                          </select>
-                          <select
-                            aria-label="กรองตามคนขับ"
-                            value={dailyReportDriverFilter}
-                            onChange={(e) => setDailyReportDriverFilter(e.target.value)}
-                          >
-                            <option value="">ทุกคนขับ</option>
-                            {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name || driver.id}</option>)}
-                          </select>
+                      <details key={key} className="daily-accordion">
+                        <summary className="daily-accordion-trigger">
+                          <b className="daily-title">{title}</b>
                           <span className="daily-meta">{stats.total} งาน</span>
                           <span className="daily-cod">COD ฿{money(stats.cod)}</span>
                           <ChevronDown className="daily-chevron" size={16} />
-                        </div>
-
+                        </summary>
                         <div className="daily-accordion-body">
-                          <b>{selectedTitle}</b>
-                          {!isRecentKey && cacheAtLimit && (
-                            <p className="muted" style={{ color: "#b45309" }}>
-                              ⚠️ ข้อมูลของวันที่นี้อาจไม่ครบ เพราะออเดอร์เก่าบางส่วนยังไม่ได้โหลดในเครื่อง
-                              {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <> — <button type="button" className="secondary compact-btn" onClick={() => setOrdersLimit(nextOrdersLimit)}>โหลดออเดอร์เก่าเพิ่ม</button></>}
-                            </p>
-                          )}
                           <div className="status-chip-row">
                             <span className="status-chip waiting">รอรับ <b>{stats.waiting}</b></span>
                             <span className="status-chip active">กำลังส่ง <b>{stats.active}</b></span>
@@ -6807,15 +6855,15 @@ export default function App() {
                           <div className="daily-actions">
                             <span>สำเร็จ {stats.completionRate}% · COD สำเร็จ ฿{money(stats.codDone)}</span>
                             <div>
-                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "copy")}>คัดลอก</button>
-                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "download")}>TXT</button>
-                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "csv")}>CSV</button>
+                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(key, "copy")}>คัดลอก</button>
+                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(key, "download")}>TXT</button>
+                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(key, "csv")}>CSV</button>
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </details>
                     );
-                  })()}
+                  })}
                 </div>
               )}
             </section>
@@ -6837,7 +6885,12 @@ export default function App() {
                   <b>{order.customerName}</b>
                   <small style={{ color: "#6b7280", display: "block", marginTop: "4px" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>
                   <p>{order.complaint || order.status || "ติดปัญหา"}</p>
-                  <span>{order.id}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                    <span>{order.id}</span>
+                    <button type="button" className="secondary compact-btn" disabled={resolvingComplaintId === order.id} onClick={() => resolveComplaint(order)}>
+                      {resolvingComplaintId === order.id ? "กำลังปิด..." : "ปิดปัญหา"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </section>
