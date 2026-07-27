@@ -46,7 +46,6 @@ import {
   SearchCheck,
   Star,
   Store,
-  Sparkles,
   Truck,
   UserCheck,
   Users,
@@ -575,6 +574,10 @@ const DEFAULT_PREPARATION_CHECKERS = {
   pack: ["กิต", "มาย", "ยุทธ", "หล้า", "มุก"]
 };
 
+// Full destructive controls (reset dashboard, migrate driver identities) stay restricted to this
+// short allowlist even for other "admin"-role accounts, as an extra guardrail beyond role checks.
+const SUPER_ADMIN_EMAILS = ["online_marketing@hillkoff.com"];
+
 function BookingNumberInput({ value, onChange, required = false }) {
   const [manualPrefixMode, setManualPrefixMode] = useState(false);
   const rawValue = String(value || "").trim().toUpperCase();
@@ -686,12 +689,21 @@ export default function App() {
   const [staffAccountForm, setStaffAccountForm] = useState({ username: "", password: "", name: "", role: "store" });
   const [notificationPermission, setNotificationPermission] = useState("default");
 
-  // Sales-only database chatbot sidebar
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiInput, setAiInput] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiMessages, setAiMessages] = useState([]); // [{role:'user'|'model', text:string}]
-  const aiListRef = useRef(null);
+  // Settings tab: account list, vehicle master, checker names, backup/restore
+  const [staffAccounts, setStaffAccounts] = useState([]);
+  const [staffAccountsLoading, setStaffAccountsLoading] = useState(false);
+  const [vehicleMasterList, setVehicleMasterList] = useState([]);
+  const [vehicleMasterLoading, setVehicleMasterLoading] = useState(false);
+  const [vehicleMasterForm, setVehicleMasterForm] = useState({ id: "", plate: "", vehicleType: "", brand: "", model: "", responsiblePerson: "", department: "" });
+  const [settingsNewCheckerName, setSettingsNewCheckerName] = useState({ store: "", pack: "" });
+  const [backupList, setBackupList] = useState([]);
+  const [backupSummary, setBackupSummary] = useState(null);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupNowLoading, setBackupNowLoading] = useState(false);
+  const [restoreBackupId, setRestoreBackupId] = useState("");
+  const [restoreReplace, setRestoreReplace] = useState(false);
+  const [restoreConfirmText, setRestoreConfirmText] = useState("");
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setAppClock(new Date()), 60000);
@@ -817,6 +829,7 @@ export default function App() {
   const [reportExportDate, setReportExportDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportStartDate, setReportExportStartDate] = useState(() => toServiceDateKey(new Date()));
   const [reportExportEndDate, setReportExportEndDate] = useState(() => toServiceDateKey(new Date()));
+  const [dailyReportDriverFilter, setDailyReportDriverFilter] = useState("");
   const [ordersLimit, setOrdersLimit] = useState(100);
   const customersLimit = 200;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
@@ -1426,19 +1439,6 @@ export default function App() {
     } catch {}
   };
 
-  const scrollAiToBottom = () => {
-    try {
-      const el = aiListRef.current;
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
-    } catch {}
-  };
-
-  useEffect(() => {
-    if (!aiOpen) return;
-    setTimeout(scrollAiToBottom, 0);
-  }, [aiOpen, aiMessages]);
-
   const refreshAuthToken = useCallback(async (forceRefresh = true) => {
     const authClient = getFirebaseAuth();
     const user = authClient.currentUser;
@@ -1458,58 +1458,6 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
-
-  const sendToChatbot = async (text) => {
-    const q = String(text || "").trim();
-    if (!q) return;
-    if (state.auth?.role !== "sales") return;
-    if (!state.auth?.token) return;
-
-    setAiBusy(true);
-    setAiInput("");
-    setAiMessages((prev) => [...prev, { role: "user", text: q }, { role: "model", text: "" }]);
-
-    try {
-      const idToken = await refreshAuthToken();
-      const res = await fetch("/api/chat/bot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({
-          question: q,
-          history: aiMessages.slice(-8).map((m) => ({ role: m.role, text: m.text }))
-        }),
-      });
-      if (!res.ok) {
-        const errorPayload = await res.json().catch(() => null);
-        throw new Error(errorPayload?.error || `HTTP ${res.status}`);
-      }
-      const json = await res.json();
-      if (!json?.ok) throw new Error(json?.error || "chatbot failed");
-      setAiMessages((prev) => {
-        const next = prev.slice();
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === "model") {
-            next[i] = { ...next[i], text: json?.data?.answer || "ไม่พบคำตอบจากฐานข้อมูลครับ" };
-            break;
-          }
-        }
-        return next;
-      });
-    } catch (e) {
-      setAiMessages((prev) => {
-        const next = prev.slice();
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === "model") {
-            next[i] = { ...next[i], text: `❌ ขออภัย แชทบอทฐานข้อมูลตอบไม่ได้: ${e?.message || String(e)}` };
-            break;
-          }
-        }
-        return next;
-      });
-    } finally {
-      setAiBusy(false);
-    }
-  };
 
   const parseChatTime = (v) => {
     try {
@@ -3245,6 +3193,14 @@ export default function App() {
 
   useEffect(() => { loadCheckerLists(); }, [loadCheckerLists]);
 
+  useEffect(() => {
+    if (displayTab !== "settings" || auth.role !== "admin") return;
+    loadStaffAccounts();
+    loadVehicleMasterList();
+    loadBackupList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayTab, auth.role]);
+
   const openWorkModal = (order, role) => {
     clearWorkPhotos();
     delete workPhotoFilesRef.current[`${role}:${order.id}`];
@@ -3623,6 +3579,116 @@ export default function App() {
       setSyncStatus(`✅ ตั้งค่า Google Sheet แล้ว: ${json?.data?.spreadsheetUrl || json?.spreadsheetUrl || ""}`);
       if (json?.data?.spreadsheetUrl || json?.spreadsheetUrl) window.open(json.data?.spreadsheetUrl || json.spreadsheetUrl, "_blank", "noopener");
     } catch (e) { setSyncStatus(`❌ ตั้งค่า Google Sheet ไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const loadStaffAccounts = async () => {
+    if (auth.role !== "admin") return;
+    setStaffAccountsLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStaffAccounts(Array.isArray(json.data) ? json.data : []);
+    } catch (e) { setSyncStatus(`❌ โหลดรายชื่อบัญชีไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setStaffAccountsLoading(false); }
+  };
+
+  const toggleStaffAccountActive = async (account) => {
+    const nextActive = !(account.active !== false);
+    if (!window.confirm(`ยืนยัน${nextActive ? "เปิด" : "ปิด"}ใช้งานบัญชี "${account.name || account.username}"?`)) return;
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ uid: account.uid, active: nextActive }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStaffAccounts((prev) => prev.map((item) => item.uid === account.uid ? { ...item, active: nextActive } : item));
+      setSyncStatus(`✅ ${nextActive ? "เปิด" : "ปิด"}ใช้งานบัญชี "${account.name || account.username}" แล้ว`);
+    } catch (e) { setSyncStatus(`❌ อัปเดตบัญชีไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const loadVehicleMasterList = async () => {
+    setVehicleMasterLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/vehicle-master?includeInactive=true", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setVehicleMasterList(Array.isArray(json.data) ? json.data : []);
+    } catch (e) { setSyncStatus(`❌ โหลดรายการรถไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setVehicleMasterLoading(false); }
+  };
+
+  const saveVehicleMasterRecord = async () => {
+    const id = vehicleMasterForm.id.trim() || vehicleMasterForm.plate.trim();
+    if (!id) return setSyncStatus("⚠️ กรุณากรอกทะเบียนรถหรือรหัสทรัพย์สิน");
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/vehicle-master", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ ...vehicleMasterForm, id }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setVehicleMasterForm({ id: "", plate: "", vehicleType: "", brand: "", model: "", responsiblePerson: "", department: "" });
+      setSyncStatus(`✅ บันทึกข้อมูลรถ "${json.data.plate || json.data.id}" แล้ว`);
+      await loadVehicleMasterList();
+    } catch (e) { setSyncStatus(`❌ บันทึกข้อมูลรถไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const disableVehicleMasterRecord = async (vehicle) => {
+    if (!window.confirm(`ยืนยันปิดใช้งานรถ "${vehicle.plate || vehicle.id}"?`)) return;
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/vehicle-master", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ id: vehicle.id }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setVehicleMasterList((prev) => prev.map((item) => item.id === vehicle.id ? { ...item, active: false } : item));
+      setSyncStatus(`✅ ปิดใช้งานรถ "${vehicle.plate || vehicle.id}" แล้ว`);
+    } catch (e) { setSyncStatus(`❌ ปิดใช้งานรถไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const loadBackupList = async () => {
+    setBackupLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/backup/list", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setBackupList(Array.isArray(json.backups) ? json.backups : []);
+      setBackupSummary(json.summary || null);
+    } catch (e) { setSyncStatus(`❌ โหลดรายการสำรองข้อมูลไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setBackupLoading(false); }
+  };
+
+  const runBackupNow = async () => {
+    setBackupNowLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/backup/now", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ reason: "manual-settings" }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setSyncStatus("✅ สำรองข้อมูลสำเร็จ");
+      await loadBackupList();
+    } catch (e) { setSyncStatus(`❌ สำรองข้อมูลไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setBackupNowLoading(false); }
+  };
+
+  const runRestoreBackup = async () => {
+    if (!restoreBackupId) return setSyncStatus("⚠️ กรุณาเลือกไฟล์สำรองข้อมูลที่จะกู้คืน");
+    const requiredConfirmation = restoreReplace ? "YES_REPLACE_FIRESTORE_DATA" : "YES_MERGE_FIRESTORE_DATA";
+    if (restoreConfirmText.trim() !== requiredConfirmation) {
+      return setSyncStatus(`⚠️ กรุณาพิมพ์ "${requiredConfirmation}" ให้ตรงเพื่อยืนยันการกู้คืนข้อมูล`);
+    }
+    if (!window.confirm(`ยืนยันครั้งสุดท้าย: กู้คืนข้อมูลจาก "${restoreBackupId}" แบบ${restoreReplace ? "แทนที่ข้อมูลทั้งหมด" : "ผสานกับข้อมูลปัจจุบัน"}? การกระทำนี้ย้อนกลับไม่ได้`)) return;
+    setRestoreLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/backup/restore", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ backupId: restoreBackupId, replace: restoreReplace, confirm: requiredConfirmation }) });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setSyncStatus("✅ กู้คืนข้อมูลสำเร็จ");
+      setRestoreConfirmText("");
+      alert("✅ กู้คืนข้อมูลสำเร็จ");
+    } catch (e) { setSyncStatus(`❌ กู้คืนข้อมูลไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setRestoreLoading(false); }
   };
 
   const submitDailyVehicleStart = async () => {
@@ -4373,6 +4439,14 @@ export default function App() {
     return { days, summary, maxDailyTotal, avgDailyOrders };
   }, [ordersByServiceDate, currentMonthKey]);
 
+  const weekAnalytics = useMemo(() => {
+    const todayDate = parseServiceDateKey(todayServiceDate);
+    const weekKeys = todayDate ? Array.from({ length: 7 }, (_, index) => toServiceDateKey(new Date(todayDate.getTime() - index * 86400000))) : [];
+    const days = weekKeys.map((key) => ({ key, ...summarizeOrders(ordersByServiceDate.groups[key] || []) }));
+    const weekOrders = weekKeys.flatMap((key) => ordersByServiceDate.groups[key] || []);
+    return { days, summary: summarizeOrders(weekOrders) };
+  }, [ordersByServiceDate, todayServiceDate]);
+
   const getOrderDriverName = (order) => {
     const driver = drivers.find(d => d.id === order.driverId);
     return order.driverName || driver?.name || order.driverId || "ยังไม่ระบุคนขับ";
@@ -4485,13 +4559,19 @@ export default function App() {
     return lines.join("\n");
   };
 
-  const buildServiceDateRangeReport = (startKey, endKey) => {
+  const serviceDateRangeKeys = (startKey, endKey) => {
     const start = startKey && endKey && startKey > endKey ? endKey : startKey;
     const end = startKey && endKey && startKey > endKey ? startKey : endKey;
-    const keys = ordersByServiceDate.keys
+    return ordersByServiceDate.keys
       .filter((key) => (!start || key >= start) && (!end || key <= end))
       .slice()
       .sort((a, b) => (a < b ? -1 : 1));
+  };
+
+  const buildServiceDateRangeReport = (startKey, endKey) => {
+    const start = startKey && endKey && startKey > endKey ? endKey : startKey;
+    const end = startKey && endKey && startKey > endKey ? startKey : endKey;
+    const keys = serviceDateRangeKeys(startKey, endKey);
     const list = keys.flatMap((key) => ordersByServiceDate.groups[key] || []);
     const stats = summarizeOrders(list);
     const startTitle = parseServiceDateKey(start)?.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) || start || "-";
@@ -4523,14 +4603,40 @@ export default function App() {
     return lines.join("\n");
   };
 
+  const escapeCsvCell = (value) => {
+    let text = String(value ?? "");
+    if (/^[=+\-@]/.test(text)) text = `'${text}`;
+    return `"${text.replaceAll("\"", "\"\"")}"`;
+  };
+
+  const ordersToCsvText = (list) => {
+    const labels = ["เลขออเดอร์", "ลูกค้า", "โซน", "สถานะ", "คนส่ง", "COD", "เวลาส่งสำเร็จ"];
+    const lines = [labels.map(escapeCsvCell).join(",")];
+    (list || []).forEach((order) => {
+      lines.push([
+        order.id, order.customerName || "-", order.zone || "-", order.status || "-",
+        getOrderDriverName(order), Number(order.cod || 0), order.deliveredAt || ""
+      ].map(escapeCsvCell).join(","));
+    });
+    return `﻿${lines.join("\r\n")}`;
+  };
+
+  const downloadTextFile = (text, fileName, mimeType) => {
+    const element = document.createElement("a");
+    element.setAttribute("href", `data:${mimeType};charset=utf-8,` + encodeURIComponent(text));
+    element.setAttribute("download", fileName);
+    element.click();
+  };
+
   const exportServiceDateReport = (key, mode = "copy") => {
+    if (mode === "csv") {
+      downloadTextFile(ordersToCsvText(ordersByServiceDate.groups[key] || []), `Hillkoff-Report-${key || "daily"}.csv`, "text/csv");
+      return;
+    }
     const reportText = buildServiceDateReport(key);
     const fileName = `Hillkoff-Report-${key || "daily"}.txt`;
     if (mode === "download") {
-      const element = document.createElement("a");
-      element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
-      element.setAttribute("download", fileName);
-      element.click();
+      downloadTextFile(reportText, fileName, "text/plain");
       return;
     }
     copyToClipboard(reportText);
@@ -4538,6 +4644,16 @@ export default function App() {
 
   const exportSelectedServiceReport = (mode = "download") => {
     const isRange = reportExportMode === "range";
+    if (mode === "csv") {
+      const list = isRange
+        ? serviceDateRangeKeys(reportExportStartDate, reportExportEndDate).flatMap((key) => ordersByServiceDate.groups[key] || [])
+        : (ordersByServiceDate.groups[reportExportDate] || []);
+      const fileName = isRange
+        ? `Hillkoff-Report-${reportExportStartDate || "start"}-to-${reportExportEndDate || "end"}.csv`
+        : `Hillkoff-Report-${reportExportDate || "daily"}.csv`;
+      downloadTextFile(ordersToCsvText(list), fileName, "text/csv");
+      return;
+    }
     const reportText = isRange
       ? buildServiceDateRangeReport(reportExportStartDate, reportExportEndDate)
       : buildServiceDateReport(reportExportDate);
@@ -4545,10 +4661,7 @@ export default function App() {
       ? `Hillkoff-Report-${reportExportStartDate || "start"}-to-${reportExportEndDate || "end"}.txt`
       : `Hillkoff-Report-${reportExportDate || "daily"}.txt`;
     if (mode === "download") {
-      const element = document.createElement("a");
-      element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(reportText));
-      element.setAttribute("download", fileName);
-      element.click();
+      downloadTextFile(reportText, fileName, "text/plain");
       return;
     }
     copyToClipboard(reportText);
@@ -4698,9 +4811,6 @@ export default function App() {
              <>
                <button type="button" className={displayTab === "reports" ? "active" : ""} onClick={() => selectAppTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
                <button type="button" className={displayTab === "settings" ? "active" : ""} onClick={() => selectAppTab("settings")}><Settings size={18} /> การตั้งค่า</button>
-               {["sales", "admin"].includes(auth.role) && (
-                 <button type="button" className={aiOpen ? "active" : ""} onClick={() => setAiOpen(true)}><Sparkles size={18} /> แชทบอทฐานข้อมูล</button>
-               )}
              </>
            )}
         </nav>
@@ -4764,79 +4874,6 @@ export default function App() {
                 )}
               </div>
             </section>
-          </div>
-        )}
-
-        {auth.role === "sales" && aiOpen && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 2000 }} onClick={() => setAiOpen(false)}>
-            <aside
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: "absolute",
-                top: 0,
-                right: 0,
-                height: "100%",
-                width: "min(420px, 92vw)",
-                background: "white",
-                boxShadow: "-12px 0 30px rgba(0,0,0,0.2)",
-                display: "grid",
-                gridTemplateRows: "auto auto 1fr auto",
-              }}
-            >
-              <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-                <b>แชทบอทฐานข้อมูล</b>
-                <button className="secondary" aria-label="ปิดแชทบอท" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setAiOpen(false)}>✕</button>
-              </div>
-
-              <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {[
-                  "สรุปงานส่งภาพรวมและยอด COD วันนี้",
-                  "พื้นที่หรือโซนไหนที่มีปริมาณงานหนาแน่นที่สุด",
-                  "วันนี้ใครยังไม่ได้ทำแบบประเมินตรวจรถ",
-                  "ตรวจสอบออเดอร์ที่มีปัญหาหรือตกค้าง",
-                  "ช่วยแนะนำว่าควรติดตามงานไหนก่อน",
-                ].map((t) => (
-                  <button key={t} className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={aiBusy} onClick={() => sendToChatbot(t)}>
-                    {t}
-                  </button>
-                ))}
-              </div>
-
-              <div ref={aiListRef} style={{ padding: "12px 14px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "10px" }}>
-                {aiMessages.length === 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>ถามข้อมูลในแอพได้ เช่น ออเดอร์วันนี้, ลูกค้า, COD, โซนงาน, ตรวจรถ, งานที่ควรติดตาม หรือให้ช่วยสรุปภาพรวม</p>
-                ) : (
-                  aiMessages.map((m, idx) => (
-                    <div key={idx} style={{ justifySelf: m.role === "user" ? "end" : "start", maxWidth: "100%" }}>
-                      <div style={{ background: m.role === "user" ? "#166534" : "white", color: m.role === "user" ? "white" : "#111827", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "10px 12px", whiteSpace: "pre-wrap", fontSize: "13px" }}>
-                        {m.text}
-                      </div>
-                    </div>
-                  ))
-                )}
-                {aiBusy && (
-                  <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "10px 12px", color: "#6b7280", fontSize: "12px" }}>
-                    กำลังค้นข้อมูลจาก Firestore...
-                  </div>
-                )}
-              </div>
-
-              <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
-                <input
-                  value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)}
-                  placeholder="ถามแชทบอทฐานข้อมูล..."
-                  style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") sendToChatbot(aiInput);
-                  }}
-                  disabled={aiBusy}
-                />
-                <button className="primary" onClick={() => sendToChatbot(aiInput)} disabled={aiBusy} style={{ padding: "10px 14px" }}>
-                  ส่ง
-                </button>
-              </div>
-            </aside>
           </div>
         )}
 
@@ -5430,6 +5467,7 @@ export default function App() {
           <section className="panel role-workspace">
             <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งานที่กำลังเตรียม</span></div>
             <p className="muted">งานต่างจังหวัดเลือกได้ทั้งส่งตรงห้องแพ็คหรือผ่านสโตร์ก่อน สถานะอัปเดตทันทีตามขั้นตอนตรวจสินค้า</p>
+            <OrderHistorySearch title="ค้นหาออเดอร์ต่างจังหวัดย้อนหลัง" query={outstationHistoryQuery} onQueryChange={setOutstationHistoryQuery} onSearch={searchOutstationHistory} onClear={() => { setOutstationHistoryQuery(""); setOutstationHistoryResults([]); setOutstationHistorySearched(false); }} loading={outstationHistoryLoading} searched={outstationHistorySearched} results={outstationHistoryResults} onOpen={openChiangmaiHistoryOrder} />
             <div className="outstation-label-toolbar">
               <label className="outstation-label-select-all">
                 <input
@@ -5463,7 +5501,6 @@ export default function App() {
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
             <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
-            <OrderHistorySearch title="ค้นหาออเดอร์ต่างจังหวัดย้อนหลัง" query={outstationHistoryQuery} onQueryChange={setOutstationHistoryQuery} onSearch={searchOutstationHistory} onClear={() => { setOutstationHistoryQuery(""); setOutstationHistoryResults([]); setOutstationHistorySearched(false); }} loading={outstationHistoryLoading} searched={outstationHistorySearched} results={outstationHistoryResults} onOpen={openChiangmaiHistoryOrder} />
           </section>
         )}
 
@@ -5481,22 +5518,6 @@ export default function App() {
         )}
         {showOutstationQrScanner && <OutstationQrScannerDialog apiFetch={authenticatedApiFetch} onClose={() => setShowOutstationQrScanner(false)} onScanned={applyOutstationQrScan} />}
 
-        {auth.role === "admin" && displayTab === "settings" && (
-          <section className="panel" style={{ marginBottom: "16px", borderLeft: "4px solid #7c3aed" }}>
-            <div className="panel-head"><h2>จัดการบัญชีสโตร์และห้องแพ็ค</h2><span>Admin</span></div>
-            <div className="form-grid two">
-              <input value={staffAccountForm.username} onChange={e => setStaffAccountForm(p => ({ ...p, username: e.target.value }))} placeholder="Username เช่น store01" />
-              <input value={staffAccountForm.name} onChange={e => setStaffAccountForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อพนักงาน" />
-              <input type="password" value={staffAccountForm.password} onChange={e => setStaffAccountForm(p => ({ ...p, password: e.target.value }))} placeholder="Password อย่างน้อย 8 ตัว" />
-              <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option></select>
-            </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
-              <button className="primary" onClick={createStaffAccount}>สร้างบัญชี</button>
-              <button className="secondary" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่</button>
-            </div>
-            <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ</p>
-          </section>
-        )}
 
         {storeUrgentOpen && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
@@ -6184,7 +6205,7 @@ export default function App() {
 	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} 
 	                            disabled={false}
 	                            onClick={() => {
-	                              updateOrder(order.id, { status: "ส่งสำเร็จ", queueStatus: "completed", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "" });
+	                              updateOrder(order.id, { status: "ส่งสำเร็จ", queueStatus: "completed", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "", complaint: "" });
 	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
 	                            }}>✅ ส่งสำเร็จแล้ว</button>
 	                        )}
@@ -6724,6 +6745,7 @@ export default function App() {
                 )}
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("copy")}>คัดลอก</button>
                 <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("download")}>TXT</button>
+                <button className="secondary compact-btn" onClick={() => exportSelectedServiceReport("csv")}>CSV</button>
               </div>
               {ordersByServiceDate.keys.length === 0 ? (
                 <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงาน</p>
@@ -6731,10 +6753,13 @@ export default function App() {
                 <div className="daily-report-scroll">
                   {(() => {
                     const selectedKey = openReportDate || ordersByServiceDate.keys[0] || "";
-                    const list = ordersByServiceDate.groups[selectedKey] || [];
+                    const dayOrders = ordersByServiceDate.groups[selectedKey] || [];
+                    const list = dailyReportDriverFilter ? dayOrders.filter((order) => order.driverId === dailyReportDriverFilter) : dayOrders;
                     const stats = summarizeOrders(list);
                     const selectedDate = parseServiceDateKey(selectedKey);
                     const selectedTitle = selectedDate ? selectedDate.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Bangkok" }) : selectedKey;
+                    const isRecentKey = ordersByServiceDate.keys.slice(0, 3).includes(selectedKey);
+                    const cacheAtLimit = orders.length >= recentOrdersLimit(ordersLimit, auth.role);
                     return (
                       <div className="daily-accordion open">
                         <div className="daily-accordion-trigger">
@@ -6753,6 +6778,14 @@ export default function App() {
                               return <option key={k} value={k}>{title}</option>;
                             })}
                           </select>
+                          <select
+                            aria-label="กรองตามคนขับ"
+                            value={dailyReportDriverFilter}
+                            onChange={(e) => setDailyReportDriverFilter(e.target.value)}
+                          >
+                            <option value="">ทุกคนขับ</option>
+                            {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name || driver.id}</option>)}
+                          </select>
                           <span className="daily-meta">{stats.total} งาน</span>
                           <span className="daily-cod">COD ฿{money(stats.cod)}</span>
                           <ChevronDown className="daily-chevron" size={16} />
@@ -6760,6 +6793,12 @@ export default function App() {
 
                         <div className="daily-accordion-body">
                           <b>{selectedTitle}</b>
+                          {!isRecentKey && cacheAtLimit && (
+                            <p className="muted" style={{ color: "#b45309" }}>
+                              ⚠️ ข้อมูลของวันที่นี้อาจไม่ครบ เพราะออเดอร์เก่าบางส่วนยังไม่ได้โหลดในเครื่อง
+                              {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <> — <button type="button" className="secondary compact-btn" onClick={() => setOrdersLimit(nextOrdersLimit)}>โหลดออเดอร์เก่าเพิ่ม</button></>}
+                            </p>
+                          )}
                           <div className="status-chip-row">
                             <span className="status-chip waiting">รอรับ <b>{stats.waiting}</b></span>
                             <span className="status-chip active">กำลังส่ง <b>{stats.active}</b></span>
@@ -6770,6 +6809,7 @@ export default function App() {
                             <div>
                               <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "copy")}>คัดลอก</button>
                               <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "download")}>TXT</button>
+                              <button className="secondary compact-btn" onClick={() => exportServiceDateReport(selectedKey, "csv")}>CSV</button>
                             </div>
                           </div>
                         </div>
@@ -6781,7 +6821,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>คะแนนคนขับ</h2><span>จากงานสำเร็จ รูปยืนยัน และปัญหา</span></div>
+              <div className="panel-head"><h2>คะแนนคนขับ</h2><span>สะสมทั้งหมด · จากงานสำเร็จ รูปยืนยัน และปัญหา</span></div>
               {report.driverScore.map(driver => (
                 <div key={driver.id} className="score-row">
                   <div><b>{driver.name}</b><span>{driver.jobs} งาน · สำเร็จ {driver.done} · ปัญหา {driver.issues}</span></div>
@@ -6791,7 +6831,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>ปัญหาและการร้องเรียน</h2><span>{report.complaints.length} รายการ</span></div>
+              <div className="panel-head"><h2>ปัญหาและการร้องเรียนที่ยังไม่ปิด</h2><span>{report.complaints.length} รายการ · ทุกวัน</span></div>
               {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
                 <div key={order.id} className="complaint-card">
                   <b>{order.customerName}</b>
@@ -6819,6 +6859,30 @@ export default function App() {
                 <span><i className="waiting" /> รอรับ {todaySummary.waiting}</span>
                 <span><i className="active" /> กำลังส่ง {todaySummary.active}</span>
                 <span><i className="done" /> สำเร็จ {todaySummary.done}</span>
+              </div>
+            </section>
+
+            <section className="panel analytics-panel">
+              <div className="panel-head"><h2>วิเคราะห์รายสัปดาห์</h2><span>7 วันล่าสุด</span></div>
+              <div className="analytics-cards">
+                <div><span>งานสัปดาห์นี้</span><b>{weekAnalytics.summary.total}</b></div>
+                <div><span>สำเร็จ</span><b>{weekAnalytics.summary.done}</b></div>
+                <div><span>COD รวม</span><b>฿{money(weekAnalytics.summary.cod)}</b></div>
+                <div><span>สำเร็จ</span><b>{weekAnalytics.summary.completionRate}%</b></div>
+              </div>
+              <div className="monthly-chart" aria-label="กราฟจำนวนงานรายวันของสัปดาห์นี้">
+                {weekAnalytics.days.slice().reverse().map((day) => {
+                  const dt = parseServiceDateKey(day.key);
+                  const label = dt ? dt.toLocaleDateString("th-TH", { day: "2-digit", month: "short", timeZone: "Asia/Bangkok" }) : day.key.slice(5);
+                  const maxDailyTotal = Math.max(1, ...weekAnalytics.days.map((d) => d.total));
+                  const height = Math.max(8, Math.round((day.total / maxDailyTotal) * 92));
+                  return (
+                    <div key={day.key} className="month-bar-item">
+                      <div className="month-bar-track"><span style={{ height: `${height}%` }} /></div>
+                      <small>{label}</small>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -6968,6 +7032,142 @@ export default function App() {
 		              })()}
 		            </section>
 
+            {auth.role === "admin" && (
+              <>
+                <section className="panel">
+                  <div className="panel-head"><h2>👥 บัญชีสโตร์และห้องแพ็ค</h2><span>{staffAccounts.length} บัญชี</span></div>
+                  <div className="form-grid two">
+                    <input value={staffAccountForm.username} onChange={e => setStaffAccountForm(p => ({ ...p, username: e.target.value }))} placeholder="Username เช่น store01" />
+                    <input value={staffAccountForm.name} onChange={e => setStaffAccountForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อพนักงาน" />
+                    <input type="password" value={staffAccountForm.password} onChange={e => setStaffAccountForm(p => ({ ...p, password: e.target.value }))} placeholder="Password อย่างน้อย 8 ตัว" />
+                    <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option></select>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                    <button className="primary" onClick={createStaffAccount}>สร้างบัญชี</button>
+                    <button className="secondary" onClick={loadStaffAccounts} disabled={staffAccountsLoading}>{staffAccountsLoading ? "กำลังโหลด..." : "รีเฟรชรายชื่อ"}</button>
+                  </div>
+                  <div style={{ marginTop: "12px", display: "grid", gap: "6px" }}>
+                    {staffAccounts.length === 0 ? (
+                      <p className="muted" style={{ margin: 0 }}>{staffAccountsLoading ? "กำลังโหลด..." : "ยังไม่มีบัญชี หรือยังไม่ได้โหลด"}</p>
+                    ) : staffAccounts.map((account) => (
+                      <div key={account.uid} className="score-row">
+                        <div>
+                          <b>{account.name || account.username}</b>
+                          <span> {account.role === "store" ? "สโตร์" : "ห้องแพ็ค"} · {account.active === false ? "ปิดใช้งาน" : "ใช้งานอยู่"}</span>
+                        </div>
+                        <button type="button" className="secondary compact-btn" onClick={() => toggleStaffAccountActive(account)}>
+                          {account.active === false ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-head"><h2>🚚 ข้อมูลรถ (Vehicle Master)</h2><span>{vehicleMasterList.length} คัน</span></div>
+                  <div className="form-grid two">
+                    <input value={vehicleMasterForm.plate} onChange={e => setVehicleMasterForm(p => ({ ...p, plate: e.target.value }))} placeholder="ทะเบียนรถ" />
+                    <input value={vehicleMasterForm.vehicleType} onChange={e => setVehicleMasterForm(p => ({ ...p, vehicleType: e.target.value }))} placeholder="ประเภทรถ" />
+                    <input value={vehicleMasterForm.brand} onChange={e => setVehicleMasterForm(p => ({ ...p, brand: e.target.value }))} placeholder="ยี่ห้อ" />
+                    <input value={vehicleMasterForm.model} onChange={e => setVehicleMasterForm(p => ({ ...p, model: e.target.value }))} placeholder="รุ่น" />
+                    <input value={vehicleMasterForm.responsiblePerson} onChange={e => setVehicleMasterForm(p => ({ ...p, responsiblePerson: e.target.value }))} placeholder="ผู้รับผิดชอบ" />
+                    <input value={vehicleMasterForm.department} onChange={e => setVehicleMasterForm(p => ({ ...p, department: e.target.value }))} placeholder="แผนก" />
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                    <button className="primary" onClick={saveVehicleMasterRecord}>บันทึกรถ</button>
+                    <button className="secondary" onClick={loadVehicleMasterList} disabled={vehicleMasterLoading}>{vehicleMasterLoading ? "กำลังโหลด..." : "รีเฟรชรายการ"}</button>
+                  </div>
+                  <div style={{ marginTop: "12px", display: "grid", gap: "6px" }}>
+                    {vehicleMasterList.length === 0 ? (
+                      <p className="muted" style={{ margin: 0 }}>{vehicleMasterLoading ? "กำลังโหลด..." : "ยังไม่มีข้อมูลรถ หรือยังไม่ได้โหลด"}</p>
+                    ) : vehicleMasterList.map((vehicle) => (
+                      <div key={vehicle.id} className="score-row">
+                        <div>
+                          <b>{vehicle.plate || vehicle.id}</b>
+                          <span> {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson || "ยังไม่ระบุผู้รับผิดชอบ"} · {vehicle.active === false ? "ปิดใช้งาน" : "ใช้งานอยู่"}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button type="button" className="secondary compact-btn" onClick={() => setVehicleMasterForm({ id: vehicle.id, plate: vehicle.plate || "", vehicleType: vehicle.vehicleType || "", brand: vehicle.brand || "", model: vehicle.model || "", responsiblePerson: vehicle.responsiblePerson || "", department: vehicle.department || "" })}>แก้ไข</button>
+                          {vehicle.active !== false && <button type="button" className="secondary compact-btn" onClick={() => disableVehicleMasterRecord(vehicle)}>ปิดใช้งาน</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-head"><h2>✅ รายชื่อผู้ตรวจสอบ</h2><span>สโตร์ / ห้องแพ็ค</span></div>
+                  {["store", "pack"].map((role) => (
+                    <div key={role} style={{ marginBottom: "12px" }}>
+                      <b>{role === "store" ? "สโตร์" : "ห้องแพ็ค"}</b>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                        {(checkerLists[role] || []).map((name) => (
+                          <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>
+                            {name}
+                            <button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ "${name}" หรือไม่?`)) saveCheckerList(role, (checkerLists[role] || []).filter((item) => item !== name)); }}>×</button>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                        <input
+                          value={settingsNewCheckerName[role]}
+                          onChange={(e) => setSettingsNewCheckerName((prev) => ({ ...prev, [role]: e.target.value }))}
+                          placeholder={`เพิ่มชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`}
+                        />
+                        <button type="button" className="secondary" onClick={() => {
+                          const name = settingsNewCheckerName[role].trim();
+                          if (!name) return;
+                          saveCheckerList(role, [...(checkerLists[role] || []), name]);
+                          setSettingsNewCheckerName((prev) => ({ ...prev, [role]: "" }));
+                        }}>+ เพิ่ม</button>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+
+                <section className="panel">
+                  <div className="panel-head"><h2>💾 สำรอง/กู้คืนข้อมูล</h2><span>{backupSummary?.totalDays ?? backupList.length} ไฟล์</span></div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button className="primary" onClick={runBackupNow} disabled={backupNowLoading}>{backupNowLoading ? "กำลังสำรอง..." : "สำรองข้อมูลตอนนี้"}</button>
+                    <button className="secondary" onClick={loadBackupList} disabled={backupLoading}>{backupLoading ? "กำลังโหลด..." : "รีเฟรชรายการ"}</button>
+                  </div>
+                  <div style={{ marginTop: "10px", display: "grid", gap: "4px", maxHeight: "160px", overflowY: "auto" }}>
+                    {backupList.length === 0 ? (
+                      <p className="muted" style={{ margin: 0 }}>{backupLoading ? "กำลังโหลด..." : "ยังไม่มีไฟล์สำรอง หรือยังไม่ได้โหลด"}</p>
+                    ) : backupList.map((id) => <p key={id} style={{ margin: 0, fontSize: "13px" }}>{id}</p>)}
+                  </div>
+                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
+                    <b style={{ color: "#b91c1c" }}>กู้คืนข้อมูล (การกระทำนี้ย้อนกลับไม่ได้)</b>
+                    <div className="form-grid two" style={{ marginTop: "8px" }}>
+                      <select value={restoreBackupId} onChange={(e) => setRestoreBackupId(e.target.value)}>
+                        <option value="">-- เลือกไฟล์สำรอง --</option>
+                        {backupList.map((id) => <option key={id} value={id}>{id}</option>)}
+                      </select>
+                      <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <input type="checkbox" checked={restoreReplace} onChange={(e) => setRestoreReplace(e.target.checked)} />
+                        แทนที่ข้อมูลทั้งหมด (แทนการผสาน)
+                      </label>
+                    </div>
+                    <p className="muted" style={{ fontSize: "12px", marginTop: "6px" }}>
+                      พิมพ์ <code>{restoreReplace ? "YES_REPLACE_FIRESTORE_DATA" : "YES_MERGE_FIRESTORE_DATA"}</code> เพื่อยืนยัน แล้วกดกู้คืน
+                    </p>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                      <input value={restoreConfirmText} onChange={(e) => setRestoreConfirmText(e.target.value)} placeholder="พิมพ์ข้อความยืนยัน" style={{ flex: 1 }} />
+                      <button type="button" className="secondary" style={{ background: "#dc2626", color: "white" }} disabled={restoreLoading || !restoreBackupId} onClick={runRestoreBackup}>
+                        {restoreLoading ? "กำลังกู้คืน..." : "กู้คืนข้อมูล"}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-head"><h2>🔗 ระบบภายนอก</h2><span>ใช้ครั้งแรกเท่านั้น</span></div>
+                  <button className="secondary wide" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่</button>
+                  <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ</p>
+                </section>
+              </>
+            )}
+
 		            <section className="panel">
 		              {(() => {
 		                const locs = state.driverLocations || {};
@@ -7013,7 +7213,7 @@ export default function App() {
 		              })()}
 		            </section>
 
-		            {auth.email === "online_marketing@hillkoff.com" && (
+		            {SUPER_ADMIN_EMAILS.includes(auth.email) && (
 		              <section className="panel">
 	                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
 	                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>

@@ -75,6 +75,7 @@ export async function PATCH(request) {
         patch.queueStatus = "completed";
         patch.deliveredAt = deliveredAt;
         patch.driverNote = driverNote;
+        patch.complaint = "";
         patch.deliveryCompleteness = "complete";
         patch.deliveryAttemptNumber = (Number(order.deliveryAttemptNumber) || 0) + 1;
         patch.lastDeliveryDriverId = String(profile.driverId || order.driverId || "").trim().slice(0, 120);

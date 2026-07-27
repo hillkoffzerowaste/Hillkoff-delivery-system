@@ -12,7 +12,6 @@
 โ”       โ”โ”€โ”€ auth/login/
 โ”       โ”โ”€โ”€ auth/validate/
 โ”       โ”โ”€โ”€ backup/
-โ”       โ”โ”€โ”€ chat/bot/
 โ”       โ”โ”€โ”€ driver-assessments/today/
 โ”       โ”โ”€โ”€ google/
 โ”       โ”โ”€โ”€ orders/create/
@@ -21,7 +20,6 @@
 โ”โ”€โ”€ lib/                         # Shared server/client adapters and backup modules
 โ”   โ”โ”€โ”€ firebaseAdmin.js         # Firebase Admin singleton
 โ”   โ”โ”€โ”€ firebaseClient.js        # Firebase browser SDK wrapper
-โ”   โ”โ”€โ”€ chatbotKnowledge.js      # Seed knowledge + synonyms for Firestore chatbot
 โ”   โ”โ”€โ”€ supabaseServer.js        # Supabase service-role client
 โ”   โ”โ”€โ”€ backup/                  # Supabase snapshot backup/restore flow
 โ”   โ””โ”€โ”€ utils/backupUtils.js
@@ -87,7 +85,7 @@
 * **Dependencies:** Class names rendered mainly by `app/page.jsx`.
 
 ### ๐“ `app/page.jsx`
-* **Role:** [CLIENT ENTRY POINT] Main React application containing login, sales, dispatch, driver, driver SOP checklist/reporting, reports, settings, team chat, database chatbot, and Firestore sync.
+* **Role:** [CLIENT ENTRY POINT] Main React application containing login, sales, dispatch, driver, driver SOP checklist/reporting, reports, settings, team chat, and Firestore sync.
 * **Key Components & Flow:**
   - `defaultState/readState` -> initializes auth/state from `localStorage` -> feeds `App` state.
   - `App` -> controls `displayTab` (`sales|dispatch|driver|reports|settings`) -> renders role-specific dashboards.
@@ -100,7 +98,6 @@
   - `driver-sop-report` tab + `exportDriverAssessmentReport` -> sales view for completed/missing driver assessments -> refreshes token, calls `/api/driver-assessments/today`, exports TXT/copy report.
   - `ensureWebPushForDriver/requestNotifyPermission` -> registers `firebase-messaging-sw.js`, gets FCM token -> calls `/api/push/register`.
   - `sendChat/sendEmergency/updateTyping/updateChatSummary` -> writes team chat and typing state to Firestore -> chat modal and badge update.
-  - `sendToChatbot/refreshAuthToken` -> posts sales questions to `/api/chat/bot` -> answers from Firestore data, seed knowledge, and saved chatbot memory.
   - `generateDailyReport/buildServiceDateReport/exportServiceDateReport` -> derives reports from local `orders` -> copy/download text output.
 * **Dependencies:** Imports `lib/firebaseClient.js`, Lucide icons, calls API routes under `app/api/*`, reads/writes browser `localStorage`, writes Firestore `driver_daily_assessments`, uses OpenStreetMap URLs.
 
@@ -143,15 +140,6 @@
 * **Key Components & Flow:**
   - `POST` -> validates token, role, phoneDigits -> upserts `push_tokens/{token}` with device metadata.
 * **Dependencies:** `lib/firebaseAdmin.js`, Firestore `push_tokens`; called by `ensureWebPushForDriver`.
-
-### 📄 `app/api/chat/bot/route.js`
-* **Role:** [API ROUTE] Sales-only database chatbot; no external AI provider.
-* **Key Components & Flow:**
-  - `POST` -> verifies Firebase token + `users_by_phone` role/uid -> enforces sales-only RBAC.
-  - `loadContext` -> reads recent `orders`, `customers`, `users_by_phone`, `driver_locations`, today's `driver_daily_assessments`, and `chatbot_knowledge`.
-  - `buildAnswer` -> routes fuzzy intents for orders, customers, drivers, assessments, COD, zones, and SOP knowledge -> returns JSON answer.
-  - `parseMemoryInstruction/rememberKnowledge` -> handles `จำว่า หัวข้อ = คำตอบ` -> stores trainable memory in `chatbot_knowledge`.
-* **Dependencies:** `lib/firebaseAdmin.js`, `lib/chatbotKnowledge.js`, Firestore `orders`, `customers`, `users_by_phone`, `driver_locations`, `driver_daily_assessments`, `chatbot_knowledge`, `chatbot_sessions`.
 
 ### ๐“ `app/api/google/route.js`
 * **Role:** [API ROUTE] Generic proxy to Google Apps Script web app URL.
@@ -200,13 +188,6 @@
   - `fb` -> exported Firestore function bundle, including `deleteDoc`, used throughout `app/page.jsx`.
   - `startPhoneSignInE164/signInAnon/fbLogout` -> auth helpers for login/logout flow.
 * **Dependencies:** `firebase/app`, `firebase/auth`, `firebase/firestore`, `firebase/messaging`, `NEXT_PUBLIC_FIREBASE_*`.
-
-### 📄 `lib/chatbotKnowledge.js`
-* **Role:** Seed knowledge and synonym dictionary for the database chatbot.
-* **Key Components & Flow:**
-  - `CHATBOT_SEED_KNOWLEDGE` -> built-in SOP/app Q&A -> used before/alongside Firestore-trained memory.
-  - `CHATBOT_SYNONYMS` -> Thai/English keyword groups -> powers fuzzy intent detection in `/api/chat/bot`.
-* **Dependencies:** Imported by `app/api/chat/bot/route.js`.
 
 ### ๐“ `lib/firebaseAdmin.js`
 * **Role:** Server Firebase Admin singleton for API routes.
