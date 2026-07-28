@@ -6074,7 +6074,7 @@ export default function App() {
                 <button className="primary wide" onClick={createRouteTask}><MapPinned size={18} /> เริ่มงานวิ่ง</button>
 
                 {activeDriverRouteTasks.length > 0 && (
-                  <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "12px" }}>
+                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "12px" }}>
                     {activeDriverRouteTasks.map(task => {
                       const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
                       return (
@@ -6134,7 +6134,7 @@ export default function App() {
               return (
                 <section className="panel">
                   <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
-                  <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "12px" }}>
+                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "12px" }}>
                     {pending.map(order => {
                       const salesName = order.salesName || "ไม่มี";
                       const salesPhone = order.salesPhone || "-";
@@ -6192,7 +6192,7 @@ export default function App() {
 	              <section className="panel">
 	                <div className="panel-head"><h2>🚗 ลำดับส่งของฉัน</h2><span>{driverDeliveryOrders.length} งาน</span></div>
 	                <div className="driver-sequence-help">ลากการ์ดเพื่อจัดลำดับได้ · งานที่กำลังจัดส่งจะถูกตรึงบนสุด · งานใหม่จะต่อท้ายอัตโนมัติ</div>
-	                <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
+	                <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
 	                  {driverDeliveryOrders.map((order, sequenceIndex) => (
 	                    <div key={order.id} className={`driver-sequence-card ${order.status === "กำลังจัดส่ง" ? "locked" : ""}`} draggable={order.status === "กำลังส่ง"} onDragStart={() => setDriverSequenceDragId(order.id)} onDragOver={(event) => { if (order.status === "กำลังส่ง") event.preventDefault(); }} onDrop={() => { if (order.status === "กำลังส่ง") dropDriverSequence(order.id); }} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div className="driver-sequence-bar">{order.status === "กำลังจัดส่ง" ? <span>📍 กำลังนำส่ง · ตรึงลำดับ</span> : <><span>☰ ลำดับ {sequenceIndex - driverCurrentDeliveryOrders.length + 1}</span><div><button className="secondary" disabled={sequenceIndex === driverCurrentDeliveryOrders.length} onClick={() => moveDriverSequence(order.id, -1)}>↑</button><button className="secondary" disabled={sequenceIndex === driverDeliveryOrders.length - 1} onClick={() => moveDriverSequence(order.id, 1)}>↓</button></div></>}</div>
@@ -6357,7 +6357,7 @@ export default function App() {
 	                  const visibleDelivered = showDeliveredHistory ? [...deliveredToday, ...deliveredHistory] : deliveredToday;
 	                  const visibleRouteTasks = driverTodayCompletedRouteTasks;
 	                  return (
-	                  <div className="scroll-box" style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
+	                  <div className="scroll-box mobile-flow" style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
 	                    {visibleDelivered.length === 0 && visibleRouteTasks.length === 0 && (
 	                      <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", color: "#6b7280", fontSize: "12px" }}>
 	                        ยังไม่มีรายการส่งสำเร็จในวันนี้

@@ -2079,7 +2079,8 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
   }
 
   .ops-store-work > .scroll-box,
-  .ops-pack-work > .scroll-box {
+  .ops-pack-work > .scroll-box,
+  .scroll-box.mobile-flow {
     max-height: none;
     overflow-y: visible;
     padding-right: 0;
