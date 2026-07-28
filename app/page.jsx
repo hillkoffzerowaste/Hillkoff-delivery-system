@@ -2332,15 +2332,11 @@ export default function App() {
     codDone: driverTodayCompletedOrders.reduce((sum, order) => sum + Number(order.cod || 0), 0)
   };
 
-  const report = useMemo(() => {
-    const source = reportRangeOrders.length ? reportRangeOrders : orders;
-    const delivered = source.filter(order => order.status === "ส่งสำเร็จ");
-    const complaints = source.filter(order => (order.status === "ติดปัญหา" || order.complaint) && order.complaintStatus !== "resolved");
-    const cod = source.reduce((sum, order) => sum + Number(order.cod || 0), 0);
-    return { delivered: delivered.length, complaints, cod, driverScore: aggregateLatestDriverReviews(source) };
-  }, [reportRangeOrders, orders]);
-
   const allTimeDriverScore = useMemo(() => aggregateLatestDriverReviews(orders), [orders]);
+
+  const allTimeComplaints = useMemo(() => (
+    orders.filter(order => (order.status === "ติดปัญหา" || order.complaint) && order.complaintStatus !== "resolved")
+  ), [orders]);
 
   const filteredCustomers = customers.filter(customer => customerMatchesQuery(customer, customerQuery));
   const customerNameCounts = useMemo(() => {
@@ -4842,7 +4838,7 @@ export default function App() {
               <button type="button" className={displayTab === "sales" ? "active" : ""} onClick={() => selectAppTab("sales")}><Store size={18} /> แดชบอร์ดการขาย</button>
               <button type="button" className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => selectAppTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button type="button" className={displayTab === "dispatch" ? "active" : ""} onClick={() => selectAppTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
-              <button type="button" className={displayTab === "driver-ratings" ? "active" : ""} onClick={() => selectAppTab("driver-ratings")}><Star size={18} /> KPI คะแนนคนขับ{report.driverScore.length > 0 && <span className="nav-count-badge" aria-label={`มีคะแนนคนขับ ${report.driverScore.length} คน`}>{report.driverScore.length}</span>}</button>
+              <button type="button" className={displayTab === "driver-ratings" ? "active" : ""} onClick={() => selectAppTab("driver-ratings")}><Star size={18} /> KPI คะแนนคนขับ{allTimeDriverScore.length > 0 && <span className="nav-count-badge" aria-label={`มีคะแนนคนขับ ${allTimeDriverScore.length} คน`}>{allTimeDriverScore.length}</span>}</button>
               <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}{salesWaitingOrders.length > 0 && <span className="nav-count-badge" style={{ background: "#dc2626", color: "white" }} aria-label={`ออเดอร์รอสินค้าหรือของไม่ครบ ${salesWaitingOrders.length} งาน`}>! {salesWaitingOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
@@ -5622,7 +5618,6 @@ export default function App() {
             {displayTab === "store-work" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วนเชียงใหม่/ใกล้เคียง</button>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
               {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "#ef4444" : order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "returned" ? "#dc2626" : order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "returned" ? "#fef2f2" : order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
                 <OrderCreatedAt order={order} />
@@ -5637,14 +5632,11 @@ export default function App() {
               </article>})}
               {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
-              </div>
             </div>}
             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
               {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><SalesNoteAlert order={order} compact /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
-              </div>
             </div>}
             {["store-booking", "store-online"].includes(displayTab) && <div className="store-report-workspace">
               {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "7px", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "#991b1b" }}>⚠️ มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "#b91c1c", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "#dc2626", color: "#991b1b" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "6px" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid #fecaca", background: "#fff", color: "#7f1d1d", borderRadius: "7px", padding: "8px", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "#991b1b" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
@@ -5708,7 +5700,6 @@ export default function App() {
             <OrderHistorySearch title="ค้นหาประวัติออเดอร์ห้องแพ็ค" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
             {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "12px", display: "grid", gap: "8px", background: "#fff7ed", border: "2px solid #f97316", borderLeftWidth: "6px", borderRadius: "10px", padding: "12px" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "#9a3412" }}>⚠️ ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrders.length} งาน</span></div>{packReworkOrders.map(order => <ReworkNotice key={`pack-rework-${order.id}`} order={order} />)}</div>}
             <div className="ops-pack-work">
-              <div className="scroll-box">
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 <OrderCreatedAt order={order} />
@@ -5722,12 +5713,11 @@ export default function App() {
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button><button className="secondary danger" onClick={() => archivePackOrder(order)}>นำออกจากคิว</button></div>
               </article>)}
               {!(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
-              </div>
             </div>
             {displayTab === "pack-outstation" && (
               <details className="prep-order-details" style={{ marginTop: "14px" }}>
                 <summary>สถานะส่งมอบขนส่ง ({salesOutstationHistory.length})</summary>
-                <div className="scroll-box" style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+                <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
                   {salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">สแกน {order.outstationDispatchScannedCount || 0}/{order.outstationDispatchBoxTotal || order.boxes || 1} กล่อง · {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={order.queueStatus === "completed" ? { color: "#166534", background: "#dcfce7" } : undefined}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div></article>)}
                   {!salesOutstationHistory.length && <p className="muted">ยังไม่มีออเดอร์ที่พร้อมส่งหรือส่งมอบขนส่งแล้ว</p>}
                 </div>
@@ -5899,7 +5889,7 @@ export default function App() {
           const driverMonthCompletedRoutes = driverMonthRouteTasks.filter(task => task.status === "เสร็จงาน");
           const backlog = (orders || []).filter(order => order.driverId === driverId && getOrderServiceDate(order) < todayServiceDate && ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status));
           const issues = (orders || []).filter(order => order.driverId === driverId && order.status === "ติดปัญหา");
-          const driverReview = report.driverScore.find((item) => item.id === driverId) || null;
+          const driverReview = allTimeDriverScore.find((item) => item.id === driverId) || null;
           const statusTones = { "กำลังส่ง": "is-amber", "กำลังจัดส่ง": "is-blue", "ส่งสำเร็จ": "is-green", "ติดปัญหา": "is-red" };
           const recentOrders = driverTodayOrders.slice(0, 6).map(order => ({ ...order, statusLabel: order.status || "รอจัดส่ง", statusTone: statusTones[order.status] || "is-primary" }));
           const activities = driverTodayOrders.flatMap(order => [
@@ -6977,9 +6967,9 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>ปัญหาและการร้องเรียนที่ยังไม่ปิด</h2><span>{report.complaints.length} รายการ · ทุกวัน</span></div>
+              <div className="panel-head"><h2>ปัญหาและการร้องเรียนที่ยังไม่ปิด</h2><span>{allTimeComplaints.length} รายการ · ทุกวัน</span></div>
               <div className="scroll-box">
-              {report.complaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : report.complaints.map(order => (
+              {allTimeComplaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : allTimeComplaints.map(order => (
                 <div key={order.id} className="complaint-card">
                   <b>{order.customerName}</b>
                   <small style={{ color: "#6b7280", display: "block", marginTop: "4px" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>

@@ -1962,22 +1962,13 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
 .ops-store-work > .history-search,
 .ops-store-work > .metrics-grid,
 .ops-store-work > p,
-.ops-store-work > .scroll-box,
 .ops-pack-work > .metrics-grid,
 .ops-pack-work > p,
-.ops-pack-work > .scroll-box,
 .ops-store-outstation > .panel-head,
 .ops-store-outstation > p,
 .ops-pack-follow-up > b,
 .ops-pack-follow-up > p {
   grid-column: 1 / -1;
-}
-
-.ops-store-work > .scroll-box,
-.ops-pack-work > .scroll-box {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
 }
 
 .ops-store-work > .metrics-grid,
