@@ -62,7 +62,6 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
       .catch(() => {
         if (cancelled) return;
         setRecipientHistory([]);
-        setRecipientHistoryCustomerId(current.customerId);
       });
     return () => { cancelled = true; };
   }, [apiFetch, current?.customerId]);
@@ -78,17 +77,20 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
   function updateCurrent(patch) {
     setItems(previous => previous.map((item, index) => index === selectedIndex ? { ...item, ...patch } : item));
     setJobId("");
+    setRequestKey("");
   }
 
   function updateSender(patch) {
     setItems(previous => previous.map(item => ({ ...item, ...patch })));
     setJobId("");
+    setRequestKey("");
   }
 
   function applyRecipientToOrder(patch) {
     if (!current) return;
     setItems(previous => previous.map(item => item.orderId === current.orderId ? { ...item, ...patch } : item));
     setJobId("");
+    setRequestKey("");
   }
 
   function updateOrderBoxTotal(value) {
@@ -98,6 +100,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
     setItems(nextItems);
     setSelectedIndex(Math.max(0, nextItems.findIndex(item => item.orderId === current.orderId)));
     setJobId("");
+    setRequestKey("");
   }
 
   async function saveSenderDefault() {
