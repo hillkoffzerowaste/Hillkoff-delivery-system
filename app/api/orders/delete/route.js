@@ -27,10 +27,20 @@ export async function POST(request) {
     const activity = await ref.collection("activity").limit(400).get();
     const deletedAt = new Date().toISOString();
     const releasedBookingNumbers = [];
+    let permissionError = null;
     await db.runTransaction(async (transaction) => {
       const currentSnap = await transaction.get(ref);
       if (!currentSnap.exists) return;
       const currentOrder = currentSnap.data() || {};
+      if (profile.role !== "admin") {
+        const driverStarted = Boolean(currentOrder.driverId)
+          || !["preparing", "ready"].includes(String(currentOrder.queueStatus || ""))
+          || ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(String(currentOrder.status || ""));
+        if (!currentOrder.workflowType || driverStarted) {
+          permissionError = "ลบได้เฉพาะงานเตรียมที่ยังไม่เข้าคิวและยังไม่มีคนขับรับ";
+          return;
+        }
+      }
       const bookingNumbers = [...new Set((Array.isArray(currentOrder.bookingNumbers) ? currentOrder.bookingNumbers : [currentOrder.bookingNumber])
         .map(normalizeBookingNumber)
         .filter((bookingNumber) => BOOKING_NUMBER_PATTERN.test(bookingNumber)))];
@@ -61,6 +71,7 @@ export async function POST(request) {
         createdAt: deletedAt
       });
     });
+    if (permissionError) return Response.json({ ok: false, error: permissionError }, { status: 403 });
     return Response.json({ ok: true, data: { id: orderId, releasedBookingNumbers } });
   } catch (error) {
     return errorResponse(error);

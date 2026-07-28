@@ -2912,10 +2912,12 @@ export default function App() {
   const resetAllOrders = async () => {
     if (auth.role !== "admin") return setSyncStatus("❌ เฉพาะแอดมินเท่านั้นที่รีเซ็ตออเดอร์ได้");
     if (!window.confirm("ยืนยันอีกครั้ง: ต้องการรีเซ็ตออเดอร์ทั้งหมดหรือไม่? ข้อมูลออเดอร์จะถูกลบ")) return;
+    const confirmation = window.prompt('การกระทำนี้ย้อนกลับไม่ได้ พิมพ์ "YES_DELETE_ALL_ORDERS" เพื่อยืนยัน:', "");
+    if (confirmation !== "YES_DELETE_ALL_ORDERS") return setSyncStatus("⚠️ ยกเลิกการรีเซ็ต: ข้อความยืนยันไม่ตรง");
     try {
       setSyncStatus("⏳ กำลังลบออเดอร์ทั้งหมด...");
       const idToken = await refreshAuthToken(true);
-      const res = await fetch("/api/admin/reset-orders", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
+      const res = await fetch("/api/admin/reset-orders", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ confirm: confirmation }) });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setState(prev => ({ ...prev, orders: [] }));
@@ -2975,7 +2977,8 @@ export default function App() {
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...patch } : item) }));
       setSyncStatus(`✅ รับออเดอร์ "${order.id}" และเพิ่มท้ายลำดับส่งแล้ว`);
     } catch (error) {
-      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
+      const rollback = Object.fromEntries(Object.keys(patch).map((key) => [key, order[key]]));
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...rollback } : item) }));
       setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
     } finally {
       pendingOrderUpdatesRef.current.delete(order.id);
@@ -3878,7 +3881,8 @@ export default function App() {
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...nextPatch } : item) }));
       return { ok: true };
     } catch (error) {
-      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
+      const rollback = Object.fromEntries(Object.keys(nextPatch).map((key) => [key, order[key]]));
+      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...rollback } : item) }));
       return { ok: false, error: error?.message || String(error) };
     } finally {
       pendingOrderUpdatesRef.current.delete(order.id);
@@ -6214,10 +6218,10 @@ export default function App() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                         {order.status === "กำลังส่ง" && (
                           <>
-	                            <button 
-	                              className="primary" 
-	                              style={{ padding: "8px", fontSize: "12px" }} 
-	                              disabled={false}
+	                            <button
+	                              className="primary"
+	                              style={{ padding: "8px", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
 	                              onClick={async () => {
 	                                setSyncStatus(`⏳ กำลังบันทึกว่าถึงจุดหมาย "${order.id}"...`);
 	                                const saved = await persistDriverOrderPatch(order, { status: "กำลังจัดส่ง", checkInAt: new Date().toLocaleString("th-TH") });
@@ -6225,10 +6229,10 @@ export default function App() {
 	                                recordDriverCheckInLocation({ ...order, status: "กำลังจัดส่ง" });
 	                                setSyncStatus(`✅ ถึงจุดหมายแล้ว กรุณาถ่ายรูป POD 1–5 รูป`);
 	                              }}>🚗 ไปถึงแล้ว</button>
-	                            <button 
-	                              className="secondary" 
-	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
-	                              disabled={false}
+	                            <button
+	                              className="secondary"
+	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
                               onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
                           </>
                         )}
@@ -6253,10 +6257,10 @@ export default function App() {
 	                                e.target.value = "";
 	                              }} />
 	                            </label>
-	                            <button 
-	                              className="secondary" 
-	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b" }} 
-	                              disabled={false}
+	                            <button
+	                              className="secondary"
+	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
                               onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
                           </>
 	                        )}
@@ -6269,22 +6273,21 @@ export default function App() {
 	                          >{driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
-	                          <button 
-	                            className="primary" 
-	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669" }} 
-	                            disabled={false}
+	                          <button
+	                            className="primary"
+	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
 	                            onClick={() => {
+	                              pendingOrderUpdatesRef.current.add(order.id);
 	                              updateOrder(order.id, { status: "ส่งสำเร็จ", queueStatus: "completed", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "", complaint: "" });
 	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
 	                            }}>✅ ส่งสำเร็จแล้ว</button>
 	                        )}
                         {order.status === "ส่งสำเร็จ" && (
-                          <button 
-                            className="secondary" 
-                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                          <button
+                            className="secondary"
+                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1" }}
                             onClick={() => {
-                              pendingOrderUpdatesRef.current.add(order.id);
                               alert(`✅ ส่งสำเร็จแล้ว\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ✅ มี\n\nสามารถรับอีกงานได้`);
                             }}>🏠 ส่งเสร็จสิ้น</button>
                         )}

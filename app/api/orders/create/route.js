@@ -143,7 +143,7 @@ export async function POST(request) {
       bookingMonthKey: serviceDate.slice(0, 7),
       bookingNumberMissing: bookingNumbers.length === 0,
       bookingNumberNotice: bookingNumbers.length === 0 ? (storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
-      shippingCarrier: String(order.shippingCarrier || "").trim().slice(0, 100),
+      shippingCarrier: deliveryMethod === "outstation" ? String(order.shippingCarrier || "").trim().slice(0, 100) : "",
       storeStatus: preparation.storeStatus,
       packStatus: preparation.packStatus,
       queueStatus: preparation.queueStatus,
