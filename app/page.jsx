@@ -4238,63 +4238,80 @@ export default function App() {
     (async () => {
       let completedOrder = null;
       let text = "";
+      let deliveryCompleteness = "";
+      let files = [];
       try {
-          const isActiveDelivery = ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status);
-          const deliveryCompleteness = driverDeliveryCompleteness[order.id] || order.deliveryCompleteness || (order.status === "ส่งสำเร็จ" ? "complete" : "");
-          const driverNote = String(noteDraft ?? order.driverNote ?? "").trim();
-          if (isActiveDelivery && !deliveryCompleteness) throw new Error("กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูปและส่ง LINE");
-          if (isActiveDelivery && requiresDriverDeliveryNote(deliveryCompleteness) && !driverNote) throw new Error("กรณีสินค้าไม่ครบ กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
-          const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
-          const files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
-          completedOrder = {
-            ...order,
-            status: deliveryCompleteness === "incomplete" ? "ติดปัญหา" : "ส่งสำเร็จ",
-            queueStatus: deliveryCompleteness === "incomplete" ? "preparing" : "completed",
-            deliveredAt,
-	            deliveryCompleteness,
-	            driverNote,
-            driverName: order.driverName || state.auth?.name || "",
-            driverId: order.driverId || state.auth?.driverId || driverId || "",
-            sharedToLine: true,
-            reworkRequired: deliveryCompleteness === "incomplete",
-            reworkRoute: order.workflowType === "store_route" ? "store_route" : "direct_pack",
-            reworkStatus: deliveryCompleteness === "incomplete" ? (order.workflowType === "store_route" ? "waiting_store" : "waiting_pack") : "",
-            reworkNote: deliveryCompleteness === "incomplete" ? driverNote : "",
-            podPhotoCount: files.length
-          };
-	        text = buildLineMessageForOrder(completedOrder);
+        const isActiveDelivery = ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status);
+        deliveryCompleteness = driverDeliveryCompleteness[order.id] || order.deliveryCompleteness || (order.status === "ส่งสำเร็จ" ? "complete" : "");
+        const driverNote = String(noteDraft ?? order.driverNote ?? "").trim();
+        if (isActiveDelivery && !deliveryCompleteness) throw new Error("กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูปและส่ง LINE");
+        if (isActiveDelivery && requiresDriverDeliveryNote(deliveryCompleteness) && !driverNote) throw new Error("กรณีสินค้าไม่ครบ กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
+        const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
+        files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
+        completedOrder = {
+          ...order,
+          status: deliveryCompleteness === "incomplete" ? "ติดปัญหา" : "ส่งสำเร็จ",
+          queueStatus: deliveryCompleteness === "incomplete" ? "preparing" : "completed",
+          deliveredAt,
+          deliveryCompleteness,
+          driverNote,
+          driverName: order.driverName || state.auth?.name || "",
+          driverId: order.driverId || state.auth?.driverId || driverId || "",
+          sharedToLine: true,
+          reworkRequired: deliveryCompleteness === "incomplete",
+          reworkRoute: order.workflowType === "store_route" ? "store_route" : "direct_pack",
+          reworkStatus: deliveryCompleteness === "incomplete" ? (order.workflowType === "store_route" ? "waiting_store" : "waiting_pack") : "",
+          reworkNote: deliveryCompleteness === "incomplete" ? driverNote : "",
+          podPhotoCount: files.length
+        };
+        text = buildLineMessageForOrder(completedOrder);
+      } catch (error) {
+        setSyncStatus(`❌ ${error?.message || error} (${order.id})`);
+        return;
+      }
+
+      // Attempt the LINE share FIRST, while the button-tap's user gesture is still fresh —
+      // navigator.share() throws immediately if that activation has expired, which used to
+      // happen silently after awaiting the backend save below. Only mark the job complete
+      // once we know the share actually went out (or there's no share sheet to open at all).
+      let shareOutcome = "none";
+      try {
+        try { await navigator.clipboard?.writeText?.(text); } catch {}
+        if (!navigator?.share) {
+          shareOutcome = "unsupported";
+        } else {
+          const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
+          const filesToShare = photoSheet ? [photoSheet] : files;
+          if (filesToShare.length && navigator.canShare?.({ files: filesToShare })) await navigator.share({ files: filesToShare, text });
+          else await navigator.share({ text });
+          shareOutcome = "shared";
+        }
+      } catch (error) {
+        setSyncStatus(`⚠️ ยังไม่ได้บันทึกจบงาน: เปิดแชร์ LINE ไม่สำเร็จ (${error?.name === "AbortError" ? "ถูกยกเลิก" : error?.message || error}) — กดส่งอีกครั้งได้เลย (${order.id})`);
+        return;
+      }
+
+      try {
         const saved = await completeDriverDeliveryOrder(order, {
           deliveredAt: completedOrder.deliveredAt,
           driverNote: completedOrder.driverNote,
           podPhotoCount: files.length || Number(order.podPhotoCount) || 0,
           deliveryCompleteness
         });
-	        if (!saved.ok) throw new Error(saved.error);
-	        setSyncStatus(deliveryCompleteness === "incomplete" ? `⚠️ บันทึกงานแก้ไขแล้ว กำลังเปิดแชร์ LINE (${order.id})` : `✅ บันทึกส่งสำเร็จแล้ว กำลังเปิดแชร์ LINE (${order.id})`);
+        if (!saved.ok) throw new Error(saved.error);
+        const savedLabel = deliveryCompleteness === "incomplete" ? "บันทึกงานแก้ไขแล้ว" : "บันทึกส่งสำเร็จแล้ว";
+        setSyncStatus(
+          shareOutcome === "shared" ? `✅ ${savedLabel} และเปิดแชร์ LINE แล้ว ${files.length} รูป (${order.id})`
+          : `✅ ${savedLabel} และคัดลอกข้อความ LINE แล้ว (${order.id})`
+        );
       } catch (error) {
-        setSyncStatus(`❌ บันทึกส่งสำเร็จไม่สำเร็จ: ${error?.message || error} (${order.id})`);
+        setSyncStatus(`❌ แชร์ LINE สำเร็จ แต่บันทึกจบงานไม่สำเร็จ: ${error?.message || error} — ลองกดส่งอีกครั้ง (${order.id})`);
         return;
-	      }
-
-	      try {
-	        try { await navigator.clipboard?.writeText?.(text); } catch {}
-	        if (!navigator?.share) {
-	          setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว และคัดลอกข้อความ LINE แล้ว (${order.id})`);
-	          return;
-	        }
-	        const files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
-	        const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
-	        const filesToShare = photoSheet ? [photoSheet] : files;
-	        if (filesToShare.length && navigator.canShare?.({ files: filesToShare })) await navigator.share({ files: filesToShare, text });
-	        else await navigator.share({ text });
-	        setSyncStatus(`✅ ส่งสำเร็จและเปิดแชร์ LINE แล้ว ${files.length} รูป (${order.id})`);
-	      } catch {
-	        setSyncStatus(`✅ บันทึกส่งสำเร็จแล้ว แต่การแชร์ LINE ถูกยกเลิก (${order.id})`);
-	      } finally {
-	        clearPodPhotos(order.id);
-	        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
-	        setDriverDeliveryCompleteness((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
-	      }
+      } finally {
+        clearPodPhotos(order.id);
+        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
+        setDriverDeliveryCompleteness((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
+      }
     })();
   };
 
