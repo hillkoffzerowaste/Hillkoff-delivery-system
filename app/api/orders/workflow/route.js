@@ -159,7 +159,7 @@ export async function PATCH(request) {
         patch.returnResolutionNote = String(body.storeWorkDetails?.note || body.storeWorkDetails?.detail || "").trim().slice(0, 1000);
         Object.assign(history, { result: "return_resolved", returnResolvedAt: now, returnResolutionNote: patch.returnResolutionNote });
       }
-    } else if (profile.role === "pack" && action === "pack_update") {
+    } else if ((profile.role === "pack" || (["sales", "admin"].includes(profile.role) && order.deliveryMethod === "outstation")) && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
       const storeReady = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       if (!storeReady) throw Object.assign(new Error("ออเดอร์ยังไม่ได้รับการยืนยันจากสโตร์"), { status: 409 });

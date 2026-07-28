@@ -5648,6 +5648,9 @@ export default function App() {
                   <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div>
                   <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>
                   {order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}
+                  {["pending", "working", "waiting", "partial"].includes(order.packStatus || "pending") && (order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus)) && (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button type="button" className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>ยืนยันจัดส่ง</button></div>
+                  )}
                 </article>
               ))}
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
