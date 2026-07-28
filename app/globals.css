@@ -1976,7 +1976,7 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
 .ops-store-work > .scroll-box,
 .ops-pack-work > .scroll-box {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
@@ -2044,11 +2044,6 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .ops-store-work > .scroll-box,
-  .ops-pack-work > .scroll-box {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .ops-dashboard-lower { grid-template-columns: 1fr; }
   .ops-dashboard-main { grid-template-columns: 1fr; }
   .ops-dashboard-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2076,11 +2071,6 @@ input:focus,select:focus,textarea:focus { border-color:#63aa76; box-shadow:0 0 0
   .ops-store-outstation,
   .ops-pack-follow-up,
   .role-workspace .kpi-grid + div:not(.kpi-grid) {
-    grid-template-columns: 1fr;
-  }
-
-  .ops-store-work > .scroll-box,
-  .ops-pack-work > .scroll-box {
     grid-template-columns: 1fr;
   }
 
