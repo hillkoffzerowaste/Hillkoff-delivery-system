@@ -792,6 +792,9 @@ export default function App() {
   const [showOutstationCarrierModal, setShowOutstationCarrierModal] = useState(false);
   const [outstationLabelSelectedIds, setOutstationLabelSelectedIds] = useState([]);
   const [outstationLabelItems, setOutstationLabelItems] = useState([]);
+  const [outstationLabelReopenJobId, setOutstationLabelReopenJobId] = useState("");
+  const [outstationLabelJobs, setOutstationLabelJobs] = useState([]);
+  const [outstationLabelJobsLoading, setOutstationLabelJobsLoading] = useState(false);
   const [showOutstationQrScanner, setShowOutstationQrScanner] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
@@ -1924,6 +1927,31 @@ export default function App() {
     };
     setOutstationLabelItems(expandOrderToLabelItems(syntheticOrder));
   }
+
+  const loadOutstationLabelJobs = async () => {
+    setOutstationLabelJobsLoading(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/outstation-labels/jobs", { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setOutstationLabelJobs(Array.isArray(json.data) ? json.data : []);
+    } catch (e) { setSyncStatus(`❌ โหลดประวัติการพิมพ์ไม่สำเร็จ: ${e?.message || e}`); }
+    finally { setOutstationLabelJobsLoading(false); }
+  };
+
+  const reopenOutstationLabelJob = async (job) => {
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch(`/api/outstation-labels/jobs?jobId=${encodeURIComponent(job.id)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      const loadedItems = Array.isArray(json.data?.items) ? json.data.items : [];
+      if (!loadedItems.length) return setSyncStatus("⚠️ ประวัติการพิมพ์นี้ไม่มีรายการใบปะหน้า");
+      setOutstationLabelReopenJobId(job.id);
+      setOutstationLabelItems(loadedItems);
+    } catch (e) { setSyncStatus(`❌ เปิดประวัติการพิมพ์ไม่สำเร็จ: ${e?.message || e}`); }
+  };
 
   function applyOutstationQrScan(order) {
     setState(previous => ({ ...previous, orders: previous.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
@@ -3277,6 +3305,12 @@ export default function App() {
     loadBackupList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayTab, auth.role]);
+
+  useEffect(() => {
+    if (displayTab !== "sales-outstation") return;
+    loadOutstationLabelJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayTab]);
 
   const openWorkModal = (order, role) => {
     clearWorkPhotos();
@@ -5581,6 +5615,25 @@ export default function App() {
               <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>
               <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
             </div>
+            <section className="panel" style={{ marginBottom: "10px" }}>
+              <div className="panel-head"><h2 style={{ fontSize: "14px" }}>🗂️ ประวัติการพิมพ์ใบปะหน้า</h2><button type="button" className="secondary compact-btn" onClick={loadOutstationLabelJobs} disabled={outstationLabelJobsLoading}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "รีเฟรช"}</button></div>
+              <div className="scroll-box" style={{ display: "grid", gap: "6px", maxHeight: "220px" }}>
+                {outstationLabelJobs.length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "ยังไม่มีประวัติการพิมพ์"}</p>
+                ) : outstationLabelJobs.map((job) => {
+                  const statusLabel = { creating: "กำลังสร้าง", ready: "พร้อมพิมพ์", printed: "พิมพ์แล้ว", reprinted: "พิมพ์ซ้ำแล้ว", cancelled: "ยกเลิกแล้ว" }[job.status] || job.status;
+                  return (
+                    <div key={job.id} className="score-row">
+                      <div>
+                        <b>{job.createdAt ? new Date(job.createdAt).toLocaleString("th-TH") : job.id}</b>
+                        <span> {job.orderCount ?? "-"} ออเดอร์ · {job.itemCount ?? "-"} กล่อง · {statusLabel}</span>
+                      </div>
+                      <button type="button" className="secondary compact-btn" onClick={() => reopenOutstationLabelJob(job)}>พิมพ์ซ้ำ</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
             <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
               {salesOutstationOrders.map(order => (
                 <article key={order.id} className="role-order-card">
@@ -5606,12 +5659,15 @@ export default function App() {
         {outstationLabelItems.length > 0 && (
           <OutstationLabelPrintDialog
             initialItems={outstationLabelItems}
+            initialJobId={outstationLabelReopenJobId}
             apiFetch={authenticatedApiFetch}
-            onClose={() => setOutstationLabelItems([])}
+            onClose={() => { setOutstationLabelItems([]); setOutstationLabelReopenJobId(""); }}
             onPrinted={jobId => {
               setOutstationLabelItems([]);
+              setOutstationLabelReopenJobId("");
               setOutstationLabelSelectedIds([]);
               setSyncStatus(`✅ บันทึกการพิมพ์ใบปะหน้าแล้ว (${jobId})`);
+              loadOutstationLabelJobs();
             }}
           />
         )}

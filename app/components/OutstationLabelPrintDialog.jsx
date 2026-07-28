@@ -24,7 +24,7 @@ function InputField({ label, children }) {
   return <label className="outstation-label-field"><b>{label}</b>{children}</label>;
 }
 
-export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch, onClose, onPrinted }) {
+export default function OutstationLabelPrintDialog({ initialItems = [], initialJobId = "", apiFetch, onClose, onPrinted }) {
   const [items, setItems] = useState(() => initialItems.map(item => ({ ...item })));
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
@@ -32,8 +32,9 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
   const [recipientHistoryCustomerId, setRecipientHistoryCustomerId] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
-  const [jobId, setJobId] = useState("");
+  const [jobId, setJobId] = useState(initialJobId);
   const [requestKey, setRequestKey] = useState("");
+  const isReprint = Boolean(jobId);
   const current = items[selectedIndex] || items[0] || null;
 
   useEffect(() => {
@@ -162,6 +163,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
     setStatus("");
     try {
       let resolvedJobId = jobId;
+      const wasExistingJob = Boolean(resolvedJobId);
       if (!resolvedJobId) {
         const resolvedRequestKey = requestKey || `labels-${globalThis.crypto.randomUUID()}`;
         if (!requestKey) setRequestKey(resolvedRequestKey);
@@ -177,9 +179,13 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
       await responseData(await apiFetch("/api/outstation-labels/jobs", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: resolvedJobId, status: "printed", reason: "" })
+        body: JSON.stringify(
+          wasExistingJob
+            ? { jobId: resolvedJobId, status: "reprinted", reason: "พิมพ์ซ้ำจากประวัติการพิมพ์" }
+            : { jobId: resolvedJobId, status: "printed", reason: "" }
+        )
       }));
-      setStatus("บันทึกประวัติการพิมพ์แล้ว");
+      setStatus(wasExistingJob ? "บันทึกการพิมพ์ซ้ำแล้ว" : "บันทึกประวัติการพิมพ์แล้ว");
       onPrinted?.(resolvedJobId);
     } catch (error) { setStatus(error.message); }
     finally { setBusy(false); }
@@ -191,7 +197,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
     <div className="modal-overlay outstation-label-modal-overlay" role="dialog" aria-modal="true" aria-label="จัดทำใบปะหน้าต่างจังหวัด">
       <div className="modal outstation-label-modal">
         <div className="panel-head no-print">
-          <div><h2>จัดทำใบปะหน้าต่างจังหวัด</h2><span>{summary.orderCount} ออเดอร์ · {summary.labelCount} กล่อง · {summary.pageCount} หน้า A4</span></div>
+          <div><h2>จัดทำใบปะหน้าต่างจังหวัด</h2><span>{isReprint && "🔁 พิมพ์ซ้ำจากประวัติ · "}{summary.orderCount} ออเดอร์ · {summary.labelCount} กล่อง · {summary.pageCount} หน้า A4</span></div>
           <button type="button" className="secondary" onClick={onClose}>ปิด</button>
         </div>
 
@@ -247,7 +253,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], apiFetch
 
         {status && <p className="outstation-label-status no-print">{status}</p>}
         <div className="outstation-label-actions no-print">
-          {showPreview ? <><button type="button" className="secondary" onClick={() => setShowPreview(false)}>กลับไปแก้ไข</button><button type="button" className="primary" disabled={busy} onClick={printLabels}>{busy ? "กำลังเตรียมพิมพ์…" : "พิมพ์ใบปะหน้า"}</button></> : <><button type="button" className="secondary" onClick={onClose}>ยกเลิก</button><button type="button" className="primary" onClick={openPreview}>ดูตัวอย่างก่อนพิมพ์</button></>}
+          {showPreview ? <><button type="button" className="secondary" onClick={() => setShowPreview(false)}>กลับไปแก้ไข</button><button type="button" className="primary" disabled={busy} onClick={printLabels}>{busy ? "กำลังเตรียมพิมพ์…" : isReprint ? "พิมพ์ซ้ำ" : "พิมพ์ใบปะหน้า"}</button></> : <><button type="button" className="secondary" onClick={onClose}>ยกเลิก</button><button type="button" className="primary" onClick={openPreview}>ดูตัวอย่างก่อนพิมพ์</button></>}
         </div>
       </div>
     </div>
