@@ -1912,6 +1912,19 @@ export default function App() {
     setOutstationLabelItems(labels);
   }
 
+  function printCustomerLabel(customer) {
+    const syntheticOrder = {
+      id: `adhoc-${customer.id}-${Date.now()}`,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      address: customer.address,
+      zone: customer.zone,
+      boxes: 1
+    };
+    setOutstationLabelItems(expandOrderToLabelItems(syntheticOrder));
+  }
+
   function applyOutstationQrScan(order) {
     setState(previous => ({ ...previous, orders: previous.orders.map(item => item.id === order.id ? { ...item, ...order } : item) }));
     setSyncStatus(`✅ บันทึกการส่งมอบขนส่ง ${order.customerName || order.id} แล้ว`);
@@ -5194,16 +5207,29 @@ export default function App() {
                         return <p className="muted" style={{ margin: 0, padding: "10px" }}>ไม่พบลูกค้าที่ตรงกับคำค้น</p>;
                       }
                       return displayCustomers.map(customer => (
-                        <button key={customer.id} className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`} onClick={() => setSelectedCustomerId(customer.id)}>
+                        <div
+                          key={customer.id}
+                          role="button"
+                          tabIndex={0}
+                          className={`customer-card ${selectedCustomerId === customer.id ? "selected" : ""}`}
+                          style={{ touchAction: "manipulation" }}
+                          onClick={() => setSelectedCustomerId(customer.id)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedCustomerId(customer.id); } }}
+                        >
                           <strong>
                             {customer.name}
-                            {customerNameCounts[customerNameKey(customer.name)] > 1 && (
-                              <small className="duplicate-count">ซ้ำ {customerNameCounts[customerNameKey(customer.name)]} ราย</small>
-                            )}
+                            <span style={{ display: "flex", gap: "6px", alignItems: "center", flex: "0 0 auto" }}>
+                              {customerNameCounts[customerNameKey(customer.name)] > 1 && (
+                                <small className="duplicate-count">ซ้ำ {customerNameCounts[customerNameKey(customer.name)]} ราย</small>
+                              )}
+                              <button type="button" className="customer-card-print-label" onClick={(e) => { e.stopPropagation(); printCustomerLabel(customer); }}>
+                                🏷️ พิมพ์ใบปะหน้า
+                              </button>
+                            </span>
                           </strong>
                           <span>{customer.contact} · {customer.phone}</span>
                           <span>{customer.zone} · {customer.address}</span>
-                        </button>
+                        </div>
                       ));
                     })()}
                   </div>
