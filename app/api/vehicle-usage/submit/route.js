@@ -123,20 +123,20 @@ export async function POST(request) {
           sourceEventId: latestPrevious.doc.id,
           startServiceDate: serviceDate
         }));
-        const existingAutoClose = await autoEndRef.get();
-        if (existingAutoClose.exists) {
-          autoClosed = {
-            id: existingAutoClose.id,
-            serviceDate: previous.serviceDate,
-            eventType: "end",
-            skippedDuplicate: true
-          };
-        } else {
+        let autoEnd = null;
+        let skippedDuplicate = false;
+        let warning = "";
+        await db.runTransaction(async (transaction) => {
+          const existingAutoClose = await transaction.get(autoEndRef);
+          if (existingAutoClose.exists) {
+            skippedDuplicate = true;
+            return;
+          }
           const previousStart = Number(previous.odometerStart || previous.odometer || 0);
-          const warning = previousStart > 0 && odometer < previousStart
+          warning = previousStart > 0 && odometer < previousStart
             ? "เลขไมล์เริ่มต้นครั้งใหม่ต่ำกว่าเลขไมล์เดิม กรุณาตรวจสอบ"
             : "";
-          const autoEnd = {
+          autoEnd = {
             id: autoEndRef.id,
             serviceDate: String(previous.serviceDate || ""),
             eventType: "end",
@@ -164,7 +164,16 @@ export async function POST(request) {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
           };
-          await autoEndRef.set(autoEnd, { merge: true });
+          transaction.set(autoEndRef, autoEnd, { merge: true });
+        });
+        if (skippedDuplicate) {
+          autoClosed = {
+            id: autoEndRef.id,
+            serviceDate: previous.serviceDate,
+            eventType: "end",
+            skippedDuplicate: true
+          };
+        } else if (autoEnd) {
           scheduleGoogleSync(autoEndRef, {
             ...autoEnd,
             createdAt: new Date().toISOString(),
