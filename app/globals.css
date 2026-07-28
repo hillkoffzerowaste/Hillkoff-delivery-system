@@ -2906,10 +2906,6 @@ summary:focus-visible {
   gap: 14px;
 }
 
-.dispatch-dashboard-toolbar {
-  display: flex;
-}
-
 .dispatch-eight-cards {
   display: grid;
   gap: 10px;

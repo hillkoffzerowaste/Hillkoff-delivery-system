@@ -5112,7 +5112,7 @@ export default function App() {
                     {inProgress.length === 0 ? (
                       <p className="muted" style={{ textAlign: "center", padding: "8px 0" }}>ยังไม่มีงานที่กำลังส่ง</p>
                     ) : (
-                      <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+                      <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))", gap: "12px" }}>
                         {Object.keys(byDriver).map(did => {
                           const driver = drivers.find(d => d.id === did);
                           const items = byDriver[did] || [];
@@ -6057,7 +6057,7 @@ export default function App() {
                 <button className="primary wide" onClick={createRouteTask}><MapPinned size={18} /> เริ่มงานวิ่ง</button>
 
                 {activeDriverRouteTasks.length > 0 && (
-                  <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+                  <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "12px" }}>
                     {activeDriverRouteTasks.map(task => {
                       const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
                       return (
@@ -6067,7 +6067,7 @@ export default function App() {
                             <small style={{ color: "#374151" }}>{task.origin} → {task.destinationSummary}</small><br />
                             {task.note && <small style={{ color: "#6b7280" }}>{task.note}</small>}
                           </div>
-                          <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}>📍 เช็คอินระหว่างทาง</button>
+                          <button className="secondary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}>📍 เช็คอินระหว่างทาง</button>
                           <div style={{ display: "grid", gap: "8px" }}>
                             {(task.stops || []).map(stop => (
                               <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", display: "grid", gap: "8px" }}>
@@ -6078,8 +6078,8 @@ export default function App() {
                                 {stop.checkedInAt && <small style={{ color: "#6b7280" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
                                 {stop.note && <small style={{ color: "#6b7280" }}>{stop.note}</small>}
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                                  <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
-                                  <label className="secondary" style={{ padding: "8px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <button className="primary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
+                                  <label className="secondary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                     📷 ถ่ายรูป
                                     <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
                                       const file = e.target.files?.[0];
@@ -6089,7 +6089,7 @@ export default function App() {
                                   </label>
                                 </div>
                                 {(stop.photo || stop.checkedInAt) && (
-                                  <button className="primary" style={{ padding: "8px", fontSize: "12px", background: "#2563eb" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
+                                  <button className="primary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px", background: "#2563eb" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
                                     💬 แชร์ LINE จุดนี้
                                   </button>
                                 )}
@@ -6101,7 +6101,7 @@ export default function App() {
                               </div>
                             ))}
                           </div>
-                          <button className="secondary" style={{ padding: "9px", fontSize: "12px", background: "#f0fdf4", color: "#166534" }} onClick={() => completeRouteTask(task)}>✅ จบงานวิ่ง</button>
+                          <button className="secondary" style={{ padding: "9px", fontSize: "12px", minHeight: "44px", background: "#f0fdf4", color: "#166534" }} onClick={() => completeRouteTask(task)}>✅ จบงานวิ่ง</button>
                         </div>
                       );
                     })}
@@ -6117,7 +6117,7 @@ export default function App() {
               return (
                 <section className="panel">
                   <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
-                  <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+                  <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "12px" }}>
                     {pending.map(order => {
                       const salesName = order.salesName || "ไม่มี";
                       const salesPhone = order.salesPhone || "-";
@@ -6142,15 +6142,15 @@ export default function App() {
                         <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #fcd34d" }}>
                           <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 ลูกค้า: {order.customerPhone}</small>
                           <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
-                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>🗺️ แผนที่</a>}
+                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
+                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>🗺️ แผนที่</a>}
                           </div>
                         </div>
                         
                         <div style={{ background: "#f3e8ff", padding: "8px", borderRadius: "6px", border: "1px solid #d8b4fe" }}>
                           <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>ฝ่ายขาย: {salesName}</small>
                           <small style={{ color: "#666", display: "block" }}>{salesPhone}</small>
-                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "6px", fontSize: "11px", marginTop: "4px", display: "block", textAlign: "center", textDecoration: "none" }}>📞 โทรหาฝ่ายขาย</a>
+                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "6px", fontSize: "11px", minHeight: "44px", marginTop: "4px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", textDecoration: "none" }}>📞 โทรหาฝ่ายขาย</a>
                         </div>
                         
                         {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>📬 {order.address}</small>}
@@ -6175,7 +6175,7 @@ export default function App() {
 	              <section className="panel">
 	                <div className="panel-head"><h2>🚗 ลำดับส่งของฉัน</h2><span>{driverDeliveryOrders.length} งาน</span></div>
 	                <div className="driver-sequence-help">ลากการ์ดเพื่อจัดลำดับได้ · งานที่กำลังจัดส่งจะถูกตรึงบนสุด · งานใหม่จะต่อท้ายอัตโนมัติ</div>
-	                <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+	                <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
 	                  {driverDeliveryOrders.map((order, sequenceIndex) => (
 	                    <div key={order.id} className={`driver-sequence-card ${order.status === "กำลังจัดส่ง" ? "locked" : ""}`} draggable={order.status === "กำลังส่ง"} onDragStart={() => setDriverSequenceDragId(order.id)} onDragOver={(event) => { if (order.status === "กำลังส่ง") event.preventDefault(); }} onDrop={() => { if (order.status === "กำลังส่ง") dropDriverSequence(order.id); }} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div className="driver-sequence-bar">{order.status === "กำลังจัดส่ง" ? <span>📍 กำลังนำส่ง · ตรึงลำดับ</span> : <><span>☰ ลำดับ {sequenceIndex - driverCurrentDeliveryOrders.length + 1}</span><div><button className="secondary" disabled={sequenceIndex === driverCurrentDeliveryOrders.length} onClick={() => moveDriverSequence(order.id, -1)}>↑</button><button className="secondary" disabled={sequenceIndex === driverDeliveryOrders.length - 1} onClick={() => moveDriverSequence(order.id, 1)}>↓</button></div></>}</div>
@@ -6340,7 +6340,7 @@ export default function App() {
 	                  const visibleDelivered = showDeliveredHistory ? [...deliveredToday, ...deliveredHistory] : deliveredToday;
 	                  const visibleRouteTasks = driverTodayCompletedRouteTasks;
 	                  return (
-	                  <div className="scroll-box" style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+	                  <div className="scroll-box" style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
 	                    {visibleDelivered.length === 0 && visibleRouteTasks.length === 0 && (
 	                      <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", color: "#6b7280", fontSize: "12px" }}>
 	                        ยังไม่มีรายการส่งสำเร็จในวันนี้
