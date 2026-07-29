@@ -27,10 +27,6 @@ The script stores the spreadsheet ID in Apps Script properties under:
 HILLKOFF_VEHICLE_USAGE_SPREADSHEET_ID
 ```
 
-## Delivery workbook sheets
-
-The delivery workbook keeps one worksheet per service date using the `YYYY-MM-DD` name format. Every order sync is normalized to its service date before the row is upserted. When setup or an order sync runs, the current Bangkok-date worksheet is kept visible and older date worksheets are hidden automatically; hidden sheets remain available for history and can be shown manually when needed.
-
 ## Supported Actions
 
 The Next.js app posts JSON to the deployed Web App URL using `text/plain;charset=utf-8`.

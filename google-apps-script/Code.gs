@@ -922,14 +922,14 @@ function setupDeliveryWorkbook() {
   var existingId = props.getProperty(DELIVERY_CONFIG.spreadsheetIdProperty);
   var existing = existingId ? openSpreadsheetById(existingId) : null;
   if (existing) {
-    return { spreadsheetId: existing.getId(), spreadsheetUrl: existing.getUrl(), created: false, hiddenSheetNames: hideOldDeliveryDaySheets(existing) };
+    return { spreadsheetId: existing.getId(), spreadsheetUrl: existing.getUrl(), created: false };
   }
   if (existingId && !existing) {
     throw new Error("ไม่พบไฟล์ระบบส่งของที่ล็อกไว้: " + existingId + ". ระบบจะไม่สร้างไฟล์ใหม่อัตโนมัติ");
   }
   var ss = SpreadsheetApp.create(DELIVERY_CONFIG.spreadsheetName);
   props.setProperty(DELIVERY_CONFIG.spreadsheetIdProperty, ss.getId());
-  return { spreadsheetId: ss.getId(), spreadsheetUrl: ss.getUrl(), created: true, hiddenSheetNames: hideOldDeliveryDaySheets(ss) };
+  return { spreadsheetId: ss.getId(), spreadsheetUrl: ss.getUrl(), created: true };
 }
 
 function getLockedDeliverySpreadsheet() {
@@ -966,13 +966,8 @@ function deliveryOverallStatus(order) {
   return "รอสโตร์ตรวจสอบ";
 }
 
-function deliveryDayKey(value) {
-  var normalized = normalizeServiceDate(value);
-  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : getBangkokDateKey();
-}
-
-function ensureDeliveryDaySheet(ss, serviceDate, options) {
-  var name = deliveryDayKey(serviceDate);
+function ensureDeliveryDaySheet(ss, serviceDate) {
+  var name = String(serviceDate || Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd"));
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, DELIVERY_HEADERS.length).setValues([DELIVERY_HEADERS]);
@@ -982,24 +977,7 @@ function ensureDeliveryDaySheet(ss, serviceDate, options) {
     sheet.setColumnWidth(3, 190); sheet.setColumnWidth(6, 260); sheet.setColumnWidth(16, 220); sheet.setColumnWidth(26, 180);
     sheet.getRange(1, 1, 1, DELIVERY_HEADERS.length).createFilter();
   }
-  if (!options || options.cleanup !== false) hideOldDeliveryDaySheets(ss, getBangkokDateKey());
   return sheet;
-}
-
-function hideOldDeliveryDaySheets(ss, todayDate) {
-  var today = deliveryDayKey(todayDate);
-  var current = ensureDeliveryDaySheet(ss, today, { cleanup: false });
-  current.showSheet();
-  var hidden = [];
-  ss.getSheets().forEach(function(sheet) {
-    var name = sheet.getName();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(name) || name >= today || sheet.getSheetId() === current.getSheetId()) return;
-    if (!sheet.isSheetHidden()) {
-      sheet.hideSheet();
-      hidden.push(name);
-    }
-  });
-  return hidden;
 }
 
 function findDeliveryOrderRow(sheet, orderId) {
@@ -1019,11 +997,10 @@ function upsertDailyDeliveryOrder(payload) {
   var order = payload.order || {};
   if (!order.id) throw new Error("Missing order.id");
   var ss = getLockedDeliverySpreadsheet();
-  var serviceDate = deliveryDayKey(order.serviceDate);
-  var sheet = ensureDeliveryDaySheet(ss, serviceDate);
+  var sheet = ensureDeliveryDaySheet(ss, order.serviceDate);
   var overall = deliveryOverallStatus(order);
   var rowValues = [[
-    order.id, serviceDate, order.customerName || "", order.customerPhone || "", order.zone || "", order.address || "", Number(order.boxes || 0),
+    order.id, order.serviceDate || "", order.customerName || "", order.customerPhone || "", order.zone || "", order.address || "", Number(order.boxes || 0),
     order.salesName || "", order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์", order.storeStatus || "", order.storePackerName || "", order.storeCheckerName || "",
     order.packStatus || "", order.packPackerName || "", order.packCheckerName || "", displayMissingItems(order.missingItems), overall,
     order.queuedBy || "", order.queuedAt || "", order.driverName || "", order.acceptedAt || "", order.checkInAt || "", order.deliveredAt || "",
