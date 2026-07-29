@@ -13,11 +13,23 @@ import {
   HILLKOFF_LINE_URL,
   outstationQrRenderOptions
 } from "../../lib/outstationQr.js";
+import { canReprintOutstationLabel } from "../../lib/outstationLabelStorage.js";
 
 const actor = { role: "pack", name: "ผู้แพ็ค", uid: "pack-1" };
 const now = "2026-07-24T04:00:00.000Z";
 
 describe("outstation QR dispatch", () => {
+  it("blocks reprinting a label created before an outstation route change", () => {
+    expect(canReprintOutstationLabel(
+      { deliveryMethod: "outstation", outstationLabelInvalidatedAt: "2026-07-29T02:00:00.000Z" },
+      "2026-07-29T01:00:00.000Z"
+    )).toBe(false);
+    expect(canReprintOutstationLabel(
+      { deliveryMethod: "outstation", outstationLabelInvalidatedAt: "2026-07-29T02:00:00.000Z" },
+      "2026-07-29T03:00:00.000Z"
+    )).toBe(true);
+  });
+
   it("uses a print-safe QR image and scans only the QR format", () => {
     expect(outstationQrRenderOptions).toEqual({
       errorCorrectionLevel: "H",

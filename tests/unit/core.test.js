@@ -21,6 +21,8 @@ import {
 import { authenticatedFetch } from "../../lib/authenticatedFetch.js";
 import {
   initialPreparationStatuses,
+  buildReroutePatch,
+  canRerouteOrder,
   driverReworkPatch,
   isChiangmaiPreparationOrder,
   isDriverDeliveryOrder,
@@ -33,6 +35,130 @@ import {
 } from "../../lib/preparationWorkflow.js";
 
 describe("sales order preparation workflow", () => {
+  it("reroutes an open Chiang Mai order to outstation direct-pack and resets downstream work", () => {
+    const result = buildReroutePatch(
+      {
+        id: "ORDER-1",
+        deliveryMethod: "company_driver",
+        workflowType: "store_route",
+        queueStatus: "preparing",
+        storeStatus: "working",
+        packStatus: "blocked",
+        chiangmaiRoundCode: "tuesday",
+        chiangmaiRoundDate: "2026-07-28",
+        missingItems: ["old item"],
+        storePackerName: "Store One"
+      },
+      { deliveryMethod: "outstation", workflowType: "direct_pack", shippingCarrier: "Flash" },
+      { role: "sales", uid: "sales-1", name: "Sales One" },
+      "ลูกค้าแจ้งให้ส่งต่างจังหวัด",
+      "2026-07-29T02:00:00.000Z"
+    );
+
+    expect(result.patch).toMatchObject({
+      deliveryMethod: "outstation",
+      workflowType: "direct_pack",
+      shippingCarrier: "Flash",
+      storeStatus: "skipped",
+      packStatus: "pending",
+      queueStatus: "preparing",
+      chiangmaiRoundCode: "",
+      chiangmaiRoundDate: "",
+      missingItems: []
+    });
+    expect(result.history).toMatchObject({
+      action: "reroute",
+      fromDeliveryMethod: "company_driver",
+      toDeliveryMethod: "outstation",
+      fromWorkflowType: "store_route",
+      toWorkflowType: "direct_pack",
+      note: "ลูกค้าแจ้งให้ส่งต่างจังหวัด"
+    });
+  });
+
+  it("reroutes an outstation order back to a store-route Chiang Mai order and clears carrier data", () => {
+    const result = buildReroutePatch(
+      {
+        deliveryMethod: "outstation",
+        workflowType: "direct_pack",
+        shippingCarrier: "Flash",
+        queueStatus: "preparing",
+        storeStatus: "skipped",
+        packStatus: "working",
+        outstationDispatchScans: []
+      },
+      { deliveryMethod: "company_driver", workflowType: "store_route" },
+      { role: "admin", uid: "admin-1", name: "Admin One" },
+      "เปลี่ยนกลับเป็นงานเชียงใหม่",
+      "2026-07-29T02:00:00.000Z"
+    );
+
+    expect(result.patch).toMatchObject({
+      deliveryMethod: "company_driver",
+      workflowType: "store_route",
+      shippingCarrier: "",
+      storeStatus: "pending",
+      packStatus: "blocked",
+      queueStatus: "preparing",
+      outstationDispatchScans: []
+    });
+    expect(result.patch.outstationLabelInvalidatedAt).toBe("2026-07-29T02:00:00.000Z");
+  });
+
+  it("requires a carrier when rerouting to outstation", () => {
+    expect(canRerouteOrder(
+      { deliveryMethod: "company_driver", workflowType: "store_route", queueStatus: "preparing" },
+      { deliveryMethod: "outstation", workflowType: "direct_pack" }
+    )).toMatchObject({ ok: false });
+  });
+
+  it("rejects an empty reroute target when building the server patch", () => {
+    expect(() => buildReroutePatch(
+      { deliveryMethod: "company_driver", workflowType: "store_route", queueStatus: "preparing" },
+      {},
+      { role: "sales", uid: "sales-1" },
+      "แก้ปลายทาง",
+      "2026-07-29T02:00:00.000Z"
+    )).toThrow("Reroute target is required");
+  });
+
+  it("recognizes an open order as eligible for a reroute preview", () => {
+    expect(canRerouteOrder({
+      deliveryMethod: "company_driver",
+      workflowType: "store_route",
+      queueStatus: "preparing"
+    })).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ["assigned driver", { queueStatus: "queued", driverId: "driver-1" }],
+    ["completed work", { queueStatus: "completed" }],
+    ["outstation QR scan", { deliveryMethod: "outstation", queueStatus: "preparing", outstationDispatchScans: [{ boxIndex: 1 }] }],
+    ["driver rework", { queueStatus: "preparing", reworkRequired: true }]
+  ])("rejects reroute after %s", (_label, orderPatch) => {
+    expect(canRerouteOrder(
+      { deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "pending", packStatus: "blocked", ...orderPatch },
+      { deliveryMethod: "outstation", workflowType: "direct_pack", shippingCarrier: "Flash" }
+    )).toMatchObject({ ok: false });
+  });
+
+  it("uses store-route preparation for Grab and customer pickup targets", () => {
+    expect(buildReroutePatch(
+      { deliveryMethod: "company_driver", workflowType: "direct_pack", queueStatus: "preparing" },
+      { deliveryMethod: "grab_pickup" },
+      { role: "sales", uid: "sales-1", name: "Sales One" },
+      "ลูกค้าขอรับผ่าน Grab",
+      "2026-07-29T02:00:00.000Z"
+    ).patch).toMatchObject({
+      deliveryMethod: "grab_pickup",
+      workflowType: "store_route",
+      storeStatus: "pending",
+      packStatus: "blocked",
+      queueStatus: "preparing",
+      shippingCarrier: ""
+    });
+  });
+
   it("keeps a completed sales order visible while it waits for dispatch across multiple days", () => {
     expect(isReadyOrderWaitingForDispatch({ packStatus: "checked", queueStatus: "ready", driverId: "" })).toBe(true);
     expect(isReadyOrderWaitingForDispatch({ packStatus: "partial", queueStatus: "ready", driverId: "" })).toBe(true);
@@ -45,6 +171,11 @@ describe("sales order preparation workflow", () => {
     expect(isOutstationOrder({ workflowType: "direct_pack", shippingCarrier: "Flash" })).toBe(true);
     expect(isChiangmaiPreparationOrder({ deliveryMethod: "outstation", workflowType: "store_route", queueStatus: "preparing" })).toBe(false);
     expect(isReadyOrderWaitingForDispatch({ deliveryMethod: "outstation", packStatus: "checked", queueStatus: "ready", driverId: "" })).toBe(false);
+  });
+
+  it("keeps Grab and customer-pickup work out of the Chiang Mai preparation page", () => {
+    expect(isChiangmaiPreparationOrder({ deliveryMethod: "grab_pickup", workflowType: "store_route", queueStatus: "preparing" })).toBe(false);
+    expect(isChiangmaiPreparationOrder({ deliveryMethod: "customer_pickup", workflowType: "store_route", queueStatus: "preparing" })).toBe(false);
   });
 
   it("shows active waiting and incomplete orders to sales but excludes terminal work", () => {

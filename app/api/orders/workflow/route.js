@@ -2,7 +2,7 @@ import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
-import { driverReworkPatch } from "../../../../lib/preparationWorkflow";
+import { buildReroutePatch, driverReworkPatch } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
 
 export const runtime = "nodejs";
@@ -28,7 +28,20 @@ export async function PATCH(request) {
     let bookingReservation = null;
     let previousBookingReservationRef = null;
 
-    if (profile.role === "driver" && ["driver_cancel", "driver_complete", "driver_rework"].includes(action)) {
+    if (["sales", "admin"].includes(profile.role) && action === "reroute") {
+      const reason = String(body.reason || "").trim().slice(0, 1000);
+      if (!reason) throw Object.assign(new Error("Reroute reason is required"), { status: 400 });
+      const target = body.target && typeof body.target === "object" ? body.target : null;
+      if (!target) throw Object.assign(new Error("Reroute target is required"), { status: 400 });
+      let reroute;
+      try {
+        reroute = buildReroutePatch(order, target, profile, reason, now);
+      } catch (error) {
+        throw Object.assign(new Error(error?.message || String(error)), { status: 409 });
+      }
+      Object.assign(patch, reroute.patch);
+      Object.assign(history, reroute.history);
+    } else if (profile.role === "driver" && ["driver_cancel", "driver_complete", "driver_rework"].includes(action)) {
       if (String(order.driverId || "") !== String(profile.driverId || "")) {
         throw Object.assign(new Error("Driver can update only an assigned order"), { status: 403 });
       }
@@ -246,7 +259,7 @@ export async function PATCH(request) {
     } catch (syncError) {
       console.warn("Delivery sheet sync failed after workflow update", syncError?.message || syncError);
     }
-    if (action === "queue") {
+    if (action === "queue" || (action === "reroute" && patch.queueStatus === "queued")) {
       try {
         const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
         const tokens = snap.docs.map((doc) => doc.id).filter(Boolean);

@@ -1,4 +1,4 @@
-import { sanitizePrintJob, sanitizePrintStatusPatch } from "../../../../lib/outstationLabelStorage";
+import { canReprintOutstationLabel, sanitizePrintJob, sanitizePrintStatusPatch } from "../../../../lib/outstationLabelStorage";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
@@ -65,6 +65,10 @@ export async function POST(request) {
     const now = new Date().toISOString();
     const actor = actorFields(profile);
     const orderIds = [...new Set(job.items.map(item => item.orderId))];
+    const orderSnapshots = await Promise.all(orderIds.map(orderId => db.collection("orders").doc(orderId).get()));
+    if (orderSnapshots.some(snapshot => !snapshot.exists || snapshot.data()?.deliveryMethod !== "outstation")) {
+      throw Object.assign(new Error("Every label item must belong to a current outstation order"), { status: 409 });
+    }
     const transactionResult = await db.runTransaction(async transaction => {
       const current = await transaction.get(jobRef);
       if (current.exists) return { created: false, data: current.data() || {} };
@@ -115,6 +119,15 @@ export async function PATCH(request) {
     if (!snap.exists) return Response.json({ ok: false, error: "Print job not found" }, { status: 404 });
     const now = new Date().toISOString();
     const actor = actorFields(profile);
+    if (patch.status === "reprinted") {
+      const itemSnap = await ref.collection("items").orderBy("ordinal", "asc").limit(10_000).get();
+      const orderIds = [...new Set(itemSnap.docs.map(doc => String(doc.data()?.orderId || "")).filter(Boolean))];
+      const orderSnapshots = await Promise.all(orderIds.map(orderId => db.collection("orders").doc(orderId).get()));
+      const jobCreatedAt = String(snap.data()?.createdAt || "");
+      const canReprint = orderSnapshots.length === orderIds.length
+        && orderSnapshots.every(orderSnap => orderSnap.exists && canReprintOutstationLabel(orderSnap.data() || {}, jobCreatedAt));
+      if (!canReprint) throw Object.assign(new Error("This label job is invalid after the order route changed"), { status: 409 });
+    }
     const batch = db.batch();
     batch.update(ref, {
       status: patch.status,

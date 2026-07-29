@@ -14,6 +14,7 @@ import VehicleInspectionReport from "./components/VehicleInspectionReport";
 import DispatchDashboard from "./components/DispatchDashboard";
 import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
 import {
+  canRerouteOrder,
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
   isDriverDeliveryOrder,
@@ -795,6 +796,10 @@ export default function App() {
   const [outstationLabelReopenJobId, setOutstationLabelReopenJobId] = useState("");
   const [outstationLabelJobs, setOutstationLabelJobs] = useState([]);
   const [outstationLabelJobsLoading, setOutstationLabelJobsLoading] = useState(false);
+  const [rerouteModal, setRerouteModal] = useState(null);
+  const [rerouteForm, setRerouteForm] = useState({ deliveryMethod: "", workflowType: "", shippingCarrier: "", reason: "" });
+  const [rerouteSubmitting, setRerouteSubmitting] = useState(false);
+  const [rerouteError, setRerouteError] = useState("");
   const [showOutstationQrScanner, setShowOutstationQrScanner] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [workForm, setWorkForm] = useState({ bookingNumber: "", detail: "", note: "", missingNote: "" });
@@ -1884,6 +1889,9 @@ export default function App() {
   const isOpenStoreQueueStatus = (status) => ["pending", "working", "waiting", "partial", "returned"].includes(status || "pending");
   const isOpenPackQueueStatus = (status) => ["pending", "working", "waiting"].includes(status || "pending");
   const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
+  const salesPickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod)
+    && order.workflowType
+    && !["grab_picked_up", "completed", "pack_archived"].includes(String(order.queueStatus || "")));
   const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const packReworkOrders = (orders || []).filter(order => order.reworkRequired === true && !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod));
@@ -3146,6 +3154,50 @@ export default function App() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...json.data } : item) }));
       setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
+  const openRerouteModal = (order) => {
+    if (!canRerouteOrder(order).ok) {
+      setSyncStatus("⚠️ ออเดอร์นี้ผ่านจุดที่แก้เส้นทางได้แล้ว");
+      return;
+    }
+    const targetDeliveryMethod = order.deliveryMethod === "outstation" ? "company_driver" : "outstation";
+    setRerouteModal(order);
+    setRerouteForm({
+      deliveryMethod: targetDeliveryMethod,
+      workflowType: targetDeliveryMethod === "outstation" ? "direct_pack" : "store_route",
+      shippingCarrier: "",
+      reason: ""
+    });
+    setRerouteError("");
+  };
+
+  const submitReroute = async () => {
+    if (!rerouteModal || rerouteSubmitting) return;
+    const target = {
+      deliveryMethod: rerouteForm.deliveryMethod,
+      workflowType: rerouteForm.workflowType,
+      shippingCarrier: rerouteForm.shippingCarrier
+    };
+    const validation = canRerouteOrder(rerouteModal, target);
+    if (!validation.ok) {
+      setRerouteError(validation.reason || "ไม่สามารถย้ายออเดอร์นี้ได้");
+      return;
+    }
+    if (!rerouteForm.reason.trim()) {
+      setRerouteError("กรุณาระบุเหตุผลการย้ายออเดอร์");
+      return;
+    }
+    setRerouteSubmitting(true);
+    setRerouteError("");
+    const result = await updatePreparationWorkflow(rerouteModal, "reroute", { target, reason: rerouteForm.reason.trim() });
+    setRerouteSubmitting(false);
+    if (!result?.ok) {
+      setRerouteError(result?.error || "ย้ายออเดอร์ไม่สำเร็จ");
+      return;
+    }
+    setRerouteModal(null);
+    setRerouteForm({ deliveryMethod: "", workflowType: "", shippingCarrier: "", reason: "" });
+  };
+
       return { ok: true };
     } catch (e) {
       const error = e?.message || String(e);
@@ -4968,6 +5020,10 @@ export default function App() {
                     {availableVehicles.map(vehicle => (
                       <option key={vehicle.id} value={vehicle.id}>
                         {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
+            <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #7c3aed", background: "#faf5ff" }}>
+              <div className="panel-head"><h2>🛍️ งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
+              {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
+            </section>
                       </option>
                     ))}
                   </select>
@@ -5649,7 +5705,7 @@ export default function App() {
                   <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>
                   {order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}
                   {["pending", "working", "waiting", "partial"].includes(order.packStatus || "pending") && (order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus)) && (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button type="button" className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>ยืนยันจัดส่ง</button></div>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button type="button" className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>ยืนยันจัดส่ง</button>{["sales", "admin"].includes(auth.role) && canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div>
                   )}
                 </article>
               ))}
@@ -5793,6 +5849,7 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 <OrderCreatedAt order={order} />
                 {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
+                  {displayTab === "chiangmai" && ["sales", "admin"].includes(auth.role) && canRerouteOrder(order).ok && <button className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}
                 {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
@@ -7339,6 +7396,28 @@ export default function App() {
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
             <b>💬 แชททีม</b>
             <button className="secondary" onClick={() => { markChatReadUpToLatest(); setChatOpen(false); }} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
+    {rerouteModal && (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 1700, display: "grid", placeItems: "center", padding: "16px" }}>
+        <section className="panel" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", display: "grid", gap: "12px" }}>
+          <div className="panel-head"><h2>แก้เส้นทาง/ย้ายงาน</h2><span>{rerouteModal.id}</span></div>
+          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "9px", padding: "10px", fontSize: "12px" }}>
+            <b>เส้นทางปัจจุบัน:</b> {rerouteModal.deliveryMethod === "outstation" ? "ต่างจังหวัด" : rerouteModal.deliveryMethod === "grab_pickup" ? "Grab" : rerouteModal.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "คนขับบริษัท"}
+            <span> · {rerouteModal.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : rerouteModal.workflowType === "direct_driver" ? "ส่งตรงคนขับ" : "ผ่านสโตร์ก่อน"}</span>
+            <div className="muted" style={{ marginTop: "4px" }}>สถานะคิว: {rerouteModal.queueStatus || "preparing"} · สโตร์: {rerouteModal.storeStatus || "-"} · ห้องแพ็ค: {rerouteModal.packStatus || "-"}</div>
+          </div>
+          {rerouteError && <div role="alert" style={{ background: "#fef2f2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "9px", padding: "10px", fontSize: "12px" }}>{rerouteError}</div>}
+          <label style={{ display: "grid", gap: "5px" }}><b>ปลายทางใหม่ *</b><select value={rerouteForm.deliveryMethod} onChange={event => { const deliveryMethod = event.target.value; setRerouteForm(previous => ({ ...previous, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod === "company_driver" ? "store_route" : "store_route", shippingCarrier: deliveryMethod === "outstation" ? previous.shippingCarrier : "" })); }}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+          {!['grab_pickup', 'customer_pickup'].includes(rerouteForm.deliveryMethod) && <label style={{ display: "grid", gap: "5px" }}><b>เส้นทางตรวจสินค้า *</b><select value={rerouteForm.workflowType} onChange={event => setRerouteForm(previous => ({ ...previous, workflowType: event.target.value }))}>{rerouteForm.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option><option value="direct_driver">ส่งตรงคนขับทันที</option></>}</select></label>}
+          {rerouteForm.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "5px" }}><b>บริษัทขนส่ง *</b><input list="reroute-carriers" value={rerouteForm.shippingCarrier} onChange={event => setRerouteForm(previous => ({ ...previous, shippingCarrier: event.target.value }))} placeholder="เช่น Flash, Kerry, NTC" /><datalist id="reroute-carriers">{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier} />)}</datalist></label>}
+          <label style={{ display: "grid", gap: "5px" }}><b>เหตุผลการย้าย *</b><textarea value={rerouteForm.reason} onChange={event => setRerouteForm(previous => ({ ...previous, reason: event.target.value }))} rows={3} placeholder="เช่น ฝ่ายขายเลือกปลายทางผิด / ลูกค้าเปลี่ยนวิธีรับสินค้า" /></label>
+          <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderLeft: "5px solid #f97316", borderRadius: "8px", padding: "10px", fontSize: "12px", color: "#9a3412" }}>
+            การย้ายจะรีเซ็ตสถานะตรวจสโตร์/ห้องแพ็คและรอเริ่มตรวจตามเส้นทางใหม่{rerouteModal.deliveryMethod === "outstation" && (rerouteForm.deliveryMethod !== "outstation" || rerouteForm.shippingCarrier.trim() !== String(rerouteModal.shippingCarrier || "").trim()) ? " พร้อมทำให้ใบปะหน้าต่างจังหวัดเดิมใช้ต่อไม่ได้" : ""} และบันทึกเหตุผลไว้ในประวัติออเดอร์
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button type="button" className="secondary" disabled={rerouteSubmitting} onClick={() => { setRerouteModal(null); setRerouteError(""); }}>ยกเลิก</button><button type="button" className="primary" disabled={rerouteSubmitting || !rerouteForm.reason.trim()} onClick={submitReroute}>{rerouteSubmitting ? "กำลังย้าย..." : "ยืนยันแก้เส้นทาง"}</button></div>
+        </section>
+      </div>
+    )}
+
           </div>
           {chatOpen && typingUsers.filter(u => u.phone !== state.auth?.phone).length > 0 && (
             <div style={{ padding: "8px 14px", borderBottom: "1px solid #e5e7eb", background: "#ecfeff", color: "#0e7490", fontSize: "12px" }}>
