@@ -4,6 +4,7 @@ import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { driverReworkPatch } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
+import { buildDriverQueuePolicyPatch, refreshVersionedDriverQueuePatch } from "../../../../lib/driverQueuePolicy";
 
 export const runtime = "nodejs";
 
@@ -50,6 +51,7 @@ export async function PATCH(request) {
         patch.driverSequenceServiceDate = "";
         patch.driverSequenceUpdatedAt = "";
         patch.driverSequenceUpdatedBy = "";
+        Object.assign(patch, refreshVersionedDriverQueuePatch(order, now));
         Object.assign(history, { result: "returned_to_queue", reason });
       } else if (action === "driver_rework") {
         if (!["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || ""))) {
@@ -225,7 +227,7 @@ export async function PATCH(request) {
       if (!storeOk || !packOk) throw Object.assign(new Error("Order is not ready for driver queue"), { status: 409 });
       if (order.reworkRequired) throw Object.assign(new Error("Order rework must be resolved before driver queue"), { status: 409 });
       if (["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod)) throw Object.assign(new Error("Pickup and outstation orders do not enter the driver queue"), { status: 409 });
-      patch.queueStatus = "queued"; patch.status = "รอคนขับรับ"; patch.queuedAt = now; patch.queuedBy = profile.name || profile.email;
+      Object.assign(patch, buildDriverQueuePolicyPatch(now), { queuedBy: profile.name || profile.email });
     } else if (["sales", "admin"].includes(profile.role) && action === "complaint_resolve") {
       const note = String(body.note || "").trim().slice(0, 1000);
       if (!note) throw Object.assign(new Error("กรุณาระบุเหตุผลหรือวิธีแก้ไขก่อนปิดปัญหา"), { status: 400 });

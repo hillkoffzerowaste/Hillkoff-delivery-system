@@ -24,6 +24,7 @@ import {
   resolveNextRoundDate
 } from "../lib/preparationWorkflow";
 import { aggregateLatestDriverReviews } from "../lib/orderReview";
+import { isDriverQueueVisibleToDriver, isExpiredDriverQueueForSales } from "../lib/driverQueuePolicy";
 import {
   AlertTriangle,
   Camera,
@@ -1417,7 +1418,10 @@ export default function App() {
     if (state.auth?.role !== "driver") return;
     const did = state.auth?.driverId || driverId || "";
     if (!did) return;
-    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did) && o.status === "รอคนขับรับ" && (!o.queueStatus || o.queueStatus === "queued"));
+    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did)
+      && o.status === "รอคนขับรับ"
+      && (!o.queueStatus || o.queueStatus === "queued")
+      && isDriverQueueVisibleToDriver(o, todayServiceDate));
     const count = pending.length;
     setAppBadgeSafe(count);
     if (typeof document === "undefined") return;
@@ -1439,7 +1443,7 @@ export default function App() {
       });
     }
     previousOrderCountRef.current = count;
-  }, [state.auth?.role, state.auth?.driverId, driverId, state.orders]);
+  }, [state.auth?.role, state.auth?.driverId, driverId, state.orders, todayServiceDate]);
 
   // Chat UX: auto-scroll to latest message + emergency alert to everyone
   const scrollChatToBottom = () => {
@@ -2026,6 +2030,11 @@ export default function App() {
   });
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
+  const expiredDriverQueueOrders = (orders || [])
+    .filter((order) => isExpiredDriverQueueForSales(order, todayServiceDate))
+    .slice()
+    .sort((a, b) => String(a.driverQueueDate || "").localeCompare(String(b.driverQueueDate || ""))
+      || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
   const salesWaitingOrders = (orders || [])
     .filter(isSalesWaitingAlert)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
@@ -2333,6 +2342,7 @@ export default function App() {
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
     if (order.queueStatus && order.queueStatus !== "queued") return false;
+    if (!isDriverQueueVisibleToDriver(order, todayServiceDate)) return false;
     const isAvailable = !order.driverId || order.driverId === "";
     const isAssignedToMe = order.driverId === driverId;
     return isAvailable || isAssignedToMe;
@@ -5012,6 +5022,40 @@ export default function App() {
               }}
             />
             <div className="sales-grid">
+            {expiredDriverQueueOrders.length > 0 && (
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #f59e0b", background: "#fffbeb" }}>
+                <div className="panel-head"><h2>⏰ คิวหมดอายุ—รอฝ่ายขายส่งใหม่</h2><span>{expiredDriverQueueOrders.length} งาน</span></div>
+                <p className="muted" style={{ marginTop: 0 }}>ออเดอร์กติกาใหม่ที่ไม่มีคนขับรับภายในวันที่เข้าคิว ระบบซ่อนจากหน้าคนขับแล้ว</p>
+                <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>
+                  {expiredDriverQueueOrders.map((order) => (
+                    <article key={order.id} style={{ background: "white", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px", display: "grid", gap: "7px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                        <div>
+                          <b>{order.id} · {order.customerName || "-"}</b>
+                          <div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"} · เข้าคิวล่าสุด {order.driverQueueDate || "-"}</div>
+                        </div>
+                        <button
+                          className="primary"
+                          disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                          onClick={async () => {
+                            if (pendingOrderUpdatesRef.current.has(order.id)) return;
+                            pendingOrderUpdatesRef.current.add(order.id);
+                            try {
+                              const result = await updatePreparationWorkflow(order, "queue");
+                              if (result.ok) setSyncStatus(`✅ ส่งออเดอร์ ${order.id} เข้าคิวคนขับใหม่แล้ว`);
+                            } finally {
+                              pendingOrderUpdatesRef.current.delete(order.id);
+                            }
+                          }}
+                        >
+                          ส่งเข้าคิวใหม่
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
                 <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>✓ {syncStatus}</p>
@@ -6208,7 +6252,11 @@ export default function App() {
 
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
-              const pending = orders.filter(o => o.status === "รอคนขับรับ" && o.queueStatus === "queued" && !o.driverId && !pendingOrderUpdatesRef.current.has(o.id));
+              const pending = orders.filter(o => o.status === "รอคนขับรับ"
+                && o.queueStatus === "queued"
+                && !o.driverId
+                && isDriverQueueVisibleToDriver(o, todayServiceDate)
+                && !pendingOrderUpdatesRef.current.has(o.id));
               console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
               return (
                 <section className="panel">
