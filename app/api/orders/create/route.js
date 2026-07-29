@@ -5,6 +5,7 @@ import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
+import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
 
 export const runtime = "nodejs";
 
@@ -176,6 +177,7 @@ export async function POST(request) {
       chiangmaiRoundAssignedAt: now,
       chiangmaiRoundAssignedBy: createdByName
     });
+    if (next.queueStatus === "queued") Object.assign(next, buildDriverQueuePolicyPatch(now));
 
     try {
       const transactionResult = await db.runTransaction(async (transaction) => {

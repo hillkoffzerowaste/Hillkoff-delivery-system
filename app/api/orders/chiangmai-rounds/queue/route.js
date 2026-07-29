@@ -1,6 +1,7 @@
 import { isReadyOrderWaitingForDispatch } from "../../../../../lib/preparationWorkflow";
 import { errorResponse, requireProfile } from "../../../../../lib/workflowAuth";
 import { getAdminMessaging } from "../../../../../lib/firebaseAdmin";
+import { buildDriverQueuePolicyPatch } from "../../../../../lib/driverQueuePolicy";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,7 @@ export async function POST(request) {
       const blockingOrderIds = currentOrders.filter((order) => !isReadyOrderWaitingForDispatch(order)).map((order) => order.id);
       if (blockingOrderIds.length) throw Object.assign(new Error("Round is not ready"), { status: 409, blockingOrderIds });
       for (const order of currentOrders) {
-        transaction.set(order.ref, { queueStatus: "queued", status: "รอคนขับรับ", queuedAt: now, queuedBy: profile.name || profile.email, updatedAt: now }, { merge: true });
+        transaction.set(order.ref, { ...buildDriverQueuePolicyPatch(now), queuedBy: profile.name || profile.email, updatedAt: now }, { merge: true });
         transaction.set(order.ref.collection("activity").doc(), { action: "queue_round_bulk", roundCode, roundDate, batchId, uid: profile.uid, role: profile.role, at: now });
       }
     });

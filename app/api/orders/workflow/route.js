@@ -1,9 +1,10 @@
 import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
-import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumberList, parseBookingNumberList } from "../../../../lib/bookingRegistry";
 import { buildReroutePatch, driverReworkPatch } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
+import { buildDriverQueuePolicyPatch, refreshVersionedDriverQueuePatch } from "../../../../lib/driverQueuePolicy";
 
 export const runtime = "nodejs";
 
@@ -25,8 +26,8 @@ export async function PATCH(request) {
     const now = new Date().toISOString();
     const history = { action, role: profile.role, name: profile.name, uid: profile.uid, at: now, note: String(body?.note || "").trim().slice(0, 1000) };
     const patch = { updatedAt: now, workflowHistory: [...(Array.isArray(order.workflowHistory) ? order.workflowHistory : []).slice(-99), history] };
-    let bookingReservation = null;
-    let previousBookingReservationRef = null;
+    const bookingReservationsToCreate = [];
+    const bookingReservationsToDelete = [];
 
     if (["sales", "admin"].includes(profile.role) && action === "reroute") {
       const reason = String(body.reason || "").trim().slice(0, 1000);
@@ -63,6 +64,7 @@ export async function PATCH(request) {
         patch.driverSequenceServiceDate = "";
         patch.driverSequenceUpdatedAt = "";
         patch.driverSequenceUpdatedBy = "";
+        Object.assign(patch, refreshVersionedDriverQueuePatch(order, now));
         Object.assign(history, { result: "returned_to_queue", reason });
       } else if (action === "driver_rework") {
         if (!["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || ""))) {
@@ -124,31 +126,43 @@ export async function PATCH(request) {
       }
       patch.storeStatus = body.storeStatus; patch.storePackerName = String(body.storePackerName || profile.name).slice(0, 160); patch.storeCheckerName = String(body.storeCheckerName || "").slice(0, 160); patch.missingItems = Array.isArray(body.missingItems) ? body.missingItems.slice(0, 20).map((item) => String(item || "").slice(0, 500)).filter(Boolean) : [];
       Object.assign(history, { fromStatus: order.storeStatus || "pending", toStatus: body.storeStatus, result: body.storeWorkDetails?.checkResult || "", packerName: patch.storePackerName, checkerName: patch.storeCheckerName, missingItems: patch.missingItems });
-      if (body.bookingNumber !== undefined) {
-        const bookingNumber = normalizeBookingNumber(body.bookingNumber).slice(0, 100);
-        if (!BOOKING_NUMBER_PATTERN.test(bookingNumber)) throw Object.assign(new Error("Booking number must use PREFIX-1234 format"), { status: 400 });
-        const existingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter((value) => BOOKING_NUMBER_PATTERN.test(value)))];
-        const previousPrimaryNumber = existingNumbers[0] || "";
+      const rawBookingList = Array.isArray(body.bookingNumbers)
+        ? body.bookingNumbers
+        : body.bookingNumber !== undefined ? [body.bookingNumber] : null;
+      if (rawBookingList !== null) {
+        const parsed = parseBookingNumberList(rawBookingList);
+        if (!parsed.ok) throw Object.assign(new Error(parsed.error), { status: 400 });
+        const desired = parsed.items;
+        if (desired.length === 0) throw Object.assign(new Error("At least one valid booking number is required"), { status: 400 });
+        const current = normalizeBookingNumberList(
+          Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber].filter(Boolean)
+        );
+        const currentSet = new Set(current);
+        const desiredSet = new Set(desired);
+        const toAdd = desired.filter((v) => !currentSet.has(v));
+        const toRemove = current.filter((v) => !desiredSet.has(v));
         const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
-        const registryId = bookingRegistryId(serviceDate, bookingNumber);
-        if (!registryId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
-        const reservationRef = db.collection("booking_month_registry").doc(registryId);
-        const reservationSnap = await reservationRef.get();
-        if (reservationSnap.exists && reservationSnap.data()?.sourceId !== orderId) {
-          throw Object.assign(new Error(bookingConflictMessage(reservationSnap.data())), { status: 409 });
-        }
-        patch.bookingNumber = bookingNumber;
-        patch.bookingNumbers = [bookingNumber, ...existingNumbers.filter((value) => value !== previousPrimaryNumber && value !== bookingNumber)];
-        if (!reservationSnap.exists) bookingReservation = { ref: reservationRef, data: bookingRegistryRecord({ serviceDate, bookingNumber, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) };
-        if (previousPrimaryNumber && previousPrimaryNumber !== bookingNumber) {
-          const previousRegistryId = bookingRegistryId(serviceDate, previousPrimaryNumber);
-          if (previousRegistryId) {
-            const previousRef = db.collection("booking_month_registry").doc(previousRegistryId);
-            const previousSnap = await previousRef.get();
-            if (previousSnap.exists && previousSnap.data()?.sourceId === orderId) previousBookingReservationRef = previousRef;
+        for (const num of toAdd) {
+          const regId = bookingRegistryId(serviceDate, num);
+          if (!regId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
+          const regRef = db.collection("booking_month_registry").doc(regId);
+          const regSnap = await regRef.get();
+          if (regSnap.exists && regSnap.data()?.sourceId !== orderId) {
+            throw Object.assign(new Error(bookingConflictMessage(regSnap.data())), { status: 409 });
           }
-          Object.assign(history, { bookingNumberFrom: previousPrimaryNumber, bookingNumberTo: bookingNumber });
+          if (!regSnap.exists) bookingReservationsToCreate.push({ ref: regRef, data: bookingRegistryRecord({ serviceDate, bookingNumber: num, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) });
         }
+        for (const num of toRemove) {
+          const regId = bookingRegistryId(serviceDate, num);
+          if (!regId) continue;
+          const regRef = db.collection("booking_month_registry").doc(regId);
+          const regSnap = await regRef.get();
+          if (regSnap.exists && regSnap.data()?.sourceId === orderId) bookingReservationsToDelete.push({ ref: regRef, updateTime: regSnap.updateTime });
+        }
+        patch.bookingNumber = desired[0];
+        patch.bookingNumbers = desired;
+        if (toAdd.length) Object.assign(history, { bookingNumbersAdded: toAdd });
+        if (toRemove.length) Object.assign(history, { bookingNumbersRemoved: toRemove });
       }
       if (body.storeWorkDetails && typeof body.storeWorkDetails === "object") patch.storeWorkDetails = {
         detail: String(body.storeWorkDetails.detail || "").trim().slice(0, 2000),
@@ -238,7 +252,7 @@ export async function PATCH(request) {
       if (!storeOk || !packOk) throw Object.assign(new Error("Order is not ready for driver queue"), { status: 409 });
       if (order.reworkRequired) throw Object.assign(new Error("Order rework must be resolved before driver queue"), { status: 409 });
       if (["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod)) throw Object.assign(new Error("Pickup and outstation orders do not enter the driver queue"), { status: 409 });
-      patch.queueStatus = "queued"; patch.status = "รอคนขับรับ"; patch.queuedAt = now; patch.queuedBy = profile.name || profile.email;
+      Object.assign(patch, buildDriverQueuePolicyPatch(now), { queuedBy: profile.name || profile.email });
     } else if (["sales", "admin"].includes(profile.role) && action === "complaint_resolve") {
       const note = String(body.note || "").trim().slice(0, 1000);
       if (!note) throw Object.assign(new Error("กรุณาระบุเหตุผลหรือวิธีแก้ไขก่อนปิดปัญหา"), { status: 400 });
@@ -251,8 +265,8 @@ export async function PATCH(request) {
     const batch = db.batch();
     batch.update(ref, patch, { lastUpdateTime: snap.updateTime });
     batch.set(ref.collection("activity").doc(), history);
-    if (bookingReservation) batch.create(bookingReservation.ref, bookingReservation.data);
-    if (previousBookingReservationRef) batch.delete(previousBookingReservationRef);
+    for (const r of bookingReservationsToCreate) batch.create(r.ref, r.data);
+    for (const r of bookingReservationsToDelete) batch.delete(r.ref, { lastUpdateTime: r.updateTime });
     await batch.commit();
     try {
       await syncDeliveryOrderToSheet(db, orderId, { ...order, ...patch });
