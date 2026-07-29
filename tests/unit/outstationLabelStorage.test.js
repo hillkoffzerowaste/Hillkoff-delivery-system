@@ -72,6 +72,18 @@ describe("outstation label persistence validation", () => {
     expect(job).not.toHaveProperty("queueStatus");
   });
 
+  it("preserves a safe label revision for reprints", () => {
+    const job = sanitizePrintJob({
+      idempotencyKey: "print-request-0002",
+      items: [{ ...validItem, labelRevision: "2026-07-29T02:00:00.000Z" }]
+    });
+    expect(job.items[0].labelRevision).toBe("2026-07-29T02:00:00.000Z");
+    expect(() => sanitizePrintJob({
+      idempotencyKey: "print-request-0003",
+      items: [{ ...validItem, labelRevision: "bad/revision" }]
+    })).toThrow(/revision/i);
+  });
+
   it("accepts only printed, reprinted, or cancelled status patches", () => {
     expect(sanitizePrintStatusPatch({ status: "printed", reason: "" })).toEqual({ status: "printed", reason: "" });
     expect(() => sanitizePrintStatusPatch({ status: "ready" })).toThrow(/status/i);

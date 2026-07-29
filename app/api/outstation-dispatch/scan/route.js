@@ -19,7 +19,7 @@ export async function POST(request) {
       const snap = await transaction.get(ref);
       if (!snap.exists) throw Object.assign(new Error("ไม่พบออเดอร์จาก QR นี้"), { status: 404 });
       const order = { id: snap.id, ...(snap.data() || {}) };
-      if (!validateOutstationDispatchOrder(order)) {
+      if (!validateOutstationDispatchOrder(order, payload)) {
         throw Object.assign(new Error("ออเดอร์นี้ยังไม่พร้อมส่งขนส่ง หรือปิดงานแล้ว"), { status: 409 });
       }
       const now = new Date().toISOString();

@@ -30,6 +30,25 @@ describe("outstation QR dispatch", () => {
     )).toBe(true);
   });
 
+  it("accepts only the current QR label revision after an outstation reroute", () => {
+    const invalidatedOrder = {
+      deliveryMethod: "outstation",
+      outstationLabelInvalidatedAt: "2026-07-29T02:00:00.000Z",
+      outstationLabelRevision: "rev-2"
+    };
+    expect(validateOutstationDispatchOrder(invalidatedOrder, { labelRevision: "rev-1" })).toBe(false);
+    expect(validateOutstationDispatchOrder(invalidatedOrder, { labelRevision: "rev-2" })).toBe(true);
+    expect(validateOutstationDispatchOrder(invalidatedOrder, { labelRevision: "" })).toBe(false);
+    expect(validateOutstationDispatchOrder({
+      deliveryMethod: "outstation",
+      outstationLabelInvalidatedAt: "2026-07-29T02:00:00.000Z"
+    }, { labelRevision: "2026-07-29T02:00:00.000Z" })).toBe(true);
+    expect(validateOutstationDispatchOrder({
+      deliveryMethod: "outstation",
+      outstationLabelInvalidatedAt: "2026-07-29T02:00:00.000Z"
+    }, { labelRevision: "" })).toBe(false);
+  });
+
   it("uses a print-safe QR image and scans only the QR format", () => {
     expect(outstationQrRenderOptions).toEqual({
       errorCorrectionLevel: "H",
@@ -53,7 +72,7 @@ describe("outstation QR dispatch", () => {
     const payload = createOutstationQrPayload({ orderId: "DO-260724-093803260-B81E54A1", boxIndex: 1, boxTotal: 3 });
 
     expect(payload).toBe("HKO1|DO-260724-093803260-B81E54A1|1|3");
-    expect(parseOutstationQrPayload(payload)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", boxIndex: 1, boxTotal: 3 });
+    expect(parseOutstationQrPayload(payload)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", labelRevision: "", boxIndex: 1, boxTotal: 3 });
     expect(() => parseOutstationQrPayload("HKO1|bad/order|1|3")).toThrow("Invalid outstation QR payload");
   });
 
@@ -62,8 +81,14 @@ describe("outstation QR dispatch", () => {
     const qrUrl = createOutstationQrUrl("https://delivery.example", payload);
 
     expect(qrUrl).toBe("https://delivery.example/outstation-qr?t=HKO1%7CDO-260724-093803260-B81E54A1%7C1%7C3");
-    expect(parseOutstationQrPayload(qrUrl)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", boxIndex: 1, boxTotal: 3 });
+    expect(parseOutstationQrPayload(qrUrl)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", labelRevision: "", boxIndex: 1, boxTotal: 3 });
     expect(HILLKOFF_LINE_URL).toBe("https://page.line.me/769svedb?oat_content=url&openQrModal=true");
+  });
+
+  it("writes and parses a revisioned QR for rerouted outstation labels", () => {
+    const payload = createOutstationQrPayload({ orderId: "DO-260724-093803260-B81E54A1", labelRevision: "rev-2", boxIndex: 1, boxTotal: 3 });
+    expect(payload).toBe("HKO2|DO-260724-093803260-B81E54A1|rev-2|1|3");
+    expect(parseOutstationQrPayload(payload)).toEqual({ orderId: "DO-260724-093803260-B81E54A1", labelRevision: "rev-2", boxIndex: 1, boxTotal: 3 });
   });
 
   it("uses the first scan total, records unique boxes, and completes only on the final box", () => {
