@@ -460,6 +460,18 @@ h2 {
   grid-template-columns: 340px minmax(0, 1fr) 360px;
 }
 
+.sales-status-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.sales-status-columns .sales-round-queue-panel,
+.sales-status-columns > details.daily-accordion {
+  margin-bottom: 0;
+}
+
 .driver-grid {
   grid-template-columns: 300px minmax(0, 1fr);
 }
@@ -1816,6 +1828,7 @@ textarea {
   .primary, .secondary, .add-row button { min-height: 42px; }
   [style*="position: fixed"] { padding: 10px !important; }
   [style*="position: fixed"] .panel { border-radius: 14px; }
+  .sales-status-columns { grid-template-columns: 1fr; }
 }
 
 /* Active palette: Fresh Leaf Workspace — higher contrast, less grey. */
