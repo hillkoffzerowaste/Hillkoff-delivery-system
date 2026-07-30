@@ -811,11 +811,6 @@ export default function App() {
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
   const [workSubmitting, setWorkSubmitting] = useState(false);
   const [workSubmitError, setWorkSubmitError] = useState("");
-  const [storeBookingEntryTargetId, setStoreBookingEntryTargetId] = useState("");
-  const [storeBookingEntryNumbers, setStoreBookingEntryNumbers] = useState([]);
-  const [storeBookingEntryStatus, setStoreBookingEntryStatus] = useState("draft");
-  const [storeBookingEntrySaving, setStoreBookingEntrySaving] = useState(false);
-  const [storeBookingEntryError, setStoreBookingEntryError] = useState("");
   const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
   const [newCheckerName, setNewCheckerName] = useState("");
   const [storeReports, setStoreReports] = useState([]);
@@ -910,7 +905,7 @@ export default function App() {
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : tab === "driver-dashboard" ? "driver-dashboard" : "driver")
-    : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
+    : state.auth?.role === "store" ? (["store-work", "store-booking-entry", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? (["pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : state.auth?.role === "accounting" ? "driver-sop-report"
     : (tab === "driver" ? "sales" : tab);
@@ -1095,7 +1090,7 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "driver-ratings", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "driver-ratings", "store-work", "store-booking-entry", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
     // Store searches customers through the authenticated API; its Firestore rules intentionally
@@ -2127,11 +2122,11 @@ export default function App() {
   }, [auth.role, fetchStoreReportIssues]);
   useEffect(() => {
     const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
-    const reportType = ["store-booking", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
-    const shouldFetchReports = (auth.role === "store" && ["store-booking", "store-online", "store-dashboard"].includes(displayTab))
+    const reportType = ["store-booking", "store-booking-entry", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
+    const shouldFetchReports = (auth.role === "store" && ["store-booking", "store-booking-entry", "store-online", "store-dashboard"].includes(displayTab))
       || (auth.role === "pack" && ["pack-booking", "pack-online", "pack-dashboard"].includes(displayTab));
-    if (shouldFetchReports) fetchStoreReports({ date: ["store-booking", "store-online", "pack-booking", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
-    const isStoreReport = auth.role === "store" && ["store-booking", "store-online"].includes(displayTab);
+    if (shouldFetchReports) fetchStoreReports({ date: ["store-booking", "store-booking-entry", "store-online", "pack-booking", "pack-online"].includes(displayTab) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
+    const isStoreReport = auth.role === "store" && ["store-booking", "store-booking-entry", "store-online"].includes(displayTab);
     if (!isKpi && !isStoreReport) return undefined;
     if (isKpi && !kpiAutoRefresh) return undefined;
     const timer = window.setInterval(() => {
@@ -3378,49 +3373,6 @@ export default function App() {
     loadOutstationLabelJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayTab]);
-
-  const openStoreBookingEntry = (order) => {
-    setStoreBookingEntryTargetId(order.id);
-    const current = getOrderBookingNumbers(order);
-    setStoreBookingEntryNumbers(current.length ? current : [""]);
-    setStoreBookingEntryStatus(order.storeBookingEntryStatus === "confirmed" ? "confirmed" : "draft");
-    setStoreBookingEntryError("");
-  };
-
-  const updateStoreBookingEntryNumber = (index, value) => {
-    setStoreBookingEntryNumbers((current) => current.map((item, itemIndex) => itemIndex === index ? value : item));
-    setStoreBookingEntryError("");
-  };
-
-  const saveStoreBookingEntry = async (entryStatus = "draft") => {
-    const order = orders.find((item) => item.id === storeBookingEntryTargetId);
-    if (!order || storeBookingEntrySaving) return;
-    const bookingNumbers = storeBookingEntryNumbers.map(normalizeBookingNumber).filter(Boolean);
-    if (!bookingNumbers.length) {
-      setStoreBookingEntryError("กรุณาเพิ่มเลขใบสั่งจองอย่างน้อย 1 รายการ");
-      return;
-    }
-    if (bookingNumbers.some((value) => !isValidBookingNumber(value))) {
-      setStoreBookingEntryError("เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
-      return;
-    }
-    if (new Set(bookingNumbers).size !== bookingNumbers.length) {
-      setStoreBookingEntryError("เลขที่ใบสั่งจองในรายการห้ามซ้ำกัน");
-      return;
-    }
-    setStoreBookingEntrySaving(true);
-    setStoreBookingEntryError("");
-    const result = await updatePreparationWorkflow(order, "store_booking_update", { bookingNumbers, entryStatus });
-    setStoreBookingEntrySaving(false);
-    if (result.ok) {
-      setStoreBookingEntryTargetId("");
-      setStoreBookingEntryNumbers([]);
-      setStoreBookingEntryStatus("draft");
-      setSyncStatus(`✅ ${entryStatus === "confirmed" ? "ยืนยันรายการเลขใบสั่งจอง" : "บันทึกร่างเลขใบสั่งจอง"}ของออเดอร์ ${order.id} แล้ว`);
-    } else {
-      setStoreBookingEntryError(result.error || "บันทึกเลขใบสั่งจองไม่สำเร็จ");
-    }
-  };
 
   const openWorkModal = (order, role) => {
     clearWorkPhotos();
@@ -5018,6 +4970,7 @@ export default function App() {
           {auth.role === "store" && (
             <>
               <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{storeWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอสโตร์ ${storeWorkOrders.length} งาน`}>{storeWorkOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "store-booking-entry" ? "active" : ""} onClick={() => selectAppTab("store-booking-entry")}><FileText size={18} /> <span>เพิ่มเลขใบสั่งจอง</span></button>
               <button type="button" className={displayTab === "store-pickup" ? "active" : ""} onClick={() => selectAppTab("store-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{storePickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอสโตร์ ${storePickupOrders.length} งาน`}>{storePickupOrders.length}</span>}</button>
               <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง{storeReportIssues.booking.count > 0 && <span className="nav-count-badge" aria-label={`ใบสั่งจองของไม่ครบ ${storeReportIssues.booking.count} รายการ`}>{storeReportIssues.booking.count}</span>}</button>
               <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์{storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`ใบขายออนไลน์ของไม่ครบ ${storeReportIssues.online.count} รายการ`}>{storeReportIssues.online.count}</span>}</button>
@@ -5844,10 +5797,10 @@ export default function App() {
           </div>
         )}
 
-        {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
+        {["store-work", "store-booking-entry", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
             {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
-            {displayTab !== "store-dashboard" && <div className="panel-head"><h2>{displayTab === "store-work" ? "ออเดอร์เชียงใหม่/ใกล้เคียง" : "งานสโตร์"}</h2><span>เฉพาะบัญชีสโตร์</span></div>}
+            {displayTab !== "store-dashboard" && <div className="panel-head"><h2>{displayTab === "store-work" ? "ออเดอร์เชียงใหม่/ใกล้เคียง" : displayTab === "store-booking-entry" ? "เพิ่มเลขใบสั่งจอง" : "งานสโตร์"}</h2><span>เฉพาะบัญชีสโตร์</span></div>}
             {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "10px" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
             {displayTab === "store-work" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วนเชียงใหม่/ใกล้เคียง</button>
@@ -5856,38 +5809,28 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
                 <OrderCreatedAt order={order} />
                  <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
-                 {order.storeBookingEntryStatus && <span className="status-chip" style={{ width: "fit-content", color: order.storeBookingEntryStatus === "confirmed" ? "#166534" : "#92400e", background: order.storeBookingEntryStatus === "confirmed" ? "#dcfce7" : "#fef3c7" }}>{order.storeBookingEntryStatus === "confirmed" ? "เลขใบสั่งจองยืนยันแล้ว" : "เลขใบสั่งจองบันทึกร่าง"}</span>}
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <SalesNoteAlert order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                   <button type="button" className="secondary" onClick={() => openStoreBookingEntry(order)}>+ เพิ่มเลขใบสั่งจอง</button>
-                   <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
-                 </div>
-                 {storeBookingEntryTargetId === order.id && <div style={{ display: "grid", gap: "9px", marginTop: "4px", padding: "11px", background: "#f8fafc", border: "1px solid #bfdbfe", borderLeft: "5px solid #2563eb", borderRadius: "9px" }}>
-                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", alignItems: "center" }}><b>รายการเลขใบสั่งจอง</b><span className="muted">{storeBookingEntryStatus === "confirmed" ? "ยืนยันแล้ว" : "บันทึกร่าง"}</span></div>
-                   {storeBookingEntryNumbers.map((number, index) => <div key={`store-booking-entry-row-${index}`} style={{ display: "flex", gap: "7px", alignItems: "flex-end" }}><div style={{ flex: "1 1 240px" }}><BookingNumberInput value={number} onChange={(value) => updateStoreBookingEntryNumber(index, value)} /></div>{storeBookingEntryNumbers.length > 1 && <button type="button" className="secondary danger" onClick={() => setStoreBookingEntryNumbers((current) => current.filter((_, itemIndex) => itemIndex !== index))}>ลบ</button>}</div>)}
-                   {storeBookingEntryError && <div role="alert" style={{ color: "#991b1b", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "7px", padding: "7px", fontSize: "12px" }}>{storeBookingEntryError}</div>}
-                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button type="button" className="secondary" onClick={() => setStoreBookingEntryNumbers((current) => [...current, ""])}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><button type="button" className="secondary" disabled={storeBookingEntrySaving} onClick={() => saveStoreBookingEntry("draft")}>{storeBookingEntrySaving ? "กำลังบันทึก…" : "บันทึกร่าง"}</button><button type="button" className="primary" disabled={storeBookingEntrySaving} onClick={() => saveStoreBookingEntry("confirmed")}>ยืนยันรายการ</button><button type="button" className="secondary" disabled={storeBookingEntrySaving} onClick={() => { setStoreBookingEntryTargetId(""); setStoreBookingEntryNumbers([]); setStoreBookingEntryStatus("draft"); setStoreBookingEntryError(""); }}>ยกเลิก</button></div></div>
-                 </div>}
+                 <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
                </article>})}
                {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
                {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
-             </div>}
-             {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
+              </div>}
+              {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
               {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><SalesNoteAlert order={order} compact /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
-            {["store-booking", "store-online"].includes(displayTab) && <div className="store-report-workspace">
-              {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "7px", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "#991b1b" }}>⚠️ มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "#b91c1c", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "#dc2626", color: "#991b1b" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "6px" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid #fecaca", background: "#fff", color: "#7f1d1d", borderRadius: "7px", padding: "8px", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "#991b1b" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
-              {storeReports.filter(item => item.type === (displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "#991b1b" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
-              {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type, includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, type, includeDeleted: storeReportIncludeDeleted }); }; return <>
+            {["store-booking", "store-booking-entry", "store-online"].includes(displayTab) && <div className="store-report-workspace">
+              {(() => { const type = ["store-booking", "store-booking-entry"].includes(displayTab) ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "7px", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "#991b1b" }}>⚠️ มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "#b91c1c", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "#dc2626", color: "#991b1b" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "6px" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid #fecaca", background: "#fff", color: "#7f1d1d", borderRadius: "7px", padding: "8px", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "#991b1b" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
+              {storeReports.filter(item => item.type === (["store-booking", "store-booking-entry"].includes(displayTab) ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "#991b1b" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
+              {(() => { const type = ["store-booking", "store-booking-entry"].includes(displayTab) ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type, includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, type, includeDeleted: storeReportIncludeDeleted }); }; return <>
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
-                <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? "ติดตามเอกสารและงานที่รอยืนยัน" : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน">↻ รีเฟรช</button></div></div></header>
+                 <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? (displayTab === "store-booking-entry" ? "เพิ่มเลขใบสั่งจอง" : "ใบสั่งจอง") : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? (displayTab === "store-booking-entry" ? "เพิ่มเอกสารอิสระโดยไม่ต้องผูกกับออเดอร์" : "ติดตามเอกสารและงานที่รอยืนยัน") : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน">↻ รีเฟรช</button></div></div></header>
                 <div className="store-report-kpis"><article><span>ทั้งหมด</span><strong>{activeRows.length}</strong><small>{deletedCount ? `ไม่รวมลบแล้ว ${deletedCount}` : "รายการที่ใช้งาน"}</small></article><article className="is-action"><span>ต้องดำเนินการ</span><strong>{activeRows.filter(needsAction).length}</strong><small>ร่างหรือยังไม่ยืนยัน</small></article><article className="is-confirmed"><span>ยืนยันแล้ว</span><strong>{activeRows.filter(item => item.confirmedAt).length}</strong><small>พร้อมดำเนินงานต่อ</small></article><article className="is-problem"><span>มีปัญหา</span><strong>{activeRows.filter(isProblem).length}</strong><small>รอของ / ของไม่ครบ</small></article></div>
                 <div className="store-report-filters"><div className="store-report-search"><Search size={17} /><input value={storeReportQuery} onChange={e => setStoreReportQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") runSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div><button className="secondary" onClick={runSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); fetchStoreReports({ date: storeReportDate, type, includeDeleted: storeReportIncludeDeleted }); }}>ล้าง</button><select aria-label="กรองตามสถานะ" value={storeReportStatusFilter} onChange={e => setStoreReportStatusFilter(e.target.value)}><option value="all">ทุกสถานะ</option><option value="action">ต้องดำเนินการ</option><option value="confirmed">ยืนยันแล้ว</option><option value="problem">มีปัญหา</option><option value="deleted">ลบแล้ว</option></select><label className="store-report-deleted-filter"><input type="checkbox" checked={storeReportIncludeDeleted} onChange={e => setStoreReportIncludeDeleted(e.target.checked)} /> รวมรายการลบแล้ว{deletedCount > 0 ? ` (${deletedCount})` : ""}</label></div>
                 {storeReportSearchActive && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>ผลค้นหาย้อนหลัง: “{storeReportQuery}”</div>}
