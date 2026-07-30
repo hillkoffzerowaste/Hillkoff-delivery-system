@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const pageSource = await readFile(new URL("../../app/page.jsx", import.meta.url), "utf8");
+const normalizedPageSource = pageSource.replaceAll("\r\n", "\n");
 
 describe("dashboard layout", () => {
   it("does not render the retired five-card order summary on any page", () => {
@@ -10,5 +11,11 @@ describe("dashboard layout", () => {
     expect(pageSource).not.toContain('title="กำลังส่ง"');
     expect(pageSource).not.toContain('title="ส่งสำเร็จ"');
     expect(pageSource).not.toContain('title="งานวิ่งวันนี้"');
+  });
+
+  it("keeps legacy customer editing beside the original sales customer panels", () => {
+    expect(normalizedPageSource).toContain('<section className="panel">\n              <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2>');
+    expect(normalizedPageSource).toContain('<section className="panel">\n              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2>');
+    expect(normalizedPageSource).toContain('<section className="panel">\n              <div className="panel-head"><h2>เพิ่มลูกค้าใหม่</h2>');
   });
 });
