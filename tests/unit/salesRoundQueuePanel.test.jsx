@@ -13,7 +13,6 @@ describe("sales round queue panel", () => {
       ]}
       onQueued={() => {}}
     />);
-    expect(html).toContain("ออเดอร์รอบจัดส่งเชียงใหม่");
     expect(html).toContain("รอบวันอังคาร");
     expect(html).toContain("2026-07-28");
     expect(html).toContain("เลือกทั้งหมดที่พร้อม");

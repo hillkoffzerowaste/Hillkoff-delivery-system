@@ -14,6 +14,7 @@ import VehicleInspectionReport from "./components/VehicleInspectionReport";
 import DispatchDashboard from "./components/DispatchDashboard";
 import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
 import {
+  buildChiangmaiRoundGroups,
   canRerouteOrder,
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -928,6 +929,7 @@ export default function App() {
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const [showDriverDailyReport, setShowDriverDailyReport] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
+  const [activeSalesStatusPanel, setActiveSalesStatusPanel] = useState(null);
   const [podPreviewsByOrder, setPodPreviewsByOrder] = useState({});
   const podFilesRef = useRef({}); // { [orderId]: File[] } kept on-device only (not synced)
   const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
@@ -2053,6 +2055,9 @@ export default function App() {
     .filter(isSalesWaitingAlert)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
   const salesWaitingOrdersVisible = salesWaitingOrders.slice(0, 30);
+  const chiangmaiRoundGroups = useMemo(() => buildChiangmaiRoundGroups(orders || []), [orders]);
+  const chiangmaiRoundTotalOrders = chiangmaiRoundGroups.reduce((sum, group) => sum + group.total, 0);
+  const chiangmaiRoundTotalReady = chiangmaiRoundGroups.reduce((sum, group) => sum + group.ready, 0);
   const storeTodayOrders = storeKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
   const packTodayOrders = packKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
   const activeStoreTodayOrders = storeTodayOrders.filter(order => order.storeStatus !== "archived");
@@ -5065,25 +5070,48 @@ export default function App() {
         {displayTab === "sales" && (
           <>
             <div className="sales-grid">
-            <div className="sales-status-columns" style={{ gridColumn: "1 / -1" }}>
-            <SalesRoundQueuePanel
-              apiFetch={authenticatedApiFetch}
-              orders={orders}
-              onQueued={(queuedIds, result) => {
-                const queuedSet = new Set(queuedIds);
-                setState((prev) => ({
-                  ...prev,
-                  orders: prev.orders.map((order) => queuedSet.has(order.id)
-                    ? { ...order, queueStatus: "queued", status: "รอคนขับรับ" }
-                    : order)
-                }));
-                setSyncStatus(`✅ ส่งเข้าคิวพร้อมกัน ${result.count} ออเดอร์`);
-              }}
-            />
-            {expiredDriverQueueOrders.length > 0 && (
-              <details className="daily-accordion" style={{ borderLeft: "4px solid #f59e0b", background: "#fffbeb" }}>
-                <summary className="panel-head daily-accordion-trigger" style={{ cursor: "pointer" }}><h2>⏰ คิวหมดอายุ—รอฝ่ายขายส่งใหม่</h2><span>{expiredDriverQueueOrders.length} งาน</span></summary>
-                <div className="daily-accordion-body">
+            <div className="sales-status-tabs" style={{ gridColumn: "1 / -1" }}>
+              <button type="button" className={activeSalesStatusPanel === "round" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "round" ? null : "round")}>
+                <span>ออเดอร์รอบจัดส่งเชียงใหม่</span>
+                <span className="status-chip">พร้อม {chiangmaiRoundTotalReady}/{chiangmaiRoundTotalOrders}</span>
+              </button>
+              {expiredDriverQueueOrders.length > 0 && (
+                <button type="button" className={activeSalesStatusPanel === "expired" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "expired" ? null : "expired")}>
+                  <span>⏰ คิวหมดอายุ</span>
+                  <span className="status-chip">{expiredDriverQueueOrders.length} งาน</span>
+                </button>
+              )}
+              <button type="button" className={activeSalesStatusPanel === "waiting" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "waiting" ? null : "waiting")}>
+                <span>⏳ งานรอของ / ของไม่ครบ</span>
+                <span className="status-chip">{salesWaitingOrders.length} งาน</span>
+              </button>
+              <button type="button" className={activeSalesStatusPanel === "grab" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "grab" ? null : "grab")}>
+                <span>🛍️ Grab / รับหน้าร้าน</span>
+                <span className="status-chip">{salesPickupOrders.length} งาน</span>
+              </button>
+            </div>
+            {activeSalesStatusPanel === "round" && (
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #166562" }}>
+                <div className="panel-head"><h2>ออเดอร์รอบจัดส่งเชียงใหม่</h2></div>
+                <SalesRoundQueuePanel
+                  apiFetch={authenticatedApiFetch}
+                  orders={orders}
+                  onQueued={(queuedIds, result) => {
+                    const queuedSet = new Set(queuedIds);
+                    setState((prev) => ({
+                      ...prev,
+                      orders: prev.orders.map((order) => queuedSet.has(order.id)
+                        ? { ...order, queueStatus: "queued", status: "รอคนขับรับ" }
+                        : order)
+                    }));
+                    setSyncStatus(`✅ ส่งเข้าคิวพร้อมกัน ${result.count} ออเดอร์`);
+                  }}
+                />
+              </section>
+            )}
+            {activeSalesStatusPanel === "expired" && expiredDriverQueueOrders.length > 0 && (
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #f59e0b", background: "#fffbeb" }}>
+                <div className="panel-head"><h2>⏰ คิวหมดอายุ—รอฝ่ายขายส่งใหม่</h2><span>{expiredDriverQueueOrders.length} งาน</span></div>
                 <p className="muted" style={{ marginTop: 0 }}>ออเดอร์กติกาใหม่ที่ไม่มีคนขับรับภายในวันที่เข้าคิว ระบบซ่อนจากหน้าคนขับแล้ว</p>
                 <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>
                   {expiredDriverQueueOrders.map((order) => (
@@ -5123,22 +5151,20 @@ export default function App() {
                     </article>
                   ))}
                 </div>
-                </div>
-              </details>
+              </section>
             )}
-            <details className="daily-accordion" style={{ borderLeft: "4px solid #dc2626", background: "#fffafa" }}>
-              <summary className="panel-head daily-accordion-trigger" style={{ cursor: "pointer" }}><h2>⏳ งานรอของ / ของไม่ครบ</h2><span>{salesWaitingOrders.length} งาน{salesWaitingOrders.length > salesWaitingOrdersVisible.length ? ` · แสดง ${salesWaitingOrdersVisible.length} งานล่าสุด` : ""}</span></summary>
-              <div className="daily-accordion-body">
+            {activeSalesStatusPanel === "waiting" && (
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #dc2626", background: "#fffafa" }}>
+                <div className="panel-head"><h2>⏳ งานรอของ / ของไม่ครบ</h2><span>{salesWaitingOrders.length} งาน{salesWaitingOrders.length > salesWaitingOrdersVisible.length ? ` · แสดง ${salesWaitingOrdersVisible.length} งานล่าสุด` : ""}</span></div>
               {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><ReworkNotice order={order} compact /><div style={{ display: "flex", gap: "7px", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
-              </div>
-            </details>
-            <details className="daily-accordion" style={{ borderLeft: "4px solid #7c3aed", background: "#faf5ff" }}>
-              <summary className="panel-head daily-accordion-trigger" style={{ cursor: "pointer" }}><h2>🛍️ งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></summary>
-              <div className="daily-accordion-body">
+              </section>
+            )}
+            {activeSalesStatusPanel === "grab" && (
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #7c3aed", background: "#faf5ff" }}>
+                <div className="panel-head"><h2>🛍️ งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
               {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
-              </div>
-            </details>
-            </div>
+              </section>
+            )}
             {syncStatus && syncStatus !== "Local mode" && (
               <section className="panel" style={{ gridColumn: "1 / -1", background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
                 <p style={{ margin: 0, fontSize: "12px", color: "#92400e" }}>✓ {syncStatus}</p>

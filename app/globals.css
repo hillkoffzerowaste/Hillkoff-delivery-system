@@ -460,16 +460,40 @@ h2 {
   grid-template-columns: 340px minmax(0, 1fr) 360px;
 }
 
-.sales-status-columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+.sales-status-tabs {
+  display: flex;
   gap: 10px;
-  align-items: start;
 }
 
-.sales-status-columns .sales-round-queue-panel,
-.sales-status-columns > details.daily-accordion {
-  margin-bottom: 0;
+.sales-status-tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dfeae0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 8px;
+  cursor: pointer;
+  font-weight: 800;
+  color: #17201e;
+  text-align: center;
+}
+
+.sales-status-tabs button span:first-child {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.sales-status-tabs button.active {
+  border-color: #175e6b;
+  background: #eefaf9;
+  box-shadow: 0 6px 18px rgba(23, 32, 25, 0.08);
 }
 
 .driver-grid {
@@ -1828,7 +1852,8 @@ textarea {
   .primary, .secondary, .add-row button { min-height: 42px; }
   [style*="position: fixed"] { padding: 10px !important; }
   [style*="position: fixed"] .panel { border-radius: 14px; }
-  .sales-status-columns { grid-template-columns: 1fr; }
+  .sales-status-tabs { flex-wrap: wrap; }
+  .sales-status-tabs button { flex: 1 1 calc(50% - 5px); }
 }
 
 /* Active palette: Fresh Leaf Workspace — higher contrast, less grey. */
