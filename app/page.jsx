@@ -5093,22 +5093,32 @@ export default function App() {
                           <b>{order.id} · {order.customerName || "-"}</b>
                           <div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"} · เข้าคิวล่าสุด {order.driverQueueDate || "-"}</div>
                         </div>
-                        <button
-                          className="primary"
-                          disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                          onClick={async () => {
-                            if (pendingOrderUpdatesRef.current.has(order.id)) return;
-                            pendingOrderUpdatesRef.current.add(order.id);
-                            try {
-                              const result = await updatePreparationWorkflow(order, "queue");
-                              if (result.ok) setSyncStatus(`✅ ส่งออเดอร์ ${order.id} กลับเข้าคิวคนขับวันนี้แล้ว`);
-                            } finally {
-                              pendingOrderUpdatesRef.current.delete(order.id);
-                            }
-                          }}
-                        >
-                          ส่งเข้าคิวใหม่
-                        </button>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          <button
+                            className="primary"
+                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            onClick={async () => {
+                              if (pendingOrderUpdatesRef.current.has(order.id)) return;
+                              pendingOrderUpdatesRef.current.add(order.id);
+                              try {
+                                const result = await updatePreparationWorkflow(order, "queue");
+                                if (result.ok) setSyncStatus(`✅ ส่งออเดอร์ ${order.id} กลับเข้าคิวคนขับวันนี้แล้ว`);
+                              } finally {
+                                pendingOrderUpdatesRef.current.delete(order.id);
+                              }
+                            }}
+                          >
+                            ส่งเข้าคิวใหม่
+                          </button>
+                          <button
+                            className="secondary danger"
+                            aria-label={`ลบออเดอร์ ${order.id}`}
+                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            onClick={() => deleteOrder(order.id)}
+                          >
+                            ลบ
+                          </button>
+                        </div>
                       </div>
                     </article>
                   ))}
