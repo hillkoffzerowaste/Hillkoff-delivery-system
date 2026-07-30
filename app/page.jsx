@@ -26,7 +26,6 @@ import {
 } from "../lib/preparationWorkflow";
 import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import { isDriverQueueVisibleToDriver, isExpiredDriverQueueForSales } from "../lib/driverQueuePolicy";
-import { isStoreBookingEntryOrder } from "../lib/storeBookingEntry";
 import {
   AlertTriangle,
   Camera,
@@ -812,10 +811,9 @@ export default function App() {
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
   const [workSubmitting, setWorkSubmitting] = useState(false);
   const [workSubmitError, setWorkSubmitError] = useState("");
-  const [storeBookingEntryQuery, setStoreBookingEntryQuery] = useState("");
   const [storeBookingEntryTargetId, setStoreBookingEntryTargetId] = useState("");
   const [storeBookingEntryNumbers, setStoreBookingEntryNumbers] = useState([]);
-  const [storeBookingEntryInput, setStoreBookingEntryInput] = useState("");
+  const [storeBookingEntryStatus, setStoreBookingEntryStatus] = useState("draft");
   const [storeBookingEntrySaving, setStoreBookingEntrySaving] = useState(false);
   const [storeBookingEntryError, setStoreBookingEntryError] = useState("");
   const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
@@ -912,7 +910,7 @@ export default function App() {
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
     ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : tab === "driver-dashboard" ? "driver-dashboard" : "driver")
-    : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking-entry", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
+    : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? (["pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : state.auth?.role === "accounting" ? "driver-sop-report"
     : (tab === "driver" ? "sales" : tab);
@@ -1097,7 +1095,7 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "driver-ratings", "store-work", "store-pickup", "store-booking-entry", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
+    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "driver-ratings", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
 	    const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
 	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
     // Store searches customers through the authenticated API; its Firestore rules intentionally
@@ -1900,19 +1898,6 @@ export default function App() {
   const isOpenStoreQueueStatus = (status) => ["pending", "working", "waiting", "partial", "returned"].includes(status || "pending");
   const isOpenPackQueueStatus = (status) => ["pending", "working", "waiting"].includes(status || "pending");
   const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
-  const storeBookingEntrySearch = storeBookingEntryQuery.trim().toLowerCase();
-  const storeBookingEntryOrders = (orders || [])
-    .filter(isStoreBookingEntryOrder)
-    .filter((order) => {
-      if (!storeBookingEntrySearch) return true;
-      return [order.id, order.customerName, order.customerPhone, order.zone, ...getOrderBookingNumbers(order)]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(storeBookingEntrySearch);
-    })
-    .slice()
-    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
   const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const packReworkOrders = (orders || []).filter(order => order.reworkRequired === true && !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod));
@@ -2052,7 +2037,7 @@ export default function App() {
       else if (item.action === "pack_checked") title = `ห้องแพ็คยืนยัน${order.sourceType || "รายการ"}ครบ`;
       else if (item.action === "pack_partial") title = `ห้องแพ็คพบ${order.sourceType || "รายการ"}ของไม่ครบ`;
       else if (item.action === "store_update") title = "สโตร์อัปเดตการตรวจสินค้า";
-      else if (item.action === "store_booking_update") title = "สโตร์เพิ่ม/แก้ไขเลขใบสั่งจอง";
+      else if (item.action === "store_booking_update") title = item.result === "booking_numbers_confirmed" ? "สโตร์ยืนยันเลขใบสั่งจอง" : "สโตร์บันทึกร่างเลขใบสั่งจอง";
       else if (item.action === "pack_update") title = "ห้องแพ็คอัปเดตการตรวจสินค้า";
       return { id: `${department}-${order.id}-${item.id || item.at || index}`, at: item.at, title, note };
     });
@@ -3396,38 +3381,42 @@ export default function App() {
 
   const openStoreBookingEntry = (order) => {
     setStoreBookingEntryTargetId(order.id);
-    setStoreBookingEntryNumbers(getOrderBookingNumbers(order));
-    setStoreBookingEntryInput("");
+    const current = getOrderBookingNumbers(order);
+    setStoreBookingEntryNumbers(current.length ? current : [""]);
+    setStoreBookingEntryStatus(order.storeBookingEntryStatus === "confirmed" ? "confirmed" : "draft");
     setStoreBookingEntryError("");
   };
 
-  const addStoreBookingEntryNumber = () => {
-    const value = normalizeBookingNumber(storeBookingEntryInput);
-    if (!isValidBookingNumber(value)) {
+  const updateStoreBookingEntryNumber = (index, value) => {
+    setStoreBookingEntryNumbers((current) => current.map((item, itemIndex) => itemIndex === index ? value : item));
+    setStoreBookingEntryError("");
+  };
+
+  const saveStoreBookingEntry = async (entryStatus = "draft") => {
+    const order = orders.find((item) => item.id === storeBookingEntryTargetId);
+    if (!order || storeBookingEntrySaving) return;
+    const bookingNumbers = storeBookingEntryNumbers.map(normalizeBookingNumber).filter(Boolean);
+    if (!bookingNumbers.length) {
+      setStoreBookingEntryError("กรุณาเพิ่มเลขใบสั่งจองอย่างน้อย 1 รายการ");
+      return;
+    }
+    if (bookingNumbers.some((value) => !isValidBookingNumber(value))) {
       setStoreBookingEntryError("เลขที่ใบสั่งจองต้องมีคำนำหน้าและตามด้วยตัวเลข 4 หลัก");
       return;
     }
-    setStoreBookingEntryNumbers((current) => current.includes(value) ? current : [...current, value]);
-    setStoreBookingEntryInput("");
-    setStoreBookingEntryError("");
-  };
-
-  const saveStoreBookingEntry = async () => {
-    const order = orders.find((item) => item.id === storeBookingEntryTargetId);
-    if (!order || storeBookingEntrySaving) return;
-    if (!storeBookingEntryNumbers.length) {
-      setStoreBookingEntryError("กรุณาเพิ่มเลขใบสั่งจองอย่างน้อย 1 เลข");
+    if (new Set(bookingNumbers).size !== bookingNumbers.length) {
+      setStoreBookingEntryError("เลขที่ใบสั่งจองในรายการห้ามซ้ำกัน");
       return;
     }
     setStoreBookingEntrySaving(true);
     setStoreBookingEntryError("");
-    const result = await updatePreparationWorkflow(order, "store_booking_update", { bookingNumbers: storeBookingEntryNumbers });
+    const result = await updatePreparationWorkflow(order, "store_booking_update", { bookingNumbers, entryStatus });
     setStoreBookingEntrySaving(false);
     if (result.ok) {
       setStoreBookingEntryTargetId("");
       setStoreBookingEntryNumbers([]);
-      setStoreBookingEntryInput("");
-      setSyncStatus(`✅ บันทึกเลขใบสั่งจองของออเดอร์ ${order.id} แล้ว`);
+      setStoreBookingEntryStatus("draft");
+      setSyncStatus(`✅ ${entryStatus === "confirmed" ? "ยืนยันรายการเลขใบสั่งจอง" : "บันทึกร่างเลขใบสั่งจอง"}ของออเดอร์ ${order.id} แล้ว`);
     } else {
       setStoreBookingEntryError(result.error || "บันทึกเลขใบสั่งจองไม่สำเร็จ");
     }
@@ -5029,7 +5018,6 @@ export default function App() {
           {auth.role === "store" && (
             <>
               <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{storeWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอสโตร์ ${storeWorkOrders.length} งาน`}>{storeWorkOrders.length}</span>}</button>
-              <button type="button" className={displayTab === "store-booking-entry" ? "active" : ""} onClick={() => selectAppTab("store-booking-entry")}><FileText size={18} /> <span>เพิ่มเลขใบสั่งจอง</span></button>
               <button type="button" className={displayTab === "store-pickup" ? "active" : ""} onClick={() => selectAppTab("store-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{storePickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอสโตร์ ${storePickupOrders.length} งาน`}>{storePickupOrders.length}</span>}</button>
               <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง{storeReportIssues.booking.count > 0 && <span className="nav-count-badge" aria-label={`ใบสั่งจองของไม่ครบ ${storeReportIssues.booking.count} รายการ`}>{storeReportIssues.booking.count}</span>}</button>
               <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์{storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`ใบขายออนไลน์ของไม่ครบ ${storeReportIssues.online.count} รายการ`}>{storeReportIssues.online.count}</span>}</button>
@@ -5856,10 +5844,10 @@ export default function App() {
           </div>
         )}
 
-        {["store-work", "store-pickup", "store-booking-entry", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
+        {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
             {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
-            {displayTab !== "store-dashboard" && <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>}
+            {displayTab !== "store-dashboard" && <div className="panel-head"><h2>{displayTab === "store-work" ? "ออเดอร์เชียงใหม่/ใกล้เคียง" : "งานสโตร์"}</h2><span>เฉพาะบัญชีสโตร์</span></div>}
             {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "10px" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
             {displayTab === "store-work" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วนเชียงใหม่/ใกล้เคียง</button>
@@ -5867,37 +5855,27 @@ export default function App() {
               {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "#ef4444" : order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "returned" ? "#dc2626" : order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "returned" ? "#fef2f2" : order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
                 <OrderCreatedAt order={order} />
-                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
+                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
+                 {order.storeBookingEntryStatus && <span className="status-chip" style={{ width: "fit-content", color: order.storeBookingEntryStatus === "confirmed" ? "#166534" : "#92400e", background: order.storeBookingEntryStatus === "confirmed" ? "#dcfce7" : "#fef3c7" }}>{order.storeBookingEntryStatus === "confirmed" ? "เลขใบสั่งจองยืนยันแล้ว" : "เลขใบสั่งจองบันทึกร่าง"}</span>}
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
                 {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <SalesNoteAlert order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
-              </article>})}
+                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                   <button type="button" className="secondary" onClick={() => openStoreBookingEntry(order)}>+ เพิ่มเลขใบสั่งจอง</button>
+                   <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
+                 </div>
+                 {storeBookingEntryTargetId === order.id && <div style={{ display: "grid", gap: "9px", marginTop: "4px", padding: "11px", background: "#f8fafc", border: "1px solid #bfdbfe", borderLeft: "5px solid #2563eb", borderRadius: "9px" }}>
+                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", alignItems: "center" }}><b>รายการเลขใบสั่งจอง</b><span className="muted">{storeBookingEntryStatus === "confirmed" ? "ยืนยันแล้ว" : "บันทึกร่าง"}</span></div>
+                   {storeBookingEntryNumbers.map((number, index) => <div key={`store-booking-entry-row-${index}`} style={{ display: "flex", gap: "7px", alignItems: "flex-end" }}><div style={{ flex: "1 1 240px" }}><BookingNumberInput value={number} onChange={(value) => updateStoreBookingEntryNumber(index, value)} /></div>{storeBookingEntryNumbers.length > 1 && <button type="button" className="secondary danger" onClick={() => setStoreBookingEntryNumbers((current) => current.filter((_, itemIndex) => itemIndex !== index))}>ลบ</button>}</div>)}
+                   {storeBookingEntryError && <div role="alert" style={{ color: "#991b1b", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "7px", padding: "7px", fontSize: "12px" }}>{storeBookingEntryError}</div>}
+                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><button type="button" className="secondary" onClick={() => setStoreBookingEntryNumbers((current) => [...current, ""])}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><button type="button" className="secondary" disabled={storeBookingEntrySaving} onClick={() => saveStoreBookingEntry("draft")}>{storeBookingEntrySaving ? "กำลังบันทึก…" : "บันทึกร่าง"}</button><button type="button" className="primary" disabled={storeBookingEntrySaving} onClick={() => saveStoreBookingEntry("confirmed")}>ยืนยันรายการ</button><button type="button" className="secondary" disabled={storeBookingEntrySaving} onClick={() => { setStoreBookingEntryTargetId(""); setStoreBookingEntryNumbers([]); setStoreBookingEntryStatus("draft"); setStoreBookingEntryError(""); }}>ยกเลิก</button></div></div>
+                 </div>}
+               </article>})}
                {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
                {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
-             </div>}
-             {displayTab === "store-booking-entry" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
-               <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderLeft: "5px solid #2563eb", borderRadius: "9px", padding: "10px", fontSize: "13px" }}><b>คีย์เลขใบสั่งจองแยกจากหน้ารับงาน</b><div className="muted" style={{ marginTop: "3px" }}>เลือกออเดอร์เชียงใหม่/ใกล้เคียง แล้วเพิ่มหรือลบเลขใบสั่งจองได้จากหน้านี้โดยตรง</div></div>
-               <div className="store-report-search"><Search size={17} /><input value={storeBookingEntryQuery} onChange={(event) => setStoreBookingEntryQuery(event.target.value)} placeholder="ค้นหาเลขออเดอร์ / ลูกค้า / เบอร์โทร / ใบสั่งจอง" /></div>
-               {storeBookingEntryOrders.map((order) => {
-                 const selected = storeBookingEntryTargetId === order.id;
-                 return <article key={`booking-entry-${order.id}`} className="role-order-card" style={selected ? { borderColor: "#2563eb", borderLeft: "5px solid #2563eb", background: "#eff6ff" } : undefined}>
-                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.zone || "-"} · สถานะสโตร์: {storeStatusLabel(order)}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
-                   <OrderCreatedAt order={order} />
-                   <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขปัจจุบัน: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}</div>
-                   {!selected && <button type="button" className="secondary" onClick={() => openStoreBookingEntry(order)}>เลือกออเดอร์นี้เพื่อคีย์เลข</button>}
-                   {selected && <div style={{ display: "grid", gap: "8px", marginTop: "4px" }}>
-                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{storeBookingEntryNumbers.map((number) => <span key={number} className="status-chip" style={{ display: "inline-flex", gap: "4px", alignItems: "center" }}>{number}<button type="button" aria-label={`ลบ ${number}`} onClick={() => setStoreBookingEntryNumbers((current) => current.filter((item) => item !== number))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#b91c1c", padding: "0 2px", lineHeight: 1, fontSize: "14px" }}>×</button></span>)}</div>
-                     <div style={{ display: "flex", gap: "7px", alignItems: "flex-end", flexWrap: "wrap" }}><div style={{ flex: "1 1 240px" }}><BookingNumberInput value={storeBookingEntryInput} onChange={setStoreBookingEntryInput} /></div><button type="button" className="secondary" onClick={addStoreBookingEntryNumber}>+ เพิ่มเลข</button></div>
-                     {storeBookingEntryError && <div role="alert" style={{ color: "#991b1b", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "7px", padding: "7px", fontSize: "12px" }}>{storeBookingEntryError}</div>}
-                     <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><button type="button" className="primary" disabled={storeBookingEntrySaving} onClick={saveStoreBookingEntry}>{storeBookingEntrySaving ? "กำลังบันทึก…" : "บันทึกเลขใบสั่งจอง"}</button><button type="button" className="secondary" disabled={storeBookingEntrySaving} onClick={() => { setStoreBookingEntryTargetId(""); setStoreBookingEntryNumbers([]); setStoreBookingEntryInput(""); setStoreBookingEntryError(""); }}>ยกเลิก</button></div>
-                   </div>}
-                 </article>;
-               })}
-               {!storeBookingEntryOrders.length && <p className="muted">ไม่พบออเดอร์เชียงใหม่/ใกล้เคียงที่ค้นหา</p>}
              </div>}
              {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
@@ -6054,7 +6032,7 @@ export default function App() {
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
                 <SalesNoteAlert order={workModal.order} />
                 <details className="prep-order-details"><summary>ดูรายละเอียดลูกค้าและออเดอร์</summary><PackSalesOrderDetails order={workModal.order} /></details>
-                <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุ · เพิ่มได้จากเมนูเพิ่มเลขใบสั่งจอง"}</div>
+                <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุ · เพิ่มได้จากการ์ดออเดอร์เชียงใหม่"}</div>
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
                 <details style={{ border: "1px solid #dbe4d6", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
