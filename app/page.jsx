@@ -61,7 +61,7 @@ const initialDrivers = [];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
-const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166534", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
+const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166562", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
 const WORKFLOW_STATUS_META = {
   pending: { label: "รอรับงาน", tone: "waiting" },
   blocked: { label: "รอสโตร์ตรวจ", tone: "neutral" },
@@ -102,7 +102,7 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
     if (!context) return null;
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#174b36";
+    context.fillStyle = "#17424b";
     context.fillRect(0, 0, canvas.width, headerHeight);
     context.fillStyle = "#ffffff";
     context.font = "700 69px sans-serif";
@@ -114,7 +114,7 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
       const row = Math.floor(index / columns);
       const x = padding + (column * (cellWidth + gap));
       const y = headerHeight + padding + (row * (cellHeight + gap));
-      context.fillStyle = "#edf3ef";
+      context.fillStyle = "#edf3f3";
       context.fillRect(x, y, cellWidth, cellHeight);
       const scale = Math.min(cellWidth / image.width, cellHeight / image.height);
       const width = image.width * scale;
@@ -151,7 +151,7 @@ function storeStatusLabel(order) {
 const BRANCH_ROUTE_STOPS = ["สาขาช้างเผือก", "สาขาโรงงานป่าแพ่ง", "สาขาสำนักงานใหญ่", "สาขามหิดล", "สาขาทับเดื่อ"];
 const LONG_ROUTE_STOPS = ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"];
 const LONG_ROUTE_RETURN_STOPS = ["สาขาราติก้า จ.กรุงเทพมหานคร", "เชียงใหม่"];
-const routeTaskStatusColor = { "กำลังวิ่ง": "#1d4ed8", "เช็คอินแล้ว": "#92400e", "เสร็จงาน": "#166534", "ยกเลิก": "#dc2626" };
+const routeTaskStatusColor = { "กำลังวิ่ง": "#1d4ed8", "เช็คอินแล้ว": "#92400e", "เสร็จงาน": "#166562", "ยกเลิก": "#dc2626" };
 const TAB_TITLES = {
   sales: "แดชบอร์ดการขาย",
   "sales-outstation": "ออเดอร์ต่างจังหวัด · ฝ่ายขาย",
@@ -476,7 +476,7 @@ async function dataUrlToFile(dataUrl, fileName) {
   return new File([blob], `${fileName}.${ext}`, { type: blob.type || "image/jpeg" });
 }
 
-function StoreMetricCard({ icon: Icon, title, value, suffix = "", description, tone = "#166534", onClick, active = false }) {
+function StoreMetricCard({ icon: Icon, title, value, suffix = "", description, tone = "#166562", onClick, active = false }) {
   const Component = onClick ? "button" : "div";
   return (
     <Component type={onClick ? "button" : undefined} className={`card stat-card${active ? " active" : ""}`} onClick={onClick}>
@@ -495,7 +495,7 @@ function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, r
   const remaining = Math.max(0, total - completed);
   const cardIcons = { "is-primary": Package, "is-amber": Clock3, "is-blue": SearchCheck, "is-green": CheckCircle2, "is-red": PackageX };
   return <div className="ops-kpi-dashboard ops-kpi-dashboard-v2">
-    <div className="stats role-stats" aria-label="สรุปงานวันนี้">{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const tone = { "is-primary": "#2563eb", "is-amber": "#b7791f", "is-blue": "#1d78b5", "is-green": "#25834d", "is-red": "#c7504a" }[card.tone] || "#2563eb"; return <StoreMetricCard key={card.label} icon={Icon} title={card.label} value={card.value} suffix=" งาน" description={card.detail} tone={tone} />; })}</div>
+    <div className="stats role-stats" aria-label="สรุปงานวันนี้">{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const tone = { "is-primary": "#2563eb", "is-amber": "#b7791f", "is-blue": "#1d78b5", "is-green": "#258283", "is-red": "#c7504a" }[card.tone] || "#2563eb"; return <StoreMetricCard key={card.label} icon={Icon} title={card.label} value={card.value} suffix=" งาน" description={card.detail} tone={tone} />; })}</div>
     <div className="ops-dashboard-main"><section className="ops-progress-card"><div className="ops-section-heading"><div><h3>{progressTitle}</h3><p>{progressLabel} {completed} จาก {total} งาน</p></div><b>{progress}%</b></div><div className="ops-progress-track" role="progressbar" aria-label={progressTitle} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div><div className="ops-progress-foot"><span>{progressLabel} {completed} จาก {total} งาน</span><b>เหลืออีก {remaining} งาน</b></div></section><section className="ops-follow-up-card"><div className="ops-section-heading"><div><h3>งานที่ต้องติดตาม</h3><p>สถานะที่ควรดำเนินการต่อ</p></div></div><div className="ops-follow-up-grid">{followUps.map((item) => <div key={item.label} className={item.value ? "is-alert" : "is-clear"}>{item.value ? <><span>{item.label}</span><b>{item.value} งาน</b></> : <><i aria-hidden="true">✅</i><span>{item.emptyLabel}</span></>}</div>)}</div></section></div>
     <section className="ops-recent-orders"><div className="ops-section-heading"><div><h3>ออเดอร์ล่าสุดวันนี้</h3><p>รายการล่าสุดจากข้อมูลที่มีอยู่ในระบบ</p></div></div><div className="ops-recent-list">{recentOrders.map((order) => <article key={order.id}><div><b>{order.bookingNumber || order.id}</b><span>{order.customerName || "ไม่ระบุลูกค้า"}</span></div><span className={`ops-order-status ${order.statusTone || "is-primary"}`}>{order.statusLabel}</span><small>{order.updatedAt ? formatThaiDateTime(order.updatedAt) : "ยังไม่มีเวลาอัปเดต"}</small></article>)}{!recentOrders.length && <p className="muted">ยังไม่มีออเดอร์ของวันนี้</p>}</div></section>
     <div className="ops-dashboard-footer"><section className="ops-month-summary"><h3>สรุปเดือนนี้</h3><div className="ops-month-summary-grid">{monthly.map((item) => <div key={item.label}><span>{item.label}</span><b>{item.value}{item.suffix || ""}</b></div>)}</div></section><section className="ops-activity-card"><div className="ops-section-heading"><div><h3>Activity วันนี้</h3><p>อ้างอิงจากประวัติการทำงานที่บันทึกไว้</p></div></div><div className="ops-activity-list">{activities.map((activity) => <article key={activity.id}><time>{activity.at ? new Date(activity.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</time><div><b>{activity.title}</b>{activity.note && <span>{activity.note}</span>}</div></article>)}{!activities.length && <p className="muted">ยังไม่มีรายการเคลื่อนไหวของวันนี้</p>}</div></section>{reportActions && <section className="ops-report-actions"><h3>รายงาน</h3><div><button className="secondary" onClick={reportActions.copyDaily}>📋 คัดลอกวันนี้</button><button className="primary" onClick={reportActions.shareDaily}>📤 แชร์ LINE วันนี้</button><button className="secondary" onClick={reportActions.copyMonthly}>📋 คัดลอกเดือนนี้</button><button className="primary" onClick={reportActions.shareMonthly}>📤 แชร์ LINE เดือนนี้</button></div></section>}</div>
@@ -4859,8 +4859,8 @@ export default function App() {
       <main className="login-page">
         <section className="login-panel">
           <div className="brand login-brand">
-            <img className="brand-mark" src="/delivery-logo.svg" alt="Hillkoff Delivery" />
-            <div><strong>Hillkoff</strong><span>Delivery System</span></div>
+            <img className="brand-logo" src="/hillkoff-logo.png" alt="Hillkoff" />
+            <span>Delivery System</span>
           </div>
           {auth.role !== "driver-register" ? (
             <>
@@ -4943,8 +4943,8 @@ export default function App() {
       <main>
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-mark" src="/delivery-logo.svg" alt="Hillkoff Delivery" />
-          <div><strong>Hillkoff</strong><span>Delivery System</span></div>
+          <img className="brand-logo" src="/hillkoff-logo.png" alt="Hillkoff" />
+          <span>Delivery System</span>
         </div>
         <nav className="app-nav" aria-label="เมนูหลัก">
           {["sales", "admin"].includes(auth.role) && (
@@ -5049,7 +5049,7 @@ export default function App() {
                   <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
                 </button>
                 {vehicleUsageStatus && (
-                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166534" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166562" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {vehicleUsageStatus}
                   </span>
                 )}
@@ -5120,7 +5120,7 @@ export default function App() {
               <div className="panel-head"><h2>🛍️ งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
               {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
             </section>
-            <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
+            <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdfc", borderLeft: "4px solid #22c5bd" }}>
               <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
                 {Object.keys(state.onlineDrivers || {}).length === 0 ? (
@@ -5129,11 +5129,11 @@ export default function App() {
                   drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
                     const onlineTime = Math.floor((new Date().getTime() - (state.onlineDrivers?.[driver.id] || 0)) / 60000);
                     return (
-                      <div key={driver.id} style={{ background: "white", padding: "12px", borderRadius: "6px", border: "1px solid #dcfce7", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#22c55e", marginBottom: "4px" }}>🟢 {driver.name}</div>
+                      <div key={driver.id} style={{ background: "white", padding: "12px", borderRadius: "6px", border: "1px solid #dcfcfa", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#22c5bd", marginBottom: "4px" }}>🟢 {driver.name}</div>
                         <small style={{ color: "#666" }}>{driver.plate}</small><br />
                         <small style={{ color: "#999" }}>{driver.zone}</small><br />
-                        <small style={{ color: "#16a34a", marginTop: "4px", display: "block" }}>Online {onlineTime}m ago</small>
+                        <small style={{ color: "#16a39c", marginTop: "4px", display: "block" }}>Online {onlineTime}m ago</small>
                       </div>
                     );
                   })
@@ -5173,7 +5173,7 @@ export default function App() {
                           {(task.stops || []).map(stop => (
                             <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "8px", fontSize: "12px" }}>
                               <b>{stop.kind === "midway" ? "ระหว่างทาง" : stop.name}</b>
-                              <span style={{ color: stop.checkedInAt ? "#166534" : "#6b7280", marginLeft: "6px" }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</span>
+                              <span style={{ color: stop.checkedInAt ? "#166562" : "#6b7280", marginLeft: "6px" }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</span>
                               {stop.checkedInAt && <div style={{ color: "#6b7280", marginTop: "3px" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</div>}
                               {stop.note && <div style={{ color: "#6b7280", marginTop: "3px" }}>{stop.note}</div>}
                             </div>
@@ -5202,7 +5202,7 @@ export default function App() {
                               <span><b>คนขับ:</b> {task.driverName || task.driverId || "-"}</span>
                               <span><b>เส้นทาง:</b> {task.origin} → {task.destinationSummary}</span>
                               <span><b>เช็คอิน:</b> {checkedCount}/{stopCount} จุด{latestStop ? ` · ล่าสุด ${latestStop.name}` : ""}</span>
-                              {task.completedAt && <span style={{ color: "#166534", fontWeight: 800 }}><b>จบงาน:</b> {task.completedAt}</span>}
+                              {task.completedAt && <span style={{ color: "#166562", fontWeight: 800 }}><b>จบงาน:</b> {task.completedAt}</span>}
                             </div>
                           );
                         })}
@@ -5370,7 +5370,7 @@ export default function App() {
               )}
 
               {selectedCustomer && (
-                <div style={{ marginTop: "16px", padding: "12px", background: "#f0fdf4", borderRadius: "8px", border: "1px solid #dcfce7" }}>
+                <div style={{ marginTop: "16px", padding: "12px", background: "#f0fdfc", borderRadius: "8px", border: "1px solid #dcfcfa" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
                     <div>
                       <b style={{ fontSize: "14px", display: "block" }}>{selectedCustomer.name}</b>
@@ -5391,7 +5391,7 @@ export default function App() {
                     <button className="secondary danger" style={{ padding: "8px", fontSize: "12px" }} onClick={() => deleteCustomer(selectedCustomer)}>ลบลูกค้า</button>
                   </div>
                   {customerHistoryCustomerId === selectedCustomer.id && (
-                    <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #bbf7d0" }}>
+                    <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #bbf7f3" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
                         <b style={{ fontSize: "13px" }}>ประวัติออเดอร์ทั้งหมด</b>
                         {!customerHistoryLoading && <span className="status-chip">พบ {customerHistory.length} งาน</span>}
@@ -5401,7 +5401,7 @@ export default function App() {
                       ) : (
                         <div className="scroll-box" style={{ display: "grid", gap: "7px" }}>
                           {customerHistory.map(order => (
-                            <article key={order.id} style={{ background: "#fff", border: "1px solid #d1fae5", borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+                            <article key={order.id} style={{ background: "#fff", border: "1px solid #d1f7fa", borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
                               <div style={{ minWidth: 0 }}>
                                 <b style={{ fontSize: "12px" }}>{order.id} · {order.customerName || selectedCustomer.name}</b>
                                 <div className="muted" style={{ fontSize: "11px" }}>ใบสั่งจอง: {order.bookingNumber || "-"} · {order.zone || selectedCustomer.zone || "-"}</div>
@@ -5459,7 +5459,7 @@ export default function App() {
                       />
                     </label>
                     {q && matches.length === 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "8px", padding: "8px 10px", border: "1px dashed #9ac7a4", borderRadius: "9px", background: "#f5fbf4", fontSize: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "8px", padding: "8px 10px", border: "1px dashed #9ac7be", borderRadius: "9px", background: "#f5fbf4", fontSize: "12px" }}>
                         <span>{allHistoricalCustomersLoaded ? "ยังไม่พบชื่อลูกค้าที่ตรงกันในข้อมูลที่โหลดแล้ว" : "ยังไม่พบในรายชื่อที่แสดงอยู่"}</span>
                         <button type="button" className="secondary" disabled={allHistoricalCustomersLoading || allHistoricalCustomersLoaded} onClick={loadAllHistoricalCustomers}>{allHistoricalCustomersLoading ? "กำลังโหลด…" : allHistoricalCustomersLoaded ? "โหลดข้อมูลแล้ว" : "โหลดข้อมูลลูกค้าเก่าทั้งหมด"}</button>
                       </div>
@@ -5582,7 +5582,7 @@ export default function App() {
                           <div>
                             <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
                             <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone || "-"} · {location.plate}</p>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#059669", fontWeight: "bold" }}>🏪 {location.customerName || location.lastCustomerName || "-"}</p>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#056e96", fontWeight: "bold" }}>🏪 {location.customerName || location.lastCustomerName || "-"}</p>
                             {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>👤 ติดต่อ: {customer.contact}</p>}
                             <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address || currentOrder?.address || "-"}</p>
                             <p style={{ margin: "4px 0", fontSize: "11px", color: "#6b7280" }}>📍 โซน: {location.zone || currentOrder?.zone || "-"}</p>
@@ -5592,7 +5592,7 @@ export default function App() {
                           {isOffline ? (
                             <span style={{ background: "#991b1b", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>⚫ Offline</span>
                           ) : (
-                            <span style={{ background: "#166534", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                            <span style={{ background: "#166562", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
                           )}
                         </div>
                         <div style={{ marginTop: "6px", color: "#6b7280", fontSize: "11px" }}>
@@ -5641,9 +5641,9 @@ export default function App() {
                   <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
                   <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length}</b>
                 </div>
-                <div style={{ flex: 1, background: "#f0fdf4", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c55e" }}>
-                  <small style={{ color: "#166534" }}>✓ สำเร็จ</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#22c55e" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
+                <div style={{ flex: 1, background: "#f0fdfc", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c5bd" }}>
+                  <small style={{ color: "#166562" }}>✓ สำเร็จ</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "#22c5bd" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
               <div className="scroll-box">
@@ -5657,28 +5657,28 @@ export default function App() {
                       return (
                         <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
-                            <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c55e" }}>{order.id}</b>
-                            <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdf4", color: order.status === "กำลังส่ง" ? "#92400e" : "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                            <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c5bd" }}>{order.id}</b>
+                            <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdfc", color: order.status === "กำลังส่ง" ? "#92400e" : "#166562", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
                           </div>
                           <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
                           <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
                           <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driverName || "ยังไม่มอบหมาย"}</p>
                           {order.status === "ส่งสำเร็จ" && order.deliveredAt && (
-                            <p style={{ margin: "2px 0", color: "#16a34a", fontWeight: "bold" }}>✅ เสร็จเมื่อ {order.deliveredAt}</p>
+                            <p style={{ margin: "2px 0", color: "#16a39c", fontWeight: "bold" }}>✅ เสร็จเมื่อ {order.deliveredAt}</p>
                           )}
                         </div>
                       );
                     })}
                     {completedTodayRouteTasks.map(task => (
-                      <div key={task.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px", background: "#f0fdf4" }}>
+                      <div key={task.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px", background: "#f0fdfc" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
-                          <b style={{ color: "#166534" }}>{task.id}</b>
-                          <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>✓ งานวิ่งเสร็จ</span>
+                          <b style={{ color: "#166562" }}>{task.id}</b>
+                          <span style={{ background: "#dcfcfa", color: "#166562", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>✓ งานวิ่งเสร็จ</span>
                         </div>
                         <p style={{ margin: "2px 0", color: "#333" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</p>
                         <p style={{ margin: "2px 0", color: "#666" }}>{task.origin} → {task.destinationSummary}</p>
                         <p style={{ margin: "2px 0", color: "#999" }}>🚗 {task.driverName || task.driverId || "ไม่ระบุคนขับ"}</p>
-                        {task.completedAt && <p style={{ margin: "2px 0", color: "#16a34a", fontWeight: "bold" }}>✅ เสร็จเมื่อ {task.completedAt}</p>}
+                        {task.completedAt && <p style={{ margin: "2px 0", color: "#16a39c", fontWeight: "bold" }}>✅ เสร็จเมื่อ {task.completedAt}</p>}
                       </div>
                     ))}
                   </>
@@ -5754,7 +5754,7 @@ export default function App() {
               ))}
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
-            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166534", background: "#dcfce7" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166562", background: "#dcfcfa" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 
@@ -5812,7 +5812,7 @@ export default function App() {
                 <OrderCreatedAt order={order} />
                  <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
                 {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
-                {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
+                {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166562", background: "#dcfcfa", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <SalesNoteAlert order={order} compact />
@@ -5895,7 +5895,7 @@ export default function App() {
                 {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
                 {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
-                {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166534", background: "#dcfce7", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
+                {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166562", background: "#dcfcfa", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
@@ -5907,7 +5907,7 @@ export default function App() {
               <details className="prep-order-details" style={{ marginTop: "14px" }}>
                 <summary>สถานะส่งมอบขนส่ง ({salesOutstationHistory.length})</summary>
                 <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
-                  {salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">สแกน {order.outstationDispatchScannedCount || 0}/{order.outstationDispatchBoxTotal || order.boxes || 1} กล่อง · {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={order.queueStatus === "completed" ? { color: "#166534", background: "#dcfce7" } : undefined}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div></article>)}
+                  {salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">สแกน {order.outstationDispatchScannedCount || 0}/{order.outstationDispatchBoxTotal || order.boxes || 1} กล่อง · {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={order.queueStatus === "completed" ? { color: "#166562", background: "#dcfcfa" } : undefined}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div></article>)}
                   {!salesOutstationHistory.length && <p className="muted">ยังไม่มีออเดอร์ที่พร้อมส่งหรือส่งมอบขนส่งแล้ว</p>}
                 </div>
               </details>
@@ -5980,7 +5980,7 @@ export default function App() {
                 <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุ · เพิ่มได้จากการ์ดออเดอร์เชียงใหม่"}</div>
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
-                <details style={{ border: "1px solid #dbe4d6", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
+                <details style={{ border: "1px solid #d6e4d9", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
                 <label style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "10px", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
                 <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value, missingNote: ["partial", "returned"].includes(e.target.value) ? p.missingNote : "" }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option>{workModal.role === "pack" && !skipsStoreCheck(workModal.order) && <option value="returned">ของผิด — ส่งกลับสโตร์ตรวจสอบ</option>}</select>
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
@@ -6136,7 +6136,7 @@ export default function App() {
         {auth.role === "driver" && displayTab === "driver" && (
           <div style={{ display: "grid", gap: "16px" }}>
             {/* ส่วนข้อมูลคนขับ */}
-            <section className="panel" style={{ background: "#f0fdf4", borderLeft: "4px solid #22c55e" }}>
+            <section className="panel" style={{ background: "#f0fdfc", borderLeft: "4px solid #22c5bd" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
                 <div>
                   {drivers.filter(driver => driver.id === driverId).map(driver => (
@@ -6147,7 +6147,7 @@ export default function App() {
                   ))}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <b style={{ fontSize: "20px", color: "#22c55e", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
+                  <b style={{ fontSize: "20px", color: "#22c5bd", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
@@ -6270,7 +6270,7 @@ export default function App() {
                               <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", display: "grid", gap: "8px" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
                                   <b>{stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name}</b>
-                                  <small style={{ color: stop.checkedInAt ? "#166534" : "#92400e", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
+                                  <small style={{ color: stop.checkedInAt ? "#166562" : "#92400e", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
                                 </div>
                                 {stop.checkedInAt && <small style={{ color: "#6b7280" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
                                 {stop.note && <small style={{ color: "#6b7280" }}>{stop.note}</small>}
@@ -6298,7 +6298,7 @@ export default function App() {
                               </div>
                             ))}
                           </div>
-                          <button className="secondary" style={{ padding: "9px", fontSize: "12px", minHeight: "44px", background: "#f0fdf4", color: "#166534" }} onClick={() => completeRouteTask(task)}>✅ จบงานวิ่ง</button>
+                          <button className="secondary" style={{ padding: "9px", fontSize: "12px", minHeight: "44px", background: "#f0fdfc", color: "#166562" }} onClick={() => completeRouteTask(task)}>✅ จบงานวิ่ง</button>
                         </div>
                       );
                     })}
@@ -6440,7 +6440,7 @@ export default function App() {
 	                            </div>
 	                            <label 
 	                              className="primary" 
-	                              style={{ padding: "8px", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b3a", color: "white", opacity: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? 0.55 : 1 }}>
+	                              style={{ padding: "8px", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b6b", color: "white", opacity: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? 0.55 : 1 }}>
 	                              2. 📷 ถ่ายรูป ({(podPreviewsByOrder[order.id] || []).length}/5)
 	                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5 || !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())} onChange={(e) => {
 	                                if (e.target.files?.length) uploadPod(order, e.target.files);
@@ -6465,7 +6465,7 @@ export default function App() {
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button
 	                            className="primary"
-	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#059669", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#056e96", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
 	                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
 	                            onClick={() => {
 	                              pendingOrderUpdatesRef.current.add(order.id);
@@ -6485,11 +6485,11 @@ export default function App() {
 
                       {/* Photo Preview */}
                       {(podPreviewsByOrder[order.id] || []).length > 0 && (
-                        <div style={{ marginTop: "8px" }}><b style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#166534" }}>📷 รูป POD {(podPreviewsByOrder[order.id] || []).length}/5</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "6px" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ borderRadius: "6px", overflow: "hidden", border: "2px solid #22c55e", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>)}</div></div>
+                        <div style={{ marginTop: "8px" }}><b style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#166562" }}>📷 รูป POD {(podPreviewsByOrder[order.id] || []).length}/5</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "6px" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ borderRadius: "6px", overflow: "hidden", border: "2px solid #22c5bd", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>)}</div></div>
                       )}
                       
                       {order.status === "ส่งสำเร็จ" && (
-                        <div style={{ background: "#f0fdf4", padding: "6px", borderRadius: "4px", fontSize: "11px", color: "#166534", fontWeight: "bold", textAlign: "center" }}>
+                        <div style={{ background: "#f0fdfc", padding: "6px", borderRadius: "4px", fontSize: "11px", color: "#166562", fontWeight: "bold", textAlign: "center" }}>
                           ✅ {order.deliveredAt}
                         </div>
                       )}
@@ -6552,7 +6552,7 @@ export default function App() {
 	                            <b style={{ fontSize: "14px", display: "block" }}>{order.id}</b>
 	                            <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{order.customerName}</b>
 	                            <small style={{ color: "#6b7280" }}>📍 {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
-	                            {order.deliveredAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
+	                            {order.deliveredAt && <small style={{ color: "#16a39c", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
 	                          </div>
 	                          <div style={{ background: "#fffdf5", border: "1px solid #f5d78e", borderRadius: "8px", padding: "8px", display: "grid", justifyItems: "center", gap: "5px" }}>
 	                            <b style={{ color: "#8a5a00", fontSize: "12px" }}>ให้ลูกค้าสแกนรีวิว</b>
@@ -6571,10 +6571,10 @@ export default function App() {
 	                    {visibleRouteTasks.map(task => (
 	                      <div key={task.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #bfdbfe", display: "flex", flexDirection: "column", gap: "8px" }}>
 	                        <div>
-	                          <b style={{ fontSize: "14px", display: "block", color: "#166534" }}>{task.id}</b>
+	                          <b style={{ fontSize: "14px", display: "block", color: "#166562" }}>{task.id}</b>
 	                          <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</b>
 	                          <small style={{ color: "#6b7280" }}>{task.origin || "-"} → {task.destinationSummary || "-"}</small><br/>
-	                          {task.completedAt && <small style={{ color: "#16a34a", fontWeight: "bold" }}>✅ {task.completedAt}</small>}
+	                          {task.completedAt && <small style={{ color: "#16a39c", fontWeight: "bold" }}>✅ {task.completedAt}</small>}
 	                        </div>
 	                        {(task.stops || []).length > 0 && (
 	                          <div style={{ display: "grid", gap: "4px", color: "#6b7280", fontSize: "12px" }}>
@@ -6672,7 +6672,7 @@ export default function App() {
                     <button type="button" className="primary" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
                       <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
                     </button>
-                    {dailyVehicleStartSaved && <span style={{ color: "#166534", fontWeight: 800, fontSize: "12px" }}>บันทึกเริ่มต้นวันนี้แล้ว</span>}
+                    {dailyVehicleStartSaved && <span style={{ color: "#166562", fontWeight: 800, fontSize: "12px" }}>บันทึกเริ่มต้นวันนี้แล้ว</span>}
                   </div>
                 </div>
               </div>
@@ -6720,7 +6720,7 @@ export default function App() {
                   <FileText size={16} /> {vehicleUsageSubmitting ? "กำลังบันทึก..." : "บันทึกช่วงการใช้รถ"}
                 </button>
                 {vehicleUsageStatus && (
-                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166534" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166562" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {vehicleUsageStatus}
                   </span>
                 )}
@@ -6759,7 +6759,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel" style={{ borderLeft: "4px solid #16a34a" }}>
+            <section className="panel" style={{ borderLeft: "4px solid #16a39c" }}>
               <div className="panel-head">
                 <h2>บันทึกบิลน้ำมัน</h2>
                 <span>{vehicleDisplayName(selectedDriverVehicle)}</span>
@@ -6795,7 +6795,7 @@ export default function App() {
                   <FileSpreadsheet size={16} /> {fuelBillSubmitting ? "กำลังบันทึก..." : "บันทึกบิลน้ำมัน"}
                 </button>
                 {fuelBillStatus && (
-                  <span style={{ color: fuelBillStatus.startsWith("✅") ? "#166534" : fuelBillStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: fuelBillStatus.startsWith("✅") ? "#166562" : fuelBillStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {fuelBillStatus}
                   </span>
                 )}
@@ -6833,7 +6833,7 @@ export default function App() {
                 <span>{todayServiceDate}</span>
               </div>
               {selectedDriverVehicle?.id && driverOdometerStart ? (
-                <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", color: "#166534", fontSize: "13px", fontWeight: 800 }}>
+                <div style={{ background: "#f0fdfc", border: "1px solid #86efe9", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", color: "#166562", fontSize: "13px", fontWeight: 800 }}>
                   รถวันนี้: {vehicleDisplayName(selectedDriverVehicle)} · เลขไมล์เริ่ม {driverOdometerStart}
                 </div>
               ) : (
@@ -6844,7 +6844,7 @@ export default function App() {
               )}
               <div style={{ display: "grid", gap: "8px" }}>
                 {DRIVER_DAILY_CHECK_ITEMS.map(item => (
-                  <label key={item.id} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: driverDailyChecks[item.id] ? "#f0fdf4" : "#fff" }}>
+                  <label key={item.id} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: driverDailyChecks[item.id] ? "#f0fdfc" : "#fff" }}>
                     <input
                       type="checkbox"
                       checked={Boolean(driverDailyChecks[item.id])}
@@ -6874,7 +6874,7 @@ export default function App() {
                   <CheckCircle2 size={16} /> {driverAssessmentSubmitting ? "กำลังบันทึก..." : "บันทึกแบบประเมินวันนี้"}
                 </button>
                 {driverAssessmentStatus && (
-                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166562" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {driverAssessmentStatus}
                   </span>
                 )}
@@ -6925,7 +6925,7 @@ export default function App() {
                 </button>
                 <span className="muted" style={{ fontSize: "12px" }}>กดบันทึกหลังตรวจครบทุกข้อ</span>
                 {driverAssessmentStatus && (
-                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166534" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166562" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
                     {driverAssessmentStatus}
                   </span>
                 )}
@@ -6950,7 +6950,7 @@ export default function App() {
               <div style={{ display: "grid", gap: "8px" }}>
                 {DRIVER_REPAIR_STEPS.map((step, index) => (
                   <div key={step} style={{ display: "grid", gridTemplateColumns: "32px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: "#f8fafc" }}>
-                    <b style={{ width: "28px", height: "28px", borderRadius: "999px", background: "#176b3a", color: "#fff", display: "grid", placeItems: "center" }}>{index + 1}</b>
+                    <b style={{ width: "28px", height: "28px", borderRadius: "999px", background: "#176b6b", color: "#fff", display: "grid", placeItems: "center" }}>{index + 1}</b>
                     <span>{step}</span>
                   </div>
                 ))}
