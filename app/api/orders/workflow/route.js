@@ -5,7 +5,7 @@ import { bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, norma
 import { buildReroutePatch, driverReworkPatch } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
 import { buildDriverQueuePolicyPatch, refreshVersionedDriverQueuePatch } from "../../../../lib/driverQueuePolicy";
-import { isStoreBookingEntryOrder, prepareBookingNumberUpdate } from "../../../../lib/storeBookingEntry";
+import { isStoreBookingEntryOrder, normalizeStoreBookingEntryStatus, prepareBookingNumberUpdate } from "../../../../lib/storeBookingEntry";
 
 export const runtime = "nodejs";
 
@@ -147,7 +147,13 @@ export async function PATCH(request) {
       patch.bookingNumbers = update.items;
       patch.bookingNumberMissing = false;
       patch.bookingNumberNotice = "";
-      Object.assign(history, { result: "booking_numbers_updated", bookingNumbersAdded: update.toAdd, bookingNumbersRemoved: update.toRemove });
+      const entryStatus = normalizeStoreBookingEntryStatus(body.entryStatus);
+      patch.storeBookingEntryStatus = entryStatus;
+      patch.storeBookingEntryUpdatedAt = now;
+      patch.storeBookingEntryUpdatedBy = profile.name || profile.email || profile.uid;
+      patch.storeBookingEntryConfirmedAt = entryStatus === "confirmed" ? now : "";
+      patch.storeBookingEntryConfirmedBy = entryStatus === "confirmed" ? (profile.name || profile.email || profile.uid) : "";
+      Object.assign(history, { result: entryStatus === "confirmed" ? "booking_numbers_confirmed" : "booking_numbers_drafted", entryStatus, bookingNumbersAdded: update.toAdd, bookingNumbersRemoved: update.toRemove });
     } else if (profile.role === "store" && action === "store_update") {
       if (!STORE_STATUSES.includes(body.storeStatus)) throw Object.assign(new Error("Invalid store status"), { status: 400 });
       if (["checked", "partial", "waiting"].includes(body.storeStatus) && !String(body.storeCheckerName || "").trim()) {

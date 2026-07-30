@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   isStoreBookingEntryOrder,
+  normalizeStoreBookingEntryStatus,
   prepareBookingNumberUpdate,
 } from "../../lib/storeBookingEntry.js";
+
+describe("store booking entry status", () => {
+  it("only treats confirmed as a confirmed entry", () => {
+    expect(normalizeStoreBookingEntryStatus("confirmed")).toBe("confirmed");
+    expect(normalizeStoreBookingEntryStatus("draft")).toBe("draft");
+    expect(normalizeStoreBookingEntryStatus("unexpected")).toBe("draft");
+  });
+});
 
 describe("prepareBookingNumberUpdate", () => {
   it("returns a normalized primary number and stable add/remove diff", () => {
