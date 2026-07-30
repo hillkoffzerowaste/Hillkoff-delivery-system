@@ -1428,7 +1428,10 @@ export default function App() {
     if (state.auth?.role !== "driver") return;
     const did = state.auth?.driverId || driverId || "";
     if (!did) return;
-    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did) && o.status === "รอคนขับรับ" && (!o.queueStatus || o.queueStatus === "queued"));
+    const pending = (state.orders || []).filter(o => (!o.driverId || o.driverId === "" || o.driverId === did)
+      && o.status === "รอคนขับรับ"
+      && (!o.queueStatus || o.queueStatus === "queued")
+      && isDriverQueueVisibleToDriver(o, todayServiceDate));
     const count = pending.length;
     setAppBadgeSafe(count);
     if (typeof document === "undefined") return;
@@ -1450,7 +1453,7 @@ export default function App() {
       });
     }
     previousOrderCountRef.current = count;
-  }, [state.auth?.role, state.auth?.driverId, driverId, state.orders]);
+  }, [state.auth?.role, state.auth?.driverId, driverId, state.orders, todayServiceDate]);
 
   // Chat UX: auto-scroll to latest message + emergency alert to everyone
   const scrollChatToBottom = () => {
@@ -2353,6 +2356,7 @@ export default function App() {
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
     if (order.queueStatus && order.queueStatus !== "queued") return false;
+    if (!isDriverQueueVisibleToDriver(order, todayServiceDate)) return false;
     const isAvailable = !order.driverId || order.driverId === "";
     const isAssignedToMe = order.driverId === driverId;
     return isAvailable || isAssignedToMe;
@@ -5100,7 +5104,9 @@ export default function App() {
                               pendingOrderUpdatesRef.current.delete(order.id);
                             }
                           }}
-                        >ส่งเข้าคิวใหม่</button>
+                        >
+                          ส่งเข้าคิวใหม่
+                        </button>
                       </div>
                     </article>
                   ))}
