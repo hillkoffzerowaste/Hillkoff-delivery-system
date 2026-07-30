@@ -5,6 +5,7 @@ import { bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, norma
 import { buildReroutePatch, driverReworkPatch } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
 import { buildDriverQueuePolicyPatch, refreshVersionedDriverQueuePatch } from "../../../../lib/driverQueuePolicy";
+import { isStoreBookingEntryOrder, prepareBookingNumberUpdate } from "../../../../lib/storeBookingEntry";
 
 export const runtime = "nodejs";
 
@@ -119,6 +120,34 @@ export async function PATCH(request) {
       patch.packArchivedBy = profile.name || profile.email;
       patch.packArchiveReason = reason;
       Object.assign(history, { result: "archived", reason });
+    } else if (["store", "admin"].includes(profile.role) && action === "store_booking_update") {
+      if (!isStoreBookingEntryOrder(order)) throw Object.assign(new Error("Order is not eligible for Store booking entry"), { status: 409 });
+      const currentValues = Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber].filter(Boolean);
+      const update = prepareBookingNumberUpdate(currentValues, body.bookingNumbers ?? body.bookingNumber);
+      if (!update.ok) throw Object.assign(new Error(update.error), { status: 400 });
+      const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
+      for (const num of update.toAdd) {
+        const regId = bookingRegistryId(serviceDate, num);
+        if (!regId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
+        const regRef = db.collection("booking_month_registry").doc(regId);
+        const regSnap = await regRef.get();
+        if (regSnap.exists && regSnap.data()?.sourceId !== orderId) {
+          throw Object.assign(new Error(bookingConflictMessage(regSnap.data())), { status: 409 });
+        }
+        if (!regSnap.exists) bookingReservationsToCreate.push({ ref: regRef, data: bookingRegistryRecord({ serviceDate, bookingNumber: num, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) });
+      }
+      for (const num of update.toRemove) {
+        const regId = bookingRegistryId(serviceDate, num);
+        if (!regId) continue;
+        const regRef = db.collection("booking_month_registry").doc(regId);
+        const regSnap = await regRef.get();
+        if (regSnap.exists && regSnap.data()?.sourceId === orderId) bookingReservationsToDelete.push({ ref: regRef, updateTime: regSnap.updateTime });
+      }
+      patch.bookingNumber = update.primary;
+      patch.bookingNumbers = update.items;
+      patch.bookingNumberMissing = false;
+      patch.bookingNumberNotice = "";
+      Object.assign(history, { result: "booking_numbers_updated", bookingNumbersAdded: update.toAdd, bookingNumbersRemoved: update.toRemove });
     } else if (profile.role === "store" && action === "store_update") {
       if (!STORE_STATUSES.includes(body.storeStatus)) throw Object.assign(new Error("Invalid store status"), { status: 400 });
       if (["checked", "partial", "waiting"].includes(body.storeStatus) && !String(body.storeCheckerName || "").trim()) {
