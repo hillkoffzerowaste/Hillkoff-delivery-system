@@ -5126,7 +5126,10 @@ export default function App() {
               <div className="panel-head"><h2>🛍️ งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
               {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
             </section>
-            <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0fdfc", borderLeft: "4px solid #22c5bd" }}>
+            <details className="daily-accordion" style={{ gridColumn: "1 / -1" }}>
+              <summary className="daily-accordion-trigger" style={{ cursor: "pointer", fontWeight: 900, display: "block" }}>📍 ภาพรวมคนขับ, งานวิ่ง และแผนที่ (คลิกเพื่อดู)</summary>
+              <div className="daily-accordion-body" style={{ display: "grid", gap: "14px" }}>
+            <section className="panel" style={{ background: "#f0fdfc", borderLeft: "4px solid #22c5bd" }}>
               <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
                 {Object.keys(state.onlineDrivers || {}).length === 0 ? (
@@ -5219,7 +5222,7 @@ export default function App() {
               )}
             </section>
 
-            <section className="panel" style={{ gridColumn: "1 / -1", order: 99 }}>
+            <section className="panel">
               {(() => {
                 const locs = state.driverLocations || {};
                 // Show markers based on last check-in location (not "online" heartbeat),
@@ -5317,6 +5320,8 @@ export default function App() {
                 );
               })()}
             </section>
+              </div>
+            </details>
 
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
