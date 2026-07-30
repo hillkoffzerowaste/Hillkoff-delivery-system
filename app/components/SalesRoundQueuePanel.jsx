@@ -56,15 +56,19 @@ export default function SalesRoundQueuePanel({ apiFetch, orders = [], onQueued }
     }
   };
 
+  const totalOrders = groups.reduce((sum, group) => sum + group.total, 0);
+  const totalReady = groups.reduce((sum, group) => sum + group.ready, 0);
+
   return (
-    <section className="panel sales-round-queue-panel">
-      <div className="panel-head">
+    <details className="daily-accordion sales-round-queue-panel" open={totalReady > 0}>
+      <summary className="panel-head daily-accordion-trigger" style={{ cursor: "pointer" }}>
         <div>
           <h2>ออเดอร์รอบจัดส่งเชียงใหม่</h2>
           <p className="muted">เลือกเฉพาะออเดอร์ที่ห้องแพ็คตรวจครบแล้ว แล้วส่งเข้าคิวพร้อมกันได้</p>
         </div>
-        <span>{groups.reduce((sum, group) => sum + group.total, 0)} ออเดอร์</span>
-      </div>
+        <span>พร้อมส่ง {totalReady}/{totalOrders} ออเดอร์</span>
+      </summary>
+      <div className="daily-accordion-body">
       {message && <div className="sales-round-message" role="status">{message}</div>}
       {groups.length === 0 ? <p className="muted">ยังไม่มีออเดอร์ที่กำหนดรอบจัดส่ง</p> : (
         <div className="sales-round-groups">
@@ -108,6 +112,7 @@ export default function SalesRoundQueuePanel({ apiFetch, orders = [], onQueued }
           })}
         </div>
       )}
-    </section>
+      </div>
+    </details>
   );
 }
