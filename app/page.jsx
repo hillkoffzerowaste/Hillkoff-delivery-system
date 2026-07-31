@@ -1911,6 +1911,7 @@ export default function App() {
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "completed", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && ["outstation_ready", "completed"].includes(order.queueStatus));
+  const todayOutstationLabelJobs = (outstationLabelJobs || []).filter(job => job.createdAt && toServiceDateKey(job.createdAt) === todayServiceDate);
   const outstationLabelSelectedSet = new Set(outstationLabelSelectedIds);
   const selectedOutstationLabelOrders = salesOutstationOrders.filter(order => outstationLabelSelectedSet.has(order.id));
   const selectedOutstationLabelBoxes = selectedOutstationLabelOrders.reduce((sum, order) => sum + Math.max(1, Number(order.boxes || 0)), 0);
@@ -5764,12 +5765,19 @@ export default function App() {
               <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>
               <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
             </div>
-            <section className="panel" style={{ marginBottom: "10px" }}>
-              <div className="panel-head"><h2 style={{ fontSize: "14px" }}>🗂️ ประวัติการพิมพ์ใบปะหน้า</h2><button type="button" className="secondary compact-btn" onClick={loadOutstationLabelJobs} disabled={outstationLabelJobsLoading}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "รีเฟรช"}</button></div>
+            <details className="daily-accordion" style={{ marginBottom: "10px" }}>
+              <summary className="panel-head daily-accordion-trigger" style={{ cursor: "pointer", fontSize: "14px" }}>
+                <span>🗂️ ประวัติการพิมพ์ใบปะหน้า (วันนี้)</span>
+                <span className="status-chip">{todayOutstationLabelJobs.length} รายการ</span>
+              </summary>
+              <div className="daily-accordion-body">
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
+                <button type="button" className="secondary compact-btn" onClick={loadOutstationLabelJobs} disabled={outstationLabelJobsLoading}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "รีเฟรช"}</button>
+              </div>
               <div className="scroll-box" style={{ display: "grid", gap: "6px", maxHeight: "220px" }}>
-                {outstationLabelJobs.length === 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "ยังไม่มีประวัติการพิมพ์"}</p>
-                ) : outstationLabelJobs.map((job) => {
+                {todayOutstationLabelJobs.length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "ยังไม่มีประวัติการพิมพ์วันนี้"}</p>
+                ) : todayOutstationLabelJobs.map((job) => {
                   const statusLabel = { creating: "กำลังสร้าง", ready: "พร้อมพิมพ์", printed: "พิมพ์แล้ว", reprinted: "พิมพ์ซ้ำแล้ว", cancelled: "ยกเลิกแล้ว" }[job.status] || job.status;
                   return (
                     <div key={job.id} className="score-row">
@@ -5782,7 +5790,8 @@ export default function App() {
                   );
                 })}
               </div>
-            </section>
+              </div>
+            </details>
             <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
               {salesOutstationOrders.map(order => (
                 <article key={order.id} className="role-order-card">
