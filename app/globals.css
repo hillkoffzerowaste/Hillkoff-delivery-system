@@ -3072,3 +3072,149 @@ summary:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Design tokens — single source of truth for inline styles.
+   Added so JSX inline styles stop hardcoding raw hex/px values.
+   ============================================================ */
+:root {
+  /* Neutral scale */
+  --c-surface: #ffffff;
+  --c-surface-subtle: #f8fafc;
+  --c-surface-muted: #f3f4f6;
+  --c-line: #e5e7eb;
+  --c-line-strong: #d1d5db;
+  --c-text-faint: #9aa0aa;
+  --c-text-muted: #6b7280;
+  --c-text-soft: #4b5563;
+  --c-text-strong: #374151;
+  --c-text-heading: #1f2937;
+  --c-text: #111827;
+
+  /* Brand (teal) */
+  --c-brand-bg: #f0fdfc;
+  --c-brand-bg-strong: #dcfcfa;
+  --c-brand-border: #bbf7f3;
+  --c-brand-light: #22c5bd;
+  --c-brand: #16a39c;
+  --c-brand-dark: #166562;
+  --c-brand-deep: #17424b;
+  --c-brand-cyan: #0e7490;
+
+  /* Info (blue) */
+  --c-info-bg: #eff6ff;
+  --c-info-border: #bfdbfe;
+  --c-info: #2563eb;
+  --c-info-dark: #1d4ed8;
+  --c-info-deep: #1e3a8a;
+
+  /* Danger (red) */
+  --c-danger-bg: #fef2f2;
+  --c-danger-bg-strong: #fee2e2;
+  --c-danger-border: #fecaca;
+  --c-danger-light: #fca5a5;
+  --c-danger: #dc2626;
+  --c-danger-dark: #b91c1c;
+  --c-danger-deep: #991b1b;
+
+  /* Warning (amber) */
+  --c-warn-bg: #fffbeb;
+  --c-warn-bg-strong: #fef3c7;
+  --c-warn-border: #fde68a;
+  --c-warn-light: #fcd34d;
+  --c-warn: #f59e0b;
+  --c-warn-dark: #a16207;
+  --c-warn-deep: #92400e;
+
+  /* Accent (orange) */
+  --c-accent-bg: #fff7ed;
+  --c-accent-border: #fed7aa;
+  --c-accent-light: #fb923c;
+  --c-accent: #f97316;
+  --c-accent-dark: #ea580c;
+  --c-accent-deep: #9a3412;
+
+  /* Highlight (purple) */
+  --c-highlight-bg: #faf5ff;
+  --c-highlight-border: #ddd6fe;
+  --c-highlight: #7c3aed;
+
+  /* Overlays */
+  --c-overlay: rgba(0, 0, 0, 0.48);
+  --c-overlay-soft: rgba(0, 0, 0, 0.25);
+
+  /* Spacing scale (4px grid, with 6/10 half-steps for dense UI) */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 10px;
+  --sp-6: 12px;
+  --sp-7: 16px;
+  --sp-8: 20px;
+  --sp-9: 24px;
+  --sp-10: 32px;
+
+  /* Radius scale */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-full: 999px;
+
+  /* Elevation */
+  --e-1: 0 1px 2px rgba(16, 24, 32, 0.06);
+  --e-2: 0 4px 12px rgba(16, 24, 32, 0.08);
+  --e-3: 0 12px 32px rgba(16, 24, 32, 0.14);
+}
+
+/* Inline SVG icons (replacing emoji used as UI chrome) */
+.i-inline {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 2px;
+  flex: none;
+  stroke-width: 2;
+}
+h2 .i-inline, .panel-head .i-inline { vertical-align: -4px; }
+
+/* Status dots (replacing colored-circle emoji) */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  vertical-align: 1px;
+  margin-right: var(--sp-3);
+  flex: none;
+}
+.status-dot.is-online { background: var(--c-brand); box-shadow: 0 0 0 3px rgba(22, 163, 156, 0.18); }
+.status-dot.is-danger { background: var(--c-danger); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16); }
+.status-dot.is-warn { background: var(--c-warn); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
+.status-dot.is-info { background: var(--c-info); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16); }
+.status-dot.is-off { background: var(--c-text-faint); }
+
+/* Skeleton loading placeholders */
+@keyframes hk-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--c-surface-muted) 25%, var(--c-line) 37%, var(--c-surface-muted) 63%);
+  background-size: 200% 100%;
+  animation: hk-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-text { height: 12px; margin-bottom: var(--sp-3); }
+.skeleton-text:last-child { width: 60%; margin-bottom: 0; }
+.skeleton-card { min-height: 84px; border-radius: var(--r-lg); }
+.skeleton-list { display: grid; gap: var(--sp-5); }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* Keyboard-only focus rings (mouse clicks must not trigger them) */
+button:focus-visible, a:focus-visible, summary:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
+}

@@ -29,32 +29,56 @@ import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import { isDriverQueueVisibleToDriver, isExpiredDriverQueueForSales } from "../lib/driverQueuePolicy";
 import {
   AlertTriangle,
+  Archive,
+  BellRing,
   Camera,
-  CheckCircle2,
+  Car,
   ChartNoAxesCombined,
+  CheckCircle2,
   ChevronDown,
   ClipboardList,
+  Clock3,
   Download,
+  Eye,
   FileSpreadsheet,
   FileText,
   FolderSync,
+  Home,
+  Inbox,
+  KeyRound,
+  Link2,
+  Map as MapIcon,
+  MapPin,
   MapPinned,
+  Menu,
+  MessageSquare,
   MessageSquareWarning,
+  Moon,
   Navigation,
-  Clock3,
   Package,
-  PackageX,
   PackagePlus,
-  BellRing,
+  PackageX,
+  Pencil,
+  Phone,
+  Pin,
   RefreshCw,
+  Route,
+  Save,
   Search,
   SearchCheck,
+  Settings,
+  ShoppingBag,
+  Siren,
+  Smartphone,
   Star,
   Store,
   Truck,
+  Upload,
+  User,
   UserCheck,
   Users,
-  Settings
+  Wrench,
+  XCircle
 } from "lucide-react";
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
@@ -62,7 +86,7 @@ const initialDrivers = [];
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
-const statusColor = { "รอคนขับรับ": "#92400e", "กำลังส่ง": "#1d4ed8", "กำลังจัดส่ง": "#f59e0b", "ส่งสำเร็จ": "#166562", "ติดปัญหา": "#b91c1c", "ยกเลิก": "#dc2626" };
+const statusColor = { "รอคนขับรับ": "var(--c-warn-deep)", "กำลังส่ง": "var(--c-info-dark)", "กำลังจัดส่ง": "var(--c-warn)", "ส่งสำเร็จ": "var(--c-brand-dark)", "ติดปัญหา": "var(--c-danger-dark)", "ยกเลิก": "var(--c-danger)" };
 const WORKFLOW_STATUS_META = {
   pending: { label: "รอรับงาน", tone: "waiting" },
   blocked: { label: "รอสโตร์ตรวจ", tone: "neutral" },
@@ -115,7 +139,7 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
       const row = Math.floor(index / columns);
       const x = padding + (column * (cellWidth + gap));
       const y = headerHeight + padding + (row * (cellHeight + gap));
-      context.fillStyle = "#edf3f3";
+      context.fillStyle = "#f8fafc";
       context.fillRect(x, y, cellWidth, cellHeight);
       const scale = Math.min(cellWidth / image.width, cellHeight / image.height);
       const width = image.width * scale;
@@ -152,7 +176,7 @@ function storeStatusLabel(order) {
 const BRANCH_ROUTE_STOPS = ["สาขาช้างเผือก", "สาขาโรงงานป่าแพ่ง", "สาขาสำนักงานใหญ่", "สาขามหิดล", "สาขาทับเดื่อ"];
 const LONG_ROUTE_STOPS = ["ร้านหอมไกล จ.ชลบุรี", "สาขาราติก้า จ.กรุงเทพมหานคร"];
 const LONG_ROUTE_RETURN_STOPS = ["สาขาราติก้า จ.กรุงเทพมหานคร", "เชียงใหม่"];
-const routeTaskStatusColor = { "กำลังวิ่ง": "#1d4ed8", "เช็คอินแล้ว": "#92400e", "เสร็จงาน": "#166562", "ยกเลิก": "#dc2626" };
+const routeTaskStatusColor = { "กำลังวิ่ง": "var(--c-info-dark)", "เช็คอินแล้ว": "var(--c-warn-deep)", "เสร็จงาน": "var(--c-brand-dark)", "ยกเลิก": "var(--c-danger)" };
 const TAB_TITLES = {
   sales: "แดชบอร์ดการขาย",
   "sales-outstation": "ออเดอร์ต่างจังหวัด · ฝ่ายขาย",
@@ -449,6 +473,16 @@ function buildLineMessageForRouteTask(task, stop) {
   return lines.join("\n");
 }
 
+function ListSkeleton({ rows = 4 }) {
+  return (
+    <div className="skeleton-list" role="status" aria-live="polite" aria-label="กำลังโหลดข้อมูล">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div className="skeleton skeleton-card" key={index} />
+      ))}
+    </div>
+  );
+}
+
 function buildLineMessageForNewOrder(order) {
   const lines = [];
   lines.push("📦 มีออเดอร์ใหม่เข้าคิวเตรียมสินค้า");
@@ -477,7 +511,7 @@ async function dataUrlToFile(dataUrl, fileName) {
   return new File([blob], `${fileName}.${ext}`, { type: blob.type || "image/jpeg" });
 }
 
-function StoreMetricCard({ icon: Icon, title, value, suffix = "", description, tone = "#166562", onClick, active = false }) {
+function StoreMetricCard({ icon: Icon, title, value, suffix = "", description, tone = "var(--c-brand-dark)", onClick, active = false }) {
   const Component = onClick ? "button" : "div";
   return (
     <Component type={onClick ? "button" : undefined} className={`card stat-card${active ? " active" : ""}`} onClick={onClick}>
@@ -496,10 +530,10 @@ function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, r
   const remaining = Math.max(0, total - completed);
   const cardIcons = { "is-primary": Package, "is-amber": Clock3, "is-blue": SearchCheck, "is-green": CheckCircle2, "is-red": PackageX };
   return <div className="ops-kpi-dashboard ops-kpi-dashboard-v2">
-    <div className="stats role-stats" aria-label="สรุปงานวันนี้">{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const tone = { "is-primary": "#2563eb", "is-amber": "#b7791f", "is-blue": "#1d78b5", "is-green": "#258283", "is-red": "#c7504a" }[card.tone] || "#2563eb"; return <StoreMetricCard key={card.label} icon={Icon} title={card.label} value={card.value} suffix=" งาน" description={card.detail} tone={tone} />; })}</div>
-    <div className="ops-dashboard-main"><section className="ops-progress-card"><div className="ops-section-heading"><div><h3>{progressTitle}</h3><p>{progressLabel} {completed} จาก {total} งาน</p></div><b>{progress}%</b></div><div className="ops-progress-track" role="progressbar" aria-label={progressTitle} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div><div className="ops-progress-foot"><span>{progressLabel} {completed} จาก {total} งาน</span><b>เหลืออีก {remaining} งาน</b></div></section><section className="ops-follow-up-card"><div className="ops-section-heading"><div><h3>งานที่ต้องติดตาม</h3><p>สถานะที่ควรดำเนินการต่อ</p></div></div><div className="ops-follow-up-grid">{followUps.map((item) => <div key={item.label} className={item.value ? "is-alert" : "is-clear"}>{item.value ? <><span>{item.label}</span><b>{item.value} งาน</b></> : <><i aria-hidden="true">✅</i><span>{item.emptyLabel}</span></>}</div>)}</div></section></div>
+    <div className="stats role-stats" aria-label="สรุปงานวันนี้">{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const tone = { "is-primary": "var(--c-info)", "is-amber": "var(--c-warn-dark)", "is-blue": "var(--c-info-dark)", "is-green": "var(--c-brand-dark)", "is-red": "var(--c-danger)" }[card.tone] || "var(--c-info)"; return <StoreMetricCard key={card.label} icon={Icon} title={card.label} value={card.value} suffix=" งาน" description={card.detail} tone={tone} />; })}</div>
+    <div className="ops-dashboard-main"><section className="ops-progress-card"><div className="ops-section-heading"><div><h3>{progressTitle}</h3><p>{progressLabel} {completed} จาก {total} งาน</p></div><b>{progress}%</b></div><div className="ops-progress-track" role="progressbar" aria-label={progressTitle} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div><div className="ops-progress-foot"><span>{progressLabel} {completed} จาก {total} งาน</span><b>เหลืออีก {remaining} งาน</b></div></section><section className="ops-follow-up-card"><div className="ops-section-heading"><div><h3>งานที่ต้องติดตาม</h3><p>สถานะที่ควรดำเนินการต่อ</p></div></div><div className="ops-follow-up-grid">{followUps.map((item) => <div key={item.label} className={item.value ? "is-alert" : "is-clear"}>{item.value ? <><span>{item.label}</span><b>{item.value} งาน</b></> : <><i aria-hidden="true"><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> </i><span>{item.emptyLabel}</span></>}</div>)}</div></section></div>
     <section className="ops-recent-orders"><div className="ops-section-heading"><div><h3>ออเดอร์ล่าสุดวันนี้</h3><p>รายการล่าสุดจากข้อมูลที่มีอยู่ในระบบ</p></div></div><div className="ops-recent-list">{recentOrders.map((order) => <article key={order.id}><div><b>{order.bookingNumber || order.id}</b><span>{order.customerName || "ไม่ระบุลูกค้า"}</span></div><span className={`ops-order-status ${order.statusTone || "is-primary"}`}>{order.statusLabel}</span><small>{order.updatedAt ? formatThaiDateTime(order.updatedAt) : "ยังไม่มีเวลาอัปเดต"}</small></article>)}{!recentOrders.length && <p className="muted">ยังไม่มีออเดอร์ของวันนี้</p>}</div></section>
-    <div className="ops-dashboard-footer"><section className="ops-month-summary"><h3>สรุปเดือนนี้</h3><div className="ops-month-summary-grid">{monthly.map((item) => <div key={item.label}><span>{item.label}</span><b>{item.value}{item.suffix || ""}</b></div>)}</div></section><section className="ops-activity-card"><div className="ops-section-heading"><div><h3>Activity วันนี้</h3><p>อ้างอิงจากประวัติการทำงานที่บันทึกไว้</p></div></div><div className="ops-activity-list">{activities.map((activity) => <article key={activity.id}><time>{activity.at ? new Date(activity.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</time><div><b>{activity.title}</b>{activity.note && <span>{activity.note}</span>}</div></article>)}{!activities.length && <p className="muted">ยังไม่มีรายการเคลื่อนไหวของวันนี้</p>}</div></section>{reportActions && <section className="ops-report-actions"><h3>รายงาน</h3><div><button className="secondary" onClick={reportActions.copyDaily}>📋 คัดลอกวันนี้</button><button className="primary" onClick={reportActions.shareDaily}>📤 แชร์ LINE วันนี้</button><button className="secondary" onClick={reportActions.copyMonthly}>📋 คัดลอกเดือนนี้</button><button className="primary" onClick={reportActions.shareMonthly}>📤 แชร์ LINE เดือนนี้</button></div></section>}</div>
+    <div className="ops-dashboard-footer"><section className="ops-month-summary"><h3>สรุปเดือนนี้</h3><div className="ops-month-summary-grid">{monthly.map((item) => <div key={item.label}><span>{item.label}</span><b>{item.value}{item.suffix || ""}</b></div>)}</div></section><section className="ops-activity-card"><div className="ops-section-heading"><div><h3>Activity วันนี้</h3><p>อ้างอิงจากประวัติการทำงานที่บันทึกไว้</p></div></div><div className="ops-activity-list">{activities.map((activity) => <article key={activity.id}><time>{activity.at ? new Date(activity.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</time><div><b>{activity.title}</b>{activity.note && <span>{activity.note}</span>}</div></article>)}{!activities.length && <p className="muted">ยังไม่มีรายการเคลื่อนไหวของวันนี้</p>}</div></section>{reportActions && <section className="ops-report-actions"><h3>รายงาน</h3><div><button className="secondary" onClick={reportActions.copyDaily}><ClipboardList size={15} className="i-inline" aria-hidden="true" /> คัดลอกวันนี้</button><button className="primary" onClick={reportActions.shareDaily}><Upload size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE วันนี้</button><button className="secondary" onClick={reportActions.copyMonthly}><ClipboardList size={15} className="i-inline" aria-hidden="true" /> คัดลอกเดือนนี้</button><button className="primary" onClick={reportActions.shareMonthly}><Upload size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE เดือนนี้</button></div></section>}</div>
     {information && <aside className="ops-information-note"><b>ℹ️ ข้อมูลระบบ</b><p>{information}</p></aside>}
   </div>;
 }
@@ -508,7 +542,7 @@ function SalesNoteAlert({ order, compact = false }) {
   const note = String(order?.salesNote || "").trim();
   if (!note) return null;
   return <div className={`sales-note-alert${compact ? " is-compact" : ""}`} role="note" aria-label="หมายเหตุจากฝ่ายขาย">
-    <b>📝 หมายเหตุจากฝ่ายขาย</b>
+    <b><FileText size={15} className="i-inline" aria-hidden="true" /> หมายเหตุจากฝ่ายขาย</b>
     <span>{note}</span>
   </div>;
 }
@@ -517,8 +551,8 @@ function ReworkNotice({ order, compact = false }) {
   if (!order?.reworkRequired) return null;
   const route = order.reworkRoute === "store_route" ? "ผ่านสโตร์ก่อน แล้วเข้าห้องแพ็ค" : "ส่งตรงห้องแพ็ค";
   const nextStep = order.reworkStatus === "waiting_store" ? "รอสโตร์แก้ไขและยืนยัน" : order.reworkStatus === "waiting_pack" ? "รอห้องแพ็คแก้ไขและตรวจซ้ำ" : "รอดำเนินการตามขั้นตอน";
-  return <div role="alert" aria-label="ออเดอร์ต้องส่งแก้ไข" style={{ background: compact ? "#fff7ed" : "#fef2f2", border: "1px solid #fca5a5", borderLeft: "5px solid #dc2626", borderRadius: "8px", padding: compact ? "8px" : "10px", display: "grid", gap: "4px", color: "#991b1b", fontSize: "12px" }}>
-    <b>🔴 งานแก้ไขจากคนขับ · สินค้าไม่ครบ</b>
+  return <div role="alert" aria-label="ออเดอร์ต้องส่งแก้ไข" style={{ background: compact ? "var(--c-accent-bg)" : "var(--c-danger-bg)", border: "1px solid var(--c-danger-light)", borderLeft: "5px solid var(--c-danger)", borderRadius: "8px", padding: compact ? "8px" : "10px", display: "grid", gap: "var(--sp-2)", color: "var(--c-danger-deep)", fontSize: "12px" }}>
+    <b><span className="status-dot is-danger" aria-hidden="true" /> งานแก้ไขจากคนขับ · สินค้าไม่ครบ</b>
     <span><b>เส้นทาง:</b> {route} · <b>ขั้นตอนถัดไป:</b> {nextStep}</span>
     {order.reworkNote && <span><b>หมายเหตุ:</b> {order.reworkNote}</span>}
     {(order.reworkReportedBy || order.reworkReportedAt) && <small>แจ้งโดย {order.reworkReportedBy || "คนขับ"}{order.reworkReportedAt ? ` · ${formatThaiDateTime(order.reworkReportedAt)}` : ""}</small>}
@@ -534,19 +568,19 @@ function PackSalesOrderDetails({ order }) {
     ["ผู้ตรวจสโตร์ล่าสุด", order.storeCheckerName], ["ผู้ตรวจห้องแพ็คล่าสุด", order.packCheckerName],
     ["COD", order.cod != null ? `฿${money(order.cod)}` : ""], ["เส้นทาง", order.workflowType === "direct_driver" ? "🚨 ส่งตรงคนขับ (เร่งด่วน)" : order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อนห้องแพ็ค"], ["ขนส่งต่างจังหวัด", order.shippingCarrier]
   ].filter(([, value]) => String(value || "").trim());
-  return <div style={{ display: "grid", gap: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "9px", fontSize: "12px" }}>
-    <b style={{ color: "#1e3a5f" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
+  return <div style={{ display: "grid", gap: "var(--sp-2)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)", borderRadius: "8px", padding: "var(--sp-4)", fontSize: "12px" }}>
+    <b style={{ color: "var(--c-info-deep)" }}>ข้อมูลออเดอร์จากฝ่ายขาย</b>
     <SalesNoteAlert order={order} />
     {fields.map(([label, value]) => <div key={label}><b>{label}:</b> {value}</div>)}
-    {Array.isArray(order.storeBookingSupplements) && order.storeBookingSupplements.length > 0 && <div style={{ marginTop: "4px", paddingTop: "7px", borderTop: "1px solid #dbe4ee", display: "grid", gap: "4px" }}><b style={{ color: "#1d4ed8" }}>รายละเอียดใบสั่งจองเพิ่มจากสโตร์</b>{order.storeBookingSupplements.map((item, index) => <div key={item.reportId || `${item.bookingNumber}-${index}`}><b>{item.bookingNumber || "ใบสั่งจอง"}:</b> {[item.detail, item.note].filter(Boolean).join(" · ") || "ไม่มีรายละเอียด"}<small className="muted"> · {item.createdBy || "สโตร์"}</small></div>)}</div>}
-    {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>เปิดแผนที่ลูกค้า</a>}
+    {Array.isArray(order.storeBookingSupplements) && order.storeBookingSupplements.length > 0 && <div style={{ marginTop: "var(--sp-2)", paddingTop: "var(--sp-3)", borderTop: "1px solid var(--c-line-strong)", display: "grid", gap: "var(--sp-2)" }}><b style={{ color: "var(--c-info-dark)" }}>รายละเอียดใบสั่งจองเพิ่มจากสโตร์</b>{order.storeBookingSupplements.map((item, index) => <div key={item.reportId || `${item.bookingNumber}-${index}`}><b>{item.bookingNumber || "ใบสั่งจอง"}:</b> {[item.detail, item.note].filter(Boolean).join(" · ") || "ไม่มีรายละเอียด"}<small className="muted"> · {item.createdBy || "สโตร์"}</small></div>)}</div>}
+    {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--c-info-dark)", fontWeight: 700 }}>เปิดแผนที่ลูกค้า</a>}
   </div>;
 }
 
 function OrderCreatedAt({ order }) {
   if (!order?.createdAt) return null;
   const source = order.orderEntrySource === "store_assist" ? "สโตร์ช่วยคีย์" : "ฝ่ายขายเปิดออเดอร์";
-  return <div className="muted" style={{ fontSize: "12px", fontWeight: 700 }}>🕒 {source}: {formatThaiDateTime(order.createdAt)} น.</div>;
+  return <div className="muted" style={{ fontSize: "12px", fontWeight: 700 }}><Clock3 size={15} className="i-inline" aria-hidden="true" /> {source}: {formatThaiDateTime(order.createdAt)} น.</div>;
 }
 
 function OrderHistorySearch({ title, query, onQueryChange, onSearch, onClear, loading, searched, results, onOpen }) {
@@ -605,7 +639,7 @@ function BookingNumberInput({ value, onChange, required = false }) {
     const cleanDigits = digitsOnly(nextDigits).slice(0, 4);
     onChange(cleanPrefix ? `${cleanPrefix}-${cleanDigits}` : "");
   };
-  return <div style={{ display: "grid", gridTemplateColumns: isManualPrefix ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "7px" }}>
+  return <div style={{ display: "grid", gridTemplateColumns: isManualPrefix ? "76px minmax(84px, .7fr) minmax(0, 1fr)" : "76px minmax(0, 1fr)", gap: "var(--sp-3)" }}>
     <select value={prefix} onChange={e => { const next = e.target.value; if (next === "custom") { setManualPrefixMode(true); onChange(""); return; } setManualPrefixMode(false); setBooking(next, digits); }} aria-label="คำนำหน้าใบสั่งจอง"><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>
     {isManualPrefix && <input value={customPrefix} onChange={e => setBooking(e.target.value.trim().toUpperCase(), digits)} placeholder="รหัสหน้า เช่น ABC" aria-label="กรอกรหัสหน้าเอง" />}
     <input value={digits} onChange={e => setBooking(activePrefix, digitsOnly(e.target.value).slice(0, 4))} inputMode="numeric" maxLength={4} placeholder={required ? "เลข 4 หลัก *" : "เลข 4 หลัก"} aria-label="เลข 4 หลักของใบสั่งจอง" />
@@ -629,18 +663,18 @@ function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange,
   };
   return <section className="panel role-workspace ops-workspace pack-report-workspace">
     <div className="panel-head"><h2>{title}</h2><span>{selectableRows.length} งานรอยืนยัน</span></div>
-    <div className="store-report-filters" style={{ marginBottom: "10px" }}>
+    <div className="store-report-filters" style={{ marginBottom: "var(--sp-5)" }}>
       <input aria-label="วันที่รายงานห้องแพ็ค" type="date" value={date} onChange={(event) => onDateChange(event.target.value)} />
       <select aria-label="กรองสถานะห้องแพ็ค" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">งานที่ต้องดำเนินการ</option><option value="pending">รอยืนยัน</option><option value="partial">ของไม่ครบ / รอของ</option><option value="returned">ส่งกลับสโตร์</option><option value="checked">ยืนยันแล้ว</option><option value="all">ทุกสถานะ</option></select>
       <div className="store-report-search"><Search size={17} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div>
       <button className="secondary" onClick={onSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={onClear}>ล้าง</button>
     </div>
-    <div className="store-report-actions" style={{ marginBottom: "10px" }}>
+    <div className="store-report-actions" style={{ marginBottom: "var(--sp-5)" }}>
       <div><span className="muted">เลือกงานที่ตรวจครบ แล้วกดยืนยันครั้งเดียว หรือยืนยันทีละงานได้</span><select aria-label="ชื่อผู้ตรวจห้องแพ็ค" value={checkerName} onChange={(event) => onCheckerNameChange(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจห้องแพ็ค * --</option>{[...new Set([...(checkerOptions || []), checkerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
       <div><button className="secondary" disabled={!selectableRows.length} onClick={() => toggleAll(!allSelectable)}>{allSelectable ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableRows.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length || !checkerName.trim()} onClick={() => onConfirmSelected(selectedVisibleIds)}>ยืนยันที่เลือก ({selectedVisibleIds.length})</button></div>
     </div>
     {updatedAt && <small className="muted">อัปเดตล่าสุด {new Date(updatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small>}
-    {loading ? <p className="muted">กำลังโหลดรายการ…</p> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{visibleRows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; const canInspect = selectable && Boolean(checkerName.trim()); return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "#b91c1c" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span>{item.packCheckerName && <small>ผู้ตรวจล่าสุด: {item.packCheckerName}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!canInspect} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!canInspect} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!canInspect} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
+    {loading ? <ListSkeleton rows={4} /> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{visibleRows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; const canInspect = selectable && Boolean(checkerName.trim()); return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "var(--c-danger-dark)" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span>{item.packCheckerName && <small>ผู้ตรวจล่าสุด: {item.packCheckerName}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!canInspect} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!canInspect} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!canInspect} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
     {!loading && !visibleRows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่ตรงกับตัวกรอง</p>}
   </section>;
 }
@@ -1339,8 +1373,6 @@ export default function App() {
       
       osc.start(now);
       osc.stop(now + 0.2);
-      
-      console.log("🔊 Notification sound played");
     } catch (e) {
       console.error("❌ Error playing notification sound:", e);
     }
@@ -2981,7 +3013,6 @@ export default function App() {
   };
 
   const updateOrder = (id, patch) => {
-    console.log(`📝 updateOrder: ${id}`, patch);
     ordersToSyncRef.current.add(id);
     setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
 	    setTimeout(() => {
@@ -4932,7 +4963,7 @@ export default function App() {
               {loginForm.role === "accounting" && <p className="login-note">ฝ่ายบัญชีใช้ Google อีเมล @hillkoff.com ที่ได้รับอนุมัติ และเข้าได้เฉพาะหน้ารายงานตรวจรถ</p>}
               {loginForm.role === "driver" && <>
                 <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" autoComplete="current-password" />
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", cursor: "pointer", fontSize: "14px" }}>
                   <input type="checkbox" checked={rememberPhone} onChange={e => setRememberPhone(e.target.checked)} />
                   จดจำ Username ในครั้งต่อไป
                 </label>
@@ -4985,7 +5016,7 @@ export default function App() {
               <button type="button" className={displayTab === "sales-outstation" ? "active" : ""} onClick={() => selectAppTab("sales-outstation")}><FileText size={18} /> ออเดอร์ต่างจังหวัด</button>
               <button type="button" className={displayTab === "dispatch" ? "active" : ""} onClick={() => selectAppTab("dispatch")}><Users size={18} /> แดชบอร์ดการจัดส่ง</button>
               <button type="button" className={displayTab === "driver-ratings" ? "active" : ""} onClick={() => selectAppTab("driver-ratings")}><Star size={18} /> KPI คะแนนคนขับ{allTimeDriverScore.length > 0 && <span className="nav-count-badge" aria-label={`มีคะแนนคนขับ ${allTimeDriverScore.length} คน`}>{allTimeDriverScore.length}</span>}</button>
-              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}{salesWaitingOrders.length > 0 && <span className="nav-count-badge" style={{ background: "#dc2626", color: "white" }} aria-label={`ออเดอร์รอสินค้าหรือของไม่ครบ ${salesWaitingOrders.length} งาน`}>! {salesWaitingOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "chiangmai" ? "active" : ""} onClick={() => selectAppTab("chiangmai")}><PackagePlus size={18} /> <span>เตรียมออเดอร์เชียงใหม่</span>{todayPreparationOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่ในคิวเตรียม ${todayPreparationOrders.length} งาน`}>{todayPreparationOrders.length}</span>}{salesWaitingOrders.length > 0 && <span className="nav-count-badge" style={{ background: "var(--c-danger)", color: "white" }} aria-label={`ออเดอร์รอสินค้าหรือของไม่ครบ ${salesWaitingOrders.length} งาน`}>! {salesWaitingOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-sop-report" ? "active" : ""} onClick={() => selectAppTab("driver-sop-report")}><ClipboardList size={18} /> รายงานตรวจรถ</button>
             </>
           )}
@@ -5043,14 +5074,14 @@ export default function App() {
         </header>
         {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && <div className="sync-banner" role="status" aria-live="polite">{syncStatus}</div>}
         {auth.role === "driver" && needsDailyVehicleStart && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1400, display: "grid", placeItems: "center", padding: "16px" }}>
-            <section className="panel" style={{ width: "min(520px, 100%)", borderLeft: "4px solid #2563eb", boxShadow: "0 16px 40px rgba(0,0,0,0.25)" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1400, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
+            <section className="panel" style={{ width: "min(520px, 100%)", borderLeft: "4px solid var(--c-info)", boxShadow: "0 16px 40px var(--c-overlay-soft)" }}>
               <div className="panel-head">
                 <h2>เริ่มใช้รถวันนี้</h2>
                 <span>{todayServiceDate}</span>
               </div>
               <p className="muted" style={{ marginTop: 0 }}>กรุณายืนยันรถและกรอกเลขไมล์เริ่มต้นก่อนใช้งานแอพประจำวัน</p>
-              <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ display: "grid", gap: "var(--sp-5)" }}>
                 <div>
                   <label className="field-label">รถที่ใช้วันนี้</label>
                   <select
@@ -5081,7 +5112,7 @@ export default function App() {
                   <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
                 </button>
                 {vehicleUsageStatus && (
-                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166562" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "var(--c-brand-dark)" : vehicleUsageStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
                     {vehicleUsageStatus}
                   </span>
                 )}
@@ -5109,12 +5140,12 @@ export default function App() {
                 <span className="status-chip"><b className="count-num">{salesWaitingOrders.length}</b> งาน</span>
               </button>
               <button type="button" className={activeSalesStatusPanel === "grab" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "grab" ? null : "grab")}>
-                <span>🛍️ Grab / รับหน้าร้าน</span>
+                <span><ShoppingBag size={15} className="i-inline" aria-hidden="true" /> Grab / รับหน้าร้าน</span>
                 <span className="status-chip"><b className="count-num">{salesPickupOrders.length}</b> งาน</span>
               </button>
             </div>
             {activeSalesStatusPanel === "round" && (
-              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #166562" }}>
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-brand-dark)" }}>
                 <div className="panel-head"><h2>ออเดอร์รอบจัดส่งเชียงใหม่</h2></div>
                 <SalesRoundQueuePanel
                   apiFetch={authenticatedApiFetch}
@@ -5133,18 +5164,18 @@ export default function App() {
               </section>
             )}
             {activeSalesStatusPanel === "expired" && expiredDriverQueueOrders.length > 0 && (
-              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #f59e0b", background: "#fffbeb" }}>
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-warn)", background: "var(--c-warn-bg)" }}>
                 <div className="panel-head"><h2>⏰ คิวหมดอายุ—รอฝ่ายขายส่งใหม่</h2><span>{expiredDriverQueueOrders.length} งาน</span></div>
                 <p className="muted" style={{ marginTop: 0 }}>ออเดอร์กติกาใหม่ที่ไม่มีคนขับรับภายในวันที่เข้าคิว ระบบซ่อนจากหน้าคนขับแล้ว</p>
-                <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>
+                <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>
                   {expiredDriverQueueOrders.map((order) => (
-                    <article key={order.id} style={{ background: "white", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px", display: "grid", gap: "7px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <article key={order.id} style={{ background: "white", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-5)", flexWrap: "wrap" }}>
                         <div>
                           <b>{order.id} · {order.customerName || "-"}</b>
                           <div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"} · เข้าคิวล่าสุด {order.driverQueueDate || "-"}</div>
                         </div>
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}>
                           <button
                             className="primary"
                             disabled={pendingOrderUpdatesRef.current.has(order.id)}
@@ -5177,34 +5208,34 @@ export default function App() {
               </section>
             )}
             {activeSalesStatusPanel === "waiting" && (
-              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #dc2626", background: "#fffafa" }}>
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-danger)", background: "var(--c-surface-subtle)" }}>
                 <div className="panel-head"><h2>⏳ งานรอของ / ของไม่ครบ</h2><span>{salesWaitingOrders.length} งาน{salesWaitingOrders.length > salesWaitingOrdersVisible.length ? ` · แสดง ${salesWaitingOrdersVisible.length} งานล่าสุด` : ""}</span></div>
-              {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><ReworkNotice order={order} compact /><div style={{ display: "flex", gap: "7px", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
+              {salesWaitingOrdersVisible.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงานรอของหรือของไม่ครบ</p> : <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>{salesWaitingOrdersVisible.map(order => <article key={order.id} style={{ background: "white", border: "1px solid var(--c-danger-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id}</b><div className="muted">{order.customerName || "-"} · วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><span className="status-chip" style={{ color: "var(--c-danger-deep)", background: "var(--c-danger-bg-strong)", border: "1px solid var(--c-danger-border)", fontWeight: 800 }}>รอของ / ของไม่ครบ</span></div><ReworkNotice order={order} compact /><div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", fontSize: "12px" }}><span className="status-chip">สโตร์: {order.storeStatus === "partial" ? "ของไม่ครบ" : "รอของ"}</span><span className="status-chip">ห้องแพ็ค: {order.packStatus === "partial" ? "ของไม่ครบ" : order.packStatus === "waiting" ? "รอของ" : order.packStatus || "รอตรวจ"}</span></div>{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", color: "var(--c-warn-deep)", borderRadius: "6px", padding: "var(--sp-3)", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)}</small></article>)}</div>}
               </section>
             )}
             {activeSalesStatusPanel === "grab" && (
-              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #7c3aed", background: "#faf5ff" }}>
-                <div className="panel-head"><h2>🛍️ งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
-              {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
+              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-highlight)", background: "var(--c-highlight-bg)" }}>
+                <div className="panel-head"><h2><ShoppingBag size={15} className="i-inline" aria-hidden="true" /> งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
+              {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid var(--c-highlight-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
               </section>
             )}
             <details className="daily-accordion" style={{ gridColumn: "1 / -1" }}>
-              <summary className="daily-accordion-trigger" style={{ cursor: "pointer", fontWeight: 900, display: "block" }}>📍 ภาพรวมคนขับ, งานวิ่ง และแผนที่ (คลิกเพื่อดู)</summary>
-              <div className="daily-accordion-body" style={{ display: "grid", gap: "14px" }}>
-            <section className="panel" style={{ background: "#f0fdfc", borderLeft: "4px solid #22c5bd" }}>
-              <div className="panel-head"><h2>🟢 คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
+              <summary className="daily-accordion-trigger" style={{ cursor: "pointer", fontWeight: 900, display: "block" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> ภาพรวมคนขับ, งานวิ่ง และแผนที่ (คลิกเพื่อดู)</summary>
+              <div className="daily-accordion-body" style={{ display: "grid", gap: "var(--sp-6)" }}>
+            <section className="panel" style={{ background: "var(--c-brand-bg)", borderLeft: "4px solid var(--c-brand-light)" }}>
+              <div className="panel-head"><h2><span className="status-dot is-online" aria-hidden="true" /> คนขับออนไลน์ตอนนี้</h2><span>{Object.keys(state.onlineDrivers || {}).length} คน</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "var(--sp-6)" }}>
                 {Object.keys(state.onlineDrivers || {}).length === 0 ? (
                   <p className="muted" style={{ gridColumn: "1 / -1" }}>ยังไม่มีคนขับออนไลน์</p>
                 ) : (
                   drivers.filter(d => state.onlineDrivers?.[d.id]).map(driver => {
                     const onlineTime = Math.floor((new Date().getTime() - (state.onlineDrivers?.[driver.id] || 0)) / 60000);
                     return (
-                      <div key={driver.id} style={{ background: "white", padding: "12px", borderRadius: "6px", border: "1px solid #dcfcfa", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#22c5bd", marginBottom: "4px" }}>🟢 {driver.name}</div>
-                        <small style={{ color: "#666" }}>{driver.plate}</small><br />
-                        <small style={{ color: "#999" }}>{driver.zone}</small><br />
-                        <small style={{ color: "#16a39c", marginTop: "4px", display: "block" }}>Online {onlineTime}m ago</small>
+                      <div key={driver.id} style={{ background: "white", padding: "var(--sp-6)", borderRadius: "6px", border: "1px solid var(--c-brand-bg-strong)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--c-brand-light)", marginBottom: "var(--sp-2)" }}><span className="status-dot is-online" aria-hidden="true" /> {driver.name}</div>
+                        <small style={{ color: "var(--c-text-muted)" }}>{driver.plate}</small><br />
+                        <small style={{ color: "var(--c-text-faint)" }}>{driver.zone}</small><br />
+                        <small style={{ color: "var(--c-brand)", marginTop: "var(--sp-2)", display: "block" }}>Online {onlineTime}m ago</small>
                       </div>
                     );
                   })
@@ -5212,41 +5243,41 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid #0e7490" }}>
-              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>งานวันนี้ {todayRouteTasks.length} งาน · กำลังทำ {activeTodayRouteTasks.length}</span></div>
+            <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-brand-cyan)" }}>
+              <div className="panel-head"><h2><Route size={15} className="i-inline" aria-hidden="true" /> งานวิ่งสาขา / งานวิ่งไกล</h2><span>งานวันนี้ {todayRouteTasks.length} งาน · กำลังทำ {activeTodayRouteTasks.length}</span></div>
               {!latestTodayRouteTask ? (
                 <p className="muted" style={{ margin: 0 }}>ยังไม่มีงานวิ่งสาขาหรืองานวิ่งไกลวันนี้</p>
               ) : (
-                <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ display: "grid", gap: "var(--sp-6)" }}>
                   {[latestTodayRouteTask].map(task => {
-                    const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
+                    const taskColor = routeTaskStatusColor[task.status] || "var(--c-info-dark)";
                     const checkedCount = (task.stops || []).filter(stop => stop.checkedInAt).length;
                     const stopCount = (task.stops || []).length;
                     const latestStop = (task.stops || []).filter(stop => stop.checkedInAt).slice(-1)[0];
                     return (
-                      <div key={task.id} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", display: "grid", gap: "8px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "start" }}>
+                      <div key={task.id} style={{ background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "start" }}>
                           <div>
-                            <b style={{ display: "block", color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}</b>
-                            <small style={{ color: "#6b7280" }}>{task.id}{task.type === "long" ? ` · ${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : ""}</small>
+                            <b style={{ display: "block", color: "var(--c-text)" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}</b>
+                            <small style={{ color: "var(--c-text-muted)" }}>{task.id}{task.type === "long" ? ` · ${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : ""}</small>
                           </div>
-                          <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "4px 8px", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
+                          <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "var(--sp-2) var(--sp-4)", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
                         </div>
-                        <div style={{ fontSize: "12px", color: "#374151", display: "grid", gap: "3px" }}>
+                        <div style={{ fontSize: "12px", color: "var(--c-text-strong)", display: "grid", gap: "var(--sp-1)" }}>
                           <span><b>คนขับ:</b> {task.driverName || task.driverId || "-"}</span>
-                          <span style={{ color: "#1d4ed8", fontWeight: 800 }}><b>สถานะคนขับ:</b> เริ่มงานต้นทางแล้ว{task.originStartedAt ? ` · ${task.originStartedAt}` : ""}</span>
+                          <span style={{ color: "var(--c-info-dark)", fontWeight: 800 }}><b>สถานะคนขับ:</b> เริ่มงานต้นทางแล้ว{task.originStartedAt ? ` · ${task.originStartedAt}` : ""}</span>
                           <span><b>เส้นทาง:</b> {task.origin} → {task.destinationSummary}</span>
                           <span><b>เช็คอิน:</b> {checkedCount}/{stopCount} จุด</span>
-                          {latestStop && <span style={{ color: "#0e7490" }}><b>ล่าสุด:</b> {latestStop.name} · {latestStop.checkedInAt}</span>}
+                          {latestStop && <span style={{ color: "var(--c-brand-cyan)" }}><b>ล่าสุด:</b> {latestStop.name} · {latestStop.checkedInAt}</span>}
                           {task.note && <span><b>หมายเหตุ:</b> {task.note}</span>}
                         </div>
-                        <div style={{ display: "grid", gap: "6px" }}>
+                        <div style={{ display: "grid", gap: "var(--sp-3)" }}>
                           {(task.stops || []).map(stop => (
-                            <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "8px", fontSize: "12px" }}>
+                            <div key={stop.id} style={{ background: "white", border: "1px solid var(--c-line)", borderRadius: "6px", padding: "var(--sp-4)", fontSize: "12px" }}>
                               <b>{stop.kind === "midway" ? "ระหว่างทาง" : stop.name}</b>
-                              <span style={{ color: stop.checkedInAt ? "#166562" : "#6b7280", marginLeft: "6px" }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</span>
-                              {stop.checkedInAt && <div style={{ color: "#6b7280", marginTop: "3px" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</div>}
-                              {stop.note && <div style={{ color: "#6b7280", marginTop: "3px" }}>{stop.note}</div>}
+                              <span style={{ color: stop.checkedInAt ? "var(--c-brand-dark)" : "var(--c-text-muted)", marginLeft: "var(--sp-3)" }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</span>
+                              {stop.checkedInAt && <div style={{ color: "var(--c-text-muted)", marginTop: "var(--sp-1)" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</div>}
+                              {stop.note && <div style={{ color: "var(--c-text-muted)", marginTop: "var(--sp-1)" }}>{stop.note}</div>}
                             </div>
                           ))}
                         </div>
@@ -5254,26 +5285,26 @@ export default function App() {
                     );
                   })}
                   {olderTodayRouteTasks.length > 0 && (
-                    <details style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
-                      <summary style={{ cursor: "pointer", fontWeight: 900, color: "#0e7490" }}>
+                    <details style={{ background: "var(--c-surface)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)" }}>
+                      <summary style={{ cursor: "pointer", fontWeight: 900, color: "var(--c-brand-cyan)" }}>
                         ดูงานที่ผ่านมาเพิ่มเติม ({olderTodayRouteTasks.length} งาน)
                       </summary>
-                      <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+                      <div style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}>
                         {olderTodayRouteTasks.map(task => {
-                          const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
+                          const taskColor = routeTaskStatusColor[task.status] || "var(--c-info-dark)";
                           const checkedCount = (task.stops || []).filter(stop => stop.checkedInAt).length;
                           const stopCount = (task.stops || []).length;
                           const latestStop = (task.stops || []).filter(stop => stop.checkedInAt).slice(-1)[0];
                           return (
-                            <div key={task.id} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", display: "grid", gap: "6px", fontSize: "12px" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "start" }}>
-                                <b style={{ color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"} · {task.id}</b>
-                                <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "3px 7px", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
+                            <div key={task.id} style={{ background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)", fontSize: "12px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "start" }}>
+                                <b style={{ color: "var(--c-text)" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"} · {task.id}</b>
+                                <span style={{ color: taskColor, background: `${taskColor}14`, borderRadius: "999px", padding: "var(--sp-1) var(--sp-3)", fontSize: "11px", fontWeight: 800 }}>{task.status}</span>
                               </div>
                               <span><b>คนขับ:</b> {task.driverName || task.driverId || "-"}</span>
                               <span><b>เส้นทาง:</b> {task.origin} → {task.destinationSummary}</span>
                               <span><b>เช็คอิน:</b> {checkedCount}/{stopCount} จุด{latestStop ? ` · ล่าสุด ${latestStop.name}` : ""}</span>
-                              {task.completedAt && <span style={{ color: "#166562", fontWeight: 800 }}><b>จบงาน:</b> {task.completedAt}</span>}
+                              {task.completedAt && <span style={{ color: "var(--c-brand-dark)", fontWeight: 800 }}><b>จบงาน:</b> {task.completedAt}</span>}
                             </div>
                           );
                         })}
@@ -5299,16 +5330,16 @@ export default function App() {
 
                 return (
                   <>
-                    <div className="panel-head"><h2>🗺️ Mini-map (OSM)</h2><span>{idsWithLocation.length} จุดเช็คอิน</span></div>
+                    <div className="panel-head"><h2><MapIcon size={15} className="i-inline" aria-hidden="true" /> Mini-map (OSM)</h2><span>{idsWithLocation.length} จุดเช็คอิน</span></div>
                     {idsWithLocation.length === 0 ? (
                       <p className="muted" style={{ margin: 0 }}>ยังไม่มีคนขับเช็คอินพิกัด (ให้คนขับกด “ไปถึงแล้ว” ที่หน้างาน และอนุญาต GPS)</p>
                     ) : (
-                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                      <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginBottom: "var(--sp-5)" }}>
                         {idsWithLocation.map(did => {
                           const d = locs[did];
                           const name = d.driverName || (drivers.find(x => x.id === did)?.name) || did;
                           return (
-                            <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
+                            <button key={did} className={did === effectiveId ? "primary" : "secondary"} style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setSelectedMapDriverId(did)}>
                               📍 {name}
                             </button>
                           );
@@ -5316,13 +5347,13 @@ export default function App() {
                       </div>
                     )}
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--sp-5)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "baseline" }}>
                         <b>{selected?.driverName ? `📍 ${selected.driverName}` : "แผนที่ภาพรวม"}</b>
-                        <small style={{ color: "#6b7280" }}>{selected?.zone || "เชียงใหม่"}</small>
+                        <small style={{ color: "var(--c-text-muted)" }}>{selected?.zone || "เชียงใหม่"}</small>
                       </div>
-                      <iframe title="osm-mini-map" src={embed} style={{ width: "100%", height: "260px", border: "1px solid #e5e7eb", borderRadius: "8px" }} loading="lazy" />
-                      <a href={osmPageUrl(centerLat, centerLng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "8px", textDecoration: "none" }}>
+                      <iframe title="osm-mini-map" src={embed} style={{ width: "100%", height: "260px", border: "1px solid var(--c-line)", borderRadius: "8px" }} loading="lazy" />
+                      <a href={osmPageUrl(centerLat, centerLng, 16)} target="_blank" rel="noreferrer" className="secondary" style={{ display: "block", textAlign: "center", padding: "var(--sp-4)", textDecoration: "none" }}>
                         เปิดแผนที่เต็ม (OpenStreetMap)
                       </a>
                     </div>
@@ -5342,11 +5373,11 @@ export default function App() {
 
                 return (
                   <>
-                    <div className="panel-head"><h2>🚚 งานที่คนขับกำลังส่ง</h2><span>{inProgress.length} งาน</span></div>
+                    <div className="panel-head"><h2><Truck size={15} className="i-inline" aria-hidden="true" /> งานที่คนขับกำลังส่ง</h2><span>{inProgress.length} งาน</span></div>
                     {inProgress.length === 0 ? (
-                      <p className="muted" style={{ textAlign: "center", padding: "8px 0" }}>ยังไม่มีงานที่กำลังส่ง</p>
+                      <p className="muted" style={{ textAlign: "center", padding: "var(--sp-4) 0" }}>ยังไม่มีงานที่กำลังส่ง</p>
                     ) : (
-                      <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))", gap: "12px" }}>
+                      <div className="scroll-box" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))", gap: "var(--sp-6)" }}>
                         {Object.keys(byDriver).map(did => {
                           const driver = drivers.find(d => d.id === did);
                           const items = byDriver[did] || [];
@@ -5354,24 +5385,24 @@ export default function App() {
                           const resolvedName = driver?.name || items[0]?.driverName || loc?.driverName || "";
                           const resolvedPhone = driver?.phone || loc?.driverPhone || "";
                           return (
-                            <div key={did} style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+                            <div key={did} style={{ background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-6)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "baseline" }}>
                                 <b>{resolvedName || "ไม่ทราบชื่อคนขับ"}</b>
-                                <small style={{ color: "#6b7280" }}>{driver?.plate || "-"}</small>
+                                <small style={{ color: "var(--c-text-muted)" }}>{driver?.plate || "-"}</small>
                               </div>
-                              <small style={{ color: "#6b7280" }}>{driver?.zone || loc?.zone || "-"}{resolvedPhone ? ` · ${resolvedPhone}` : ""}</small>
-                              <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+                              <small style={{ color: "var(--c-text-muted)" }}>{driver?.zone || loc?.zone || "-"}{resolvedPhone ? ` · ${resolvedPhone}` : ""}</small>
+                              <div style={{ marginTop: "var(--sp-5)", display: "grid", gap: "var(--sp-4)" }}>
                                 {items.slice(0, 5).map(o => (
-                                  <div key={o.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "8px" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
-                                      <b style={{ color: statusColor[o.status] || "#111827" }}>{o.id}</b>
-                                      <small style={{ color: statusColor[o.status] || "#111827" }}>{o.status}</small>
+                                  <div key={o.id} style={{ background: "white", border: "1px solid var(--c-line)", borderRadius: "6px", padding: "var(--sp-4)" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)" }}>
+                                      <b style={{ color: statusColor[o.status] || "var(--c-text)" }}>{o.id}</b>
+                                      <small style={{ color: statusColor[o.status] || "var(--c-text)" }}>{o.status}</small>
                                     </div>
-                                    <small style={{ color: "#374151" }}>{o.customerName} · {o.zone}</small>
-                                    <div style={{ marginTop: "4px", color: "#6b7280", fontSize: "11px" }}>👤 คนขับ: {resolvedName || did} {resolvedPhone ? `· ${resolvedPhone}` : ""}</div>
+                                    <small style={{ color: "var(--c-text-strong)" }}>{o.customerName} · {o.zone}</small>
+                                    <div style={{ marginTop: "var(--sp-2)", color: "var(--c-text-muted)", fontSize: "11px" }}><User size={15} className="i-inline" aria-hidden="true" /> คนขับ: {resolvedName || did} {resolvedPhone ? `· ${resolvedPhone}` : ""}</div>
                                   </div>
                                 ))}
-                                {items.length > 5 && <small style={{ color: "#6b7280" }}>+ อีก {items.length - 5} งาน</small>}
+                                {items.length > 5 && <small style={{ color: "var(--c-text-muted)" }}>+ อีก {items.length - 5} งาน</small>}
                               </div>
                             </div>
                           );
@@ -5388,29 +5419,29 @@ export default function App() {
             <section className="panel">
               <div className="panel-head"><h2>ข้อมูลลูกค้าเก่า</h2><span>{customers.length} ร้าน</span></div>
               {customers.length === 0 ? (
-                <p className="muted" style={{ textAlign: "center", padding: "20px", color: "#999" }}>📭 ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
+                <p className="muted" style={{ textAlign: "center", padding: "var(--sp-8)", color: "var(--c-text-faint)" }}><Inbox size={15} className="i-inline" aria-hidden="true" /> ยังไม่มีลูกค้า กดเพิ่มลูกค้าใหม่ด้านล่าง</p>
               ) : (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center" }}>
-                    <small style={{ color: "#6b7280" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center" }}>
+                    <small style={{ color: "var(--c-text-muted)" }}>
                       {customerQuery.trim()
                         ? `ผลค้นหา ${filteredCustomers.length} ราย`
                         : `แสดง ${showAllCustomers ? "ทั้งหมด" : `${Math.min(customerPreviewCount, customers.length)} รายแรก`}`}
                     </small>
                     {!customerQuery.trim() && customers.length > customerPreviewCount && (
-                      <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowAllCustomers(v => !v)}>
+                      <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowAllCustomers(v => !v)}>
                         {showAllCustomers ? "ย่อรายการ" : `ดูเพิ่มเติมอีก ${customers.length - customerPreviewCount} ราย`}
                       </button>
                     )}
                   </div>
 
-                  <label className="search" style={{ marginTop: "8px" }}><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร ผู้ติดต่อ หรือพื้นที่" /></label>
+                  <label className="search" style={{ marginTop: "var(--sp-4)" }}><Search size={16} /><input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า เบอร์โทร ผู้ติดต่อ หรือพื้นที่" /></label>
                   <div className="customer-list scroll-box">
                     {(() => {
                       const q = customerQuery.trim();
                       const displayCustomers = q ? filteredCustomers.slice(0, 30) : (showAllCustomers ? customers : customers.slice(0, customerPreviewCount));
                       if (q && displayCustomers.length === 0) {
-                        return <p className="muted" style={{ margin: 0, padding: "10px" }}>ไม่พบลูกค้าที่ตรงกับคำค้น</p>;
+                        return <p className="muted" style={{ margin: 0, padding: "var(--sp-5)" }}>ไม่พบลูกค้าที่ตรงกับคำค้น</p>;
                       }
                       return displayCustomers.map(customer => (
                         <div
@@ -5424,7 +5455,7 @@ export default function App() {
                         >
                           <strong>
                             {customer.name}
-                            <span style={{ display: "flex", gap: "6px", alignItems: "center", flex: "0 0 auto" }}>
+                            <span style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flex: "0 0 auto" }}>
                               {customerNameCounts[customerNameKey(customer.name)] > 1 && (
                                 <small className="duplicate-count">ซ้ำ {customerNameCounts[customerNameKey(customer.name)]} ราย</small>
                               )}
@@ -5443,44 +5474,44 @@ export default function App() {
               )}
 
               {selectedCustomer && (
-                <div style={{ marginTop: "16px", padding: "12px", background: "#f0fdfc", borderRadius: "8px", border: "1px solid #dcfcfa" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+                <div style={{ marginTop: "var(--sp-7)", padding: "var(--sp-6)", background: "var(--c-brand-bg)", borderRadius: "8px", border: "1px solid var(--c-brand-bg-strong)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "var(--sp-4)" }}>
                     <div>
                       <b style={{ fontSize: "14px", display: "block" }}>{selectedCustomer.name}</b>
-                      <small style={{ color: "#666" }}>📞 {selectedCustomer.phone}</small><br/>
-                      <small style={{ color: "#666" }}>👤 {selectedCustomer.contact}</small><br/>
-                      <small style={{ color: "#666" }}>📍 {selectedCustomer.zone}</small><br/>
-                      <small style={{ color: "#666" }}>{selectedCustomer.address}</small>
+                      <small style={{ color: "var(--c-text-muted)" }}><Phone size={15} className="i-inline" aria-hidden="true" /> {selectedCustomer.phone}</small><br/>
+                      <small style={{ color: "var(--c-text-muted)" }}><User size={15} className="i-inline" aria-hidden="true" /> {selectedCustomer.contact}</small><br/>
+                      <small style={{ color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> {selectedCustomer.zone}</small><br/>
+                      <small style={{ color: "var(--c-text-muted)" }}>{selectedCustomer.address}</small>
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => {
+                  <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
+                    <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => {
                       setEditingCustomerId(selectedCustomer.id);
                       setEditCustomerForm(selectedCustomer);
-                    }}>✏️ แก้ไขข้อมูล</button>
-                    <button className="secondary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => loadCustomerOrderHistory(selectedCustomer)} disabled={customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id}>
+                    }}><Pencil size={15} className="i-inline" aria-hidden="true" /> แก้ไขข้อมูล</button>
+                    <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => loadCustomerOrderHistory(selectedCustomer)} disabled={customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id}>
                       {customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id ? "กำลังโหลด…" : "📚 ดูประวัติออเดอร์"}
                     </button>
-                    <button className="secondary danger" style={{ padding: "8px", fontSize: "12px" }} onClick={() => deleteCustomer(selectedCustomer)}>ลบลูกค้า</button>
+                    <button className="secondary danger" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => deleteCustomer(selectedCustomer)}>ลบลูกค้า</button>
                   </div>
                   {customerHistoryCustomerId === selectedCustomer.id && (
-                    <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #bbf7f3" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+                    <div style={{ marginTop: "var(--sp-6)", paddingTop: "var(--sp-5)", borderTop: "1px solid var(--c-brand-border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "center", marginBottom: "var(--sp-4)" }}>
                         <b style={{ fontSize: "13px" }}>ประวัติออเดอร์ทั้งหมด</b>
                         {!customerHistoryLoading && <span className="status-chip">พบ {customerHistory.length} งาน</span>}
                       </div>
                       {customerHistoryLoading ? <p className="muted" style={{ margin: 0 }}>กำลังค้นหาออเดอร์เก่าจาก Firestore…</p> : customerHistory.length === 0 ? (
                         <p className="muted" style={{ margin: 0 }}>ยังไม่พบออเดอร์ของลูกค้ารายนี้</p>
                       ) : (
-                        <div className="scroll-box" style={{ display: "grid", gap: "7px" }}>
+                        <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-3)" }}>
                           {customerHistory.map(order => (
-                            <article key={order.id} style={{ background: "#fff", border: "1px solid #d1f7fa", borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+                            <article key={order.id} style={{ background: "var(--c-surface)", border: "1px solid var(--c-brand-bg-strong)", borderRadius: "8px", padding: "var(--sp-4)", display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "center" }}>
                               <div style={{ minWidth: 0 }}>
                                 <b style={{ fontSize: "12px" }}>{order.id} · {order.customerName || selectedCustomer.name}</b>
                                 <div className="muted" style={{ fontSize: "11px" }}>ใบสั่งจอง: {order.bookingNumber || "-"} · {order.zone || selectedCustomer.zone || "-"}</div>
                                 <div className="muted" style={{ fontSize: "11px" }}>สถานะ: {order.status || "-"} · อัปเดต {order.updatedAt || order.createdAt || "-"}</div>
                               </div>
-                              <button className="secondary" style={{ padding: "6px 8px", fontSize: "11px", whiteSpace: "nowrap" }} onClick={() => openChiangmaiHistoryOrder(order)}>ดูรายละเอียด</button>
+                              <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-4)", fontSize: "11px", whiteSpace: "nowrap" }} onClick={() => openChiangmaiHistoryOrder(order)}>ดูรายละเอียด</button>
                             </article>
                           ))}
                         </div>
@@ -5492,8 +5523,8 @@ export default function App() {
             </section>
 
             {editingCustomerId && (
-              <section className="panel" style={{ background: "#fef3c7", borderLeft: "4px solid #f59e0b" }}>
-                <div className="panel-head"><h2>✏️ แก้ไขข้อมูลลูกค้า</h2><span>หมายเลข: {editingCustomerId}</span></div>
+              <section className="panel" style={{ background: "var(--c-warn-bg-strong)", borderLeft: "4px solid var(--c-warn)" }}>
+                <div className="panel-head"><h2><Pencil size={15} className="i-inline" aria-hidden="true" /> แก้ไขข้อมูลลูกค้า</h2><span>หมายเลข: {editingCustomerId}</span></div>
                 <div className="form-grid">
                   <input value={editCustomerForm.name} onChange={e => setEditCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อร้าน/ลูกค้า" />
                   <input value={editCustomerForm.contact} onChange={e => setEditCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
@@ -5503,9 +5534,9 @@ export default function App() {
                 <input value={editCustomerForm.address} onChange={e => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
                 <input value={editCustomerForm.mapUrl} onChange={e => setEditCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
                 <textarea value={editCustomerForm.note} onChange={e => setEditCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={3} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-4)" }}>
                   <button className="secondary" onClick={() => setEditingCustomerId(null)}>ยกเลิก</button>
-                  <button className="primary" onClick={() => updateCustomer(editingCustomerId, editCustomerForm)}>💾 บันทึก</button>
+                  <button className="primary" onClick={() => updateCustomer(editingCustomerId, editCustomerForm)}><Save size={15} className="i-inline" aria-hidden="true" /> บันทึก</button>
                 </div>
               </section>
             )}
@@ -5532,13 +5563,13 @@ export default function App() {
                       />
                     </label>
                     {q && matches.length === 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "8px", padding: "8px 10px", border: "1px dashed #9ac7be", borderRadius: "9px", background: "#f5fbf4", fontSize: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-4)", padding: "var(--sp-4) var(--sp-5)", border: "1px dashed var(--c-line-strong)", borderRadius: "9px", background: "var(--c-surface-subtle)", fontSize: "12px" }}>
                         <span>{allHistoricalCustomersLoaded ? "ยังไม่พบชื่อลูกค้าที่ตรงกันในข้อมูลที่โหลดแล้ว" : "ยังไม่พบในรายชื่อที่แสดงอยู่"}</span>
                         <button type="button" className="secondary" disabled={allHistoricalCustomersLoading || allHistoricalCustomersLoaded} onClick={loadAllHistoricalCustomers}>{allHistoricalCustomersLoading ? "กำลังโหลด…" : allHistoricalCustomersLoaded ? "โหลดข้อมูลแล้ว" : "โหลดข้อมูลลูกค้าเก่าทั้งหมด"}</button>
                       </div>
                     )}
                     {q && matches.length > 0 && (
-                      <div style={{ position: "absolute", top: "44px", left: 0, right: 0, zIndex: 20, background: "white", border: "1px solid #e5e7eb", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: "44px", left: 0, right: 0, zIndex: 20, background: "white", border: "1px solid var(--c-line)", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.08)", overflow: "hidden" }}>
                         {matches.map(c => (
                           <button
                             key={c.id}
@@ -5547,11 +5578,11 @@ export default function App() {
                               setSelectedCustomerId(c.id);
                               setOrderCustomerSearch("");
                             }}
-                            style={{ width: "100%", textAlign: "left", padding: "10px 12px", border: "none", background: "white", cursor: "pointer" }}
+                            style={{ width: "100%", textAlign: "left", padding: "var(--sp-5) var(--sp-6)", border: "none", background: "white", cursor: "pointer" }}
                             className="customer-suggest"
                           >
                             <div style={{ fontWeight: 700, fontSize: "13px" }}>{c.name}</div>
-                            <div style={{ fontSize: "11px", color: "#6b7280" }}>{[c.phone, c.zone].filter(Boolean).join(" · ")}</div>
+                            <div style={{ fontSize: "11px", color: "var(--c-text-muted)" }}>{[c.phone, c.zone].filter(Boolean).join(" · ")}</div>
                           </button>
                         ))}
                       </div>
@@ -5559,7 +5590,7 @@ export default function App() {
                   </div>
                 );
               })()}
-              <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+              <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} style={{ width: "100%", padding: "var(--sp-5)", borderRadius: "10px", border: "1px solid var(--c-line)" }}>
                 <option value="">-- เลือกลูกค้า --</option>
                 {customers
                   .filter(c => customerMatchesQuery(c, orderCustomerSearch))
@@ -5575,20 +5606,20 @@ export default function App() {
                     {foundCustomer.mapUrl ? (
                       <a href={foundCustomer.mapUrl} target="_blank" rel="noreferrer"><MapPinned size={16} /> เปิดแผนที่</a>
                     ) : (
-                      <span style={{ color: "#6b7280" }}>ไม่มีลิงก์แผนที่</span>
+                      <span style={{ color: "var(--c-text-muted)" }}>ไม่มีลิงก์แผนที่</span>
                     )}
                   </div>
                 ) : null;
               })()}
               <div className="form-grid order-create-grid">
-                <select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+                <select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))} style={{ width: "100%", padding: "var(--sp-5)", borderRadius: "10px", border: "1px solid var(--c-line)" }}>
                   <option value="5">เวลารอจัดเตรียมสินค้า: 5 นาที</option>
                   <option value="10">เวลารอจัดเตรียมสินค้า: 10 นาที</option>
                   <option value="15">เวลารอจัดเตรียมสินค้า: 15 นาที</option>
                   <option value="20">เวลารอจัดเตรียมสินค้า: 20 นาที</option>
                   <option value="30">เวลารอจัดเตรียมสินค้า: 30 นาที</option>
                 </select>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 92px", gap: "8px", alignItems: "center" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 92px", gap: "var(--sp-4)", alignItems: "center" }}>
                   <input
                     value={orderForm.qty}
                     onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))}
@@ -5598,11 +5629,11 @@ export default function App() {
                   />
                   <select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))} aria-label="หน่วยของที่ส่ง"><option value="box">กล่อง</option><option value="bag">ถุง</option></select>
                 </div>
-                <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+                <select value={orderForm.paymentType} onChange={e => setOrderForm(p => ({ ...p, paymentType: e.target.value }))} style={{ width: "100%", padding: "var(--sp-5)", borderRadius: "10px", border: "1px solid var(--c-line)" }}>
                   <option value="COD">COD</option>
                   <option value="PAID">PAID</option>
                 </select>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 56px", gap: "8px", alignItems: "center" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 56px", gap: "var(--sp-4)", alignItems: "center" }}>
                   <input
                     value={formatWithCommas(orderForm.codAmount)}
                     onChange={e => setOrderForm(p => ({ ...p, codAmount: digitsOnly(e.target.value) }))}
@@ -5611,10 +5642,10 @@ export default function App() {
                     placeholder="จำนวนเงิน (กรณี COD)"
                     disabled={orderForm.paymentType !== "COD"}
                   />
-                  <div style={{ color: "#6b7280", fontSize: "12px", textAlign: "center" }}>บาท</div>
+                  <div style={{ color: "var(--c-text-muted)", fontSize: "12px", textAlign: "center" }}>บาท</div>
                 </div>
               </div>
-              <div style={{ display: "grid", gap: "7px" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: orderForm.bookingPrefix === "custom" ? "92px minmax(92px, .8fr) 1fr auto" : "92px 1fr auto", gap: "8px" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value, bookingCustomPrefix: e.target.value === "custom" ? "" : p.bookingCustomPrefix }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>{orderForm.bookingPrefix === "custom" && <input value={orderForm.bookingCustomPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingCustomPrefix: e.target.value.replace(/-/g, "").trim().toUpperCase().slice(0, 20) }))} placeholder="รหัสหน้า" aria-label="กรอกรหัสหน้าเอง" />}<input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); const prefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase(); if (!prefix) return setSyncStatus("❌ กรุณากรอกรหัสหน้า"); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${prefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#991b1b", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">ตรวจซ้ำจากรหัสเต็ม เช่น CSP-1234 และ CSR-1234 ใช้พร้อมกันได้ · กรอกรหัสหน้าเองได้โดยไม่ใช้คำว่า OTHER · รหัสเดียวกันห้ามซ้ำภายในเดือน</small></div>
+              <div style={{ display: "grid", gap: "var(--sp-3)" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: orderForm.bookingPrefix === "custom" ? "92px minmax(92px, .8fr) 1fr auto" : "92px 1fr auto", gap: "var(--sp-4)" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value, bookingCustomPrefix: e.target.value === "custom" ? "" : p.bookingCustomPrefix }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>{orderForm.bookingPrefix === "custom" && <input value={orderForm.bookingCustomPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingCustomPrefix: e.target.value.replace(/-/g, "").trim().toUpperCase().slice(0, 20) }))} placeholder="รหัสหน้า" aria-label="กรอกรหัสหน้าเอง" />}<input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); const prefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase(); if (!prefix) return setSyncStatus("❌ กรุณากรอกรหัสหน้า"); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${prefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--sp-3)" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--c-danger-deep)", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">ตรวจซ้ำจากรหัสเต็ม เช่น CSP-1234 และ CSR-1234 ใช้พร้อมกันได้ · กรอกรหัสหน้าเองได้โดยไม่ใช้คำว่า OTHER · รหัสเดียวกันห้ามซ้ำภายในเดือน</small></div>
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
 
@@ -5633,7 +5664,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📍 ตำแหน่งคนขับล่าสุด</h2><span>{Object.keys(state.driverLocations || {}).length} คนเช็คอินแล้ว</span></div>
+              <div className="panel-head"><h2><MapPin size={15} className="i-inline" aria-hidden="true" /> ตำแหน่งคนขับล่าสุด</h2><span>{Object.keys(state.driverLocations || {}).length} คนเช็คอินแล้ว</span></div>
               {Object.keys(state.driverLocations || {}).length === 0 ? (
                 <p className="muted">ยังไม่มีคนขับเช็คอิน</p>
               ) : (
@@ -5650,30 +5681,30 @@ export default function App() {
                     const minutesAgo = lastSeenAt ? Math.floor((Date.now() - lastSeenAt.getTime()) / 60000) : null;
                     const isOffline = minutesAgo == null ? true : minutesAgo > 120;
                     return (
-                      <div key={location.driverId} style={{ padding: "12px", borderBottom: "1px solid #eee", marginBottom: "8px", background: "#f0f9ff", borderRadius: "6px" }}>
+                      <div key={location.driverId} style={{ padding: "var(--sp-6)", borderBottom: "1px solid var(--c-surface-muted)", marginBottom: "var(--sp-4)", background: "var(--c-info-bg)", borderRadius: "6px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
                           <div>
-                            <b style={{ fontSize: "14px", color: "#1a5490" }}>🚗 {location.driverName}</b>
-                            <p style={{ margin: "4px 0", fontSize: "12px" }}>📱 {location.driverPhone || "-"} · {location.plate}</p>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#056e96", fontWeight: "bold" }}>🏪 {location.customerName || location.lastCustomerName || "-"}</p>
-                            {customer && <p style={{ margin: "4px 0", fontSize: "11px", color: "#0891b2" }}>👤 ติดต่อ: {customer.contact}</p>}
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "#666" }}>📌 {location.address || currentOrder?.address || "-"}</p>
-                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#6b7280" }}>📍 โซน: {location.zone || currentOrder?.zone || "-"}</p>
-                            {currentOrder && <p style={{ margin: "4px 0", fontSize: "11px", color: "#7c2d12", background: "#fed7aa", padding: "2px 6px", borderRadius: "3px", display: "inline-block" }}>📦 สถานะ: {currentOrder.status}</p>}
-                            <p style={{ margin: "4px 0", fontSize: "11px", color: "#999" }}>⏰ เช็คอิน: {location.checkInTime}</p>
+                            <b style={{ fontSize: "14px", color: "var(--c-info-dark)" }}><Car size={15} className="i-inline" aria-hidden="true" /> {location.driverName}</b>
+                            <p style={{ margin: "var(--sp-2) 0", fontSize: "12px" }}><Smartphone size={15} className="i-inline" aria-hidden="true" /> {location.driverPhone || "-"} · {location.plate}</p>
+                            <p style={{ margin: "var(--sp-2) 0", fontSize: "12px", color: "var(--c-info-dark)", fontWeight: "bold" }}><Store size={15} className="i-inline" aria-hidden="true" /> {location.customerName || location.lastCustomerName || "-"}</p>
+                            {customer && <p style={{ margin: "var(--sp-2) 0", fontSize: "11px", color: "var(--c-brand-cyan)" }}><User size={15} className="i-inline" aria-hidden="true" /> ติดต่อ: {customer.contact}</p>}
+                            <p style={{ margin: "var(--sp-2) 0", fontSize: "12px", color: "var(--c-text-muted)" }}><Pin size={15} className="i-inline" aria-hidden="true" /> {location.address || currentOrder?.address || "-"}</p>
+                            <p style={{ margin: "var(--sp-2) 0", fontSize: "11px", color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> โซน: {location.zone || currentOrder?.zone || "-"}</p>
+                            {currentOrder && <p style={{ margin: "var(--sp-2) 0", fontSize: "11px", color: "var(--c-accent-deep)", background: "var(--c-accent-border)", padding: "var(--sp-1) var(--sp-3)", borderRadius: "3px", display: "inline-block" }}><Package size={15} className="i-inline" aria-hidden="true" /> สถานะ: {currentOrder.status}</p>}
+                            <p style={{ margin: "var(--sp-2) 0", fontSize: "11px", color: "var(--c-text-faint)" }}>⏰ เช็คอิน: {location.checkInTime}</p>
                           </div>
                           {isOffline ? (
-                            <span style={{ background: "#991b1b", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>⚫ Offline</span>
+                            <span style={{ background: "var(--c-danger-deep)", color: "white", padding: "var(--sp-2) var(--sp-4)", borderRadius: "4px", fontSize: "11px" }}><span className="status-dot is-off" aria-hidden="true" /> Offline</span>
                           ) : (
-                            <span style={{ background: "#166562", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "11px" }}>🟢 Online</span>
+                            <span style={{ background: "var(--c-brand-dark)", color: "white", padding: "var(--sp-2) var(--sp-4)", borderRadius: "4px", fontSize: "11px" }}><span className="status-dot is-online" aria-hidden="true" /> Online</span>
                           )}
                         </div>
-                        <div style={{ marginTop: "6px", color: "#6b7280", fontSize: "11px" }}>
+                        <div style={{ marginTop: "var(--sp-3)", color: "var(--c-text-muted)", fontSize: "11px" }}>
                           ล่าสุด {minutesAgo == null ? "-" : `${minutesAgo} นาทีที่แล้ว`}
                         </div>
                         {location.lat && location.lng && (
-                          <div style={{ marginTop: "8px" }}>
-                            <a className="secondary" style={{ display: "inline-block", padding: "6px 10px", fontSize: "11px", textDecoration: "none" }} target="_blank" rel="noreferrer" href={osmPageUrl(location.lat, location.lng, 17)}>
+                          <div style={{ marginTop: "var(--sp-4)" }}>
+                            <a className="secondary" style={{ display: "inline-block", padding: "var(--sp-3) var(--sp-5)", fontSize: "11px", textDecoration: "none" }} target="_blank" rel="noreferrer" href={osmPageUrl(location.lat, location.lng, 17)}>
                               🗺️ เปิดจุดเช็คอินบนแผนที่
                             </a>
                           </div>
@@ -5686,20 +5717,20 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📝 ออเดอร์ใหม่ (วันนี้)</h2><span>รอคนขับรับ {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length}</span></div>
+              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ใหม่ (วันนี้)</h2><span>รอคนขับรับ {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length}</span></div>
               {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
                 <p className="muted">ไม่มีออเดอร์ใหม่</p>
               ) : (
-                <div className="scroll-box" style={{ display: "grid", gap: "8px" }}>
+                <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>
                   {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").map(order => (
-                    <div key={order.id} style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", borderLeft: "4px solid #f59e0b", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                    <div key={order.id} style={{ background: "var(--c-warn-bg)", padding: "var(--sp-5)", borderRadius: "6px", borderLeft: "4px solid var(--c-warn)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-4)" }}>
                       <div style={{ flex: 1 }}>
                         <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
-                        <small style={{ color: "#666" }}>{order.zone} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                        <small style={{ color: "var(--c-text-muted)" }}>{order.zone} · {order.boxes} กล่อง · ฿{money(order.cod)}</small>
                       </div>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        <button className="primary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => sharePendingOrderQueueToLine(order)}>💬 คัดลอก/แชร์</button>
-                        <button className="secondary danger" aria-label={`ลบออเดอร์ ${order.id}`} style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>ลบ</button>
+                      <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <button className="primary" style={{ padding: "var(--sp-2) var(--sp-4)", fontSize: "12px" }} onClick={() => sharePendingOrderQueueToLine(order)}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> คัดลอก/แชร์</button>
+                        <button className="secondary danger" aria-label={`ลบออเดอร์ ${order.id}`} style={{ padding: "var(--sp-2) var(--sp-4)", fontSize: "12px" }} onClick={() => deleteOrder(order.id)}>ลบ</button>
                       </div>
                     </div>
                   ))}
@@ -5708,15 +5739,15 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2>📦 สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
-              <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
-                <div style={{ flex: 1, background: "#fef3c7", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #f59e0b" }}>
-                  <small style={{ color: "#92400e" }}>⏳ กำลังส่ง</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#f59e0b" }}>{todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length}</b>
+              <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
+              <div style={{ display: "flex", gap: "var(--sp-6)", marginBottom: "var(--sp-7)" }}>
+                <div style={{ flex: 1, background: "var(--c-warn-bg-strong)", padding: "var(--sp-6)", borderRadius: "6px", borderLeft: "4px solid var(--c-warn)" }}>
+                  <small style={{ color: "var(--c-warn-deep)" }}>⏳ กำลังส่ง</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "var(--c-warn)" }}>{todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length}</b>
                 </div>
-                <div style={{ flex: 1, background: "#f0fdfc", padding: "12px", borderRadius: "6px", borderLeft: "4px solid #22c5bd" }}>
-                  <small style={{ color: "#166562" }}>✓ สำเร็จ</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "#22c5bd" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
+                <div style={{ flex: 1, background: "var(--c-brand-bg)", padding: "var(--sp-6)", borderRadius: "6px", borderLeft: "4px solid var(--c-brand-light)" }}>
+                  <small style={{ color: "var(--c-brand-dark)" }}>✓ สำเร็จ</small>
+                  <b style={{ fontSize: "20px", display: "block", color: "var(--c-brand-light)" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
               <div className="scroll-box">
@@ -5728,39 +5759,39 @@ export default function App() {
                       const driver = drivers.find(d => d.id === order.driverId);
                       const driverName = order.driverName || driver?.name || (order.driverId ? order.driverId : "");
                       return (
-                        <div key={order.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
-                            <b style={{ color: order.status === "กำลังส่ง" ? "#f59e0b" : "#22c5bd" }}>{order.id}</b>
-                            <span style={{ background: order.status === "กำลังส่ง" ? "#fef3c7" : "#f0fdfc", color: order.status === "กำลังส่ง" ? "#92400e" : "#166562", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
+                        <div key={order.id} style={{ padding: "var(--sp-5)", borderBottom: "1px solid var(--c-surface-muted)", fontSize: "12px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "var(--sp-2)" }}>
+                            <b style={{ color: order.status === "กำลังส่ง" ? "var(--c-warn)" : "var(--c-brand-light)" }}>{order.id}</b>
+                            <span style={{ background: order.status === "กำลังส่ง" ? "var(--c-warn-bg-strong)" : "var(--c-brand-bg)", color: order.status === "กำลังส่ง" ? "var(--c-warn-deep)" : "var(--c-brand-dark)", padding: "var(--sp-1) var(--sp-3)", borderRadius: "3px", fontSize: "11px" }}>{order.status === "กำลังส่ง" ? "⏳ ส่งไป" : "✓ เสร็จ"}</span>
                           </div>
-                          <p style={{ margin: "2px 0", color: "#333" }}>{order.customerName}</p>
-                          <p style={{ margin: "2px 0", color: "#666" }}>{order.address}</p>
-                          <p style={{ margin: "2px 0", color: "#999" }}>🚗 {driverName || "ยังไม่มอบหมาย"}</p>
+                          <p style={{ margin: "var(--sp-1) 0", color: "var(--c-text-strong)" }}>{order.customerName}</p>
+                          <p style={{ margin: "var(--sp-1) 0", color: "var(--c-text-muted)" }}>{order.address}</p>
+                          <p style={{ margin: "var(--sp-1) 0", color: "var(--c-text-faint)" }}><Car size={15} className="i-inline" aria-hidden="true" /> {driverName || "ยังไม่มอบหมาย"}</p>
                           {order.status === "ส่งสำเร็จ" && order.deliveredAt && (
-                            <p style={{ margin: "2px 0", color: "#16a39c", fontWeight: "bold" }}>✅ เสร็จเมื่อ {order.deliveredAt}</p>
+                            <p style={{ margin: "var(--sp-1) 0", color: "var(--c-brand)", fontWeight: "bold" }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> เสร็จเมื่อ {order.deliveredAt}</p>
                           )}
                         </div>
                       );
                     })}
                     {completedTodayRouteTasks.map(task => (
-                      <div key={task.id} style={{ padding: "10px", borderBottom: "1px solid #eee", fontSize: "12px", background: "#f0fdfc" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px" }}>
-                          <b style={{ color: "#166562" }}>{task.id}</b>
-                          <span style={{ background: "#dcfcfa", color: "#166562", padding: "2px 6px", borderRadius: "3px", fontSize: "11px" }}>✓ งานวิ่งเสร็จ</span>
+                      <div key={task.id} style={{ padding: "var(--sp-5)", borderBottom: "1px solid var(--c-surface-muted)", fontSize: "12px", background: "var(--c-brand-bg)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "var(--sp-2)" }}>
+                          <b style={{ color: "var(--c-brand-dark)" }}>{task.id}</b>
+                          <span style={{ background: "var(--c-brand-bg-strong)", color: "var(--c-brand-dark)", padding: "var(--sp-1) var(--sp-3)", borderRadius: "3px", fontSize: "11px" }}>✓ งานวิ่งเสร็จ</span>
                         </div>
-                        <p style={{ margin: "2px 0", color: "#333" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</p>
-                        <p style={{ margin: "2px 0", color: "#666" }}>{task.origin} → {task.destinationSummary}</p>
-                        <p style={{ margin: "2px 0", color: "#999" }}>🚗 {task.driverName || task.driverId || "ไม่ระบุคนขับ"}</p>
-                        {task.completedAt && <p style={{ margin: "2px 0", color: "#16a39c", fontWeight: "bold" }}>✅ เสร็จเมื่อ {task.completedAt}</p>}
+                        <p style={{ margin: "var(--sp-1) 0", color: "var(--c-text-strong)" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</p>
+                        <p style={{ margin: "var(--sp-1) 0", color: "var(--c-text-muted)" }}>{task.origin} → {task.destinationSummary}</p>
+                        <p style={{ margin: "var(--sp-1) 0", color: "var(--c-text-faint)" }}><Car size={15} className="i-inline" aria-hidden="true" /> {task.driverName || task.driverId || "ไม่ระบุคนขับ"}</p>
+                        {task.completedAt && <p style={{ margin: "var(--sp-1) 0", color: "var(--c-brand)", fontWeight: "bold" }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> เสร็จเมื่อ {task.completedAt}</p>}
                       </div>
                     ))}
                   </>
                 )}
               </div>
               {backlogUndelivered.length > 0 && (
-                <div style={{ marginTop: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "10px", borderRadius: "8px", fontSize: "12px" }}>
-                  <b style={{ color: "#1d4ed8" }}>📌 งานค้างส่งจากวันก่อน: {backlogUndelivered.length} งาน</b>
-                  <div className="muted" style={{ marginTop: "4px" }}>นับเฉพาะงานวันก่อนที่ยังรอคนขับรับ/กำลังส่ง/กำลังจัดส่ง</div>
+                <div style={{ marginTop: "var(--sp-5)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", padding: "var(--sp-5)", borderRadius: "8px", fontSize: "12px" }}>
+                  <b style={{ color: "var(--c-info-dark)" }}><Pin size={15} className="i-inline" aria-hidden="true" /> งานค้างส่งจากวันก่อน: {backlogUndelivered.length} งาน</b>
+                  <div className="muted" style={{ marginTop: "var(--sp-2)" }}>นับเฉพาะงานวันก่อนที่ยังรอคนขับรับ/กำลังส่ง/กำลังจัดส่ง</div>
                 </div>
               )}
             </section>
@@ -5787,16 +5818,16 @@ export default function App() {
               <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>
               <button type="button" className="primary" disabled={!selectedOutstationLabelOrders.length} onClick={openOutstationLabelDialog}>สร้าง/พิมพ์ใบปะหน้า</button>
             </div>
-            <details className="daily-accordion" style={{ marginBottom: "10px" }}>
+            <details className="daily-accordion" style={{ marginBottom: "var(--sp-5)" }}>
               <summary className="panel-head daily-accordion-trigger" style={{ cursor: "pointer", fontSize: "14px" }}>
-                <span>🗂️ ประวัติการพิมพ์ใบปะหน้า (วันนี้)</span>
+                <span><Archive size={15} className="i-inline" aria-hidden="true" /> ประวัติการพิมพ์ใบปะหน้า (วันนี้)</span>
                 <span className="status-chip">{todayOutstationLabelJobs.length} รายการ</span>
               </summary>
               <div className="daily-accordion-body">
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "var(--sp-3)" }}>
                 <button type="button" className="secondary compact-btn" onClick={loadOutstationLabelJobs} disabled={outstationLabelJobsLoading}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "รีเฟรช"}</button>
               </div>
-              <div className="scroll-box" style={{ display: "grid", gap: "6px", maxHeight: "220px" }}>
+              <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "220px" }}>
                 {todayOutstationLabelJobs.length === 0 ? (
                   <p className="muted" style={{ margin: 0 }}>{outstationLabelJobsLoading ? "กำลังโหลด..." : "ยังไม่มีประวัติการพิมพ์วันนี้"}</p>
                 ) : todayOutstationLabelJobs.map((job) => {
@@ -5814,28 +5845,28 @@ export default function App() {
               </div>
               </div>
             </details>
-            <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
+            <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-5)" }}>
               {salesOutstationOrders.map(order => (
                 <article key={order.id} className="role-order-card">
                   <label className="outstation-label-order-select">
                     <input type="checkbox" checked={outstationLabelSelectedSet.has(order.id)} onChange={event => toggleOutstationLabelOrder(order.id, event.target.checked)} />
                     เลือกพิมพ์ใบปะหน้า · {Math.max(1, Number(order.boxes || 0))} กล่อง
                   </label>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}>
                     <div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div>
                     <span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span>
                   </div>
-                  <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div>
+                  <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div>
                   <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>
                   {order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}
                   {["pending", "working", "waiting", "partial"].includes(order.packStatus || "pending") && (order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus)) && (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button type="button" className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>ยืนยันจัดส่ง</button>{["sales", "admin"].includes(auth.role) && canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div>
+                    <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><button type="button" className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>ยืนยันจัดส่ง</button>{["sales", "admin"].includes(auth.role) && canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div>
                   )}
                 </article>
               ))}
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
-            <details className="prep-order-details" style={{ marginTop: "14px" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "8px", marginTop: "10px" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "#166562", background: "#dcfcfa" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <details className="prep-order-details" style={{ marginTop: "var(--sp-6)" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 
@@ -5858,21 +5889,21 @@ export default function App() {
 
 
         {storeUrgentOpen && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
-          <section className="panel role-workspace ops-workspace" style={{ width: "min(720px, 100%)", maxHeight: "90vh", overflowY: "auto", display: "grid", gap: "14px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
+          <section className="panel role-workspace ops-workspace" style={{ width: "min(720px, 100%)", maxHeight: "90vh", overflowY: "auto", display: "grid", gap: "var(--sp-6)" }}>
             <div className="panel-head"><h2>เปิดออเดอร์เร่งด่วน</h2><button className="secondary" onClick={() => setStoreUrgentOpen(false)}>ปิด</button></div>
-            <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderLeft: "5px solid #2563eb", borderRadius: "9px", padding: "10px", fontSize: "13px" }}><b>ใช้ฐานลูกค้ากลางชุดเดียวกับฝ่ายขาย</b><div className="muted" style={{ marginTop: "3px" }}>ทุกออเดอร์จะบันทึกอัตโนมัติว่า “สโตร์ช่วยคีย์” และฝ่ายขายสามารถเปิดข้อมูลเดิมมาเติมรายละเอียดต่อได้</div></div>
-            <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderLeft: "5px solid var(--c-info)", borderRadius: "9px", padding: "var(--sp-5)", fontSize: "13px" }}><b>ใช้ฐานลูกค้ากลางชุดเดียวกับฝ่ายขาย</b><div className="muted" style={{ marginTop: "var(--sp-1)" }}>ทุกออเดอร์จะบันทึกอัตโนมัติว่า “สโตร์ช่วยคีย์” และฝ่ายขายสามารถเปิดข้อมูลเดิมมาเติมรายละเอียดต่อได้</div></div>
+            <div style={{ display: "grid", gap: "var(--sp-4)" }}>
               <label className="field-label">ค้นหาลูกค้าเก่า</label>
               <div className="search"><Search size={16} /><input value={orderCustomerSearch} onChange={e => { setOrderCustomerSearch(e.target.value); setSelectedCustomerId(""); }} placeholder="พิมพ์ชื่อ / เบอร์ / ผู้ติดต่อ / พื้นที่" /></div>
-              {(() => { const query = orderCustomerSearch.trim(); const matches = customers.filter(customer => customerMatchesQuery(customer, query)).slice(0, 10); if (!query) return <small className="muted">พิมพ์อย่างน้อย 3 ตัวอักษร ระบบจะแสดงข้อมูลลูกค้าทันที</small>; if (query.length < 3) return <small className="muted">พิมพ์เพิ่มอีก {3 - query.length} ตัวอักษรเพื่อค้นหาฐานลูกค้ากลาง</small>; if (!matches.length) return <small className="muted">กำลังค้นหา หรือยังไม่พบลูกค้าที่ตรงกัน</small>; return <div style={{ display: "grid", gap: "6px", maxHeight: "260px", overflowY: "auto" }}>{matches.map(customer => <button key={customer.id} type="button" onClick={() => { setSelectedCustomerId(customer.id); setOrderCustomerSearch(""); }} style={{ textAlign: "left", border: "1px solid #dbe4ee", background: "#fff", borderRadius: "8px", padding: "9px", cursor: "pointer" }}><b>{customer.name}</b><span style={{ display: "block", fontSize: "12px", color: "#4b5563", marginTop: "2px" }}>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ") || "-"}</span>{customer.address && <small className="muted" style={{ display: "block", marginTop: "2px" }}>{customer.address}</small>}</button>)}</div>; })()}
+              {(() => { const query = orderCustomerSearch.trim(); const matches = customers.filter(customer => customerMatchesQuery(customer, query)).slice(0, 10); if (!query) return <small className="muted">พิมพ์อย่างน้อย 3 ตัวอักษร ระบบจะแสดงข้อมูลลูกค้าทันที</small>; if (query.length < 3) return <small className="muted">พิมพ์เพิ่มอีก {3 - query.length} ตัวอักษรเพื่อค้นหาฐานลูกค้ากลาง</small>; if (!matches.length) return <small className="muted">กำลังค้นหา หรือยังไม่พบลูกค้าที่ตรงกัน</small>; return <div style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "260px", overflowY: "auto" }}>{matches.map(customer => <button key={customer.id} type="button" onClick={() => { setSelectedCustomerId(customer.id); setOrderCustomerSearch(""); }} style={{ textAlign: "left", border: "1px solid var(--c-line-strong)", background: "var(--c-surface)", borderRadius: "8px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{customer.name}</b><span style={{ display: "block", fontSize: "12px", color: "var(--c-text-soft)", marginTop: "var(--sp-1)" }}>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ") || "-"}</span>{customer.address && <small className="muted" style={{ display: "block", marginTop: "var(--sp-1)" }}>{customer.address}</small>}</button>)}</div>; })()}
               {selectedCustomerId && (() => { const customer = customers.find(item => item.id === selectedCustomerId); return customer ? <div className="customer-detail"><div><b>{customer.name}</b><p>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ")}</p><p>{customer.address || "-"}</p></div></div> : null; })()}
             </div>
             <div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select></div>
             <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
             <button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button>
             <div className="form-grid two"><select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "store_route" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select><select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
-            <div style={{ display: "grid", gap: "6px" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง</small></div>
+            <div style={{ display: "grid", gap: "var(--sp-3)" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง</small></div>
             <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />
             <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> เปิดออเดอร์เร่งด่วน</button>
           </section>
@@ -5881,20 +5912,20 @@ export default function App() {
 
         {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
-            {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
+            {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
             {displayTab !== "store-dashboard" && <div className="panel-head"><h2>{displayTab === "store-work" ? "ออเดอร์เชียงใหม่/ใกล้เคียง" : "งานสโตร์"}</h2><span>เฉพาะบัญชีสโตร์</span></div>}
-            {displayTab === "store-work" && <div role="tablist" aria-label="เมนูเชียงใหม่/ใกล้เคียง" style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px", padding: "5px", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "9px" }}><button type="button" role="tab" aria-selected={storeWorkSubtab === "orders"} className={storeWorkSubtab === "orders" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("orders")}>ออเดอร์เชียงใหม่/ใกล้เคียง</button><button type="button" role="tab" aria-selected={storeWorkSubtab === "booking-entry"} className={storeWorkSubtab === "booking-entry" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("booking-entry")}>เพิ่มเลขใบสั่งจอง</button></div>}
-            {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "10px" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
-            {displayTab === "store-work" && storeWorkSubtab === "orders" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
+            {displayTab === "store-work" && <div role="tablist" aria-label="เมนูเชียงใหม่/ใกล้เคียง" style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginBottom: "var(--sp-6)", padding: "var(--sp-2)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)", borderRadius: "9px" }}><button type="button" role="tab" aria-selected={storeWorkSubtab === "orders"} className={storeWorkSubtab === "orders" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("orders")}>ออเดอร์เชียงใหม่/ใกล้เคียง</button><button type="button" role="tab" aria-selected={storeWorkSubtab === "booking-entry"} className={storeWorkSubtab === "booking-entry" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("booking-entry")}>เพิ่มเลขใบสั่งจอง</button></div>}
+            {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "var(--sp-5)" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
+            {displayTab === "store-work" && storeWorkSubtab === "orders" && <div className="ops-store-work" style={{ display: "grid", gap: "var(--sp-5)" }}>
               <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วนเชียงใหม่/ใกล้เคียง</button>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "#ef4444" : order.storeStatus === "partial" ? "#fb923c" : "#facc15", borderLeft: `5px solid ${order.storeStatus === "returned" ? "#dc2626" : order.storeStatus === "partial" ? "#f97316" : "#eab308"}`, background: order.storeStatus === "returned" ? "#fef2f2" : order.storeStatus === "partial" ? "#fff7ed" : "#fefce8" } : undefined}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
+              {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "var(--c-danger)" : order.storeStatus === "partial" ? "var(--c-accent-light)" : "var(--c-warn-light)", borderLeft: `5px solid ${order.storeStatus === "returned" ? "var(--c-danger)" : order.storeStatus === "partial" ? "var(--c-accent)" : "var(--c-warn-light)"}`, background: order.storeStatus === "returned" ? "var(--c-danger-bg)" : order.storeStatus === "partial" ? "var(--c-accent-bg)" : "var(--c-warn-bg)" } : undefined}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
                 <OrderCreatedAt order={order} />
-                 <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
-                {storePending && <b style={{ color: order.storeStatus === "returned" ? "#b91c1c" : order.storeStatus === "partial" ? "#c2410c" : "#a16207", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
-                {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166562", background: "#dcfcfa", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
-                {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
+                 <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
+                {storePending && <b style={{ color: order.storeStatus === "returned" ? "var(--c-danger-dark)" : order.storeStatus === "partial" ? "var(--c-accent-dark)" : "var(--c-warn-dark)", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
+                {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)", width: "fit-content" }}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE แล้ว</span>}
+                {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted"><Camera size={15} className="i-inline" aria-hidden="true" /> แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <SalesNoteAlert order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
@@ -5903,23 +5934,23 @@ export default function App() {
                {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
                {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
               </div>}
-              {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "10px" }}>
+              {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "var(--sp-5)" }}>
               <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><SalesNoteAlert order={order} compact /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
+              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><SalesNoteAlert order={order} compact /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
               {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
             </div>}
             {(isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab)) && <div className="store-report-workspace">
-              {(() => { const type = isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "7px", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "#991b1b" }}>⚠️ มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "#b91c1c", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "#dc2626", color: "#991b1b" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "6px" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid #fecaca", background: "#fff", color: "#7f1d1d", borderRadius: "7px", padding: "8px", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "#991b1b" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
-              {storeReports.filter(item => item.type === (isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px", display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "#991b1b" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
+              {(() => { const type = isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "7px", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "var(--c-danger-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "var(--c-danger-dark)", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "var(--c-danger)", color: "var(--c-danger-deep)" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "var(--sp-3)" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid var(--c-danger-border)", background: "var(--c-surface)", color: "var(--c-danger-deep)", borderRadius: "7px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "var(--c-danger-deep)" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
+              {storeReports.filter(item => item.type === (isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "var(--c-danger-bg)", border: "1px solid var(--c-danger-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "var(--c-danger-deep)" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
               {(() => { const type = isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type, includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, type, includeDeleted: storeReportIncludeDeleted }); }; return <>
-                {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "#fee2e2" : "#fef3c7", border: "1px solid #fca5a5", padding: "10px", borderRadius: "8px" }}><b>⚠️ มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
-                 <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? (isStoreBookingEntryView ? "เพิ่มเลขใบสั่งจอง" : "ใบสั่งจอง") : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? (isStoreBookingEntryView ? "เพิ่มเอกสารอิสระโดยไม่ต้องผูกกับออเดอร์" : "ติดตามเอกสารและงานที่รอยืนยัน") : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน">↻ รีเฟรช</button></div></div></header>
+                {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "var(--c-danger-bg-strong)" : "var(--c-warn-bg-strong)", border: "1px solid var(--c-danger-light)", padding: "var(--sp-5)", borderRadius: "8px" }}><b><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
+                 <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? (isStoreBookingEntryView ? "เพิ่มเลขใบสั่งจอง" : "ใบสั่งจอง") : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? (isStoreBookingEntryView ? "เพิ่มเอกสารอิสระโดยไม่ต้องผูกกับออเดอร์" : "ติดตามเอกสารและงานที่รอยืนยัน") : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน"><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช</button></div></div></header>
                 <div className="store-report-kpis"><article><span>ทั้งหมด</span><strong>{activeRows.length}</strong><small>{deletedCount ? `ไม่รวมลบแล้ว ${deletedCount}` : "รายการที่ใช้งาน"}</small></article><article className="is-action"><span>ต้องดำเนินการ</span><strong>{activeRows.filter(needsAction).length}</strong><small>ร่างหรือยังไม่ยืนยัน</small></article><article className="is-confirmed"><span>ยืนยันแล้ว</span><strong>{activeRows.filter(item => item.confirmedAt).length}</strong><small>พร้อมดำเนินงานต่อ</small></article><article className="is-problem"><span>มีปัญหา</span><strong>{activeRows.filter(isProblem).length}</strong><small>รอของ / ของไม่ครบ</small></article></div>
                 <div className="store-report-filters"><div className="store-report-search"><Search size={17} /><input value={storeReportQuery} onChange={e => setStoreReportQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") runSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div><button className="secondary" onClick={runSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); fetchStoreReports({ date: storeReportDate, type, includeDeleted: storeReportIncludeDeleted }); }}>ล้าง</button><select aria-label="กรองตามสถานะ" value={storeReportStatusFilter} onChange={e => setStoreReportStatusFilter(e.target.value)}><option value="all">ทุกสถานะ</option><option value="action">ต้องดำเนินการ</option><option value="confirmed">ยืนยันแล้ว</option><option value="problem">มีปัญหา</option><option value="deleted">ลบแล้ว</option></select><label className="store-report-deleted-filter"><input type="checkbox" checked={storeReportIncludeDeleted} onChange={e => setStoreReportIncludeDeleted(e.target.checked)} /> รวมรายการลบแล้ว{deletedCount > 0 ? ` (${deletedCount})` : ""}</label></div>
-                {storeReportSearchActive && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>ผลค้นหาย้อนหลัง: “{storeReportQuery}”</div>}
+                {storeReportSearchActive && <div style={{ background: "var(--c-info-bg)", padding: "var(--sp-4)", borderRadius: "6px", fontSize: "12px" }}>ผลค้นหาย้อนหลัง: “{storeReportQuery}”</div>}
                 <div className="store-report-drafts">{(storeDraftRows[type] || []).map((row) => <div key={row.draftId} className="store-report-draft-row"><BookingNumberInput value={row.bookingNumber} onChange={bookingNumber => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, bookingNumber } : item) }))} /><input value={row.detail} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, detail: e.target.value } : item) }))} placeholder="รายละเอียด" /><input value={row.note} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, note: e.target.value } : item) }))} placeholder="หมายเหตุ/รอของ" /><select value={row.status} onChange={e => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].map((item) => item.draftId === row.draftId ? { ...item, status: e.target.value } : item) }))}><option value="draft">ครบ</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select><button className="secondary danger" onClick={() => setStoreDraftRows(rows => ({ ...rows, [type]: rows[type].filter((item) => item.draftId !== row.draftId) }))}>ลบ</button></div>)}</div>
                 <div className="store-report-actions"><button className="secondary" disabled={storeReportDate !== todayServiceDate} onClick={() => addStoreDraftRow(type)}>+ เพิ่มรายการ</button><div><button className="secondary" disabled={storeReportDate !== todayServiceDate || !(storeDraftRows[type] || []).length} onClick={() => saveStoreDrafts(type)}>บันทึกร่าง</button><button className="primary" disabled={storeReportDate !== todayServiceDate} onClick={() => startStoreReportConfirmation(type)}>ยืนยันรายการ</button></div></div>
-                {storeReportsLoading ? <p className="muted">กำลังโหลดรายงาน…</p> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะงาน</th><th>จัดการ</th></tr></thead><tbody>{selectedRows.map(item => { const serviceDate = String(item.serviceDate || toServiceDateKey(item.createdAt)); const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${serviceDate}T00:00:00`)) / 86400000)); const tone = item.deletedAt ? "deleted" : item.status === "draft" ? "draft" : item.status === "waiting" ? "waiting" : item.status === "partial" ? "partial" : "confirmed"; const statusLabel = item.deletedAt ? "ลบแล้ว" : item.status === "draft" ? "ครบ · ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"; return <tr key={item.id} className={`store-report-row is-${tone}`}><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}{item.linkedOrder.zone ? ` · ${item.linkedOrder.zone}` : ""}</small>}{needsAction(item) && <small className={`store-report-priority ${age > 1 ? "is-urgent" : ""}`}>{age > 0 ? `ค้าง ${age} วัน` : "ต้องดำเนินการวันนี้"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {serviceDate}</small></td><td data-label="สถานะงาน"><span className={`store-report-status is-${tone}`}>{statusLabel}</span>{type === "online" && item.packStatus && <small>ห้องแพ็ค: {item.packStatus}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="secondary" onClick={() => openStoreReportDetail(item)} aria-label={`ดู ${item.bookingNumber || "รายการ"}`}>👁 ดู</button>{!item.deletedAt && <><button className="secondary" onClick={() => setEditingStoreReport({ ...item, reason: "" })} aria-label={`แก้ไข ${item.bookingNumber || "รายการ"}`}>✎ แก้ไข</button><button className="secondary danger" onClick={() => deleteStoreReport(item)} aria-label={`ลบ ${item.bookingNumber || "รายการ"}`}>ลบ</button></>}</div></td></tr>})}</tbody></table></div>}
+                {storeReportsLoading ? <ListSkeleton rows={4} /> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะงาน</th><th>จัดการ</th></tr></thead><tbody>{selectedRows.map(item => { const serviceDate = String(item.serviceDate || toServiceDateKey(item.createdAt)); const age = Math.max(0, Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${serviceDate}T00:00:00`)) / 86400000)); const tone = item.deletedAt ? "deleted" : item.status === "draft" ? "draft" : item.status === "waiting" ? "waiting" : item.status === "partial" ? "partial" : "confirmed"; const statusLabel = item.deletedAt ? "ลบแล้ว" : item.status === "draft" ? "ครบ · ยังไม่ยืนยัน" : item.status === "waiting" ? "รอของ" : item.status === "partial" ? "ของไม่ครบ" : "ยืนยันแล้ว"; return <tr key={item.id} className={`store-report-row is-${tone}`}><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}{item.linkedOrder.zone ? ` · ${item.linkedOrder.zone}` : ""}</small>}{needsAction(item) && <small className={`store-report-priority ${age > 1 ? "is-urgent" : ""}`}>{age > 0 ? `ค้าง ${age} วัน` : "ต้องดำเนินการวันนี้"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {serviceDate}</small></td><td data-label="สถานะงาน"><span className={`store-report-status is-${tone}`}>{statusLabel}</span>{type === "online" && item.packStatus && <small>ห้องแพ็ค: {item.packStatus}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="secondary" onClick={() => openStoreReportDetail(item)} aria-label={`ดู ${item.bookingNumber || "รายการ"}`}><Eye size={15} className="i-inline" aria-hidden="true" /> ดู</button>{!item.deletedAt && <><button className="secondary" onClick={() => setEditingStoreReport({ ...item, reason: "" })} aria-label={`แก้ไข ${item.bookingNumber || "รายการ"}`}><Pencil size={15} className="i-inline" aria-hidden="true" /> แก้ไข</button><button className="secondary danger" onClick={() => deleteStoreReport(item)} aria-label={`ลบ ${item.bookingNumber || "รายการ"}`}>ลบ</button></>}</div></td></tr>})}</tbody></table></div>}
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
             </div>}
@@ -5930,12 +5961,12 @@ export default function App() {
         {displayTab === "store-chiangmai-track" && (
           <section className="panel">
             <div className="panel-head"><h2>ติดตามเตรียมออเดอร์เชียงใหม่</h2><span>ดูข้อมูลจากฝ่ายขาย · อ่านอย่างเดียว</span></div>
-            <div style={{ display: "grid", gap: "10px" }}>
-              {chiangmaiPreparationOrders.map(order => <article key={order.id} style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "7px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>
-                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}{order.shippingCarrier ? ` · ขนส่ง: ${order.shippingCarrier}` : ""}</div>
+            <div style={{ display: "grid", gap: "var(--sp-5)" }}>
+              {chiangmaiPreparationOrders.map(order => <article key={order.id} style={{ border: "1px solid var(--c-line)", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-3)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div>
+                <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>เลขที่ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · {order.boxes || 0} กล่อง {order.window ? `· ${order.window}` : ""}{order.shippingCarrier ? ` · ขนส่ง: ${order.shippingCarrier}` : ""}</div>
                 <SalesNoteAlert order={order} compact />
-                {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
+                {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", padding: "var(--sp-4)", borderRadius: "6px", fontSize: "12px" }}><b>รอสินค้า/ของไม่ครบ:</b> {order.missingItems.join(", ")}</div>}
               </article>)}
               {!chiangmaiPreparationOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/ใกล้เคียงที่อยู่ระหว่างเตรียม</p>}
             </div>
@@ -5944,7 +5975,7 @@ export default function App() {
 
         {displayTab === "pack-dashboard" && (() => { const pending = packTodayOrders.filter(order => order.packStatus === "pending").length; const working = packTodayOrders.filter(order => order.packStatus === "working").length; const waiting = packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length; const monthOrders = packKpiOrders.filter(order => getOrderServiceDate(order).startsWith(currentMonthKey)); const monthCompleted = monthOrders.filter(order => ["checked", "partial"].includes(order.packStatus)); const monthReturned = packKpiOrders.flatMap(getReturnEvents).filter(event => String(event.at || "").startsWith(currentMonthKey)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอแพ็ค", working: "กำลังแพ็ค", checked: "แพ็คเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับสโตร์" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = packTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.packStatus] || "รอแพ็ค", statusTone: statusTones[order.packStatus] })); let activityRows = buildKpiActivityRows(packKpiOrders, "pack"); if (!activityRows.length) activityRows = packTodayOrders.map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "อัปเดตออเดอร์ห้องแพ็ค", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard cards={[{ icon: "📦", value: packTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่เข้าสู่ห้องแพ็ค", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอแพ็ค", detail: "ยังไม่ได้เริ่มแพ็ค", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังแพ็ค", detail: "ห้องแพ็คกำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: packTodayCompleted, label: "แพ็คเสร็จ", detail: "ตรวจและยืนยันแล้ว", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={packTodayCompleted} total={packTodayOrders.length} followUps={[{ label: "งานส่งกลับสโตร์", emptyLabel: "ไม่มีงานส่งกลับ", value: packKpiReturned.length }, { label: "งานค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: packKpiOverdue.length }, { label: "งานรอดำเนินการ / รอของ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "แพ็คเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับสโตร์", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราแพ็คครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows} reportActions={{ copyDaily: () => copyPackSummary("daily"), shareDaily: () => sharePackSummary("daily"), copyMonthly: () => copyPackSummary("monthly"), shareMonthly: () => sharePackSummary("monthly") }} information="KPI ห้องแพ็คอ้างอิง Log การตรวจจริงแบบเรียลไทม์ เคสส่งกลับที่แก้เสร็จแล้วยังคงอยู่ในสถิติย้อนหลัง แต่ไม่แสดงเป็นงานค้าง" progressTitle="ความคืบหน้าการแพ็คสินค้า" progressLabel="แพ็คเสร็จ" />;</section>; })()}
 
-        {displayTab === "pack-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}>↻ รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
+        {displayTab === "pack-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
 
         {["pack-booking", "pack-online"].includes(displayTab) && (() => {
           const type = displayTab === "pack-booking" ? "booking" : "online";
@@ -5961,34 +5992,34 @@ export default function App() {
           const title = type === "booking" ? "ใบสั่งจอง · ห้องแพ็ค" : "ใบขายออนไลน์ · ห้องแพ็ค";
           const pendingRows = storeReports.filter(item => item.type === type && item.confirmedAt && !["checked", "blocked"].includes(item.packStatus) && !item.deletedAt);
           const rows = storeReportSearchActive ? storeReports.filter(item => item.type === type && !item.deletedAt) : pendingRows;
-          return <section className="panel role-workspace ops-workspace"><div className="panel-head"><h2>{title}</h2><span>{rows.length} งานรอตรวจ</span></div><div className="store-report-filters" style={{ marginBottom: "10px" }}><div className="store-report-search"><Search size={17} /><input value={storeReportQuery} onChange={event => setStoreReportQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { const active = Boolean(event.currentTarget.value.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: event.currentTarget.value, includeDeleted: true }); } }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div><button className="secondary" onClick={() => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: storeReportQuery, includeDeleted: true }); }}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); fetchStoreReports({ type, date: storeReportDate, includeDeleted: false }); }}>ล้าง</button></div><p className="muted">ตรวจยืนยันด้วย Flow เดียวกัน: ครบจึงปิดงาน หากผิดหรือไม่ครบให้ส่งกลับสโตร์แก้ไขและส่งตรวจใหม่</p><div className="ops-pack-work" style={{ display: "grid", gap: "10px" }}>{rows.map(item => <article key={item.id} className="role-order-card" style={["returned", "partial"].includes(item.packStatus) ? { borderLeft: "5px solid #dc2626", background: "#fef2f2" } : undefined}><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><span className="status-chip">{item.packStatus === "returned" ? "ส่งกลับสโตร์" : item.packStatus === "partial" ? "ของไม่ครบ" : "รอห้องแพ็คตรวจ"}</span></div><div>{item.detail || "-"}</div>{item.note && <small className="muted">หมายเหตุสโตร์: {item.note}</small>}{item.returnReason && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px", borderRadius: "6px" }}><b>เหตุผลส่งกลับ:</b> {item.returnReason}</div>}<div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" onClick={() => updateReportPackStatus(item, "checked")}>ยืนยันครบ</button><button className="secondary" onClick={() => updateReportPackStatus(item, "partial")}>ของไม่ครบ / รอของ</button><button className="secondary danger" onClick={() => updateReportPackStatus(item, "returned")}>ส่งกลับสโตร์ตรวจซ้ำ</button></div></article>)}{!rows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่รอห้องแพ็คตรวจ</p>}</div></section>;
+          return <section className="panel role-workspace ops-workspace"><div className="panel-head"><h2>{title}</h2><span>{rows.length} งานรอตรวจ</span></div><div className="store-report-filters" style={{ marginBottom: "var(--sp-5)" }}><div className="store-report-search"><Search size={17} /><input value={storeReportQuery} onChange={event => setStoreReportQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { const active = Boolean(event.currentTarget.value.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: event.currentTarget.value, includeDeleted: true }); } }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div><button className="secondary" onClick={() => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: storeReportQuery, includeDeleted: true }); }}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); fetchStoreReports({ type, date: storeReportDate, includeDeleted: false }); }}>ล้าง</button></div><p className="muted">ตรวจยืนยันด้วย Flow เดียวกัน: ครบจึงปิดงาน หากผิดหรือไม่ครบให้ส่งกลับสโตร์แก้ไขและส่งตรวจใหม่</p><div className="ops-pack-work" style={{ display: "grid", gap: "var(--sp-5)" }}>{rows.map(item => <article key={item.id} className="role-order-card" style={["returned", "partial"].includes(item.packStatus) ? { borderLeft: "5px solid var(--c-danger)", background: "var(--c-danger-bg)" } : undefined}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b><span className="status-chip">{item.packStatus === "returned" ? "ส่งกลับสโตร์" : item.packStatus === "partial" ? "ของไม่ครบ" : "รอห้องแพ็คตรวจ"}</span></div><div>{item.detail || "-"}</div>{item.note && <small className="muted">หมายเหตุสโตร์: {item.note}</small>}{item.returnReason && <div style={{ background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", padding: "var(--sp-4)", borderRadius: "6px" }}><b>เหตุผลส่งกลับ:</b> {item.returnReason}</div>}<div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><button className="primary" onClick={() => updateReportPackStatus(item, "checked")}>ยืนยันครบ</button><button className="secondary" onClick={() => updateReportPackStatus(item, "partial")}>ของไม่ครบ / รอของ</button><button className="secondary danger" onClick={() => updateReportPackStatus(item, "returned")}>ส่งกลับสโตร์ตรวจซ้ำ</button></div></article>)}{!rows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่รอห้องแพ็คตรวจ</p>}</div></section>;
         })()}
 
         {["pack-work", "pack-pickup", "pack-outstation"].includes(displayTab) && (
           <section className="panel role-workspace ops-workspace">
             <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length + (displayTab === "pack-work" ? packBlockedReworkOrders.length : 0)} งาน</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
             <OrderHistorySearch title="ค้นหาประวัติออเดอร์ห้องแพ็ค" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-            {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "12px", display: "grid", gap: "8px", background: "#fff7ed", border: "2px solid #f97316", borderLeftWidth: "6px", borderRadius: "10px", padding: "12px" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "#9a3412" }}>⚠️ ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrders.length} งาน</span></div>{packReworkOrders.map(order => <ReworkNotice key={`pack-rework-${order.id}`} order={order} />)}</div>}
+            {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-accent-bg)", border: "2px solid var(--c-accent)", borderLeftWidth: "6px", borderRadius: "10px", padding: "var(--sp-6)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-accent-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrders.length} งาน</span></div>{packReworkOrders.map(order => <ReworkNotice key={`pack-rework-${order.id}`} order={order} />)}</div>}
             <div className="ops-pack-work">
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 <OrderCreatedAt order={order} />
-                {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
-                {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "#1d4ed8", background: "#dbeafe" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
-                <div style={{ fontSize: "12px", color: "#4b5563" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
-                {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "#166562", background: "#dcfcfa", width: "fit-content" }}>💬 แชร์ LINE แล้ว</span>}
-                {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted">📷 แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
+                {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
+                {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
+                <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
+                {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)", width: "fit-content" }}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE แล้ว</span>}
+                {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted"><Camera size={15} className="i-inline" aria-hidden="true" /> แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button><button className="secondary danger" onClick={() => archivePackOrder(order)}>นำออกจากคิว</button></div>
+                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button><button className="secondary danger" onClick={() => archivePackOrder(order)}>นำออกจากคิว</button></div>
               </article>)}
               {!(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
             {displayTab === "pack-outstation" && (
-              <details className="prep-order-details" style={{ marginTop: "14px" }}>
+              <details className="prep-order-details" style={{ marginTop: "var(--sp-6)" }}>
                 <summary>สถานะส่งมอบขนส่ง ({salesOutstationHistory.length})</summary>
-                <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
-                  {salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">สแกน {order.outstationDispatchScannedCount || 0}/{order.outstationDispatchBoxTotal || order.boxes || 1} กล่อง · {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={order.queueStatus === "completed" ? { color: "#166562", background: "#dcfcfa" } : undefined}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div></article>)}
+                <div style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}>
+                  {salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">สแกน {order.outstationDispatchScannedCount || 0}/{order.outstationDispatchBoxTotal || order.boxes || 1} กล่อง · {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={order.queueStatus === "completed" ? { color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" } : undefined}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div></article>)}
                   {!salesOutstationHistory.length && <p className="muted">ยังไม่มีออเดอร์ที่พร้อมส่งหรือส่งมอบขนส่งแล้ว</p>}
                 </div>
               </details>
@@ -6002,19 +6033,19 @@ export default function App() {
               <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
               <span>{todayPreparationOrders.length} งานที่ต้องดำเนินการ{displayTab === "chiangmai" && readyPreparationOrdersCount > 0 ? ` · พร้อมจัดส่ง ${readyPreparationOrdersCount}` : ""}</span>
             </div>
-            {displayTab === "chiangmai" && <div className="segmented" style={{ marginBottom: "10px" }}>{[["normal", "ออเดอร์ปกติ"], ["tuesday", "รอบวันอังคาร"], ["wednesday", "รอบวันพุธ"], ["friday", "รอบวันศุกร์"]].map(([code, label]) => <button key={code} className={chiangmaiRoundFilter === code ? "active" : ""} onClick={() => setChiangmaiRoundFilter(code)}>{label}</button>)}</div>}
+            {displayTab === "chiangmai" && <div className="segmented" style={{ marginBottom: "var(--sp-5)" }}>{[["normal", "ออเดอร์ปกติ"], ["tuesday", "รอบวันอังคาร"], ["wednesday", "รอบวันพุธ"], ["friday", "รอบวันศุกร์"]].map(([code, label]) => <button key={code} className={chiangmaiRoundFilter === code ? "active" : ""} onClick={() => setChiangmaiRoundFilter(code)}>{label}</button>)}</div>}
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
-            {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "12px", border: "2px solid #f97316", borderLeftWidth: "6px", background: "#fff7ed", borderRadius: "10px", padding: "12px", display: "grid", gap: "9px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><b style={{ color: "#9a3412" }}>⚠️ ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "#9a3412", background: "#ffedd5" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid #fed7aa", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><ReworkNotice order={order} compact />{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", color: "#92400e", borderRadius: "6px", padding: "7px", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
-            <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "10px" }}>
+            {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "var(--sp-6)", border: "2px solid var(--c-accent)", borderLeftWidth: "6px", background: "var(--c-accent-bg)", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><b style={{ color: "var(--c-accent-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "var(--c-accent-deep)", background: "var(--c-accent-bg)" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid var(--c-accent-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><ReworkNotice order={order} compact />{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", color: "var(--c-warn-deep)", borderRadius: "6px", padding: "var(--sp-3)", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
+            <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "var(--sp-5)" }}>
               {sortedPreparationOrders.map(order => (
-                <article key={order.id} className={displayTab === "chiangmai" ? "role-order-card" : undefined} style={displayTab === "chiangmai" ? (isPreparationReadyForDriver(order) ? { borderColor: "#ef4444", borderLeftColor: "#dc2626", background: "linear-gradient(145deg, #ffffff 0%, #fff1f1 100%)" } : undefined) : { border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px", display: "grid", gap: "8px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <article key={order.id} className={displayTab === "chiangmai" ? "role-order-card" : undefined} style={displayTab === "chiangmai" ? (isPreparationReadyForDriver(order) ? { borderColor: "var(--c-danger)", borderLeftColor: "var(--c-danger)", background: "linear-gradient(145deg, var(--c-surface) 0%, var(--c-danger-bg) 100%)" } : undefined) : { border: "1px solid var(--c-line)", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}>
                     <div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div>
                     <div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div>
                   </div>
-                  {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && <span className="status-chip" style={{ width: "fit-content", color: "#b91c1c", background: "#fee2e2", border: "1px solid #fecaca", fontWeight: 800 }}>พร้อมส่งคนขับ</span>}
-                  {displayTab === "chiangmai" && isReadyDriverBacklog(order) && !isTodayOrder(order) && <span className="status-chip" style={{ width: "fit-content", color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", fontWeight: 800 }}>ค้างจากวันก่อน · รอส่งเข้าคิวคนขับ</span>}
-                  <div style={{ fontSize: "12px", color: "#4b5563" }}>
+                  {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-danger-dark)", background: "var(--c-danger-bg-strong)", border: "1px solid var(--c-danger-border)", fontWeight: 800 }}>พร้อมส่งคนขับ</span>}
+                  {displayTab === "chiangmai" && isReadyDriverBacklog(order) && !isTodayOrder(order) && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-warn-deep)", background: "var(--c-warn-bg-strong)", border: "1px solid var(--c-warn-border)", fontWeight: 800 }}>ค้างจากวันก่อน · รอส่งเข้าคิวคนขับ</span>}
+                  <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>
                     เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์"} · {order.boxes || 0} กล่อง
                     {order.storePackerName && <> · ผู้จัด: {order.storePackerName}</>}
                     {order.storeCheckerName && <> · ผู้ตรวจสโตร์: {order.storeCheckerName}</>}
@@ -6022,9 +6053,9 @@ export default function App() {
                     {order.packCheckerName && <> · ผู้ตรวจแพ็ค: {order.packCheckerName}</>}
                   </div>
                   {displayTab === "chiangmai" && <SalesNoteAlert order={order} compact />}
-                  {displayTab === "chiangmai" && <label style={{ display: "grid", gap: "5px", maxWidth: "360px" }}><b>รอบจัดส่งของฝ่ายขาย</b><select value={order.chiangmaiRoundCode || ""} onChange={(event) => assignChiangmaiRound(order, event.target.value)}><option value="">ยังไม่กำหนดรอบ</option><option value="tuesday">รอบวันอังคาร</option><option value="wednesday">รอบวันพุธ</option><option value="friday">รอบวันศุกร์</option></select>{order.chiangmaiRoundDate && <small className="muted">วันที่รอบ: {order.chiangmaiRoundDate}</small>}</label>}
+                  {displayTab === "chiangmai" && <label style={{ display: "grid", gap: "var(--sp-2)", maxWidth: "360px" }}><b>รอบจัดส่งของฝ่ายขาย</b><select value={order.chiangmaiRoundCode || ""} onChange={(event) => assignChiangmaiRound(order, event.target.value)}><option value="">ยังไม่กำหนดรอบ</option><option value="tuesday">รอบวันอังคาร</option><option value="wednesday">รอบวันพุธ</option><option value="friday">รอบวันศุกร์</option></select>{order.chiangmaiRoundDate && <small className="muted">วันที่รอบ: {order.chiangmaiRoundDate}</small>}</label>}
                   {displayTab === "chiangmai" && <><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>{(order.storeWorkDetails?.note || order.packWorkDetails?.note) && <div className="prep-work-notes">{order.storeWorkDetails?.note && <div className="prep-note-store"><b>หมายเหตุสโตร์</b><span>{order.storeWorkDetails.note}</span></div>}{order.packWorkDetails?.note && <div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div>}</div>}</>}
-                  {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
+                  {Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", padding: "var(--sp-4)", borderRadius: "6px", fontSize: "12px" }}>รอสินค้า: {order.missingItems.map(item => typeof item === "string" ? item : `${item.name || item.sku || "สินค้า"}: ${item.reason || "รอสินค้า"}`).join(", ")}</div>}
                   {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && !order.chiangmaiRoundCode && <button className="primary" onClick={() => updatePreparationWorkflow(order, "queue")}>ส่งเข้าคิวคนขับ</button>}
                   {displayTab === "chiangmai" && ["sales", "admin"].includes(auth.role) && canRerouteOrder(order).ok && <button className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}
                   {displayTab === "chiangmai" && canDeleteBeforeDriverQueue(order) && (
@@ -6039,44 +6070,44 @@ export default function App() {
         )}
 
         {showStoreReportConfirm && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
             <section className="panel" style={{ width: "min(460px, 100%)" }}>
               <div className="panel-head"><h2>ยืนยันบันทึกรายงาน</h2><span>สโตร์</span></div>
               <p>รายการที่ยังไม่ยืนยันทั้งหมดจะถูกปิดสถานะและบันทึกวันเวลายืนยัน</p>
               <p className="muted">รวม {storeReportConfirmIds.length} รายการของวันที่เลือก</p>
               <label className="field-label">ชื่อผู้ตรวจสโตร์ *</label><select value={reportStoreCheckerName} onChange={(event) => setReportStoreCheckerName(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists.store || []), reportStoreCheckerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setShowStoreReportConfirm(false)}>กลับไปแก้ไข</button><button className="primary" disabled={!reportStoreCheckerName.trim()} onClick={confirmStoreReports}>ยืนยันบันทึก</button></div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-4)" }}><button className="secondary" onClick={() => setShowStoreReportConfirm(false)}>กลับไปแก้ไข</button><button className="primary" disabled={!reportStoreCheckerName.trim()} onClick={confirmStoreReports}>ยืนยันบันทึก</button></div>
             </section>
           </div>
         )}
 
         {workModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
             <section className="panel" style={{ width: "min(620px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
               <div className="panel-head"><h2>{workModal.role === "store" ? "รับงานสโตร์" : "รับงานห้องแพ็ค"}</h2><span>{workModal.order.id}</span></div>
-              <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ display: "grid", gap: "var(--sp-5)" }}>
                 <div className="muted">{workModal.order.customerName} · {workModal.order.zone}</div>
                 <SalesNoteAlert order={workModal.order} />
                 <details className="prep-order-details"><summary>ดูรายละเอียดลูกค้าและออเดอร์</summary><PackSalesOrderDetails order={workModal.order} /></details>
                 <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุ · เพิ่มได้จากการ์ดออเดอร์เชียงใหม่"}</div>
-                {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "#eff6ff", padding: "8px", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
+                {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "var(--c-info-bg)", padding: "var(--sp-4)", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
-                <details style={{ border: "1px solid #d6e4d9", borderRadius: "8px", padding: "8px 10px", background: "#fbfdf9" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "8px", marginTop: "10px" }}><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}>✎</button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "8px" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
-                <label style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #dbe4ee", borderRadius: "8px", padding: "10px", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
+                <details style={{ border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-4) var(--sp-5)", background: "var(--c-surface-subtle)" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}><div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "var(--sp-2)", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}><Pencil size={15} className="i-inline" aria-hidden="true" /> </button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "var(--c-danger-dark)" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "var(--sp-4)" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
+                <label style={{ display: "flex", gap: "var(--sp-4)", alignItems: "center", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)", borderRadius: "8px", padding: "var(--sp-5)", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
                 <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value, missingNote: ["partial", "returned"].includes(e.target.value) ? p.missingNote : "" }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option>{workModal.role === "pack" && !skipsStoreCheck(workModal.order) && <option value="returned">ของผิด — ส่งกลับสโตร์ตรวจสอบ</option>}</select>
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
                 {["partial", "returned"].includes(workForm.checkResult) && <><label className="field-label">{workForm.checkResult === "returned" ? "รายการผิด / เหตุผลส่งกลับสโตร์ *" : "ของไม่ครบ / รอของ *"}</label><textarea value={workForm.missingNote} onChange={e => setWorkForm(p => ({ ...p, missingNote: e.target.value }))} placeholder={workForm.checkResult === "returned" ? "ระบุของผิดและเหตุผลเพื่อส่งกลับสโตร์" : "ระบุรายการและเหตุผล"} rows={2} /></>}
-                {workModal.role === "store" && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>สโตร์: เมื่อตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — รูปถ่ายและการส่ง LINE เป็นตัวเลือก</div>}
-                {workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>ออเดอร์ต่างจังหวัด: ถ้าตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — ระบบจะอัปเดตสโตร์เป็นเสร็จและสถานะเป็นพร้อมส่งขนส่งอัตโนมัติ · รูปถ่ายและ LINE เป็นตัวเลือก</div>}
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                  <label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป{workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? " (ไม่บังคับ)" : ""} ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
-                  <button type="button" className={workSharedToLine ? "secondary" : "primary"} disabled={workSubmitting} onClick={shareWorkToLine}>💬 {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่ง LINE + ยืนยันอัตโนมัติ"}</button>
+                {workModal.role === "store" && <div style={{ background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", color: "var(--c-info-dark)", borderRadius: "8px", padding: "var(--sp-4)", fontSize: "12px", fontWeight: 700 }}>สโตร์: เมื่อตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — รูปถ่ายและการส่ง LINE เป็นตัวเลือก</div>}
+                {workModal.role === "pack" && workModal.order.deliveryMethod === "outstation" && <div style={{ background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", color: "var(--c-info-dark)", borderRadius: "8px", padding: "var(--sp-4)", fontSize: "12px", fontWeight: 700 }}>ออเดอร์ต่างจังหวัด: ถ้าตรวจครบแล้ว กดยืนยันออเดอร์ได้ทันที — ระบบจะอัปเดตสโตร์เป็นเสร็จและสถานะเป็นพร้อมส่งขนส่งอัตโนมัติ · รูปถ่ายและ LINE เป็นตัวเลือก</div>}
+                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", alignItems: "center" }}>
+                  <label className="secondary" style={{ cursor: "pointer" }}><Camera size={15} className="i-inline" aria-hidden="true" /> ถ่ายรูป{workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? " (ไม่บังคับ)" : ""} ({workPhotoPreviews.length}/5)<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={captureWorkPhoto} /></label>
+                  <button type="button" className={workSharedToLine ? "secondary" : "primary"} disabled={workSubmitting} onClick={shareWorkToLine}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> {workSharedToLine ? "แชร์ LINE แล้ว ✓" : "ส่ง LINE + ยืนยันอัตโนมัติ"}</button>
                   {workPhotoPreviews.length > 0 && <span className="muted">มีรูปในเครื่อง {workPhotoPreviews.length} รูป</span>}
                   {workSharedToLine && <span className="muted">แชร์ LINE แล้ว</span>}
                 </div>
-                {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid #d1d5db" }} /><button className="secondary" aria-label={`ลบรูปที่ ${index + 1}`} style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "2px 5px" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
-                {workSubmitError && <div role="alert" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "9px", fontSize: "12px", fontWeight: 700 }}>บันทึกออเดอร์ไม่สำเร็จ: {workSubmitError}</div>}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button type="button" className="secondary" disabled={workSubmitting} onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button type="button" className="primary" disabled={workSubmitting} onClick={() => confirmWorkModal(false)}>{workSubmitting ? "กำลังบันทึก..." : (workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์")}</button></div>
+                {workPhotoPreviews.length > 0 && <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>{workPhotoPreviews.map((preview, index) => <div key={`${preview}-${index}`} style={{ position: "relative" }}><img src={preview} alt={`รูปที่ถ่าย ${index + 1}`} style={{ width: "92px", height: "92px", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--c-line-strong)" }} /><button className="secondary" aria-label={`ลบรูปที่ ${index + 1}`} style={{ position: "absolute", top: "-7px", right: "-7px", borderRadius: "999px", minWidth: "24px", padding: "var(--sp-1) var(--sp-2)" }} onClick={() => removeWorkPhoto(index)}>×</button></div>)}</div>}
+                {workSubmitError && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "1px solid var(--c-danger-border)", color: "var(--c-danger-dark)", borderRadius: "8px", padding: "var(--sp-4)", fontSize: "12px", fontWeight: 700 }}>บันทึกออเดอร์ไม่สำเร็จ: {workSubmitError}</div>}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-4)" }}><button type="button" className="secondary" disabled={workSubmitting} onClick={() => { clearWorkPhotos(); setWorkModal(null); }}>ยกเลิก</button><button type="button" className="primary" disabled={workSubmitting} onClick={() => confirmWorkModal(false)}>{workSubmitting ? "กำลังบันทึก..." : (workModal.role === "store" || (workModal.role === "pack" && workModal.order.deliveryMethod === "outstation") ? "ยืนยันออเดอร์ได้เลย" : "ยืนยันออเดอร์")}</button></div>
               </div>
             </section>
           </div>
@@ -6094,48 +6125,48 @@ export default function App() {
         )}
 
         {chiangmaiHistoryOrder && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
             <section className="panel" style={{ width: "min(820px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
               <div className="panel-head"><h2>ประวัติออเดอร์เชียงใหม่/ใกล้เคียง</h2><button className="secondary" onClick={() => setChiangmaiHistoryOrder(null)}>ปิด</button></div>
               <PackSalesOrderDetails order={chiangmaiHistoryOrder} />
-              <div style={{ display: "grid", gap: "6px", marginTop: "10px" }}><div><b>สถานะล่าสุด:</b> {chiangmaiHistoryOrder.status || "-"}</div><div><b>สโตร์:</b> {storeStatusLabel(chiangmaiHistoryOrder)} · <b>ห้องแพ็ค:</b> {WORKFLOW_STATUS_META[chiangmaiHistoryOrder.packStatus]?.label || chiangmaiHistoryOrder.packStatus || "-"}</div>{chiangmaiHistoryOrder.missingItems?.length > 0 && <div style={{ background: "#fef3c7", padding: "8px", borderRadius: "6px" }}><b>รอสินค้า/ของไม่ครบ:</b> {chiangmaiHistoryOrder.missingItems.join(", ")}</div>}</div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px", padding: "10px", borderRadius: "8px", background: "#f8fafc", border: "1px solid #dbe4ee" }}>
-                {auth.role === "pack" && chiangmaiHistoryOrder.workflowType === "store_route" && chiangmaiHistoryOrder.packStatus !== "returned" && <button className="secondary danger" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "pack"); }}>⚠️ พบปัญหา · ส่งกลับสโตร์ตรวจสอบ</button>}
-                {auth.role === "store" && chiangmaiHistoryOrder.storeStatus === "returned" && <button className="primary" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "store"); }}>🔧 สโตร์แก้ไขและยืนยัน</button>}
+              <div style={{ display: "grid", gap: "var(--sp-3)", marginTop: "var(--sp-5)" }}><div><b>สถานะล่าสุด:</b> {chiangmaiHistoryOrder.status || "-"}</div><div><b>สโตร์:</b> {storeStatusLabel(chiangmaiHistoryOrder)} · <b>ห้องแพ็ค:</b> {WORKFLOW_STATUS_META[chiangmaiHistoryOrder.packStatus]?.label || chiangmaiHistoryOrder.packStatus || "-"}</div>{chiangmaiHistoryOrder.missingItems?.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", padding: "var(--sp-4)", borderRadius: "6px" }}><b>รอสินค้า/ของไม่ครบ:</b> {chiangmaiHistoryOrder.missingItems.join(", ")}</div>}</div>
+              <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginTop: "var(--sp-6)", padding: "var(--sp-5)", borderRadius: "8px", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)" }}>
+                {auth.role === "pack" && chiangmaiHistoryOrder.workflowType === "store_route" && chiangmaiHistoryOrder.packStatus !== "returned" && <button className="secondary danger" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "pack"); }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> พบปัญหา · ส่งกลับสโตร์ตรวจสอบ</button>}
+                {auth.role === "store" && chiangmaiHistoryOrder.storeStatus === "returned" && <button className="primary" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "store"); }}><Wrench size={15} className="i-inline" aria-hidden="true" /> สโตร์แก้ไขและยืนยัน</button>}
                 {chiangmaiHistoryOrder.storeStatus === "returned" && <span className="muted" style={{ alignSelf: "center" }}>งานนี้ส่งกลับให้สโตร์ตรวจสอบแล้ว · แก้ไขเสร็จให้ยืนยันเพื่อส่งห้องแพ็คตรวจซ้ำ</span>}
               </div>
-              <h3 style={{ marginTop: "16px" }}>Timeline การดำเนินงาน</h3><div style={{ display: "grid", gap: "8px" }}>{getOrderTimeline(chiangmaiHistoryOrder).map(item => <article key={item.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{item.title}</b><div className="muted">{item.at || "-"}</div>{item.checkerName && <div><b>ผู้ตรวจ:</b> {item.checkerName}</div>}{item.operatorName && <div><b>ผู้ดำเนินการ:</b> {item.operatorName}</div>}{item.performedBy && <div className="muted">บันทึกโดยบัญชี: {item.performedBy}</div>}{item.note && <div>{item.note}</div>}</article>)}{!getOrderTimeline(chiangmaiHistoryOrder).length && <p className="muted">ออเดอร์เก่ายังไม่มี Timeline ที่ระบบบันทึกไว้</p>}</div>
+              <h3 style={{ marginTop: "var(--sp-7)" }}>Timeline การดำเนินงาน</h3><div style={{ display: "grid", gap: "var(--sp-4)" }}>{getOrderTimeline(chiangmaiHistoryOrder).map(item => <article key={item.id} style={{ borderLeft: "3px solid var(--c-info)", padding: "var(--sp-3) var(--sp-5)", background: "var(--c-surface-subtle)" }}><b>{item.title}</b><div className="muted">{item.at || "-"}</div>{item.checkerName && <div><b>ผู้ตรวจ:</b> {item.checkerName}</div>}{item.operatorName && <div><b>ผู้ดำเนินการ:</b> {item.operatorName}</div>}{item.performedBy && <div className="muted">บันทึกโดยบัญชี: {item.performedBy}</div>}{item.note && <div>{item.note}</div>}</article>)}{!getOrderTimeline(chiangmaiHistoryOrder).length && <p className="muted">ออเดอร์เก่ายังไม่มี Timeline ที่ระบบบันทึกไว้</p>}</div>
             </section>
           </div>
         )}
 
         {storeReportDetail && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
             <section className="panel" style={{ width: "min(760px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
               <div className="panel-head"><h2>รายละเอียดรายงาน</h2><button className="secondary" onClick={() => setStoreReportDetail(null)}>ปิด</button></div>
-              <div style={{ display: "grid", gap: "7px" }}><b>{storeReportDetail.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{storeReportDetail.linkedOrder && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "7px", padding: "8px" }}><b>เชื่อมกับออเดอร์ฝ่ายขาย</b><div>{storeReportDetail.linkedOrder.id} · {storeReportDetail.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</div><small>{[storeReportDetail.linkedOrder.zone, storeReportDetail.linkedOrder.address].filter(Boolean).join(" · ")}</small></div>}<div>{storeReportDetail.detail || "-"}</div>{storeReportDetail.note && <div className="muted">หมายเหตุ: {storeReportDetail.note}</div>}<div className="muted">สร้างโดย {storeReportDetail.createdBy || "-"} · {storeReportDetail.createdAt || "-"}</div>{storeReportDetail.confirmedAt && <div className="muted">ยืนยัน: {storeReportDetail.confirmedAt} · ผู้ตรวจสโตร์: {storeReportDetail.storeCheckerName || "ไม่มีข้อมูล"} · บันทึกโดย: {storeReportDetail.confirmedBy || "-"}</div>}{storeReportDetail.packUpdatedAt && <div className="muted">ตรวจห้องแพ็ค: {storeReportDetail.packUpdatedAt} · ผู้ตรวจ: {storeReportDetail.packCheckerName || "ไม่มีข้อมูล"} · บันทึกโดย: {storeReportDetail.packUpdatedBy || "-"}</div>}{storeReportDetail.deletedAt && <div style={{ color: "#991b1b" }}>ลบเมื่อ {storeReportDetail.deletedAt} · เหตุผล: {storeReportDetail.deleteReason || "-"}</div>}</div>
-              <h3 style={{ marginTop: "16px" }}>ประวัติการตรวจสอบ</h3><div style={{ display: "grid", gap: "8px" }}>{(storeReportDetail.history || []).map(log => <article key={log.id} style={{ borderLeft: "3px solid #2563eb", padding: "7px 10px", background: "#f8fafc" }}><b>{reportHistoryLabel(log.event)}</b><div className="muted">{log.at || "-"}</div><div><b>ผู้ตรวจ:</b> {log.checkerName || log.after?.packCheckerName || log.after?.storeCheckerName || "ไม่มีข้อมูลชื่อผู้ตรวจ"}</div><div className="muted">บันทึกโดยบัญชี: {log.by || "-"}</div>{log.reason && <div>เหตุผล: {log.reason}</div>}</article>)}{!(storeReportDetail.history || []).length && <p className="muted">รายการเก่าอาจยังไม่มี log ก่อนเริ่มใช้ระบบนี้</p>}</div>
+              <div style={{ display: "grid", gap: "var(--sp-3)" }}><b>{storeReportDetail.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{storeReportDetail.linkedOrder && <div style={{ background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "7px", padding: "var(--sp-4)" }}><b>เชื่อมกับออเดอร์ฝ่ายขาย</b><div>{storeReportDetail.linkedOrder.id} · {storeReportDetail.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</div><small>{[storeReportDetail.linkedOrder.zone, storeReportDetail.linkedOrder.address].filter(Boolean).join(" · ")}</small></div>}<div>{storeReportDetail.detail || "-"}</div>{storeReportDetail.note && <div className="muted">หมายเหตุ: {storeReportDetail.note}</div>}<div className="muted">สร้างโดย {storeReportDetail.createdBy || "-"} · {storeReportDetail.createdAt || "-"}</div>{storeReportDetail.confirmedAt && <div className="muted">ยืนยัน: {storeReportDetail.confirmedAt} · ผู้ตรวจสโตร์: {storeReportDetail.storeCheckerName || "ไม่มีข้อมูล"} · บันทึกโดย: {storeReportDetail.confirmedBy || "-"}</div>}{storeReportDetail.packUpdatedAt && <div className="muted">ตรวจห้องแพ็ค: {storeReportDetail.packUpdatedAt} · ผู้ตรวจ: {storeReportDetail.packCheckerName || "ไม่มีข้อมูล"} · บันทึกโดย: {storeReportDetail.packUpdatedBy || "-"}</div>}{storeReportDetail.deletedAt && <div style={{ color: "var(--c-danger-deep)" }}>ลบเมื่อ {storeReportDetail.deletedAt} · เหตุผล: {storeReportDetail.deleteReason || "-"}</div>}</div>
+              <h3 style={{ marginTop: "var(--sp-7)" }}>ประวัติการตรวจสอบ</h3><div style={{ display: "grid", gap: "var(--sp-4)" }}>{(storeReportDetail.history || []).map(log => <article key={log.id} style={{ borderLeft: "3px solid var(--c-info)", padding: "var(--sp-3) var(--sp-5)", background: "var(--c-surface-subtle)" }}><b>{reportHistoryLabel(log.event)}</b><div className="muted">{log.at || "-"}</div><div><b>ผู้ตรวจ:</b> {log.checkerName || log.after?.packCheckerName || log.after?.storeCheckerName || "ไม่มีข้อมูลชื่อผู้ตรวจ"}</div><div className="muted">บันทึกโดยบัญชี: {log.by || "-"}</div>{log.reason && <div>เหตุผล: {log.reason}</div>}</article>)}{!(storeReportDetail.history || []).length && <p className="muted">รายการเก่าอาจยังไม่มี log ก่อนเริ่มใช้ระบบนี้</p>}</div>
             </section>
           </div>
         )}
 
         {reportModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
             <section className="panel" style={{ width: "min(850px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
               <div className="panel-head"><h2>บันทึกรายงาน{reportModal === "outstation" ? "ต่างจังหวัด" : "ออนไลน์"}</h2><span>{reportModal === "online" ? "ส่งต่อห้องแพ็ค · ไม่ขึ้น Sheet" : "บันทึกประวัติสโตร์ · ไม่ขึ้น Sheet"}</span></div>
-              <div style={{ display: "grid", gap: "10px" }}>{reportRows.map((row, index) => <div key={index} style={{ border: "1px solid #e5e7eb", padding: "10px", borderRadius: "8px", display: "grid", gap: "8px" }}><b>รายการ {index + 1}</b><BookingNumberInput value={row.bookingNumber} onChange={bookingNumber => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, bookingNumber } : item))} /><textarea value={row.detail} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, detail: e.target.value } : item))} placeholder="รายละเอียด" rows={2} /><textarea value={row.note} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, note: e.target.value } : item))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" rows={2} /><select value={row.status} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}><option value="saved">ครบ</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{reportRows.length > 1 && <button className="secondary" onClick={() => setReportRows(rows => rows.filter((_, i) => i !== index))}>ลบรายการนี้</button>}</div>)}</div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "12px" }}><label className="secondary" style={{ cursor: "pointer" }}>📷 ถ่ายรูป (ไม่บังคับ)<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureReportPhoto} /></label><button className="secondary" onClick={shareReportToLine}>💬 ส่ง LINE (ไม่บังคับ)</button>{reportPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}</div>
-              {reportPhotoPreview && <img src={reportPhotoPreview} alt="รูปประกอบรายงาน" style={{ maxWidth: "100%", maxHeight: "220px", objectFit: "contain", borderRadius: "8px", marginTop: "8px" }} />}
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}><button className="secondary" onClick={() => setReportRows(rows => [...rows, { bookingNumber: "", detail: "", note: "", status: "saved" }])}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "8px" }}><button className="secondary" onClick={() => setReportModal(null)}>ยกเลิก</button><button className="primary" onClick={saveStoreReports}>บันทึกทั้งหมด</button></div></div>
+              <div style={{ display: "grid", gap: "var(--sp-5)" }}>{reportRows.map((row, index) => <div key={index} style={{ border: "1px solid var(--c-line)", padding: "var(--sp-5)", borderRadius: "8px", display: "grid", gap: "var(--sp-4)" }}><b>รายการ {index + 1}</b><BookingNumberInput value={row.bookingNumber} onChange={bookingNumber => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, bookingNumber } : item))} /><textarea value={row.detail} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, detail: e.target.value } : item))} placeholder="รายละเอียด" rows={2} /><textarea value={row.note} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, note: e.target.value } : item))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" rows={2} /><select value={row.status} onChange={e => setReportRows(rows => rows.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}><option value="saved">ครบ</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{reportRows.length > 1 && <button className="secondary" onClick={() => setReportRows(rows => rows.filter((_, i) => i !== index))}>ลบรายการนี้</button>}</div>)}</div>
+              <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", alignItems: "center", marginTop: "var(--sp-6)" }}><label className="secondary" style={{ cursor: "pointer" }}><Camera size={15} className="i-inline" aria-hidden="true" /> ถ่ายรูป (ไม่บังคับ)<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={captureReportPhoto} /></label><button className="secondary" onClick={shareReportToLine}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> ส่ง LINE (ไม่บังคับ)</button>{reportPhotoPreview && <span className="muted">มีรูปในเครื่องแล้ว</span>}</div>
+              {reportPhotoPreview && <img src={reportPhotoPreview} alt="รูปประกอบรายงาน" style={{ maxWidth: "100%", maxHeight: "220px", objectFit: "contain", borderRadius: "8px", marginTop: "var(--sp-4)" }} />}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", marginTop: "var(--sp-6)", flexWrap: "wrap" }}><button className="secondary" onClick={() => setReportRows(rows => [...rows, { bookingNumber: "", detail: "", note: "", status: "saved" }])}>+ เพิ่มรายการ</button><div style={{ display: "flex", gap: "var(--sp-4)" }}><button className="secondary" onClick={() => setReportModal(null)}>ยกเลิก</button><button className="primary" onClick={saveStoreReports}>บันทึกทั้งหมด</button></div></div>
             </section>
           </div>
         )}
 
         {editingStoreReport && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 1500, display: "grid", placeItems: "center", padding: "16px" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1500, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
             <section className="panel" style={{ width: "min(620px, 100%)" }}>
               <div className="panel-head"><h2>แก้ไขรายการรายงาน</h2><span>{editingStoreReport.type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}</span></div>
-              <div style={{ display: "grid", gap: "10px" }}><BookingNumberInput value={editingStoreReport.bookingNumber || ""} onChange={bookingNumber => setEditingStoreReport(item => ({ ...item, bookingNumber }))} /><textarea rows={3} value={editingStoreReport.detail || ""} onChange={e => setEditingStoreReport(item => ({ ...item, detail: e.target.value }))} placeholder="รายละเอียด" /><textarea rows={3} value={editingStoreReport.note || ""} onChange={e => setEditingStoreReport(item => ({ ...item, note: e.target.value }))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" /><select value={editingStoreReport.status || "draft"} onChange={e => setEditingStoreReport(item => ({ ...item, status: e.target.value }))}><option value="draft">ครบ</option><option value="saved">ครบ · ยืนยันแล้ว</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{editingStoreReport.confirmedAt && <textarea rows={2} value={editingStoreReport.reason || ""} onChange={e => setEditingStoreReport(item => ({ ...item, reason: e.target.value }))} placeholder="เหตุผลการแก้ไข (บังคับ เพราะยืนยันแล้ว)" />}<div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => setEditingStoreReport(null)}>ยกเลิก</button><button className="primary" onClick={saveEditedStoreReport}>บันทึกการแก้ไข</button></div></div>
+              <div style={{ display: "grid", gap: "var(--sp-5)" }}><BookingNumberInput value={editingStoreReport.bookingNumber || ""} onChange={bookingNumber => setEditingStoreReport(item => ({ ...item, bookingNumber }))} /><textarea rows={3} value={editingStoreReport.detail || ""} onChange={e => setEditingStoreReport(item => ({ ...item, detail: e.target.value }))} placeholder="รายละเอียด" /><textarea rows={3} value={editingStoreReport.note || ""} onChange={e => setEditingStoreReport(item => ({ ...item, note: e.target.value }))} placeholder="หมายเหตุ/ของไม่ครบ/รอของ" /><select value={editingStoreReport.status || "draft"} onChange={e => setEditingStoreReport(item => ({ ...item, status: e.target.value }))}><option value="draft">ครบ</option><option value="saved">ครบ · ยืนยันแล้ว</option><option value="waiting">รอของ</option><option value="partial">ของไม่ครบ</option></select>{editingStoreReport.confirmedAt && <textarea rows={2} value={editingStoreReport.reason || ""} onChange={e => setEditingStoreReport(item => ({ ...item, reason: e.target.value }))} placeholder="เหตุผลการแก้ไข (บังคับ เพราะยืนยันแล้ว)" />}<div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-4)" }}><button className="secondary" onClick={() => setEditingStoreReport(null)}>ยกเลิก</button><button className="primary" onClick={saveEditedStoreReport}>บันทึกการแก้ไข</button></div></div>
             </section>
           </div>
         )}
@@ -6168,7 +6199,7 @@ export default function App() {
             order.checkInAt && { id: `${order.id}-checkin`, at: order.checkInAt, title: "ถึงจุดจัดส่ง", note: order.customerName || order.id },
             order.deliveredAt && { id: `${order.id}-delivered`, at: order.updatedAt || order.deliveredAt, title: "จัดส่งสำเร็จ", note: order.customerName || order.id }
           ].filter(Boolean)).sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)).slice(0, 12);
-          return <div style={{ display: "grid", gap: "16px" }}><section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard
+          return <div style={{ display: "grid", gap: "var(--sp-7)" }}><section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard
             cards={[
               { value: driverTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่รับไว้วันนี้", tone: "is-primary" },
               { value: waiting, label: "รอจัดส่ง", detail: "รับงานแล้วและรอออกส่ง", tone: "is-amber" },
@@ -6192,53 +6223,53 @@ export default function App() {
             recentOrders={recentOrders} activities={activities}
             information="KPI คนขับคำนวณจากออเดอร์และงานวิ่งที่ผูกกับบัญชีคนขับปัจจุบันแบบเรียลไทม์ โดยไม่เปลี่ยนขั้นตอนรับงานหรือจัดส่ง"
             progressTitle="ความคืบหน้างานจัดส่งวันนี้" progressLabel="เสร็จแล้ว"
-          /></section><section className="panel" style={{ borderLeft: "4px solid #f59e0b" }}>
+          /></section><section className="panel" style={{ borderLeft: "4px solid var(--c-warn)" }}>
             <div className="panel-head"><h2>คะแนนจากลูกค้า</h2><span>ใช้รีวิวล่าสุดของแต่ละออเดอร์</span></div>
-            {driverReview ? <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}><strong style={{ fontSize: "28px", color: "#a16207" }}>★ {driverReview.average}</strong><span className="muted">จาก {driverReview.count} รีวิว</span></div>
-              {driverReview.latestFeedback && <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px" }}><b>ข้อเสนอแนะล่าสุด</b><p style={{ margin: "5px 0 0" }}>{driverReview.latestFeedback}</p></div>}
+            {driverReview ? <div style={{ display: "grid", gap: "var(--sp-4)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-5)", flexWrap: "wrap" }}><strong style={{ fontSize: "28px", color: "var(--c-warn-dark)" }}><Star size={15} className="i-inline" aria-hidden="true" /> {driverReview.average}</strong><span className="muted">จาก {driverReview.count} รีวิว</span></div>
+              {driverReview.latestFeedback && <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-5)" }}><b>ข้อเสนอแนะล่าสุด</b><p style={{ margin: "var(--sp-2) 0 0" }}>{driverReview.latestFeedback}</p></div>}
             </div> : <p className="muted" style={{ margin: 0 }}>ยังไม่มีรีวิวจากลูกค้า</p>}
           </section></div>;
         })()}
 
         {(["sales", "admin"].includes(auth.role)) && displayTab === "driver-ratings" && (
           <section className="panel role-workspace ops-workspace">
-            <div className="panel-head"><div><h2 style={{ margin: 0 }}>⭐ KPI คะแนนคนขับจากลูกค้า</h2><span>รีวิวล่าสุดของแต่ละออเดอร์เท่านั้น · รีวิวเก็บประวัติไว้ในระบบ</span></div><span>{allTimeDriverScore.length} คน</span></div>
-            {allTimeDriverScore.length ? <div className="scroll-box" style={{ display: "grid", gap: "10px" }}>
-              {allTimeDriverScore.map((driver) => <article key={driver.id} style={{ border: "1px solid #e5e7eb", borderRadius: "9px", padding: "12px", display: "grid", gap: "7px", background: "#fffdf5" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline", flexWrap: "wrap" }}><b>{driver.name}</b><strong style={{ color: "#a16207", fontSize: "20px" }}>★ {driver.average}</strong></div>
+            <div className="panel-head"><div><h2 style={{ margin: 0 }}><Star size={15} className="i-inline" aria-hidden="true" /> KPI คะแนนคนขับจากลูกค้า</h2><span>รีวิวล่าสุดของแต่ละออเดอร์เท่านั้น · รีวิวเก็บประวัติไว้ในระบบ</span></div><span>{allTimeDriverScore.length} คน</span></div>
+            {allTimeDriverScore.length ? <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-5)" }}>
+              {allTimeDriverScore.map((driver) => <article key={driver.id} style={{ border: "1px solid var(--c-line)", borderRadius: "9px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-3)", background: "var(--c-warn-bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "baseline", flexWrap: "wrap" }}><b>{driver.name}</b><strong style={{ color: "var(--c-warn-dark)", fontSize: "20px" }}><Star size={15} className="i-inline" aria-hidden="true" /> {driver.average}</strong></div>
                 <small className="muted">{driver.count} รีวิวที่มีผลต่อ KPI · รหัสคนขับ {driver.id}</small>
-                {driver.latestFeedback ? <div style={{ color: "#374151", background: "white", borderRadius: "6px", padding: "8px" }}>“{driver.latestFeedback}”</div> : <small className="muted">ไม่มีข้อเสนอแนะ</small>}
+                {driver.latestFeedback ? <div style={{ color: "var(--c-text-strong)", background: "white", borderRadius: "6px", padding: "var(--sp-4)" }}>“{driver.latestFeedback}”</div> : <small className="muted">ไม่มีข้อเสนอแนะ</small>}
               </article>)}
             </div> : <div className="empty"><Star size={22} /> ยังไม่มีคะแนนจากลูกค้า</div>}
           </section>
         )}
 
         {auth.role === "driver" && displayTab === "driver" && (
-          <div style={{ display: "grid", gap: "16px" }}>
+          <div style={{ display: "grid", gap: "var(--sp-7)" }}>
             {/* ส่วนข้อมูลคนขับ */}
-            <section className="panel" style={{ background: "#f0fdfc", borderLeft: "4px solid #22c5bd" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+            <section className="panel" style={{ background: "var(--c-brand-bg)", borderLeft: "4px solid var(--c-brand-light)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-7)", flexWrap: "wrap" }}>
                 <div>
                   {drivers.filter(driver => driver.id === driverId).map(driver => (
                     <div key={driver.id}>
-                      <b style={{ fontSize: "16px", display: "block" }}>👤 {driver.name}</b>
-                      <small style={{ color: "#666" }}>🚗 {driver.plate} · 📍 {driver.zone}</small>
+                      <b style={{ fontSize: "16px", display: "block" }}><User size={15} className="i-inline" aria-hidden="true" /> {driver.name}</b>
+                      <small style={{ color: "var(--c-text-muted)" }}><Car size={15} className="i-inline" aria-hidden="true" /> {driver.plate} · 📍 {driver.zone}</small>
                     </div>
                   ))}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <b style={{ fontSize: "20px", color: "#22c5bd", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
+                  <b style={{ fontSize: "20px", color: "var(--c-brand-light)", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+              <div style={{ display: "flex", gap: "var(--sp-4)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
                 <button
                   className={notificationPermission === "granted" ? "primary" : "secondary"}
                   onClick={() => ensureWebPushForDriver(state.auth, { showStatus: true })}
                 >
                   <BellRing size={16} /> {notificationPermission === "granted" ? "แจ้งเตือนเปิดอยู่" : "เปิดแจ้งเตือนออเดอร์"}
                 </button>
-                <small style={{ color: notificationPermission === "denied" ? "#b91c1c" : "#69756d" }}>
+                <small style={{ color: notificationPermission === "denied" ? "var(--c-danger-dark)" : "var(--c-text-muted)" }}>
                   {pushStatus || (notificationPermission === "denied"
                     ? "เบราว์เซอร์บล็อกการแจ้งเตือน ต้องปลดบล็อกใน Settings ของเว็บ"
                     : "รับแจ้งเตือนเมื่อมีออเดอร์ใหม่ แม้ไม่ได้เปิดหน้าแอพอยู่")}
@@ -6246,34 +6277,34 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel" style={{ borderLeft: "4px solid #2563eb" }}>
-              <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-info)" }}>
+              <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-6)" }}>
                 <div>
                   <h2 style={{ margin: 0 }}>รายงานการทำงานวันนี้</h2>
                   <span>{todayServiceDate}</span>
                 </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowDriverDailyReport(v => !v)}>
+                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowDriverDailyReport(v => !v)}>
                     <FileText size={14} /> {showDriverDailyReport ? "ซ่อนรายงาน" : "ดูรายงาน"}
                   </button>
-                  <button className="primary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => copyToClipboard(buildDriverDailyWorkReport())}>
+                  <button className="primary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => copyToClipboard(buildDriverDailyWorkReport())}>
                     <ClipboardList size={14} /> คัดลอก
                   </button>
                 </div>
               </div>
-              <p className="muted" style={{ margin: "10px 0 0" }}>
+              <p className="muted" style={{ margin: "var(--sp-5) 0 0" }}>
                 COD วันนี้ ฿{money(driverTodayWorkSummary.cod)} · COD ส่งสำเร็จ ฿{money(driverTodayWorkSummary.codDone)}
               </p>
               {showDriverDailyReport && (
-                <pre style={{ margin: "12px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", color: "#374151", fontSize: "12px", lineHeight: 1.6 }}>
+                <pre style={{ margin: "var(--sp-6) 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-6)", color: "var(--c-text-strong)", fontSize: "12px", lineHeight: 1.6 }}>
                   {buildDriverDailyWorkReport()}
                 </pre>
               )}
             </section>
 
-            <section className="panel" style={{ borderLeft: "4px solid #0e7490" }}>
-              <div className="panel-head"><h2>🛣️ งานวิ่งสาขา / งานวิ่งไกล</h2><span>{activeDriverRouteTasks.length} งานกำลังทำ</span></div>
-              <div style={{ display: "grid", gap: "12px" }}>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-brand-cyan)" }}>
+              <div className="panel-head"><h2><Route size={15} className="i-inline" aria-hidden="true" /> งานวิ่งสาขา / งานวิ่งไกล</h2><span>{activeDriverRouteTasks.length} งานกำลังทำ</span></div>
+              <div style={{ display: "grid", gap: "var(--sp-6)" }}>
                 <div className="segmented" style={{ marginBottom: 0 }}>
                   <button className={routeTaskForm.type === "branch" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "branch", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งสาขา</button>
                   <button className={routeTaskForm.type === "long" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "long", origin: p.origin || "สาขาสำนักงานใหญ่", longDirection: p.longDirection || "outbound" }))}>วิ่งไกล</button>
@@ -6305,8 +6336,8 @@ export default function App() {
                       {BRANCH_ROUTE_STOPS.map(stop => <option key={stop} value={stop}>ปลายทาง: {stop}</option>)}
                     </select>
                   ) : (
-                    <div style={{ display: "grid", gap: "8px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
-                      <b style={{ fontSize: "12px", color: "#374151" }}>
+                    <div style={{ display: "grid", gap: "var(--sp-4)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)" }}>
+                      <b style={{ fontSize: "12px", color: "var(--c-text-strong)" }}>
                         ปลายทาง{routeTaskForm.longDirection === "return" ? "ขากลับ: เลือกตามลำดับ" : "ขาไป: เลือกได้ 1 จุด หรือรวม 2 จุดตามลำดับ"}
                       </b>
                       {[0, 1].map(index => {
@@ -6335,29 +6366,29 @@ export default function App() {
                 <button className="primary wide" onClick={createRouteTask}><MapPinned size={18} /> เริ่มงานวิ่ง</button>
 
                 {activeDriverRouteTasks.length > 0 && (
-                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "12px" }}>
+                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "var(--sp-6)" }}>
                     {activeDriverRouteTasks.map(task => {
-                      const taskColor = routeTaskStatusColor[task.status] || "#1d4ed8";
+                      const taskColor = routeTaskStatusColor[task.status] || "var(--c-info-dark)";
                       return (
-                        <div key={task.id} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${taskColor}`, display: "grid", gap: "10px" }}>
+                        <div key={task.id} style={{ background: "var(--c-info-bg)", padding: "var(--sp-6)", borderRadius: "8px", border: `2px solid ${taskColor}`, display: "grid", gap: "var(--sp-5)" }}>
                           <div>
                             <b style={{ color: taskColor, display: "block" }}>{task.type === "long" ? `งานวิ่งไกล${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : "งานวิ่งสาขา"} · {task.id}</b>
-                            <small style={{ color: "#374151" }}>{task.origin} → {task.destinationSummary}</small><br />
-                            {task.note && <small style={{ color: "#6b7280" }}>{task.note}</small>}
+                            <small style={{ color: "var(--c-text-strong)" }}>{task.origin} → {task.destinationSummary}</small><br />
+                            {task.note && <small style={{ color: "var(--c-text-muted)" }}>{task.note}</small>}
                           </div>
-                          <button className="secondary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}>📍 เช็คอินระหว่างทาง</button>
-                          <div style={{ display: "grid", gap: "8px" }}>
+                          <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}><MapPin size={15} className="i-inline" aria-hidden="true" /> เช็คอินระหว่างทาง</button>
+                          <div style={{ display: "grid", gap: "var(--sp-4)" }}>
                             {(task.stops || []).map(stop => (
-                              <div key={stop.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", display: "grid", gap: "8px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+                              <div key={stop.id} style={{ background: "white", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-4)" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "baseline" }}>
                                   <b>{stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name}</b>
-                                  <small style={{ color: stop.checkedInAt ? "#166562" : "#92400e", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
+                                  <small style={{ color: stop.checkedInAt ? "var(--c-brand-dark)" : "var(--c-warn-deep)", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
                                 </div>
-                                {stop.checkedInAt && <small style={{ color: "#6b7280" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
-                                {stop.note && <small style={{ color: "#6b7280" }}>{stop.note}</small>}
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                                  <button className="primary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
-                                  <label className="secondary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {stop.checkedInAt && <small style={{ color: "var(--c-text-muted)" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
+                                {stop.note && <small style={{ color: "var(--c-text-muted)" }}>{stop.note}</small>}
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-4)" }}>
+                                  <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
+                                  <label className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                     📷 ถ่ายรูป
                                     <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
                                       const file = e.target.files?.[0];
@@ -6367,19 +6398,19 @@ export default function App() {
                                   </label>
                                 </div>
                                 {(stop.photo || stop.checkedInAt) && (
-                                  <button className="primary" style={{ padding: "8px", fontSize: "12px", minHeight: "44px", background: "#2563eb" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
+                                  <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", background: "var(--c-info)" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
                                     💬 แชร์ LINE จุดนี้
                                   </button>
                                 )}
                                 {stop.photo && (
-                                  <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid #e5e7eb" }}>
+                                  <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid var(--c-line)" }}>
                                     <img src={stop.photo} alt="route check-in" style={{ width: "100%", height: "auto" }} />
                                   </div>
                                 )}
                               </div>
                             ))}
                           </div>
-                          <button className="secondary" style={{ padding: "9px", fontSize: "12px", minHeight: "44px", background: "#f0fdfc", color: "#166562" }} onClick={() => completeRouteTask(task)}>✅ จบงานวิ่ง</button>
+                          <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", background: "var(--c-brand-bg)", color: "var(--c-brand-dark)" }} onClick={() => completeRouteTask(task)}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> จบงานวิ่ง</button>
                         </div>
                       );
                     })}
@@ -6395,51 +6426,50 @@ export default function App() {
                 && !o.driverId
                 && isDriverQueueVisibleToDriver(o, todayServiceDate)
                 && !pendingOrderUpdatesRef.current.has(o.id));
-              console.log("📋 Driver page - Total orders:", orders.length, "Pending:", pending.length, "driverId:", driverId);
               return (
                 <section className="panel">
-                  <div className="panel-head"><h2>📦 รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
-                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "12px" }}>
+                  <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
+                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "var(--sp-6)" }}>
                     {pending.map(order => {
                       const salesName = order.salesName || "ไม่มี";
                       const salesPhone = order.salesPhone || "-";
                       return (
-                        <div key={order.id} style={{ background: "#fef9e7", padding: "12px", borderRadius: "8px", border: "2px solid #f59e0b", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div key={order.id} style={{ background: "var(--c-warn-bg)", padding: "var(--sp-6)", borderRadius: "8px", border: "2px solid var(--c-warn)", display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
                         <div>
-                          <b style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>{order.id}</b>
-                          <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
-                          {order.workflowType === "direct_driver" && <span className="status-chip" style={{ display: "inline-flex", marginTop: "6px", color: "#991b1b", background: "#fee2e2", border: "2px solid #dc2626", fontWeight: 900 }}>🚨 เร่งด่วน · ส่งตรงคนขับ</span>}
-                          <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
-                          <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
-                          <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                          <b style={{ fontSize: "14px", display: "block", marginBottom: "var(--sp-2)" }}>{order.id}</b>
+                          <b style={{ fontSize: "15px", color: "var(--c-text-heading)", display: "block" }}>{order.customerName}</b>
+                          {order.workflowType === "direct_driver" && <span className="status-chip" style={{ display: "inline-flex", marginTop: "var(--sp-3)", color: "var(--c-danger-deep)", background: "var(--c-danger-bg-strong)", border: "2px solid var(--c-danger)", fontWeight: 900 }}><Siren size={15} className="i-inline" aria-hidden="true" /> เร่งด่วน · ส่งตรงคนขับ</span>}
+                          <small style={{ color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> {order.zone}</small><br/>
+                          <small style={{ color: "var(--c-text-muted)" }}>⏰ {order.window}</small><br/>
+                          <small style={{ color: "var(--c-text-muted)" }}><Package size={15} className="i-inline" aria-hidden="true" /> {order.boxes} กล่อง · ฿{money(order.cod)}</small>
                         </div>
 
                         {order.salesNote && (
-                          <div style={{ background: "#fff7ed", padding: "8px", borderRadius: "6px", border: "1px solid #fdba74" }}>
-                            <small style={{ color: "#9a3412", display: "block", fontWeight: "bold" }}>📝 หมายเหตุจากฝ่ายขาย</small>
-                            <small style={{ color: "#7c2d12", display: "block", whiteSpace: "pre-wrap" }}>{order.salesNote}</small>
+                          <div style={{ background: "var(--c-accent-bg)", padding: "var(--sp-4)", borderRadius: "6px", border: "1px solid var(--c-accent-border)" }}>
+                            <small style={{ color: "var(--c-accent-deep)", display: "block", fontWeight: "bold" }}><FileText size={15} className="i-inline" aria-hidden="true" /> หมายเหตุจากฝ่ายขาย</small>
+                            <small style={{ color: "var(--c-accent-deep)", display: "block", whiteSpace: "pre-wrap" }}>{order.salesNote}</small>
                           </div>
                         )}
                         
-                        <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #fcd34d" }}>
-                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 ลูกค้า: {order.customerPhone}</small>
-                          <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
-                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>🗺️ แผนที่</a>}
+                        <div style={{ background: "white", padding: "var(--sp-4)", borderRadius: "6px", border: "1px solid var(--c-warn-light)" }}>
+                          <small style={{ color: "var(--c-text-muted)", display: "block", fontWeight: "bold" }}><Phone size={15} className="i-inline" aria-hidden="true" /> ลูกค้า: {order.customerPhone}</small>
+                          <div style={{ display: "flex", gap: "var(--sp-3)", marginTop: "var(--sp-3)" }}>
+                            <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "var(--sp-3)", fontSize: "11px", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", textDecoration: "none" }}><Smartphone size={15} className="i-inline" aria-hidden="true" /> โทร</a>
+                            {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "var(--sp-3)", fontSize: "11px", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}><MapIcon size={15} className="i-inline" aria-hidden="true" /> แผนที่</a>}
                           </div>
                         </div>
                         
-                        <div style={{ background: "#f3e8ff", padding: "8px", borderRadius: "6px", border: "1px solid #d8b4fe" }}>
-                          <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>ฝ่ายขาย: {salesName}</small>
-                          <small style={{ color: "#666", display: "block" }}>{salesPhone}</small>
-                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "6px", fontSize: "11px", minHeight: "44px", marginTop: "4px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", textDecoration: "none" }}>📞 โทรหาฝ่ายขาย</a>
+                        <div style={{ background: "var(--c-highlight-bg)", padding: "var(--sp-4)", borderRadius: "6px", border: "1px solid var(--c-highlight-border)" }}>
+                          <small style={{ color: "var(--c-text-muted)", display: "block", fontWeight: "bold" }}>ฝ่ายขาย: {salesName}</small>
+                          <small style={{ color: "var(--c-text-muted)", display: "block" }}>{salesPhone}</small>
+                          <a href={`tel:${salesPhone}`} className="secondary" style={{ width: "100%", padding: "var(--sp-3)", fontSize: "11px", minHeight: "44px", marginTop: "var(--sp-2)", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", textDecoration: "none" }}><Phone size={15} className="i-inline" aria-hidden="true" /> โทรหาฝ่ายขาย</a>
                         </div>
                         
-                        {order.address && <small style={{ color: "#999", borderTop: "1px solid #fcd34d", paddingTop: "8px" }}>📬 {order.address}</small>}
+                        {order.address && <small style={{ color: "var(--c-text-faint)", borderTop: "1px solid var(--c-warn-light)", paddingTop: "var(--sp-4)" }}><Inbox size={15} className="i-inline" aria-hidden="true" /> {order.address}</small>}
                         
                         <button 
                           className="primary" 
-                          style={{ width: "100%", padding: "10px", fontWeight: "bold", fontSize: "13px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
+                          style={{ width: "100%", padding: "var(--sp-5)", fontWeight: "bold", fontSize: "13px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
                           disabled={pendingOrderUpdatesRef.current.has(order.id)}
                           onClick={() => {
                             acceptDriverDeliveryOrder(order);
@@ -6455,43 +6485,43 @@ export default function App() {
 	            {/* ส่วนออเดอร์ที่รับแล้ว (In-Progress Orders) */}
 	            {driverDeliveryOrders.length > 0 && (
 	              <section className="panel">
-	                <div className="panel-head"><h2>🚗 ลำดับส่งของฉัน</h2><span>{driverDeliveryOrders.length} งาน</span></div>
+	                <div className="panel-head"><h2><Car size={15} className="i-inline" aria-hidden="true" /> ลำดับส่งของฉัน</h2><span>{driverDeliveryOrders.length} งาน</span></div>
 	                <div className="driver-sequence-help">ลากการ์ดเพื่อจัดลำดับได้ · งานที่กำลังจัดส่งจะถูกตรึงบนสุด · งานใหม่จะต่อท้ายอัตโนมัติ</div>
-	                <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
+	                <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "var(--sp-6)" }}>
 	                  {driverDeliveryOrders.map((order, sequenceIndex) => (
-	                    <div key={order.id} className={`driver-sequence-card ${order.status === "กำลังจัดส่ง" ? "locked" : ""}`} draggable={order.status === "กำลังส่ง"} onDragStart={() => setDriverSequenceDragId(order.id)} onDragOver={(event) => { if (order.status === "กำลังส่ง") event.preventDefault(); }} onDrop={() => { if (order.status === "กำลังส่ง") dropDriverSequence(order.id); }} style={{ background: "#f0f9ff", padding: "12px", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "10px" }}>
-                      <div className="driver-sequence-bar">{order.status === "กำลังจัดส่ง" ? <span>📍 กำลังนำส่ง · ตรึงลำดับ</span> : <><span>☰ ลำดับ {sequenceIndex - driverCurrentDeliveryOrders.length + 1}</span><div><button className="secondary" disabled={sequenceIndex === driverCurrentDeliveryOrders.length} onClick={() => moveDriverSequence(order.id, -1)}>↑</button><button className="secondary" disabled={sequenceIndex === driverDeliveryOrders.length - 1} onClick={() => moveDriverSequence(order.id, 1)}>↓</button></div></>}</div>
+	                    <div key={order.id} className={`driver-sequence-card ${order.status === "กำลังจัดส่ง" ? "locked" : ""}`} draggable={order.status === "กำลังส่ง"} onDragStart={() => setDriverSequenceDragId(order.id)} onDragOver={(event) => { if (order.status === "กำลังส่ง") event.preventDefault(); }} onDrop={() => { if (order.status === "กำลังส่ง") dropDriverSequence(order.id); }} style={{ background: "var(--c-info-bg)", padding: "var(--sp-6)", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
+                      <div className="driver-sequence-bar">{order.status === "กำลังจัดส่ง" ? <span><MapPin size={15} className="i-inline" aria-hidden="true" /> กำลังนำส่ง · ตรึงลำดับ</span> : <><span><Menu size={15} className="i-inline" aria-hidden="true" /> ลำดับ {sequenceIndex - driverCurrentDeliveryOrders.length + 1}</span><div><button className="secondary" disabled={sequenceIndex === driverCurrentDeliveryOrders.length} onClick={() => moveDriverSequence(order.id, -1)}>↑</button><button className="secondary" disabled={sequenceIndex === driverDeliveryOrders.length - 1} onClick={() => moveDriverSequence(order.id, 1)}>↓</button></div></>}</div>
                       <div>
-                        <b style={{ fontSize: "14px", display: "block", marginBottom: "4px", color: statusColor[order.status] }}>{order.id}</b>
-                        <b style={{ fontSize: "15px", color: "#1f2937", display: "block" }}>{order.customerName}</b>
-                        <small style={{ color: "#666" }}>📍 {order.zone}</small><br/>
-                        <small style={{ color: "#666" }}>⏰ {order.window}</small><br/>
-                        <small style={{ color: "#666" }}>📦 {order.boxes} กล่อง · ฿{money(order.cod)}</small>
+                        <b style={{ fontSize: "14px", display: "block", marginBottom: "var(--sp-2)", color: statusColor[order.status] }}>{order.id}</b>
+                        <b style={{ fontSize: "15px", color: "var(--c-text-heading)", display: "block" }}>{order.customerName}</b>
+                        <small style={{ color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> {order.zone}</small><br/>
+                        <small style={{ color: "var(--c-text-muted)" }}>⏰ {order.window}</small><br/>
+                        <small style={{ color: "var(--c-text-muted)" }}><Package size={15} className="i-inline" aria-hidden="true" /> {order.boxes} กล่อง · ฿{money(order.cod)}</small>
                       </div>
                       
-                      <div style={{ background: "white", padding: "8px", borderRadius: "6px", border: "1px solid #ddd" }}>
-                        <small style={{ color: "#666", display: "block", fontWeight: "bold" }}>📞 {order.customerPhone}</small>
-                        <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                          <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center", textDecoration: "none" }}>📱 โทร</a>
-                          {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "6px", fontSize: "11px", textAlign: "center" }}>🗺️ แผนที่</a>}
+                      <div style={{ background: "white", padding: "var(--sp-4)", borderRadius: "6px", border: "1px solid var(--c-line)" }}>
+                        <small style={{ color: "var(--c-text-muted)", display: "block", fontWeight: "bold" }}><Phone size={15} className="i-inline" aria-hidden="true" /> {order.customerPhone}</small>
+                        <div style={{ display: "flex", gap: "var(--sp-3)", marginTop: "var(--sp-3)" }}>
+                          <a href={`tel:${order.customerPhone}`} className="secondary" style={{ flex: 1, padding: "var(--sp-3)", fontSize: "11px", textAlign: "center", textDecoration: "none" }}><Smartphone size={15} className="i-inline" aria-hidden="true" /> โทร</a>
+                          {order.mapUrl && <a href={order.mapUrl} target="_blank" rel="noreferrer" className="secondary" style={{ flex: 1, padding: "var(--sp-3)", fontSize: "11px", textAlign: "center" }}><MapIcon size={15} className="i-inline" aria-hidden="true" /> แผนที่</a>}
                         </div>
                       </div>
                       
-                      {order.address && <small style={{ color: "#999", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "8px" }}>📬 {order.address}</small>}
+                      {order.address && <small style={{ color: "var(--c-text-faint)", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "var(--sp-4)" }}><Inbox size={15} className="i-inline" aria-hidden="true" /> {order.address}</small>}
 
-                      <div style={{ background: "#fffdf5", border: "1px solid #f5d78e", borderRadius: "8px", padding: "9px", display: "grid", gap: "6px", justifyItems: "center" }}>
-                        <b style={{ color: "#8a5a00", fontSize: "12px" }}>QR รีวิวออเดอร์นี้</b>
+                      <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)", justifyItems: "center" }}>
+                        <b style={{ color: "var(--c-warn-dark)", fontSize: "12px" }}>QR รีวิวออเดอร์นี้</b>
                         <OrderReviewQrCode orderId={order.id} />
-                        <small style={{ color: "#6b7280", textAlign: "center" }}>ลูกค้าสแกนหลังรับสินค้า · กรณีของไม่ครบก็รีวิวได้</small>
+                        <small style={{ color: "var(--c-text-muted)", textAlign: "center" }}>ลูกค้าสแกนหลังรับสินค้า · กรณีของไม่ครบก็รีวิวได้</small>
                       </div>
                       
                       {/* Status Actions */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-4)" }}>
                         {order.status === "กำลังส่ง" && (
                           <>
 	                            <button
 	                              className="primary"
-	                              style={{ padding: "8px", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
 	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
 	                              onClick={async () => {
 	                                setSyncStatus(`⏳ กำลังบันทึกว่าถึงจุดหมาย "${order.id}"...`);
@@ -6499,29 +6529,29 @@ export default function App() {
 	                                if (!saved.ok) return setSyncStatus(`❌ บันทึกไปถึงแล้วไม่สำเร็จ: ${saved.error}`);
 	                                recordDriverCheckInLocation({ ...order, status: "กำลังจัดส่ง" });
 	                                setSyncStatus(`✅ ถึงจุดหมายแล้ว กรุณาถ่ายรูป POD 1–5 รูป`);
-	                              }}>🚗 ไปถึงแล้ว</button>
+	                              }}><Car size={15} className="i-inline" aria-hidden="true" /> ไปถึงแล้ว</button>
 	                            <button
 	                              className="secondary"
-	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
 	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                              onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
+                              onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && (
                           <>
-	                            <div style={{ gridColumn: "1 / -1", display: "grid", gap: "7px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "9px" }}>
-	                              <b style={{ color: "#1e3a8a", fontSize: "12px" }}>1. ตรวจสอบสินค้าและบันทึกหมายเหตุ *</b>
+	                            <div style={{ gridColumn: "1 / -1", display: "grid", gap: "var(--sp-3)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "8px", padding: "var(--sp-4)" }}>
+	                              <b style={{ color: "var(--c-info-deep)", fontSize: "12px" }}>1. ตรวจสอบสินค้าและบันทึกหมายเหตุ *</b>
 	                              <select value={driverDeliveryCompleteness[order.id] || ""} onChange={event => setDriverDeliveryCompleteness(previous => ({ ...previous, [order.id]: event.target.value }))} disabled={(podPreviewsByOrder[order.id] || []).length > 0}>
 	                                <option value="">-- เลือกผลตรวจสินค้า --</option>
 	                                <option value="complete">✅ สินค้าครบ</option>
 	                                <option value="incomplete">⚠️ สินค้าไม่ครบ / ต้องส่งแก้ไข</option>
 	                              </select>
 	                              <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={event => setDriverNoteDrafts(drafts => ({ ...drafts, [order.id]: event.target.value }))} placeholder="หมายเหตุชัดเจน เช่น ครบทุกกล่อง หรือขาดสินค้าอะไร จำนวนเท่าไร" rows={2} disabled={(podPreviewsByOrder[order.id] || []).length > 0} />
-	                              <small style={{ color: "#1e40af" }}>{requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) ? "กรณีสินค้าไม่ครบ ต้องกรอกหมายเหตุก่อนถ่ายรูป/ส่ง LINE" : "เลือกผลตรวจสินค้าแล้วถ่ายรูป/ส่ง LINE ได้เลย"}</small>
+	                              <small style={{ color: "var(--c-info-dark)" }}>{requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) ? "กรณีสินค้าไม่ครบ ต้องกรอกหมายเหตุก่อนถ่ายรูป/ส่ง LINE" : "เลือกผลตรวจสินค้าแล้วถ่ายรูป/ส่ง LINE ได้เลย"}</small>
 	                            </div>
 	                            <label 
 	                              className="primary" 
-	                              style={{ padding: "8px", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "#176b6b", color: "white", opacity: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? 0.55 : 1 }}>
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", cursor: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: "8px", background: "var(--c-brand-dark)", color: "white", opacity: !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()) ? 0.55 : 1 }}>
 	                              2. 📷 ถ่ายรูป ({(podPreviewsByOrder[order.id] || []).length}/5)
 	                              <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} disabled={(podPreviewsByOrder[order.id] || []).length >= 5 || !driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())} onChange={(e) => {
 	                                if (e.target.files?.length) uploadPod(order, e.target.files);
@@ -6530,15 +6560,15 @@ export default function App() {
 	                            </label>
 	                            <button
 	                              className="secondary"
-	                              style={{ padding: "8px", fontSize: "12px", background: "#fee2e2", color: "#991b1b", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
 	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                              onClick={() => cancelDriverDeliveryOrder(order)}>❌ ยกเลิก</button>
+                              onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
                           </>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && (
 	                          <button
 	                            className="primary"
-	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#2563eb" }}
+	                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1", background: "var(--c-info)" }}
 	                            disabled={!driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())}
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
 	                          >{driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
@@ -6546,31 +6576,31 @@ export default function App() {
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button
 	                            className="primary"
-	                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1", background: "#056e96", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+	                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1", background: "var(--c-info-dark)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
 	                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
 	                            onClick={() => {
 	                              pendingOrderUpdatesRef.current.add(order.id);
 	                              updateOrder(order.id, { status: "ส่งสำเร็จ", queueStatus: "completed", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "", complaint: "" });
 	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
-	                            }}>✅ ส่งสำเร็จแล้ว</button>
+	                            }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> ส่งสำเร็จแล้ว</button>
 	                        )}
                         {order.status === "ส่งสำเร็จ" && (
                           <button
                             className="secondary"
-                            style={{ padding: "8px", fontSize: "12px", gridColumn: "1 / -1" }}
+                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1" }}
                             onClick={() => {
                               alert(`✅ ส่งสำเร็จแล้ว\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ✅ มี\n\nสามารถรับอีกงานได้`);
-                            }}>🏠 ส่งเสร็จสิ้น</button>
+                            }}><Home size={15} className="i-inline" aria-hidden="true" /> ส่งเสร็จสิ้น</button>
                         )}
                       </div>
 
                       {/* Photo Preview */}
                       {(podPreviewsByOrder[order.id] || []).length > 0 && (
-                        <div style={{ marginTop: "8px" }}><b style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#166562" }}>📷 รูป POD {(podPreviewsByOrder[order.id] || []).length}/5</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "6px" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ borderRadius: "6px", overflow: "hidden", border: "2px solid #22c5bd", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>)}</div></div>
+                        <div style={{ marginTop: "var(--sp-4)" }}><b style={{ display: "block", marginBottom: "var(--sp-3)", fontSize: "12px", color: "var(--c-brand-dark)" }}><Camera size={15} className="i-inline" aria-hidden="true" /> รูป POD {(podPreviewsByOrder[order.id] || []).length}/5</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "var(--sp-3)" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ borderRadius: "6px", overflow: "hidden", border: "2px solid var(--c-brand-light)", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>)}</div></div>
                       )}
                       
                       {order.status === "ส่งสำเร็จ" && (
-                        <div style={{ background: "#f0fdfc", padding: "6px", borderRadius: "4px", fontSize: "11px", color: "#166562", fontWeight: "bold", textAlign: "center" }}>
+                        <div style={{ background: "var(--c-brand-bg)", padding: "var(--sp-3)", borderRadius: "4px", fontSize: "11px", color: "var(--c-brand-dark)", fontWeight: "bold", textAlign: "center" }}>
                           ✅ {order.deliveredAt}
                         </div>
                       )}
@@ -6582,13 +6612,13 @@ export default function App() {
 
 	            {/* สรุป/ประวัติส่งสำเร็จประจำวัน */}
 	            {(driverTodayCompletedOrders.length > 0 || driverTodayCompletedRouteTasks.length > 0 || orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0) && (
-	              <section className="panel" style={{ background: "#f8fafc" }}>
-	                <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+	              <section className="panel" style={{ background: "var(--c-surface-subtle)" }}>
+	                <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-6)" }}>
 	                  <div>
-	                    <h2 style={{ margin: 0 }}>✅ ประวัติส่งสำเร็จวันนี้</h2>
+	                    <h2 style={{ margin: 0 }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> ประวัติส่งสำเร็จวันนี้</h2>
 	                    <span>ออเดอร์ {driverTodayCompletedOrders.length} · งานวิ่ง {driverTodayCompletedRouteTasks.length}</span>
 	                  </div>
-	                  <button className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setShowDeliveredHistory(v => !v)}>
+	                  <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowDeliveredHistory(v => !v)}>
 	                    {showDeliveredHistory ? "ซ่อนย้อนหลัง" : "ดูย้อนหลัง"}
 	                  </button>
 	                </div>
@@ -6603,7 +6633,7 @@ export default function App() {
 	                  const deliveredHistory = deliveredAll.filter(o => !isTodayOrder(o));
 	                  const codAll = deliveredAll.reduce((sum, o) => sum + Number(o.cod || 0), 0);
 	                  return (
-	                    <div style={{ color: "#6b7280", fontSize: "12px" }}>
+	                    <div style={{ color: "var(--c-text-muted)", fontSize: "12px" }}>
 	                      วันนี้ {deliveredToday.length + driverTodayCompletedRouteTasks.length} งาน · ย้อนหลัง {deliveredHistory.length} งาน · รวม COD ออเดอร์ ฿{money(codAll)}
 	                    </div>
 	                  );
@@ -6621,44 +6651,44 @@ export default function App() {
 	                  const visibleDelivered = showDeliveredHistory ? [...deliveredToday, ...deliveredHistory] : deliveredToday;
 	                  const visibleRouteTasks = driverTodayCompletedRouteTasks;
 	                  return (
-	                  <div className="scroll-box mobile-flow" style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "12px" }}>
+	                  <div className="scroll-box mobile-flow" style={{ marginTop: "var(--sp-5)", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "var(--sp-6)" }}>
 	                    {visibleDelivered.length === 0 && visibleRouteTasks.length === 0 && (
-	                      <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", color: "#6b7280", fontSize: "12px" }}>
+	                      <div style={{ background: "var(--c-surface)", padding: "var(--sp-6)", borderRadius: "8px", border: "1px solid var(--c-line)", color: "var(--c-text-muted)", fontSize: "12px" }}>
 	                        ยังไม่มีรายการส่งสำเร็จในวันนี้
 	                      </div>
 	                    )}
 	                    {visibleDelivered.map(order => (
-	                        <div key={order.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: "8px" }}>
+	                        <div key={order.id} style={{ background: "var(--c-surface)", padding: "var(--sp-6)", borderRadius: "8px", border: "1px solid var(--c-line)", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
 	                          <div>
 	                            <b style={{ fontSize: "14px", display: "block" }}>{order.id}</b>
-	                            <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{order.customerName}</b>
-	                            <small style={{ color: "#6b7280" }}>📍 {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
-	                            {order.deliveredAt && <small style={{ color: "#16a39c", fontWeight: "bold" }}>✅ {order.deliveredAt}</small>}
+	                            <b style={{ fontSize: "15px", display: "block", color: "var(--c-text)" }}>{order.customerName}</b>
+	                            <small style={{ color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
+	                            {order.deliveredAt && <small style={{ color: "var(--c-brand)", fontWeight: "bold" }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> {order.deliveredAt}</small>}
 	                          </div>
-	                          <div style={{ background: "#fffdf5", border: "1px solid #f5d78e", borderRadius: "8px", padding: "8px", display: "grid", justifyItems: "center", gap: "5px" }}>
-	                            <b style={{ color: "#8a5a00", fontSize: "12px" }}>ให้ลูกค้าสแกนรีวิว</b>
+	                          <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", justifyItems: "center", gap: "var(--sp-2)" }}>
+	                            <b style={{ color: "var(--c-warn-dark)", fontSize: "12px" }}>ให้ลูกค้าสแกนรีวิว</b>
 	                            <OrderReviewQrCode orderId={order.id} />
 	                          </div>
 	                          {order.photo?.startsWith?.("data:") && (
-	                            <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid #e5e7eb" }}>
+	                            <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid var(--c-line)" }}>
 	                              <img src={order.photo} alt="pod" style={{ width: "100%", height: "auto" }} />
 	                            </div>
 	                          )}
-	                          <button className="primary" style={{ padding: "8px", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>
+	                          <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>
 	                            💬 แชร์สรุปสั้น (LINE)
 	                          </button>
 	                        </div>
 	                      ))}
 	                    {visibleRouteTasks.map(task => (
-	                      <div key={task.id} style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #bfdbfe", display: "flex", flexDirection: "column", gap: "8px" }}>
+	                      <div key={task.id} style={{ background: "var(--c-surface)", padding: "var(--sp-6)", borderRadius: "8px", border: "1px solid var(--c-info-border)", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
 	                        <div>
-	                          <b style={{ fontSize: "14px", display: "block", color: "#166562" }}>{task.id}</b>
-	                          <b style={{ fontSize: "15px", display: "block", color: "#111827" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</b>
-	                          <small style={{ color: "#6b7280" }}>{task.origin || "-"} → {task.destinationSummary || "-"}</small><br/>
-	                          {task.completedAt && <small style={{ color: "#16a39c", fontWeight: "bold" }}>✅ {task.completedAt}</small>}
+	                          <b style={{ fontSize: "14px", display: "block", color: "var(--c-brand-dark)" }}>{task.id}</b>
+	                          <b style={{ fontSize: "15px", display: "block", color: "var(--c-text)" }}>{task.type === "long" ? "งานวิ่งไกล" : "งานวิ่งสาขา"}{task.routeDirection === "return" ? " · ขากลับเชียงใหม่" : task.type === "long" ? " · ขาไป" : ""}</b>
+	                          <small style={{ color: "var(--c-text-muted)" }}>{task.origin || "-"} → {task.destinationSummary || "-"}</small><br/>
+	                          {task.completedAt && <small style={{ color: "var(--c-brand)", fontWeight: "bold" }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> {task.completedAt}</small>}
 	                        </div>
 	                        {(task.stops || []).length > 0 && (
-	                          <div style={{ display: "grid", gap: "4px", color: "#6b7280", fontSize: "12px" }}>
+	                          <div style={{ display: "grid", gap: "var(--sp-2)", color: "var(--c-text-muted)", fontSize: "12px" }}>
 	                            {(task.stops || []).map(stop => (
 	                              <small key={stop.id}>
 	                                {stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name || "-"}{stop.checkedInAt ? ` · ${stop.checkedInAt}` : ""}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}
@@ -6666,7 +6696,7 @@ export default function App() {
 	                            ))}
 	                          </div>
 	                        )}
-	                        <button className="primary" style={{ padding: "8px", fontSize: "12px", background: "#2563eb" }} onClick={() => copyToClipboard(buildLineMessageForRouteTask(task, { name: task.destinationSummary, checkedInAt: task.completedAt, note: task.note }))}>
+	                        <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-info)" }} onClick={() => copyToClipboard(buildLineMessageForRouteTask(task, { name: task.destinationSummary, checkedInAt: task.completedAt, note: task.note }))}>
 	                          💬 คัดลอกสรุปงานวิ่ง
 	                        </button>
 	                      </div>
@@ -6678,39 +6708,39 @@ export default function App() {
 	            )}
 
             {driverOrders.length === 0 && driverRouteTasks.length === 0 && (
-              <section className="panel" style={{ background: "#f3f4f6", textAlign: "center", padding: "32px 16px" }}>
-                <p style={{ fontSize: "32px", margin: "0" }}>😴</p>
-                <p style={{ color: "#666", margin: "8px 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
+              <section className="panel" style={{ background: "var(--c-surface-muted)", textAlign: "center", padding: "var(--sp-10) var(--sp-7)" }}>
+                <p style={{ fontSize: "32px", margin: "0" }}><Moon size={15} className="i-inline" aria-hidden="true" /> </p>
+                <p style={{ color: "var(--c-text-muted)", margin: "var(--sp-4) 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
               </section>
             )}
           </div>
         )}
 
         {auth.role === "driver" && displayTab === "driver-vehicle" && (
-          <div style={{ display: "grid", gap: "14px" }}>
-            <section className="panel" style={{ borderLeft: "4px solid #2563eb" }}>
+          <div style={{ display: "grid", gap: "var(--sp-6)" }}>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-info)" }}>
               <div className="panel-head">
                 <h2>รถที่ใช้วันนี้</h2>
                 <span>{todayServiceDate}</span>
               </div>
-              <div style={{ display: "grid", gap: "10px" }}>
-                <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", display: "grid", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: "var(--sp-5)" }}>
+                <div style={{ background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-5)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", alignItems: "center", flexWrap: "wrap" }}>
                     <div>
-                      <b style={{ display: "block", color: "#111827" }}>{vehicleDisplayName(selectedDriverVehicle)}</b>
-                      <small style={{ color: "#6b7280" }}>
+                      <b style={{ display: "block", color: "var(--c-text)" }}>{vehicleDisplayName(selectedDriverVehicle)}</b>
+                      <small style={{ color: "var(--c-text-muted)" }}>
                         {selectedDriverVehicle?.assetCode || "-"} · ผู้รับผิดชอบ {selectedDriverVehicle?.responsiblePerson || "-"} · {selectedDriverVehicle?.department || "-"}
                       </small>
                     </div>
-                    <button type="button" className="secondary" style={{ padding: "8px 10px", fontSize: "12px" }} onClick={() => setShowDriverVehiclePicker(v => !v)}>
+                    <button type="button" className="secondary" style={{ padding: "var(--sp-4) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowDriverVehiclePicker(v => !v)}>
                       {showDriverVehiclePicker ? "ปิดรายการรถ" : "เปลี่ยนรถวันนี้"}
                     </button>
                   </div>
                   {!selectedDriverVehicleIsDefault && (
-                    <small style={{ color: "#92400e", fontWeight: 800 }}>วันนี้ใช้รถคนละคันกับรถประจำ ระบบจะบันทึกไว้ในรายงาน</small>
+                    <small style={{ color: "var(--c-warn-deep)", fontWeight: 800 }}>วันนี้ใช้รถคนละคันกับรถประจำ ระบบจะบันทึกไว้ในรายงาน</small>
                   )}
                   {showDriverVehiclePicker && (
-                    <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ display: "grid", gap: "var(--sp-4)" }}>
                       <select
                         value={selectedDriverVehicleId}
                         onChange={e => {
@@ -6727,7 +6757,7 @@ export default function App() {
                       <button
                         type="button"
                         className="secondary"
-                        style={{ padding: "7px 10px", fontSize: "12px", width: "fit-content" }}
+                        style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px", width: "fit-content" }}
                         onClick={() => {
                           if (defaultDriverVehicle?.id) {
                             setDriverVehicleId(defaultDriverVehicle.id);
@@ -6748,12 +6778,12 @@ export default function App() {
                     inputMode="numeric"
                     placeholder="เช่น 120,500"
                   />
-                  <small className="muted" style={{ display: "block", marginTop: "6px" }}>เลขไมล์นี้จะใช้คู่กับแบบประเมินตรวจรถประจำวัน</small>
-                  <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "10px" }}>
+                  <small className="muted" style={{ display: "block", marginTop: "var(--sp-3)" }}>เลขไมล์นี้จะใช้คู่กับแบบประเมินตรวจรถประจำวัน</small>
+                  <div style={{ display: "flex", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-5)" }}>
                     <button type="button" className="primary" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
                       <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
                     </button>
-                    {dailyVehicleStartSaved && <span style={{ color: "#166562", fontWeight: 800, fontSize: "12px" }}>บันทึกเริ่มต้นวันนี้แล้ว</span>}
+                    {dailyVehicleStartSaved && <span style={{ color: "var(--c-brand-dark)", fontWeight: 800, fontSize: "12px" }}>บันทึกเริ่มต้นวันนี้แล้ว</span>}
                   </div>
                 </div>
               </div>
@@ -6787,28 +6817,28 @@ export default function App() {
                 onChange={e => setVehicleUsageForm(p => ({ ...p, detail: e.target.value }))}
                 rows={2}
                 placeholder="รายละเอียดการใช้งาน เช่น กลับสาขา / ส่งโซนแม่ริม / รับของโรงงาน"
-                style={{ marginTop: "10px" }}
+                style={{ marginTop: "var(--sp-5)" }}
               />
               <textarea
                 value={vehicleUsageForm.note}
                 onChange={e => setVehicleUsageForm(p => ({ ...p, note: e.target.value }))}
                 rows={2}
                 placeholder="หมายเหตุเพิ่มเติม"
-                style={{ marginTop: "10px" }}
+                style={{ marginTop: "var(--sp-5)" }}
               />
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+              <div style={{ display: "flex", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
                 <button type="button" className="primary" onClick={() => submitVehicleUsageEvent("segment")} disabled={vehicleUsageSubmitting}>
                   <FileText size={16} /> {vehicleUsageSubmitting ? "กำลังบันทึก..." : "บันทึกช่วงการใช้รถ"}
                 </button>
                 {vehicleUsageStatus && (
-                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "#166562" : vehicleUsageStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "var(--c-brand-dark)" : vehicleUsageStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
                     {vehicleUsageStatus}
                   </span>
                 )}
               </div>
             </section>
 
-            <section className="panel" style={{ borderLeft: "4px solid #0f766e" }}>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-brand-dark)" }}>
               <div className="panel-head">
                 <h2>จบการใช้รถวันนี้</h2>
                 <span>{driverOdometerStart ? `เริ่ม ${driverOdometerStart}` : "ยังไม่มีเลขไมล์เริ่มต้น"}</span>
@@ -6831,16 +6861,16 @@ export default function App() {
                 onChange={e => setVehicleEndForm(p => ({ ...p, note: e.target.value }))}
                 rows={2}
                 placeholder="หมายเหตุหลังใช้งาน / ปัญหารถที่พบ"
-                style={{ marginTop: "10px" }}
+                style={{ marginTop: "var(--sp-5)" }}
               />
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+              <div style={{ display: "flex", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
                 <button type="button" className="secondary" onClick={() => submitVehicleUsageEvent("end")} disabled={vehicleUsageSubmitting}>
                   <CheckCircle2 size={16} /> {vehicleUsageSubmitting ? "กำลังบันทึก..." : "จบการใช้รถวันนี้"}
                 </button>
               </div>
             </section>
 
-            <section className="panel" style={{ borderLeft: "4px solid #16a39c" }}>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-brand)" }}>
               <div className="panel-head">
                 <h2>บันทึกบิลน้ำมัน</h2>
                 <span>{vehicleDisplayName(selectedDriverVehicle)}</span>
@@ -6869,14 +6899,14 @@ export default function App() {
                 onChange={e => setFuelBillForm(p => ({ ...p, note: e.target.value }))}
                 rows={2}
                 placeholder="หมายเหตุบิลน้ำมัน"
-                style={{ marginTop: "10px" }}
+                style={{ marginTop: "var(--sp-5)" }}
               />
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+              <div style={{ display: "flex", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
                 <button type="button" className="primary" onClick={submitFuelBill} disabled={fuelBillSubmitting}>
                   <FileSpreadsheet size={16} /> {fuelBillSubmitting ? "กำลังบันทึก..." : "บันทึกบิลน้ำมัน"}
                 </button>
                 {fuelBillStatus && (
-                  <span style={{ color: fuelBillStatus.startsWith("✅") ? "#166562" : fuelBillStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: fuelBillStatus.startsWith("✅") ? "var(--c-brand-dark)" : fuelBillStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
                     {fuelBillStatus}
                   </span>
                 )}
@@ -6890,18 +6920,18 @@ export default function App() {
         )}
 
         {auth.role === "driver" && displayTab === "driver-sop" && (
-          <div style={{ display: "grid", gap: "14px" }}>
-            <section className="panel" style={{ background: "#fff7ed", borderLeft: "4px solid #f97316" }}>
+          <div style={{ display: "grid", gap: "var(--sp-6)" }}>
+            <section className="panel" style={{ background: "var(--c-accent-bg)", borderLeft: "4px solid var(--c-accent)" }}>
               <div className="panel-head">
                 <h2>ประกาศสำคัญก่อนเริ่มงาน</h2>
                 <span>SOP ประจำวัน</span>
               </div>
-              <p style={{ margin: 0, color: "#9a3412", fontWeight: 800 }}>
+              <p style={{ margin: 0, color: "var(--c-accent-deep)", fontWeight: 800 }}>
                 ก่อนออกงานทุกเช้า คนขับต้องตรวจสภาพรถและบันทึกแบบประเมินให้ครบ หากพบความผิดปกติให้หยุดใช้รถและแจ้งทันที ห้ามฝืนใช้งานรถที่ไม่พร้อมหรือไม่ปลอดภัย
               </p>
-              <div style={{ display: "grid", gap: "6px", marginTop: "10px" }}>
+              <div style={{ display: "grid", gap: "var(--sp-3)", marginTop: "var(--sp-5)" }}>
                 {DRIVER_MORNING_NOTICE.map(item => (
-                  <div key={item} style={{ display: "flex", gap: "8px", alignItems: "flex-start", color: "#7c2d12", fontSize: "13px", fontWeight: 700 }}>
+                  <div key={item} style={{ display: "flex", gap: "var(--sp-4)", alignItems: "flex-start", color: "var(--c-accent-deep)", fontSize: "13px", fontWeight: 700 }}>
                     <CheckCircle2 size={15} style={{ flex: "0 0 auto", marginTop: "1px" }} /> <span>{item}</span>
                   </div>
                 ))}
@@ -6914,33 +6944,33 @@ export default function App() {
                 <span>{todayServiceDate}</span>
               </div>
               {selectedDriverVehicle?.id && driverOdometerStart ? (
-                <div style={{ background: "#f0fdfc", border: "1px solid #86efe9", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", color: "#166562", fontSize: "13px", fontWeight: 800 }}>
+                <div style={{ background: "var(--c-brand-bg)", border: "1px solid var(--c-brand-border)", borderRadius: "8px", padding: "var(--sp-5) var(--sp-6)", marginBottom: "var(--sp-6)", color: "var(--c-brand-dark)", fontSize: "13px", fontWeight: 800 }}>
                   รถวันนี้: {vehicleDisplayName(selectedDriverVehicle)} · เลขไมล์เริ่ม {driverOdometerStart}
                 </div>
               ) : (
-                <div style={{ background: "#fef9c3", border: "1px solid #facc15", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", color: "#854d0e", fontSize: "13px", fontWeight: 800, display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                <div style={{ background: "var(--c-warn-bg-strong)", border: "1px solid var(--c-warn-light)", borderRadius: "8px", padding: "var(--sp-5) var(--sp-6)", marginBottom: "var(--sp-6)", color: "var(--c-warn-dark)", fontSize: "13px", fontWeight: 800, display: "flex", gap: "var(--sp-5)", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
                   <span>กรุณาบันทึกรถที่ใช้และเลขไมล์เริ่มต้นในแถบ บันทึกการใช้รถ ก่อนส่งแบบประเมิน</span>
-                  <button type="button" className="secondary" style={{ padding: "6px 10px", fontSize: "12px" }} onClick={() => setTab("driver-vehicle")}>ไปบันทึกการใช้รถ</button>
+                  <button type="button" className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setTab("driver-vehicle")}>ไปบันทึกการใช้รถ</button>
                 </div>
               )}
-              <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ display: "grid", gap: "var(--sp-4)" }}>
                 {DRIVER_DAILY_CHECK_ITEMS.map(item => (
-                  <label key={item.id} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: driverDailyChecks[item.id] ? "#f0fdfc" : "#fff" }}>
+                  <label key={item.id} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "var(--sp-5)", alignItems: "start", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)", background: driverDailyChecks[item.id] ? "var(--c-brand-bg)" : "var(--c-surface)" }}>
                     <input
                       type="checkbox"
                       checked={Boolean(driverDailyChecks[item.id])}
                       onChange={e => setDriverDailyChecks(prev => ({ ...prev, [item.id]: e.target.checked }))}
-                      style={{ width: "18px", height: "18px", marginTop: "2px" }}
+                      style={{ width: "18px", height: "18px", marginTop: "var(--sp-1)" }}
                     />
                     <span>
                       <b style={{ display: "block" }}>{item.label}</b>
-                      <small style={{ color: "#6b7280" }}>{item.detail}</small>
+                      <small style={{ color: "var(--c-text-muted)" }}>{item.detail}</small>
                     </span>
                   </label>
                 ))}
               </div>
 
-              <div style={{ marginTop: "12px" }}>
+              <div style={{ marginTop: "var(--sp-6)" }}>
                 <label className="field-label">หมายเหตุอาการผิดปกติ / รายละเอียดที่ต้องแจ้งซ่อม</label>
                 <textarea
                   value={driverAssessmentNotes}
@@ -6950,19 +6980,19 @@ export default function App() {
                 />
               </div>
 
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+              <div style={{ display: "flex", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
                 <button type="button" className="primary" onClick={submitDriverDailyAssessment} disabled={driverAssessmentSubmitting}>
                   <CheckCircle2 size={16} /> {driverAssessmentSubmitting ? "กำลังบันทึก..." : "บันทึกแบบประเมินวันนี้"}
                 </button>
                 {driverAssessmentStatus && (
-                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166562" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "var(--c-brand-dark)" : driverAssessmentStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
                     {driverAssessmentStatus}
                   </span>
                 )}
               </div>
             </section>
 
-            <section className="panel" style={{ background: "#f8fafc" }}>
+            <section className="panel" style={{ background: "var(--c-surface-subtle)" }}>
               <div className="panel-head">
                 <h2>ดูแลรักษารถระหว่างวัน</h2>
                 <span>ข้อควรจำสั้น ๆ</span>
@@ -6987,26 +7017,26 @@ export default function App() {
                 <h2>รายการตรวจเช็คประจำสัปดาห์</h2>
                 <span>ตรวจทุก 7 วัน</span>
               </div>
-              <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ display: "grid", gap: "var(--sp-4)" }}>
                 {DRIVER_WEEKLY_CHECK_ITEMS.map((item, index) => (
-                  <label key={item} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px" }}>
+                  <label key={item} style={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", gap: "var(--sp-5)", alignItems: "start", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)" }}>
                     <input
                       type="checkbox"
                       checked={Boolean(driverWeeklyChecks[index])}
                       onChange={e => setDriverWeeklyChecks(prev => ({ ...prev, [index]: e.target.checked }))}
-                      style={{ width: "18px", height: "18px", marginTop: "2px" }}
+                      style={{ width: "18px", height: "18px", marginTop: "var(--sp-1)" }}
                     />
                     <span>{item}</span>
                   </label>
                 ))}
               </div>
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "12px" }}>
+              <div style={{ display: "flex", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
                 <button type="button" className="secondary" onClick={submitDriverWeeklyAssessment} disabled={driverAssessmentSubmitting}>
                   <CheckCircle2 size={16} /> {driverAssessmentSubmitting ? "กำลังบันทึก..." : "บันทึกแบบประเมินรายสัปดาห์"}
                 </button>
                 <span className="muted" style={{ fontSize: "12px" }}>กดบันทึกหลังตรวจครบทุกข้อ</span>
                 {driverAssessmentStatus && (
-                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "#166562" : driverAssessmentStatus.startsWith("⏳") ? "#1d4ed8" : "#b91c1c", fontWeight: 800, fontSize: "12px" }}>
+                  <span style={{ color: driverAssessmentStatus.startsWith("✅") ? "var(--c-brand-dark)" : driverAssessmentStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
                     {driverAssessmentStatus}
                   </span>
                 )}
@@ -7028,15 +7058,15 @@ export default function App() {
                 <h2>ขั้นตอนแจ้งซ่อม</h2>
                 <span>รายงานเป็นลำดับ</span>
               </div>
-              <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ display: "grid", gap: "var(--sp-4)" }}>
                 {DRIVER_REPAIR_STEPS.map((step, index) => (
-                  <div key={step} style={{ display: "grid", gridTemplateColumns: "32px minmax(0, 1fr)", gap: "10px", alignItems: "start", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px", background: "#f8fafc" }}>
-                    <b style={{ width: "28px", height: "28px", borderRadius: "999px", background: "#176b6b", color: "#fff", display: "grid", placeItems: "center" }}>{index + 1}</b>
+                  <div key={step} style={{ display: "grid", gridTemplateColumns: "32px minmax(0, 1fr)", gap: "var(--sp-5)", alignItems: "start", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)", background: "var(--c-surface-subtle)" }}>
+                    <b style={{ width: "28px", height: "28px", borderRadius: "999px", background: "var(--c-brand-dark)", color: "var(--c-surface)", display: "grid", placeItems: "center" }}>{index + 1}</b>
                     <span>{step}</span>
                   </div>
                 ))}
               </div>
-              <p className="muted" style={{ margin: "12px 0 0" }}>สัญลักษณ์มาตรฐาน: I=ตรวจสอบ, A=ปรับตั้ง, R=เปลี่ยนใหม่, T=กวดขันให้แน่น, L=หล่อลื่น</p>
+              <p className="muted" style={{ margin: "var(--sp-6) 0 0" }}>สัญลักษณ์มาตรฐาน: I=ตรวจสอบ, A=ปรับตั้ง, R=เปลี่ยนใหม่, T=กวดขันให้แน่น, L=หล่อลื่น</p>
             </section>
 
             <section className="panel">
@@ -7056,7 +7086,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <p className="muted" style={{ margin: "12px 0 0" }}>รถใช้งานหนัก ทางขรุขระ ฝุ่นมาก หรือลากพ่วงบ่อย ให้แจ้งตรวจเร็วกว่าระยะมาตรฐาน</p>
+              <p className="muted" style={{ margin: "var(--sp-6) 0 0" }}>รถใช้งานหนัก ทางขรุขระ ฝุ่นมาก หรือลากพ่วงบ่อย ให้แจ้งตรวจเร็วกว่าระยะมาตรฐาน</p>
             </section>
           </div>
         )}
@@ -7113,13 +7143,13 @@ export default function App() {
                   </div>
                 );
               })()}
-              {reportRangeError && <p className="muted" style={{ color: "#b91c1c" }}>❌ โหลดข้อมูลรายงานไม่สำเร็จ: {reportRangeError}</p>}
+              {reportRangeError && <p className="muted" style={{ color: "var(--c-danger-dark)" }}><XCircle size={15} className="i-inline" aria-hidden="true" /> โหลดข้อมูลรายงานไม่สำเร็จ: {reportRangeError}</p>}
               {reportRangeLoading && ordersByServiceDate.keys.length === 0 ? (
-                <p className="muted" style={{ margin: 0 }}>กำลังโหลดข้อมูลรายงาน...</p>
+                <ListSkeleton rows={3} />
               ) : ordersByServiceDate.keys.length === 0 ? (
                 <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อมูลรายงานในช่วงที่เลือก</p>
               ) : (
-                <div className="daily-report-scroll" style={{ display: "grid", gap: "10px" }}>
+                <div className="daily-report-scroll" style={{ display: "grid", gap: "var(--sp-5)" }}>
                   {ordersByServiceDate.keys.map((key) => {
                     const dayOrders = ordersByServiceDate.groups[key] || [];
                     const list = dayOrders
@@ -7246,9 +7276,9 @@ export default function App() {
               {allTimeComplaints.length === 0 ? <div className="empty"><MessageSquareWarning size={22} /> ยังไม่มีรายการร้องเรียน</div> : allTimeComplaints.map(order => (
                 <div key={order.id} className="complaint-card">
                   <b>{order.customerName}</b>
-                  <small style={{ color: "#6b7280", display: "block", marginTop: "4px" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>
+                  <small style={{ color: "var(--c-text-muted)", display: "block", marginTop: "var(--sp-2)" }}>คนขับ: {order.driverName || drivers.find(driver => driver.id === order.driverId)?.name || "ยังไม่ระบุ"}</small>
                   <p>{order.complaint || order.status || "ติดปัญหา"}</p>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-4)" }}>
                     <span>{order.id}</span>
                     <button type="button" className="secondary compact-btn" disabled={resolvingComplaintId === order.id} onClick={() => resolveComplaint(order)}>
                       {resolvingComplaintId === order.id ? "กำลังปิด..." : "ปิดปัญหา"}
@@ -7264,7 +7294,7 @@ export default function App() {
 	        {displayTab === "settings" && (
 	          <div className="settings-grid">
 		            <section className="panel">
-		              <div className="panel-head"><h2>📋 ส่งออกรายงานสรุปภาพรวม</h2><span>ทั้งหมด</span></div>
+		              <div className="panel-head"><h2><ClipboardList size={15} className="i-inline" aria-hidden="true" /> ส่งออกรายงานสรุปภาพรวม</h2><span>ทั้งหมด</span></div>
 		              <button className="secondary wide" onClick={() => {
 		                const report = generateDailyReport();
 		                copyToClipboard(report);
@@ -7279,24 +7309,24 @@ export default function App() {
 		                element.click();
 		                document.body.removeChild(element);
 		              }}><Download size={16} /> ดาวน์โหลดเป็นไฟล์</button>
-		              <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>ดูตัวเลขวันนี้/สัปดาห์/เดือนแบบละเอียดได้ที่แท็บ &ldquo;รายงานประจำวัน&rdquo; — ปุ่มด้านบนสร้างสรุปข้อความพร้อมคัดลอก/ส่งต่อทาง LINE เท่านั้น</p>
+		              <p className="muted" style={{ marginTop: "var(--sp-4)", fontSize: "12px" }}>ดูตัวเลขวันนี้/สัปดาห์/เดือนแบบละเอียดได้ที่แท็บ &ldquo;รายงานประจำวัน&rdquo; — ปุ่มด้านบนสร้างสรุปข้อความพร้อมคัดลอก/ส่งต่อทาง LINE เท่านั้น</p>
 		            </section>
 
             {auth.role === "admin" && (
               <>
                 <section className="panel">
-                  <div className="panel-head"><h2>👥 บัญชีสโตร์และห้องแพ็ค</h2><span>{staffAccounts.length} บัญชี</span></div>
+                  <div className="panel-head"><h2><Users size={15} className="i-inline" aria-hidden="true" /> บัญชีสโตร์และห้องแพ็ค</h2><span>{staffAccounts.length} บัญชี</span></div>
                   <div className="form-grid two">
                     <input value={staffAccountForm.username} onChange={e => setStaffAccountForm(p => ({ ...p, username: e.target.value }))} placeholder="Username เช่น store01" />
                     <input value={staffAccountForm.name} onChange={e => setStaffAccountForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อพนักงาน" />
                     <input type="password" value={staffAccountForm.password} onChange={e => setStaffAccountForm(p => ({ ...p, password: e.target.value }))} placeholder="Password อย่างน้อย 8 ตัว" />
                     <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option></select>
                   </div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                  <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginTop: "var(--sp-5)" }}>
                     <button className="primary" onClick={createStaffAccount}>สร้างบัญชี</button>
                     <button className="secondary" onClick={loadStaffAccounts} disabled={staffAccountsLoading}>{staffAccountsLoading ? "กำลังโหลด..." : "รีเฟรชรายชื่อ"}</button>
                   </div>
-                  <div className="scroll-box" style={{ marginTop: "12px", display: "grid", gap: "6px" }}>
+                  <div className="scroll-box" style={{ marginTop: "var(--sp-6)", display: "grid", gap: "var(--sp-3)" }}>
                     {staffAccounts.length === 0 ? (
                       <p className="muted" style={{ margin: 0 }}>{staffAccountsLoading ? "กำลังโหลด..." : "ยังไม่มีบัญชี หรือยังไม่ได้โหลด"}</p>
                     ) : staffAccounts.map((account) => (
@@ -7314,25 +7344,25 @@ export default function App() {
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2>🚚 ข้อมูลรถและคนขับ</h2><span>ย้ายไปแท็บรายงานตรวจรถ</span></div>
+                  <div className="panel-head"><h2><Truck size={15} className="i-inline" aria-hidden="true" /> ข้อมูลรถและคนขับ</h2><span>ย้ายไปแท็บรายงานตรวจรถ</span></div>
                   <p className="muted" style={{ margin: 0 }}>จัดการรถและคนขับ (เพิ่ม/แก้ไข/ปิดใช้งาน) ย้ายไปรวมอยู่ที่แท็บ &ldquo;รายงานตรวจรถ&rdquo; มุมมอง &ldquo;จัดการข้อมูล&rdquo; แล้ว เพื่อไม่ให้มีหน้าจัดการซ้ำกัน 2 ที่</p>
-                  <button className="secondary wide" style={{ marginTop: "10px" }} onClick={() => selectAppTab("driver-sop-report")}>ไปที่รายงานตรวจรถ</button>
+                  <button className="secondary wide" style={{ marginTop: "var(--sp-5)" }} onClick={() => selectAppTab("driver-sop-report")}>ไปที่รายงานตรวจรถ</button>
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2>✅ รายชื่อผู้ตรวจสอบ</h2><span>สโตร์ / ห้องแพ็ค</span></div>
+                  <div className="panel-head"><h2><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> รายชื่อผู้ตรวจสอบ</h2><span>สโตร์ / ห้องแพ็ค</span></div>
                   {["store", "pack"].map((role) => (
-                    <div key={role} style={{ marginBottom: "12px" }}>
+                    <div key={role} style={{ marginBottom: "var(--sp-6)" }}>
                       <b>{role === "store" ? "สโตร์" : "ห้องแพ็ค"}</b>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                      <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", marginTop: "var(--sp-3)" }}>
                         {(checkerLists[role] || []).map((name) => (
-                          <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "5px", alignItems: "center" }}>
+                          <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "var(--sp-2)", alignItems: "center" }}>
                             {name}
-                            <button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "#b91c1c" }} onClick={() => { if (confirm(`ลบชื่อ "${name}" หรือไม่?`)) saveCheckerList(role, (checkerLists[role] || []).filter((item) => item !== name)); }}>×</button>
+                            <button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "var(--c-danger-dark)" }} onClick={() => { if (confirm(`ลบชื่อ "${name}" หรือไม่?`)) saveCheckerList(role, (checkerLists[role] || []).filter((item) => item !== name)); }}>×</button>
                           </span>
                         ))}
                       </div>
-                      <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                      <div style={{ display: "flex", gap: "var(--sp-4)", marginTop: "var(--sp-3)" }}>
                         <input
                           value={settingsNewCheckerName[role]}
                           onChange={(e) => setSettingsNewCheckerName((prev) => ({ ...prev, [role]: e.target.value }))}
@@ -7350,34 +7380,34 @@ export default function App() {
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2>💾 สำรอง/กู้คืนข้อมูล</h2><span>{backupSummary?.totalDays ?? backupList.length} ไฟล์</span></div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <div className="panel-head"><h2><Save size={15} className="i-inline" aria-hidden="true" /> สำรอง/กู้คืนข้อมูล</h2><span>{backupSummary?.totalDays ?? backupList.length} ไฟล์</span></div>
+                  <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
                     <button className="primary" onClick={runBackupNow} disabled={backupNowLoading}>{backupNowLoading ? "กำลังสำรอง..." : "สำรองข้อมูลตอนนี้"}</button>
                     <button className="secondary" onClick={loadBackupList} disabled={backupLoading}>{backupLoading ? "กำลังโหลด..." : "รีเฟรชรายการ"}</button>
                   </div>
-                  <div style={{ marginTop: "10px", display: "grid", gap: "4px", maxHeight: "160px", overflowY: "auto" }}>
+                  <div style={{ marginTop: "var(--sp-5)", display: "grid", gap: "var(--sp-2)", maxHeight: "160px", overflowY: "auto" }}>
                     {backupList.length === 0 ? (
                       <p className="muted" style={{ margin: 0 }}>{backupLoading ? "กำลังโหลด..." : "ยังไม่มีไฟล์สำรอง หรือยังไม่ได้โหลด"}</p>
                     ) : backupList.map((id) => <p key={id} style={{ margin: 0, fontSize: "13px" }}>{id}</p>)}
                   </div>
-                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
-                    <b style={{ color: "#b91c1c" }}>กู้คืนข้อมูล (การกระทำนี้ย้อนกลับไม่ได้)</b>
-                    <div className="form-grid two" style={{ marginTop: "8px" }}>
+                  <div style={{ marginTop: "var(--sp-6)", paddingTop: "var(--sp-6)", borderTop: "1px dashed var(--c-line)" }}>
+                    <b style={{ color: "var(--c-danger-dark)" }}>กู้คืนข้อมูล (การกระทำนี้ย้อนกลับไม่ได้)</b>
+                    <div className="form-grid two" style={{ marginTop: "var(--sp-4)" }}>
                       <select value={restoreBackupId} onChange={(e) => setRestoreBackupId(e.target.value)}>
                         <option value="">-- เลือกไฟล์สำรอง --</option>
                         {backupList.map((id) => <option key={id} value={id}>{id}</option>)}
                       </select>
-                      <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)" }}>
                         <input type="checkbox" checked={restoreReplace} onChange={(e) => setRestoreReplace(e.target.checked)} />
                         แทนที่ข้อมูลทั้งหมด (แทนการผสาน)
                       </label>
                     </div>
-                    <p className="muted" style={{ fontSize: "12px", marginTop: "6px" }}>
+                    <p className="muted" style={{ fontSize: "12px", marginTop: "var(--sp-3)" }}>
                       พิมพ์ <code>{restoreReplace ? "YES_REPLACE_FIRESTORE_DATA" : "YES_MERGE_FIRESTORE_DATA"}</code> เพื่อยืนยัน แล้วกดกู้คืน
                     </p>
-                    <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                    <div style={{ display: "flex", gap: "var(--sp-4)", marginTop: "var(--sp-3)" }}>
                       <input value={restoreConfirmText} onChange={(e) => setRestoreConfirmText(e.target.value)} placeholder="พิมพ์ข้อความยืนยัน" style={{ flex: 1 }} />
-                      <button type="button" className="secondary" style={{ background: "#dc2626", color: "white" }} disabled={restoreLoading || !restoreBackupId} onClick={runRestoreBackup}>
+                      <button type="button" className="secondary" style={{ background: "var(--c-danger)", color: "white" }} disabled={restoreLoading || !restoreBackupId} onClick={runRestoreBackup}>
                         {restoreLoading ? "กำลังกู้คืน..." : "กู้คืนข้อมูล"}
                       </button>
                     </div>
@@ -7385,19 +7415,19 @@ export default function App() {
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2>🔗 ระบบภายนอก</h2><span>ลิงก์ที่ใช้บ่อย</span></div>
-                  <div style={{ display: "grid", gap: "8px" }}>
-                    <a href={HILLKOFF_LINE_URL} target="_blank" rel="noreferrer" className="secondary wide" style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "10px" }}>
+                  <div className="panel-head"><h2><Link2 size={15} className="i-inline" aria-hidden="true" /> ระบบภายนอก</h2><span>ลิงก์ที่ใช้บ่อย</span></div>
+                  <div style={{ display: "grid", gap: "var(--sp-4)" }}>
+                    <a href={HILLKOFF_LINE_URL} target="_blank" rel="noreferrer" className="secondary wide" style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "var(--sp-5)" }}>
                       เปิด LINE Official Account
                     </a>
                     {deliverySheetUrl && (
-                      <a href={deliverySheetUrl} target="_blank" rel="noreferrer" className="secondary wide" style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "10px" }}>
+                      <a href={deliverySheetUrl} target="_blank" rel="noreferrer" className="secondary wide" style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "var(--sp-5)" }}>
                         เปิด Google Sheet ระบบส่งของเชียงใหม่
                       </a>
                     )}
                     <button className="secondary wide" onClick={setupDailyDeliverySheet}>ตั้งค่า Sheet ระบบส่งของเชียงใหม่ (ใช้ครั้งแรกเท่านั้น)</button>
                   </div>
-                  <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>
+                  <p className="muted" style={{ marginTop: "var(--sp-4)", fontSize: "12px" }}>
                     ปุ่มตั้งค่าใช้ครั้งแรกเท่านั้น หลังสร้างแล้วระบบจะล็อก Spreadsheet ID และจะไม่สร้างไฟล์ใหม่อัตโนมัติ
                     {!deliverySheetUrl && " ลิงก์เปิด Sheet จะโผล่ที่นี่หลังกดตั้งค่า/รันซ้ำ (ระบบยังไม่เก็บลิงก์ไว้ถาวร ต้องกดปุ่มอีกครั้งถ้าปิดหน้าไปแล้ว)"}
                   </p>
@@ -7407,9 +7437,9 @@ export default function App() {
 
             {auth.role === "admin" && (
               <section className="panel">
-                <div className="panel-head"><h2>📦 ที่อยู่ผู้ส่งเริ่มต้น (ใบปะหน้าต่างจังหวัด)</h2><span>Outstation label</span></div>
+                <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> ที่อยู่ผู้ส่งเริ่มต้น (ใบปะหน้าต่างจังหวัด)</h2><span>Outstation label</span></div>
                 <p className="muted" style={{ marginTop: 0 }}>ใช้เป็นชื่อ/ที่อยู่ต้นทางเริ่มต้นเมื่อพิมพ์ใบปะหน้าต่างจังหวัด (แก้ไขได้ทีละใบระหว่างพิมพ์อยู่แล้ว อันนี้คือค่าเริ่มต้น)</p>
-                <input value={outstationSenderForm.name} onChange={(e) => setOutstationSenderForm((p) => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ส่ง" style={{ marginBottom: "8px" }} />
+                <input value={outstationSenderForm.name} onChange={(e) => setOutstationSenderForm((p) => ({ ...p, name: e.target.value }))} placeholder="ชื่อผู้ส่ง" style={{ marginBottom: "var(--sp-4)" }} />
                 {outstationSenderForm.addressLines.map((line, index) => (
                   <input
                     key={index}
@@ -7420,10 +7450,10 @@ export default function App() {
                       return { ...p, addressLines };
                     })}
                     placeholder={`ที่อยู่ บรรทัดที่ ${index + 1}`}
-                    style={{ marginBottom: "8px" }}
+                    style={{ marginBottom: "var(--sp-4)" }}
                   />
                 ))}
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
                   <button className="primary" onClick={saveOutstationSenderSettings} disabled={outstationSenderSaving}>{outstationSenderSaving ? "กำลังบันทึก..." : "บันทึก"}</button>
                   <button className="secondary" onClick={loadOutstationSenderSettings} disabled={outstationSenderLoading}>{outstationSenderLoading ? "กำลังโหลด..." : "รีเฟรช"}</button>
                 </div>
@@ -7432,9 +7462,9 @@ export default function App() {
 
 		            {SUPER_ADMIN_EMAILS.includes(auth.email) && (
 		              <section className="panel">
-	                <div className="panel-head"><h2>⚙️ Admin Control</h2><span>เฉพาะแอดมิน</span></div>
-	                <p style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
-	                <button type="button" className="secondary" style={{ width: "100%", padding: "10px", marginBottom: "8px" }} onClick={async () => {
+	                <div className="panel-head"><h2><Settings size={15} className="i-inline" aria-hidden="true" /> Admin Control</h2><span>เฉพาะแอดมิน</span></div>
+	                <p style={{ color: "var(--c-text-muted)", fontSize: "12px", marginBottom: "var(--sp-6)" }}>ท่านเข้าสิทธิ์แอดมินเต็ม</p>
+	                <button type="button" className="secondary" style={{ width: "100%", padding: "var(--sp-5)", marginBottom: "var(--sp-4)" }} onClick={async () => {
 	                  if (!window.confirm("ยืนยันย้าย UID คนขับเข้าสู่ระบบใหม่? ประวัติงานจะยังใช้ driverId เดิมทั้งหมด")) return;
 	                  try {
 	                    const idToken = await refreshAuthToken(true);
@@ -7445,8 +7475,8 @@ export default function App() {
 	                    setSyncStatus(`✅ ย้ายตัวตนคนขับแล้ว ${data.migrated || 0} คน · ข้าม ${data.skipped || 0} คน`);
 	                    alert(`✅ ย้ายตัวตนคนขับแล้ว ${data.migrated || 0} คน\nประวัติเดิมยังเชื่อมด้วย driverId เดิม`);
 	                  } catch (error) { setSyncStatus(`❌ ย้ายตัวตนคนขับไม่สำเร็จ: ${error?.message || error}`); }
-	                }}>🔐 ย้ายตัวตนคนขับ (เก็บประวัติเดิม)</button>
-	                <button type="button" className="secondary" style={{ background: "#dc2626", color: "white", width: "100%", padding: "10px" }} onClick={resetAllOrders}>🔄 รีเซ็ตแดชบอร์ด</button>
+	                }}><KeyRound size={15} className="i-inline" aria-hidden="true" /> ย้ายตัวตนคนขับ (เก็บประวัติเดิม)</button>
+	                <button type="button" className="secondary" style={{ background: "var(--c-danger)", color: "white", width: "100%", padding: "var(--sp-5)" }} onClick={resetAllOrders}><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเซ็ตแดชบอร์ด</button>
               </section>
             )}
             
@@ -7457,9 +7487,9 @@ export default function App() {
                   <p className="muted">ยังไม่มีการล็อกอิน</p>
                 ) : (
                   state.loginHistory.slice(0, 20).map(entry => (
-                    <p key={entry.id} style={{ fontSize: "13px", paddingBottom: "8px", borderBottom: "1px solid #eee" }}>
+                    <p key={entry.id} style={{ fontSize: "13px", paddingBottom: "var(--sp-4)", borderBottom: "1px solid var(--c-surface-muted)" }}>
                       <b>{entry.name}</b> ({entry.role === "driver" ? "🚗 Driver" : "📦 Sales"}) <br/>
-                      <small>📱 {entry.phone}</small> <br/>
+                      <small><Smartphone size={15} className="i-inline" aria-hidden="true" /> {entry.phone}</small> <br/>
                       <small>⏰ {entry.loginAt}</small>
                     </p>
                   ))
@@ -7485,8 +7515,8 @@ export default function App() {
         display: "grid",
         placeItems: "center",
         zIndex: 1200,
-        background: unreadChatCount > 0 && !chatOpen ? "linear-gradient(135deg, #f97316, #dc2626)" : "linear-gradient(135deg, #fb923c, #ea580c)",
-        border: "2px solid #fff7ed",
+        background: unreadChatCount > 0 && !chatOpen ? "linear-gradient(135deg, var(--c-accent), var(--c-danger))" : "linear-gradient(135deg, var(--c-accent-light), var(--c-accent-dark))",
+        border: "2px solid var(--c-accent-bg)",
         boxShadow: unreadChatCount > 0 && !chatOpen ? "0 0 0 5px rgba(249, 115, 22, 0.24), 0 10px 22px rgba(220, 38, 38, 0.42)" : "0 7px 16px rgba(234, 88, 12, 0.34)",
         transform: unreadChatCount > 0 && !chatOpen ? "scale(1.08)" : "scale(1)",
         transition: "transform .18s ease, box-shadow .18s ease"
@@ -7502,15 +7532,15 @@ export default function App() {
             right: "-10px",
             minWidth: "18px",
             height: "18px",
-            padding: "0 5px",
+            padding: "0 var(--sp-2)",
             borderRadius: "999px",
-            background: "#dc2626",
+            background: "var(--c-danger)",
             color: "white",
             fontSize: "11px",
             fontWeight: 900,
             display: "grid",
             placeItems: "center",
-            border: "2px solid #ffffff",
+            border: "2px solid var(--c-surface)",
             lineHeight: 1
           }}>
             {unreadChatCount > 99 ? "99+" : unreadChatCount}
@@ -7520,18 +7550,18 @@ export default function App() {
     </button>
 
     {chatOpen && (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 1300, display: "grid", placeItems: "end center", padding: "16px" }}>
-        <div style={{ width: "min(520px, 100%)", background: "white", borderRadius: "12px", boxShadow: "0 12px 30px rgba(0,0,0,0.25)", overflow: "hidden" }}>
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-            <b>💬 แชททีม</b>
-            <button className="secondary" onClick={() => { markChatReadUpToLatest(); setChatOpen(false); }} style={{ padding: "6px 10px", fontSize: "12px" }}>ปิด</button>
+      <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay-soft)", zIndex: 1300, display: "grid", placeItems: "end center", padding: "var(--sp-7)" }}>
+        <div style={{ width: "min(520px, 100%)", background: "white", borderRadius: "12px", boxShadow: "0 12px 30px var(--c-overlay-soft)", overflow: "hidden" }}>
+          <div style={{ padding: "var(--sp-6) var(--sp-6)", borderBottom: "1px solid var(--c-line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-5)" }}>
+            <b><MessageSquare size={15} className="i-inline" aria-hidden="true" /> แชททีม</b>
+            <button className="secondary" onClick={() => { markChatReadUpToLatest(); setChatOpen(false); }} style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }}>ปิด</button>
           </div>
           {chatOpen && typingUsers.filter(u => u.phone !== state.auth?.phone).length > 0 && (
-            <div style={{ padding: "8px 14px", borderBottom: "1px solid #e5e7eb", background: "#ecfeff", color: "#0e7490", fontSize: "12px" }}>
+            <div style={{ padding: "var(--sp-4) var(--sp-6)", borderBottom: "1px solid var(--c-line)", background: "var(--c-brand-bg)", color: "var(--c-brand-cyan)", fontSize: "12px" }}>
               ✍️ กำลังพิมพ์: {typingUsers.filter(u => u.phone !== state.auth?.phone).map(u => u.name || u.phone || "ไม่ระบุ").join(", ")}
             </div>
           )}
-          <div ref={chatListRef} style={{ padding: "12px 14px", maxHeight: "280px", overflowY: "auto", background: "#f9fafb", display: "grid", gap: "8px" }}>
+          <div ref={chatListRef} style={{ padding: "var(--sp-6) var(--sp-6)", maxHeight: "280px", overflowY: "auto", background: "var(--c-surface-subtle)", display: "grid", gap: "var(--sp-4)" }}>
             {chatMessages.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>ยังไม่มีข้อความ</p>
             ) : (
@@ -7540,21 +7570,21 @@ export default function App() {
                 const timeText = t ? t.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "";
                 const isEmergency = m.type === "emergency";
                 return (
-                <div key={m.id} style={{ background: isEmergency ? "#fff1f2" : "white", border: `1px solid ${isEmergency ? "#fecdd3" : "#e5e7eb"}`, borderRadius: "10px", padding: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
-                    <b style={{ fontSize: "12px", color: isEmergency ? "#9f1239" : "#111827" }}>
+                <div key={m.id} style={{ background: isEmergency ? "var(--c-danger-bg)" : "white", border: `1px solid ${isEmergency ? "var(--c-danger-border)" : "var(--c-line)"}`, borderRadius: "10px", padding: "var(--sp-5)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)" }}>
+                    <b style={{ fontSize: "12px", color: isEmergency ? "var(--c-danger-deep)" : "var(--c-text)" }}>
                       {isEmergency ? "🚨 " : ""}{m.sender_name || "ไม่ระบุ"} {m.sender_role ? `(${m.sender_role})` : ""}
                     </b>
-                    <small style={{ color: "#6b7280" }}>{timeText}</small>
+                    <small style={{ color: "var(--c-text-muted)" }}>{timeText}</small>
                   </div>
                   <div style={{ fontSize: "13px", whiteSpace: "pre-wrap" }}>{m.message}</div>
-                  {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "none" }}>📞 {m.sender_phone}</a>}
+                  {m.sender_phone && <a href={`tel:${m.sender_phone}`} style={{ fontSize: "12px", color: "var(--c-info)", textDecoration: "none" }}><Phone size={15} className="i-inline" aria-hidden="true" /> {m.sender_phone}</a>}
                 </div>
               );
               })
             )}
           </div>
-          <div style={{ padding: "12px 14px", borderTop: "1px solid #e5e7eb", display: "flex", gap: "8px" }}>
+          <div style={{ padding: "var(--sp-6) var(--sp-6)", borderTop: "1px solid var(--c-line)", display: "flex", gap: "var(--sp-4)" }}>
             <input
               value={chatText}
               onChange={e => {
@@ -7568,35 +7598,35 @@ export default function App() {
               }}
               onBlur={() => updateTyping(false)}
               placeholder="พิมพ์ข้อความ..."
-              style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "10px" }}
+              style={{ flex: 1, padding: "var(--sp-5)", border: "1px solid var(--c-line-strong)", borderRadius: "10px" }}
             />
-            <button className="secondary" onClick={sendEmergency} style={{ padding: "10px 12px", background: "#fee2e2", borderColor: "#fecaca", color: "#991b1b", fontWeight: 900 }} title="ขอความช่วยเหลือฉุกเฉิน">
+            <button className="secondary" onClick={sendEmergency} style={{ padding: "var(--sp-5) var(--sp-6)", background: "var(--c-danger-bg-strong)", borderColor: "var(--c-danger-border)", color: "var(--c-danger-deep)", fontWeight: 900 }} title="ขอความช่วยเหลือฉุกเฉิน">
               🚨
             </button>
-            <button className="primary" onClick={sendChat} style={{ padding: "10px 14px" }}>ส่ง</button>
+            <button className="primary" onClick={sendChat} style={{ padding: "var(--sp-5) var(--sp-6)" }}>ส่ง</button>
           </div>
         </div>
       </div>
     )}
 
     {rerouteModal && (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 1700, display: "grid", placeItems: "center", padding: "16px" }}>
-        <section className="panel" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", display: "grid", gap: "12px" }}>
+      <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1700, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
+        <section className="panel" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", display: "grid", gap: "var(--sp-6)" }}>
           <div className="panel-head"><h2>แก้เส้นทาง/ย้ายงาน</h2><span>{rerouteModal.id}</span></div>
-          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "9px", padding: "10px", fontSize: "12px" }}>
+          <div style={{ background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "9px", padding: "var(--sp-5)", fontSize: "12px" }}>
             <b>เส้นทางปัจจุบัน:</b> {rerouteModal.deliveryMethod === "outstation" ? "ต่างจังหวัด" : rerouteModal.deliveryMethod === "grab_pickup" ? "Grab" : rerouteModal.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "คนขับบริษัท"}
             <span> · {rerouteModal.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : rerouteModal.workflowType === "direct_driver" ? "ส่งตรงคนขับ" : "ผ่านสโตร์ก่อน"}</span>
-            <div className="muted" style={{ marginTop: "4px" }}>สถานะคิว: {rerouteModal.queueStatus || "preparing"} · สโตร์: {rerouteModal.storeStatus || "-"} · ห้องแพ็ค: {rerouteModal.packStatus || "-"}</div>
+            <div className="muted" style={{ marginTop: "var(--sp-2)" }}>สถานะคิว: {rerouteModal.queueStatus || "preparing"} · สโตร์: {rerouteModal.storeStatus || "-"} · ห้องแพ็ค: {rerouteModal.packStatus || "-"}</div>
           </div>
-          {rerouteError && <div role="alert" style={{ background: "#fef2f2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "9px", padding: "10px", fontSize: "12px" }}>{rerouteError}</div>}
-          <label style={{ display: "grid", gap: "5px" }}><b>ปลายทางใหม่ *</b><select value={rerouteForm.deliveryMethod} onChange={event => { const deliveryMethod = event.target.value; setRerouteForm(previous => ({ ...previous, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod === "company_driver" ? "store_route" : "store_route", shippingCarrier: deliveryMethod === "outstation" ? previous.shippingCarrier : "" })); }}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
-          {!["grab_pickup", "customer_pickup"].includes(rerouteForm.deliveryMethod) && <label style={{ display: "grid", gap: "5px" }}><b>เส้นทางตรวจสินค้า *</b><select value={rerouteForm.workflowType} onChange={event => setRerouteForm(previous => ({ ...previous, workflowType: event.target.value }))}>{rerouteForm.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option><option value="direct_driver">ส่งตรงคนขับทันที</option></>}</select></label>}
-          {rerouteForm.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "5px" }}><b>บริษัทขนส่ง *</b><input list="reroute-carriers" value={rerouteForm.shippingCarrier} onChange={event => setRerouteForm(previous => ({ ...previous, shippingCarrier: event.target.value }))} placeholder="เช่น Flash, Kerry, NTC" /><datalist id="reroute-carriers">{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier} />)}</datalist></label>}
-          <label style={{ display: "grid", gap: "5px" }}><b>เหตุผลการย้าย *</b><textarea value={rerouteForm.reason} onChange={event => setRerouteForm(previous => ({ ...previous, reason: event.target.value }))} rows={3} placeholder="เช่น ฝ่ายขายเลือกปลายทางผิด / ลูกค้าเปลี่ยนวิธีรับสินค้า" /></label>
-          <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderLeft: "5px solid #f97316", borderRadius: "8px", padding: "10px", fontSize: "12px", color: "#9a3412" }}>
+          {rerouteError && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", color: "var(--c-danger-deep)", borderRadius: "9px", padding: "var(--sp-5)", fontSize: "12px" }}>{rerouteError}</div>}
+          <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>ปลายทางใหม่ *</b><select value={rerouteForm.deliveryMethod} onChange={event => { const deliveryMethod = event.target.value; setRerouteForm(previous => ({ ...previous, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod === "company_driver" ? "store_route" : "store_route", shippingCarrier: deliveryMethod === "outstation" ? previous.shippingCarrier : "" })); }}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+          {!["grab_pickup", "customer_pickup"].includes(rerouteForm.deliveryMethod) && <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>เส้นทางตรวจสินค้า *</b><select value={rerouteForm.workflowType} onChange={event => setRerouteForm(previous => ({ ...previous, workflowType: event.target.value }))}>{rerouteForm.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option><option value="direct_driver">ส่งตรงคนขับทันที</option></>}</select></label>}
+          {rerouteForm.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>บริษัทขนส่ง *</b><input list="reroute-carriers" value={rerouteForm.shippingCarrier} onChange={event => setRerouteForm(previous => ({ ...previous, shippingCarrier: event.target.value }))} placeholder="เช่น Flash, Kerry, NTC" /><datalist id="reroute-carriers">{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier} />)}</datalist></label>}
+          <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>เหตุผลการย้าย *</b><textarea value={rerouteForm.reason} onChange={event => setRerouteForm(previous => ({ ...previous, reason: event.target.value }))} rows={3} placeholder="เช่น ฝ่ายขายเลือกปลายทางผิด / ลูกค้าเปลี่ยนวิธีรับสินค้า" /></label>
+          <div style={{ background: "var(--c-accent-bg)", border: "1px solid var(--c-accent-border)", borderLeft: "5px solid var(--c-accent)", borderRadius: "8px", padding: "var(--sp-5)", fontSize: "12px", color: "var(--c-accent-deep)" }}>
             การย้ายจะรีเซ็ตสถานะตรวจสโตร์/ห้องแพ็คและรอเริ่มตรวจตามเส้นทางใหม่{rerouteModal.deliveryMethod === "outstation" && (rerouteForm.deliveryMethod !== "outstation" || rerouteForm.shippingCarrier.trim() !== String(rerouteModal.shippingCarrier || "").trim()) ? " พร้อมทำให้ใบปะหน้าต่างจังหวัดเดิมใช้ต่อไม่ได้" : ""} และบันทึกเหตุผลไว้ในประวัติออเดอร์
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button type="button" className="secondary" disabled={rerouteSubmitting} onClick={() => { setRerouteModal(null); setRerouteError(""); }}>ยกเลิก</button><button type="button" className="primary" disabled={rerouteSubmitting || !rerouteForm.reason.trim()} onClick={submitReroute}>{rerouteSubmitting ? "กำลังย้าย..." : "ยืนยันแก้เส้นทาง"}</button></div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-4)" }}><button type="button" className="secondary" disabled={rerouteSubmitting} onClick={() => { setRerouteModal(null); setRerouteError(""); }}>ยกเลิก</button><button type="button" className="primary" disabled={rerouteSubmitting || !rerouteForm.reason.trim()} onClick={submitReroute}>{rerouteSubmitting ? "กำลังย้าย..." : "ยืนยันแก้เส้นทาง"}</button></div>
         </section>
       </div>
     )}
@@ -7605,7 +7635,7 @@ export default function App() {
       <div style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
+        background: "var(--c-overlay)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -7613,7 +7643,7 @@ export default function App() {
       }}>
         <div style={{
           background: "white",
-          padding: "24px",
+          padding: "var(--sp-9)",
           borderRadius: "8px",
           boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
           maxWidth: "500px",
@@ -7621,18 +7651,18 @@ export default function App() {
           maxHeight: "90vh",
           overflowY: "auto"
         }}>
-          <h2 style={{ marginTop: 0, color: "#1f2937" }}>📦 ยืนยันส่งออเดอร์</h2>
-          {orderConfirmError && <div role="alert" style={{ background: "#fef2f2", border: "2px solid #dc2626", borderLeftWidth: "6px", color: "#991b1b", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>❌ ยังบันทึกออเดอร์ไม่ได้</b><span style={{ fontSize: "13px" }}>{orderConfirmError}</span><small>ตรวจสอบข้อมูลด้านล่าง แล้วกดยืนยันอีกครั้งได้ทันที</small></div>}
-          {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "#fff1f2", border: "2px solid #e11d48", borderLeftWidth: "6px", color: "#9f1239", borderRadius: "10px", padding: "11px", marginBottom: "12px", display: "grid", gap: "4px" }}><b>⚠️ ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
-          <div style={{ display: "grid", gap: "10px", marginBottom: "12px" }}>
-            <label style={{ display: "grid", gap: "6px" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}>{pendingOrder.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">เลือกได้ว่าจะส่งตรงห้องแพ็ค หรือให้สโตร์ตรวจสอบก่อน</small>}</label>
-            <label style={{ display: "grid", gap: "6px" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "", chiangmaiRoundCode: deliveryMethod === "company_driver" ? order.chiangmaiRoundCode : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
-            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "6px" }}><b>รอบจัดส่งเชียงใหม่ (ไม่บังคับ)</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">ไม่กำหนดรอบ · ออเดอร์ปกติ</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">หากไม่เลือกรอบ ออเดอร์จะทำงานแบบออเดอร์เชียงใหม่ปกติ ส่วนสโตร์และห้องแพ็คตรวจตาม flow เดิม</small></label>}
-            {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "#fee2e2", border: "2px solid #dc2626", color: "#991b1b", borderRadius: "10px", padding: "12px", fontWeight: 800 }}><div style={{ fontSize: "15px" }}>🚨 ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "4px" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
-            {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "6px" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
-            <label style={{ display: "grid", gap: "6px" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>
+          <h2 style={{ marginTop: 0, color: "var(--c-text-heading)" }}><Package size={15} className="i-inline" aria-hidden="true" /> ยืนยันส่งออเดอร์</h2>
+          {orderConfirmError && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "6px", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-5)", marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-2)" }}><b><XCircle size={15} className="i-inline" aria-hidden="true" /> ยังบันทึกออเดอร์ไม่ได้</b><span style={{ fontSize: "13px" }}>{orderConfirmError}</span><small>ตรวจสอบข้อมูลด้านล่าง แล้วกดยืนยันอีกครั้งได้ทันที</small></div>}
+          {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "6px", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-5)", marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-2)" }}><b><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
+          <div style={{ display: "grid", gap: "var(--sp-5)", marginBottom: "var(--sp-6)" }}>
+            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid var(--c-danger)", background: "var(--c-danger-bg)", color: "var(--c-danger-deep)", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}>{pendingOrder.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">เลือกได้ว่าจะส่งตรงห้องแพ็ค หรือให้สโตร์ตรวจสอบก่อน</small>}</label>
+            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "", chiangmaiRoundCode: deliveryMethod === "company_driver" ? order.chiangmaiRoundCode : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รอบจัดส่งเชียงใหม่ (ไม่บังคับ)</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">ไม่กำหนดรอบ · ออเดอร์ปกติ</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">หากไม่เลือกรอบ ออเดอร์จะทำงานแบบออเดอร์เชียงใหม่ปกติ ส่วนสโตร์และห้องแพ็คตรวจตาม flow เดิม</small></label>}
+            {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "var(--c-danger-bg-strong)", border: "2px solid var(--c-danger)", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-6)", fontWeight: 800 }}><div style={{ fontSize: "15px" }}><Siren size={15} className="i-inline" aria-hidden="true" /> ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "var(--sp-2)" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
+            {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
+            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>
           </div>
-          <div style={{ background: "#f3f4f6", padding: "12px", borderRadius: "6px", margin: "12px 0" }}>
+          <div style={{ background: "var(--c-surface-muted)", padding: "var(--sp-6)", borderRadius: "6px", margin: "var(--sp-6) 0" }}>
             <p><b>ลูกค้า:</b> {pendingOrder.customerName}</p>
             <p><b>พื้นที่:</b> {pendingOrder.zone}</p>
             <p><b>เวลารอจัดเตรียม:</b> {pendingOrder.window}</p>
@@ -7643,16 +7673,16 @@ export default function App() {
             {pendingOrder.deliveryMethod === "outstation" && <p><b>เส้นทางตรวจสินค้า:</b> {pendingOrder.workflowType === "store_route" ? "ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค" : "ส่งตรงห้องแพ็ค"}</p>}
             {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
           </div>
-          <label style={{ display: "flex", gap: "8px", alignItems: "flex-start", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px", color: "#1d4ed8", fontSize: "13px", fontWeight: 800 }}>
+          <label style={{ display: "flex", gap: "var(--sp-4)", alignItems: "flex-start", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "8px", padding: "var(--sp-5)", color: "var(--c-info-dark)", fontSize: "13px", fontWeight: 800 }}>
             <input
               type="checkbox"
               checked={shareNewOrderToLine}
               onChange={e => setShareNewOrderToLine(e.target.checked)}
-              style={{ marginTop: "2px" }}
+              style={{ marginTop: "var(--sp-1)" }}
             />
             <span>แชร์ข้อความคิวงานหลังส่งเข้าคิว</span>
           </label>
-          <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
+          <div style={{ display: "flex", gap: "var(--sp-6)", marginTop: "var(--sp-8)" }}>
             <button className="secondary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={() => { setShowOrderConfirm(false); setOrderConfirmError(""); setShareNewOrderToLine(false); }}>ยกเลิก</button>
             <button className="primary" style={{ flex: 1 }} disabled={orderConfirmSubmitting} onClick={confirmOrder}>{orderConfirmSubmitting ? "กำลังบันทึก..." : "ยืนยันและบันทึกออเดอร์"}</button>
           </div>
@@ -7660,16 +7690,16 @@ export default function App() {
       </div>
     )}
     {showOutstationCarrierModal && (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 1600, display: "grid", placeItems: "center", padding: "16px" }}>
+      <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1600, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
         <section className="panel" style={{ width: "min(520px, 100%)" }}>
           <div className="panel-head"><h2>เลือกขนส่งต่างจังหวัด</h2><span>จำเป็นสำหรับออเดอร์นี้</span></div>
-          <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ display: "grid", gap: "var(--sp-5)" }}>
             <select value={orderForm.shippingCarrier} onChange={e => setOrderForm(p => ({ ...p, shippingCarrier: e.target.value }))}>
               <option value="">-- เลือกบริษัทขนส่ง --</option>
               {["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}
             </select>
             {orderForm.shippingCarrier === "อื่นๆ" && <input value={orderForm.shippingCarrierOther} onChange={e => setOrderForm(p => ({ ...p, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" autoFocus />}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}><button className="secondary" onClick={() => { setShowOutstationCarrierModal(false); if (!orderForm.shippingCarrier) setOrderForm(p => ({ ...p, deliveryMethod: "company_driver" })); }}>ยกเลิก</button><button className="primary" onClick={() => { const carrier = orderForm.shippingCarrier === "อื่นๆ" ? orderForm.shippingCarrierOther.trim() : orderForm.shippingCarrier; if (!carrier) return setSyncStatus("❌ กรุณาระบุบริษัทขนส่ง"); setOrderForm(p => ({ ...p, shippingCarrier: carrier })); setShowOutstationCarrierModal(false); }}>ยืนยันขนส่ง</button></div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-4)" }}><button className="secondary" onClick={() => { setShowOutstationCarrierModal(false); if (!orderForm.shippingCarrier) setOrderForm(p => ({ ...p, deliveryMethod: "company_driver" })); }}>ยกเลิก</button><button className="primary" onClick={() => { const carrier = orderForm.shippingCarrier === "อื่นๆ" ? orderForm.shippingCarrierOther.trim() : orderForm.shippingCarrier; if (!carrier) return setSyncStatus("❌ กรุณาระบุบริษัทขนส่ง"); setOrderForm(p => ({ ...p, shippingCarrier: carrier })); setShowOutstationCarrierModal(false); }}>ยืนยันขนส่ง</button></div>
           </div>
         </section>
       </div>
