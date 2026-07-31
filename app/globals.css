@@ -1934,6 +1934,7 @@ nav button.active { background:#ddf4e5; color:#174b56; box-shadow:0 7px 18px rgb
 .secondary { color:#28595d; border-color:#c1ddcb; background:#fff; }
 .secondary:hover { color:#144d57; background:#e9f8ee; border-color:#8fc5b9; }
 .primary:focus-visible,.secondary:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline-color:rgba(49,134,92,.42); }
+.primary:active,.secondary:active,.add-row button:active { transform: scale(0.97); }
 input,select,textarea { border-color:#c1ddcb; color:#18383d; background:#fff; }
 input:focus,select:focus,textarea:focus { border-color:#63aa9f; box-shadow:0 0 0 3px rgba(99,170,118,.2); }
 .card,.panel { border-color:#cae2d3; box-shadow:var(--app-shadow); }
@@ -1961,6 +1962,7 @@ input:focus,select:focus,textarea:focus { border-color:#63aa9f; box-shadow:0 0 0
 .secondary.danger:hover { background:#fff5f4; border-color:#e8aaa5; }
 [style*="position: fixed"] .panel { box-shadow:0 14px 36px rgba(17,66,43,.26); }
 [style*="position: fixed"] article[style*="border-left"] { background:#f7fcf5 !important; }
+[style*="position: fixed"][style*="background: rgba(0,0,0"] { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 @media (max-width:720px) { .sidebar { background:#20565f; } }
 
 /* Store and pack operations: compact, high-contrast card columns. */
