@@ -125,7 +125,7 @@ main {
   border: 1px solid #d2e0d5;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 18px 45px rgba(23, 32, 25, 0.12);
+  box-shadow: 0 10px 28px rgba(23, 32, 25, 0.12);
   margin-block: auto;
 }
 
@@ -621,7 +621,7 @@ h2 {
   padding: clamp(22px, 7vw, 34px) clamp(18px, 6vw, 30px);
   border-radius: 28px;
   background: #f7f8ec;
-  box-shadow: 0 24px 70px rgba(23, 53, 31, 0.18);
+  box-shadow: 0 12px 32px rgba(23, 53, 31, 0.16);
   color: #173531;
 }
 
@@ -1892,7 +1892,7 @@ textarea {
 .history-search, .role-workspace { border-radius: 14px; }
 .history-search { background: linear-gradient(145deg, #f6fbf6, #eef8f7); border-color: #cee2de; }
 .role-order-card { border-radius: 14px; border-left: 4px solid #c7ded6; }
-[style*="position: fixed"] .panel { border-radius: 18px; box-shadow: 0 24px 70px rgba(10, 32, 18, .28); }
+[style*="position: fixed"] .panel { border-radius: 18px; box-shadow: 0 12px 32px rgba(10, 32, 18, .24); }
 [style*="position: fixed"] .panel-head { padding-bottom: 12px; border-bottom: 1px solid #e9eeec; }
 [style*="position: fixed"] article[style*="border-left"] { border-radius: 0 10px 10px 0; background: #f8fbf8 !important; }
 
@@ -1959,7 +1959,7 @@ input:focus,select:focus,textarea:focus { border-color:#63aa9f; box-shadow:0 0 0
 .customer-detail a,.map-link { color:#175e6b; background:#e3f6ea; border-color:#b4dfc8; }
 .secondary.danger { color:#b85e59; border-color:#efcbc8; }
 .secondary.danger:hover { background:#fff5f4; border-color:#e8aaa5; }
-[style*="position: fixed"] .panel { box-shadow:0 30px 80px rgba(17,66,43,.3); }
+[style*="position: fixed"] .panel { box-shadow:0 14px 36px rgba(17,66,43,.26); }
 [style*="position: fixed"] article[style*="border-left"] { background:#f7fcf5 !important; }
 @media (max-width:720px) { .sidebar { background:#20565f; } }
 
@@ -1976,12 +1976,11 @@ input:focus,select:focus,textarea:focus { border-color:#63aa9f; box-shadow:0 0 0
   padding: 16px;
   border-radius: 16px;
   box-shadow: 0 12px 24px rgba(29, 82, 52, .11);
-  transition: transform .18s ease, box-shadow .18s ease;
+  transition: box-shadow .15s ease;
 }
 
 .role-workspace .kpi-grid .metric:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 16px 30px rgba(29, 82, 52, .16);
+  box-shadow: 0 6px 16px rgba(29, 82, 52, .14);
 }
 
 .role-workspace .kpi-grid .metric strong {
@@ -2121,9 +2120,8 @@ input:focus,select:focus,textarea:focus { border-color:#63aa9f; box-shadow:0 0 0
 }
 
 .ops-workspace .role-order-card:hover {
-  transform: translateY(-3px);
   border-color: #8fc9ba;
-  box-shadow: 0 16px 30px rgba(29, 82, 52, .15);
+  box-shadow: 0 6px 16px rgba(29, 82, 52, .13);
 }
 
 .ops-workspace .role-order-card > button {
@@ -2369,11 +2367,11 @@ input:focus,select:focus,textarea:focus { border-color:#63aa9f; box-shadow:0 0 0
 
 .driver-sequence-card {
   cursor: grab;
-  transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+  transition: box-shadow .16s ease, opacity .16s ease;
 }
 
 .driver-sequence-card:active { cursor: grabbing; }
-.driver-sequence-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(47, 61, 50, .12); }
+.driver-sequence-card:hover { box-shadow: 0 6px 14px rgba(47, 61, 50, .12); }
 .driver-sequence-card.locked { cursor: default; background: #f7faf7 !important; }
 
 .driver-sequence-bar {
@@ -2464,7 +2462,7 @@ summary:focus-visible {
   padding: 18px;
   border-radius: 16px;
   background: #f5f8f6;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .24);
 }
 
 .outstation-label-toolbar {
@@ -2799,8 +2797,7 @@ summary:focus-visible {
   border-color: #16a39c;
   background: #ecfbfd;
   color: #145352;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(22, 101, 52, 0.13);
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.1);
 }
 
 .vehicle-report-empty {
