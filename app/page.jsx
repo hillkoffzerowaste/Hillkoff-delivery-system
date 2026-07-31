@@ -1907,7 +1907,7 @@ export default function App() {
   const packPickupOrders = preparationOrders.filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const salesPickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod)
     && order.workflowType
-    && !["grab_picked_up", "completed", "pack_archived"].includes(String(order.queueStatus || "")));
+    && !["grab_ready", "grab_picked_up", "completed", "pack_archived"].includes(String(order.queueStatus || "")));
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "completed", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && ["outstation_ready", "completed"].includes(order.queueStatus));

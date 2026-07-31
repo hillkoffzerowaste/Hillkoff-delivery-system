@@ -490,6 +490,12 @@ h2 {
   max-width: 100%;
 }
 
+.sales-status-tabs button .status-chip {
+  color: #dc2626;
+  font-weight: 900;
+  font-size: 14px;
+}
+
 .sales-status-tabs button.active {
   border-color: #175e6b;
   background: #eefaf9;
