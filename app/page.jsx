@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { INITIAL_CUSTOMER_RESULTS_LIMIT, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
+import { INITIAL_CUSTOMER_RESULTS_LIMIT, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
@@ -1235,8 +1235,10 @@ export default function App() {
           operationalOrdersSnapshotsRef.current = { recent: [], active: [] };
           const ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
 	          attachOrderQuery(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "recent"), onOrderError);
-          const activeOrdersQ = fb.query(fb.collection(db, "orders"), fb.where("queueStatus", "in", ["preparing", "ready", "queued"]), fb.limit(250));
+          if (needsActiveOrdersQuery(displayTab)) {
+            const activeOrdersQ = fb.query(fb.collection(db, "orders"), fb.where("queueStatus", "in", ["preparing", "ready", "queued"]), fb.limit(250));
 	          attachOrderQuery(activeOrdersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "active"), onOrderError);
+          }
         }
 	      } catch (e) {
 	        console.warn("orders onSnapshot error", e);

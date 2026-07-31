@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   INITIAL_CUSTOMER_RESULTS_LIMIT,
   getOrdersSyncMode,
+  needsActiveOrdersQuery,
   shouldPauseFirestoreSync
 } from "../../lib/firestoreReadPolicy.js";
 
@@ -23,5 +24,16 @@ describe("Firestore read policy", () => {
 
   it("limits the initial customer list while leaving historical search on demand", () => {
     expect(INITIAL_CUSTOMER_RESULTS_LIMIT).toBe(200);
+  });
+
+  it("skips active-orders query on dashboard and report tabs where recent-orders already covers the screen", () => {
+    expect(needsActiveOrdersQuery("store-dashboard")).toBe(false);
+    expect(needsActiveOrdersQuery("pack-dashboard")).toBe(false);
+    expect(needsActiveOrdersQuery("reports")).toBe(false);
+    // operational tabs must still attach active-orders
+    expect(needsActiveOrdersQuery("sales")).toBe(true);
+    expect(needsActiveOrdersQuery("dispatch")).toBe(true);
+    expect(needsActiveOrdersQuery("store-work")).toBe(true);
+    expect(needsActiveOrdersQuery("driver")).toBe(true);
   });
 });
