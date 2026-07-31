@@ -490,7 +490,7 @@ h2 {
   max-width: 100%;
 }
 
-.sales-status-tabs button .status-chip {
+.sales-status-tabs button .status-chip .count-num {
   color: #dc2626;
   font-weight: 900;
   font-size: 14px;

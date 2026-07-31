@@ -5073,21 +5073,21 @@ export default function App() {
             <div className="sales-status-tabs" style={{ gridColumn: "1 / -1" }}>
               <button type="button" className={activeSalesStatusPanel === "round" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "round" ? null : "round")}>
                 <span>ออเดอร์รอบจัดส่งเชียงใหม่</span>
-                <span className="status-chip">พร้อม {chiangmaiRoundTotalReady}/{chiangmaiRoundTotalOrders}</span>
+                <span className="status-chip">พร้อม <b className="count-num">{chiangmaiRoundTotalReady}/{chiangmaiRoundTotalOrders}</b></span>
               </button>
               {expiredDriverQueueOrders.length > 0 && (
                 <button type="button" className={activeSalesStatusPanel === "expired" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "expired" ? null : "expired")}>
                   <span>⏰ คิวหมดอายุ</span>
-                  <span className="status-chip">{expiredDriverQueueOrders.length} งาน</span>
+                  <span className="status-chip"><b className="count-num">{expiredDriverQueueOrders.length}</b> งาน</span>
                 </button>
               )}
               <button type="button" className={activeSalesStatusPanel === "waiting" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "waiting" ? null : "waiting")}>
                 <span>⏳ งานรอของ / ของไม่ครบ</span>
-                <span className="status-chip">{salesWaitingOrders.length} งาน</span>
+                <span className="status-chip"><b className="count-num">{salesWaitingOrders.length}</b> งาน</span>
               </button>
               <button type="button" className={activeSalesStatusPanel === "grab" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "grab" ? null : "grab")}>
                 <span>🛍️ Grab / รับหน้าร้าน</span>
-                <span className="status-chip">{salesPickupOrders.length} งาน</span>
+                <span className="status-chip"><b className="count-num">{salesPickupOrders.length}</b> งาน</span>
               </button>
             </div>
             {activeSalesStatusPanel === "round" && (
