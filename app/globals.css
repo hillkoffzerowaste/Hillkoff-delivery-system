@@ -30,6 +30,17 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgba(23, 94, 107, 0.22);
+  color: inherit;
 }
 
 button,
@@ -41,6 +52,48 @@ textarea {
 
 button {
   touch-action: manipulation;
+}
+
+.primary,
+.secondary,
+button,
+input,
+select,
+textarea,
+.status-chip,
+nav button,
+.daily-accordion,
+.role-order-card,
+.dispatch-row,
+.driver-card,
+.customer-detail {
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.scroll-box,
+.ops-activity-list,
+.daily-report-scroll,
+.customer-list,
+.sales-round-order-list {
+  scrollbar-width: thin;
+  scrollbar-color: #9fc9bd transparent;
+}
+
+.scroll-box::-webkit-scrollbar,
+.ops-activity-list::-webkit-scrollbar,
+.daily-report-scroll::-webkit-scrollbar,
+.customer-list::-webkit-scrollbar,
+.sales-round-order-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll-box::-webkit-scrollbar-thumb,
+.ops-activity-list::-webkit-scrollbar-thumb,
+.daily-report-scroll::-webkit-scrollbar-thumb,
+.customer-list::-webkit-scrollbar-thumb,
+.sales-round-order-list::-webkit-scrollbar-thumb {
+  background-color: #9fc9bd;
+  border-radius: 999px;
 }
 
 input[type="checkbox"],
@@ -1866,7 +1919,7 @@ textarea {
 }
 
 /* Active palette: Fresh Leaf Workspace — higher contrast, less grey. */
-:root { --app-ink:#18383d; --app-muted:#587472; --app-canvas:#f1f9f3; --app-surface:#fff; --app-line:#cae2d3; --app-green:#317e86; --app-green-dark:#175e6b; --app-mint:#dcf2e5; --app-shadow:0 14px 32px rgba(29,82,52,.09); }
+:root { --app-ink:#18383d; --app-muted:#587472; --app-canvas:#f1f9f3; --app-surface:#fff; --app-line:#b9dccb; --app-green:#317e86; --app-green-dark:#175e6b; --app-mint:#dcf2e5; --app-shadow:0 8px 22px rgba(23,94,107,.1); }
 body { background:radial-gradient(circle at top right,#dbf3e5 0,transparent 36%),linear-gradient(135deg,#f7fbf4,#ebf8f0); color:var(--app-ink); }
 .sidebar { background:linear-gradient(180deg,#28656d 0%,#17424b 100%); box-shadow:10px 0 30px rgba(20,67,44,.18); }
 .brand { border-bottom-color:rgba(255,255,255,.2); }
