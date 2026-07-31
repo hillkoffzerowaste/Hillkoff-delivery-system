@@ -27,6 +27,9 @@ body {
   background: #f7f8f3;
   color: #17201e;
   font-family: var(--font-kanit), Arial, "Noto Sans Thai", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 button,
