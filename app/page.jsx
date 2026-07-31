@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, nextOrdersLimit, recentOrdersLimit } from "../lib/firestoreReadPolicy";
+import { INITIAL_CUSTOMER_RESULTS_LIMIT, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
@@ -693,6 +693,7 @@ export default function App() {
     return `hillkoff_chat_last_read_${role || "anon"}_${phone || "unknown"}`;
   }, [state.auth?.phone, state.auth?.role]);
   const [fbAuthReady, setFbAuthReady] = useState(false);
+  const [isPageVisible, setIsPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
   const [pushStatus, setPushStatus] = useState("");
   const [staffAccountForm, setStaffAccountForm] = useState({ username: "", password: "", name: "", role: "store" });
   const [notificationPermission, setNotificationPermission] = useState("default");
@@ -853,7 +854,7 @@ export default function App() {
   const [reportRangeError, setReportRangeError] = useState("");
   const [resolvingComplaintId, setResolvingComplaintId] = useState("");
   const [ordersLimit, setOrdersLimit] = useState(100);
-  const customersLimit = 200;
+  const customersLimit = INITIAL_CUSTOMER_RESULTS_LIMIT;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
   const [driverDailyChecks, setDriverDailyChecks] = useState({});
@@ -912,6 +913,14 @@ export default function App() {
     : state.auth?.role === "accounting" ? "driver-sop-report"
     : (tab === "driver" ? "sales" : tab);
   const isStoreBookingEntryView = displayTab === "store-work" && storeWorkSubtab === "booking-entry";
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    const handleVisibilityChange = () => setIsPageVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    handleVisibilityChange();
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   const todayServiceDate = toServiceDateKey(appClock);
   const previousServiceDate = toServiceDateKey(new Date(Date.parse(`${todayServiceDate}T12:00:00+07:00`) - 86400000));
@@ -1085,8 +1094,13 @@ export default function App() {
 	      setSyncStatus("กรุณาเข้าสู่ระบบ");
 	      return;
 	    }
+	    if (shouldPauseFirestoreSync({ isVisible: isPageVisible, role: state.auth?.role })) {
+	      setSyncStatus("⏸️ พักการซิงก์ชั่วคราวขณะไม่ได้เปิดหน้านี้");
+	      return;
+	    }
 	    const db = getFirestoreDb();
 	    const unsubs = [];
+	    let cancelled = false;
 	    let gotAnySnapshot = false;
 	    const markConnected = () => {
 	      if (gotAnySnapshot) return;
@@ -1094,12 +1108,10 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const needsOrdersRealtime = ["sales", "sales-outstation", "dispatch", "driver", "driver-prep", "driver-ratings", "store-work", "store-pickup", "store-booking", "store-online", "store-dashboard", "pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard", "chiangmai", "reports", "settings"].includes(String(displayTab || ""));
-	    const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
-	    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
-    // Store searches customers through the authenticated API; its Firestore rules intentionally
-    // do not grant a broad realtime read of the full customer collection.
-    const needsCustomers = String(displayTab || "") === "sales";
+    const ordersSyncMode = getOrdersSyncMode(displayTab);
+    const needsOrdersRealtime = ordersSyncMode !== "none";
+    const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
+    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
 	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	    const needsDriverAssessments = String(displayTab || "") === "settings";
 	    const needsChat = Boolean(chatOpen);
@@ -1125,6 +1137,15 @@ export default function App() {
 	    // Orders: keep realtime (core UX), but limit results.
 	    if (needsOrdersRealtime) {
 	      try {
+	        const attachOrderQuery = (query, onRows, onError) => {
+	          if (ordersSyncMode === "snapshot") {
+	            fb.getDocs(query).then((snap) => {
+	              if (!cancelled) onRows(snap);
+	            }).catch(onError);
+	            return;
+	          }
+	          unsubs.push(fb.onSnapshot(query, onRows, onError));
+	        };
 	        const applyOrderRows = (incomingRows, source = "all") => {
 	          let rows = incomingRows;
 	          if (state.auth?.role === "driver" && source !== "all") {
@@ -1170,19 +1191,19 @@ export default function App() {
 	          driverOrdersSnapshotsRef.current = { assigned: [], queued: [], rework: [] };
 	          if (did) {
 	            const assignedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", did), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
-	            unsubs.push(fb.onSnapshot(assignedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "assigned"), onOrderError));
-	            const reworkQ = fb.query(fb.collection(db, "orders"), fb.where("lastDeliveryDriverId", "==", did), fb.limit(effectiveOrdersLimit));
-	            unsubs.push(fb.onSnapshot(reworkQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "rework"), onOrderError));
-	          }
-	          const queuedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", ""), fb.where("queueStatus", "==", "queued"), fb.limit(effectiveOrdersLimit));
-	          unsubs.push(fb.onSnapshot(queuedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "queued"), onOrderError));
-	        } else {
-	          operationalOrdersSnapshotsRef.current = { recent: [], active: [] };
-	          const ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
-	          unsubs.push(fb.onSnapshot(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "recent"), onOrderError));
-	          const activeOrdersQ = fb.query(fb.collection(db, "orders"), fb.where("queueStatus", "in", ["preparing", "ready", "queued"]), fb.limit(250));
-	          unsubs.push(fb.onSnapshot(activeOrdersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "active"), onOrderError));
-	        }
+	            attachOrderQuery(assignedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "assigned"), onOrderError);
+            const reworkQ = fb.query(fb.collection(db, "orders"), fb.where("lastDeliveryDriverId", "==", did), fb.limit(effectiveOrdersLimit));
+	            attachOrderQuery(reworkQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "rework"), onOrderError);
+          }
+          const queuedQ = fb.query(fb.collection(db, "orders"), fb.where("driverId", "==", ""), fb.where("queueStatus", "==", "queued"), fb.limit(effectiveOrdersLimit));
+	          attachOrderQuery(queuedQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "queued"), onOrderError);
+        } else {
+          operationalOrdersSnapshotsRef.current = { recent: [], active: [] };
+          const ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
+	          attachOrderQuery(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "recent"), onOrderError);
+          const activeOrdersQ = fb.query(fb.collection(db, "orders"), fb.where("queueStatus", "in", ["preparing", "ready", "queued"]), fb.limit(250));
+	          attachOrderQuery(activeOrdersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "active"), onOrderError);
+        }
 	      } catch (e) {
 	        console.warn("orders onSnapshot error", e);
 	      }
@@ -1222,26 +1243,6 @@ export default function App() {
 	        );
 	      } catch (e) {
 	        console.warn("route_tasks onSnapshot error", e);
-	      }
-	    }
-
-	    // Customers: keep the full searchable list current across sales devices.
-	    if (needsCustomers) {
-	      try {
-	        const custQ = fb.query(fb.collection(db, "customers"), fb.orderBy("updatedAt", "desc"), fb.limit(customersLimit));
-	        unsubs.push(
-	          fb.onSnapshot(
-	            custQ,
-	            (snap) => {
-	              const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-	              setState((prev) => ({ ...prev, customers: rows }));
-	              markConnected();
-	            },
-	            (err) => setSyncStatus?.(`⚠️ Firestore customers error: ${err.message || err}`)
-	          )
-	        );
-	      } catch (e) {
-	        console.warn("customers onSnapshot error", e);
 	      }
 	    }
 
@@ -1303,12 +1304,13 @@ export default function App() {
 	    }
 
 	    return () => {
+	      cancelled = true;
 	      unsubs.forEach((u) => {
 	        try { u(); } catch {}
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate, isPageVisible]);
 
   // Driver location: record only on "check-in" events (no continuous tracking)
 
@@ -1485,6 +1487,26 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
+  const hasInitialCustomers = (state.customers || []).length > 0;
+
+  useEffect(() => {
+    if (!isPageVisible || displayTab !== "sales" || !["sales", "admin"].includes(state.auth?.role)) return undefined;
+    if (hasInitialCustomers) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authenticatedApiFetch(`/api/customers/search?all=true&limit=${customersLimit}`);
+        const json = await res.json();
+        if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        if (cancelled) return;
+        const rows = Array.isArray(json.data) ? json.data : [];
+        setState((prev) => ({ ...prev, customers: rows }));
+      } catch (error) {
+        if (!cancelled) setSyncStatus(`⚠️ โหลดรายชื่อลูกค้าเริ่มต้นไม่สำเร็จ: ${error?.message || error}`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authenticatedApiFetch, customersLimit, displayTab, hasInitialCustomers, isPageVisible, state.auth?.role]);
 
   const fetchReportRangeOrders = useCallback(async () => {
     if (!["sales", "admin"].includes(state.auth?.role)) return;

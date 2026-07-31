@@ -27,16 +27,20 @@ export async function GET(request) {
     const params = new URL(request.url).searchParams;
     const loadAll = params.get("all") === "true";
     const query = String(params.get("q") || "").trim();
+    const requestedLimit = Number(params.get("limit"));
+    const allResultsLimit = Number.isFinite(requestedLimit)
+      ? Math.min(MAX_ALL_RESULTS, Math.max(1, Math.trunc(requestedLimit)))
+      : MAX_ALL_RESULTS;
     const normalizedQuery = normalizeCustomerSearch(query);
     if (!loadAll && normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
-    const cacheKey = loadAll ? "__all_customers__" : normalizedQuery;
+    const cacheKey = loadAll ? `__all_customers__:${allResultsLimit}` : normalizedQuery;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.at < 5 * 60_000) return Response.json({ ok: true, data: cached.data });
 
     if (pending.has(cacheKey)) return Response.json({ ok: true, data: await pending.get(cacheKey) });
     const search = (async () => {
     if (loadAll) {
-      const snap = await db.collection("customer_search").orderBy("updatedAt", "desc").limit(MAX_ALL_RESULTS).get();
+      const snap = await db.collection("customer_search").orderBy("updatedAt", "desc").limit(allResultsLimit).get();
       const data = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
       cache.set(cacheKey, { at: Date.now(), data });
       if (cache.size > 100) cache.delete(cache.keys().next().value);
