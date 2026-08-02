@@ -127,7 +127,7 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
     if (!context) return null;
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#17424b";
+    context.fillStyle = "#174b49";
     context.fillRect(0, 0, canvas.width, headerHeight);
     context.fillStyle = "#ffffff";
     context.font = "700 69px sans-serif";
@@ -145,7 +145,7 @@ async function createLinePhotoSheet(files, title = "หลักฐานกา�
       const width = image.width * scale;
       const height = image.height * scale;
       context.drawImage(image, x + ((cellWidth - width) / 2), y + ((cellHeight - height) / 2), width, height);
-      context.fillStyle = "rgba(23, 75, 54, .9)";
+      context.fillStyle = "rgba(23, 75, 73, .9)";
       context.fillRect(x, y, 117, 87);
       context.fillStyle = "#ffffff";
       context.font = "700 48px sans-serif";

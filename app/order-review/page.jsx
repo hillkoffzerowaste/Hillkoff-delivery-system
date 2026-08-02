@@ -58,10 +58,10 @@ export default function OrderReviewPage() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#f0fdfc", padding: "24px 14px", display: "grid", placeItems: "start center" }}>
-      <section className="panel" style={{ width: "min(520px, 100%)", marginTop: "5vh", display: "grid", gap: "16px", borderTop: "5px solid #176b6b" }}>
+    <main style={{ minHeight: "100vh", background: "#f0fdfd", padding: "24px 14px", display: "grid", placeItems: "start center" }}>
+      <section className="panel" style={{ width: "min(520px, 100%)", marginTop: "5vh", display: "grid", gap: "16px", borderTop: "5px solid #058581" }}>
         <header style={{ display: "grid", gap: "4px" }}>
-          <b style={{ color: "#176b6b", fontSize: "13px" }}>HILLKOFF DELIVERY</b>
+          <b style={{ color: "#058581", fontSize: "13px" }}>HILLKOFF DELIVERY</b>
           <h1 style={{ margin: 0, fontSize: "24px" }}>ประเมินการจัดส่ง</h1>
           {order && <span className="muted">ออเดอร์ {order.orderId} · คนขับ {order.driverName}</span>}
         </header>
@@ -71,7 +71,7 @@ export default function OrderReviewPage() {
 
         {order && (status === "ready" || status === "submitted") && (
           <form onSubmit={submitReview} style={{ display: "grid", gap: "14px" }}>
-            <div style={{ background: order.deliveryCompleteness === "incomplete" ? "#fff7ed" : "#f0fdfc", borderRadius: "8px", padding: "10px", fontSize: "13px" }}>
+            <div style={{ background: order.deliveryCompleteness === "incomplete" ? "#fff7ed" : "#f0fdfd", borderRadius: "8px", padding: "10px", fontSize: "13px" }}>
               {order.deliveryCompleteness === "incomplete" ? "ออเดอร์นี้ส่งไม่ครบ ลูกค้าสามารถรีวิวรอบนี้ได้ และรีวิวใหม่ได้อีกครั้งเมื่อส่งแก้ไข" : "กรุณาให้คะแนนการจัดส่งของออเดอร์นี้"}
             </div>
             <div>
@@ -79,13 +79,13 @@ export default function OrderReviewPage() {
               <div role="radiogroup" aria-label="คะแนนการจัดส่ง" style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
                 {STAR_LABELS.map((label, index) => {
                   const value = index + 1;
-                  return <button key={value} type="button" aria-label={`${value} ดาว ${label}`} aria-pressed={rating === value} onClick={() => setRating(value)} style={{ border: rating === value ? "2px solid #176b6b" : "1px solid #d1d5db", background: rating >= value ? "#fef3c7" : "white", color: "#b7791f", borderRadius: "8px", padding: "8px 10px", cursor: "pointer", fontSize: "21px" }}>★<small style={{ display: "block", fontSize: "10px", color: "#374151" }}>{value}</small></button>;
+                  return <button key={value} type="button" aria-label={`${value} ดาว ${label}`} aria-pressed={rating === value} onClick={() => setRating(value)} style={{ border: rating === value ? "2px solid #058581" : "1px solid #d1d5db", background: rating >= value ? "#fef3c7" : "white", color: "#b7791f", borderRadius: "8px", padding: "8px 10px", cursor: "pointer", fontSize: "21px" }}>★<small style={{ display: "block", fontSize: "10px", color: "#374151" }}>{value}</small></button>;
                 })}
               </div>
             </div>
             <label style={{ display: "grid", gap: "6px" }}><span className="field-label">ข้อเสนอแนะ</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={5} placeholder="บอกเราได้เลยว่าการจัดส่งเป็นอย่างไร" /></label>
             <button className="primary wide" type="submit" disabled={!rating || submitting}>{submitting ? "กำลังบันทึก…" : status === "submitted" ? "บันทึกรีวิวใหม่" : "ส่งคะแนนและข้อเสนอแนะ"}</button>
-            {message && <div role="status" style={{ color: message.startsWith("ขอบคุณ") ? "#166562" : "#991b1b", fontWeight: 700 }}>{message}</div>}
+            {message && <div role="status" style={{ color: message.startsWith("ขอบคุณ") ? "#046662" : "#991b1b", fontWeight: 700 }}>{message}</div>}
           </form>
         )}
       </section>
