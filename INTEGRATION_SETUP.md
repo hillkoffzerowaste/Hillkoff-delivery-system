@@ -1,5 +1,12 @@
 # Hillkoff Integration Setup
 
+## Public API v1 (แอปโปรเจกต์อื่นเชื่อมเข้ามา)
+
+แอปภายนอกเรียกระบบผ่าน `/api/v1/*` ด้วย API key `hk_live_...` ที่ออกจากหน้า `/admin/api-clients`
+ดูรายละเอียด scope, endpoint, ตัวอย่าง curl และวิธีจัดการกุญแจได้ที่ [`docs/API_V1.md`](docs/API_V1.md)
+
+ไม่ต้องตั้ง environment variable เพิ่ม — กุญแจถูกเก็บเป็น SHA-256 hash ใน Firestore collection `api_clients`
+
 ## Google Login + OTP (Firebase)
 
 1. Firebase Console -> Authentication -> Sign-in method -> enable Google.
