@@ -14,6 +14,7 @@ const ENDPOINTS = [
   { method: "GET", path: "/api/v1/customers", scopes: ["customers:read"], description: "ค้นหาลูกค้า (?q= หรือ ?all=true)" },
   { method: "POST", path: "/api/v1/customers", scopes: ["customers:write"], description: "สร้าง/แก้ไขข้อมูลลูกค้า" },
   { method: "GET", path: "/api/v1/customers/history", scopes: ["customers:read"], description: "ประวัติการสั่งของลูกค้า" },
+  { method: "POST", path: "/api/v1/customers/delete", scopes: ["customers:write"], description: "ลบข้อมูลลูกค้า" },
   { method: "GET", path: "/api/v1/drivers", scopes: ["drivers:read"], description: "รายชื่อคนขับ" },
   { method: "POST", path: "/api/v1/drivers", scopes: ["drivers:write"], description: "สร้าง/แก้ไขข้อมูลคนขับ" },
   { method: "PATCH", path: "/api/v1/drivers", scopes: ["drivers:write"], description: "แก้ไขข้อมูลคนขับ" },

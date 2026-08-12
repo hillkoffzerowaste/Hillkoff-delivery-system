@@ -77,6 +77,7 @@ key ที่มี `roles: ["*"]` จะถูกจับคู่กับบ
 | GET | `/api/v1/customers?q=` หรือ `?all=true` | `customers:read` |
 | POST | `/api/v1/customers` | `customers:write` |
 | GET | `/api/v1/customers/history` | `customers:read` |
+| POST | `/api/v1/customers/delete` | `customers:write` |
 | GET/POST/PATCH/DELETE | `/api/v1/drivers` | `drivers:read` / `drivers:write` |
 | GET/POST/PATCH/DELETE | `/api/v1/vehicles` | `vehicles:read` / `vehicles:write` |
 | POST | `/api/v1/vehicle-report` | `reports:read` |
