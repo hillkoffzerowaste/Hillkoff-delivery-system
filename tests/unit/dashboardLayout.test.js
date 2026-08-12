@@ -25,4 +25,12 @@ describe("dashboard layout", () => {
     expect(pageSource).toContain('จบงานที่เลือก');
     expect(pageSource).toContain('/api/orders/chiangmai-complete');
   });
+
+  it("keeps per-order deletion and adds multi-select deletion on the Chiang Mai preparation page", () => {
+    expect(pageSource).toContain('canSalesDeleteChiangmaiOrder(order)');
+    expect(pageSource).toContain('เลือกทั้งหมดที่ลบได้');
+    expect(pageSource).toContain('ลบออเดอร์ที่เลือก');
+    expect(pageSource).toContain('/api/orders/chiangmai-delete-bulk');
+    expect(pageSource).toContain('ลบออเดอร์ที่กรอกผิด');
+  });
 });

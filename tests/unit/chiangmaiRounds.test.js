@@ -3,6 +3,7 @@ import {
   buildChiangmaiRoundGroups,
   buildSalesChiangmaiCompletionPatch,
   canSalesCompleteChiangmaiOrder,
+  canSalesDeleteChiangmaiOrder,
   isNormalChiangmaiOrder,
   resolveNextRoundDate,
   resolveOptionalChiangmaiRound,
@@ -28,6 +29,24 @@ describe("Chiang Mai sales rounds", () => {
     expect(canSalesCompleteChiangmaiOrder({ ...ready, driverId: "driver-1" })).toBe(false);
     expect(canSalesCompleteChiangmaiOrder({ ...ready, deliveryMethod: "outstation" })).toBe(false);
     expect(canSalesCompleteChiangmaiOrder({ ...ready, reworkRequired: true })).toBe(false);
+  });
+
+  it("matches the existing per-order delete guard for bulk selection", () => {
+    const deletable = {
+      deliveryMethod: "company_driver",
+      workflowType: "store_route",
+      queueStatus: "ready",
+      driverId: "",
+      status: "พร้อมส่งคนขับ"
+    };
+
+    expect(canSalesDeleteChiangmaiOrder(deletable)).toBe(true);
+    expect(canSalesDeleteChiangmaiOrder({ ...deletable, queueStatus: "queued" })).toBe(false);
+    expect(canSalesDeleteChiangmaiOrder({ ...deletable, driverId: "driver-1" })).toBe(false);
+    expect(canSalesDeleteChiangmaiOrder({ ...deletable, status: "รอคนขับรับ" })).toBe(false);
+    expect(canSalesDeleteChiangmaiOrder({ ...deletable, status: "ส่งสำเร็จ" })).toBe(false);
+    expect(canSalesDeleteChiangmaiOrder({ ...deletable, deliveryMethod: "outstation" })).toBe(false);
+    expect(canSalesDeleteChiangmaiOrder({ ...deletable, workflowType: "" })).toBe(false);
   });
 
   it("records a sales-completed order without inventing driver delivery evidence", () => {

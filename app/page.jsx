@@ -16,6 +16,7 @@ import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
 import {
   buildChiangmaiRoundGroups,
   canSalesCompleteChiangmaiOrder,
+  canSalesDeleteChiangmaiOrder,
   canRerouteOrder,
   initialPreparationStatuses,
   isChiangmaiPreparationOrder,
@@ -825,6 +826,8 @@ export default function App() {
   const [chiangmaiRoundFilter, setChiangmaiRoundFilter] = useState("normal");
   const [salesCompletionSelectedIds, setSalesCompletionSelectedIds] = useState([]);
   const [salesCompletionSubmitting, setSalesCompletionSubmitting] = useState(false);
+  const [salesDeleteSelectedIds, setSalesDeleteSelectedIds] = useState([]);
+  const [salesDeleteSubmitting, setSalesDeleteSubmitting] = useState(false);
   const [orderCustomerSearch, setOrderCustomerSearch] = useState("");
   const [syncStatus, setSyncStatus] = useState("⏳ กำลังเชื่อมต่อระบบ...");
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
@@ -1946,7 +1949,7 @@ export default function App() {
   const isPreparationReadyForDriver = order => ["checked", "partial"].includes(order.packStatus) && order.reworkRequired !== true;
   const isReadyDriverBacklog = order => isReadyOrderWaitingForDispatch(order);
   const todayPreparationOrders = chiangmaiPreparationOrders.filter(order => isTodayOrder(order) || isReadyDriverBacklog(order));
-  const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && order.deliveryMethod === "company_driver" && !order.driverId && ["preparing", "ready"].includes(order.queueStatus) && !["กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ"].includes(order.status);
+  const canDeleteBeforeDriverQueue = order => ["sales", "admin"].includes(auth.role) && canSalesDeleteChiangmaiOrder(order);
   const readyPreparationOrdersCount = todayPreparationOrders.filter(isPreparationReadyForDriver).length;
   const visibleRoundPreparationOrders = state.auth?.role === "sales" || state.auth?.role === "admin"
     ? todayPreparationOrders.filter((order) => chiangmaiRoundFilter === "normal" ? !order.chiangmaiRoundCode : order.chiangmaiRoundCode === chiangmaiRoundFilter)
@@ -1960,6 +1963,11 @@ export default function App() {
   const salesCompletionSelectedSet = new Set(salesCompletionSelectedIds);
   const selectedEligibleSalesCompletionIds = salesCompletionEligibleIds.filter(id => salesCompletionSelectedSet.has(id));
   const allSalesCompletionEligibleSelected = salesCompletionEligibleIds.length > 0 && selectedEligibleSalesCompletionIds.length === salesCompletionEligibleIds.length;
+  const allSalesDeleteEligibleIds = sortedPreparationOrders.filter(order => canSalesDeleteChiangmaiOrder(order)).map(order => order.id);
+  const salesDeleteEligibleIds = allSalesDeleteEligibleIds.slice(0, 50);
+  const salesDeleteSelectedSet = new Set(salesDeleteSelectedIds);
+  const selectedEligibleSalesDeleteIds = salesDeleteEligibleIds.filter(id => salesDeleteSelectedSet.has(id));
+  const allSalesDeleteEligibleSelected = salesDeleteEligibleIds.length > 0 && selectedEligibleSalesDeleteIds.length === salesDeleteEligibleIds.length;
   const isOpenStoreQueueStatus = (status) => ["pending", "working", "waiting", "partial", "returned"].includes(status || "pending");
   const isOpenPackQueueStatus = (status) => ["pending", "working", "waiting"].includes(status || "pending");
   const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
@@ -3289,6 +3297,50 @@ export default function App() {
       setSyncStatus(`❌ จบงานไม่สำเร็จ: ${error?.message || error}`);
     } finally {
       setSalesCompletionSubmitting(false);
+    }
+  };
+
+  const toggleSalesDeleteOrder = (orderId) => {
+    setSalesDeleteSelectedIds((current) => current.includes(orderId)
+      ? current.filter((id) => id !== orderId)
+      : [...current, orderId]);
+  };
+
+  const toggleAllSalesDeleteOrders = () => {
+    setSalesDeleteSelectedIds((current) => {
+      const next = new Set(current);
+      salesDeleteEligibleIds.forEach((id) => allSalesDeleteEligibleSelected ? next.delete(id) : next.add(id));
+      return [...next];
+    });
+  };
+
+  const deleteSelectedChiangmaiOrders = async () => {
+    const selectedIds = selectedEligibleSalesDeleteIds;
+    if (!selectedIds.length || salesDeleteSubmitting) return;
+    const preview = selectedIds.slice(0, 5).join(", ");
+    const remaining = selectedIds.length > 5 ? ` และอีก ${selectedIds.length - 5} รายการ` : "";
+    if (typeof window !== "undefined" && !window.confirm(`ยืนยันลบถาวร ${selectedIds.length} ออเดอร์?\n${preview}${remaining}\n\nการกระทำนี้ย้อนกลับจากหน้าจอไม่ได้`)) return;
+    setSalesDeleteSubmitting(true);
+    try {
+      const response = await authenticatedApiFetch("/api/orders/chiangmai-delete-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedIds })
+      });
+      const json = await response.json();
+      if (!response.ok || !json?.ok) {
+        const blocked = Array.isArray(json?.blockingOrderIds) ? ` (${json.blockingOrderIds.join(", ")})` : "";
+        throw new Error(`${json?.error || `HTTP ${response.status}`}${blocked}`);
+      }
+      const deletedSet = new Set(json.data.deletedIds);
+      setState((previous) => ({ ...previous, orders: previous.orders.filter((order) => !deletedSet.has(order.id)) }));
+      setSalesDeleteSelectedIds((current) => current.filter((id) => !deletedSet.has(id)));
+      setSalesCompletionSelectedIds((current) => current.filter((id) => !deletedSet.has(id)));
+      setSyncStatus(`✅ ลบออเดอร์สำเร็จ ${json.data.count} รายการ`);
+    } catch (error) {
+      setSyncStatus(`❌ ลบหลายรายการไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setSalesDeleteSubmitting(false);
     }
   };
 
@@ -6098,6 +6150,15 @@ export default function App() {
                 </div>
               </div>
             )}
+            {displayTab === "chiangmai" && salesDeleteEligibleIds.length > 0 && (
+              <div style={{ marginBottom: "var(--sp-5)", padding: "var(--sp-5)", border: "1px solid var(--c-danger-border)", borderLeft: "4px solid var(--c-danger)", borderRadius: "6px", background: "var(--c-danger-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}>
+                <div><b style={{ color: "var(--c-danger-deep)" }}>ลบออเดอร์หลายรายการ</b><div className="muted">เฉพาะรายการที่ปุ่มลบเดิมอนุญาต · สูงสุดครั้งละ 50 รายการ{allSalesDeleteEligibleIds.length > 50 ? ` · มีทั้งหมด ${allSalesDeleteEligibleIds.length} รายการ` : ""}</div></div>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", flexWrap: "wrap" }}>
+                  <button type="button" className="secondary" disabled={salesDeleteSubmitting} onClick={toggleAllSalesDeleteOrders}>{allSalesDeleteEligibleSelected ? "ยกเลิกเลือกทั้งหมด" : "เลือกทั้งหมดที่ลบได้"}</button>
+                  <button type="button" className="secondary danger" disabled={!selectedEligibleSalesDeleteIds.length || salesDeleteSubmitting} onClick={deleteSelectedChiangmaiOrders}>{salesDeleteSubmitting ? "กำลังลบ..." : `ลบออเดอร์ที่เลือก (${selectedEligibleSalesDeleteIds.length})`}</button>
+                </div>
+              </div>
+            )}
             {displayTab === "chiangmai" && <OrderHistorySearch title="ค้นหาประวัติออเดอร์ฝ่ายขาย" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />}
             {displayTab === "chiangmai" && salesWaitingOrdersVisible.length > 0 && <div style={{ marginBottom: "var(--sp-6)", border: "2px solid var(--c-accent)", borderLeftWidth: "6px", background: "var(--c-accent-bg)", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><b style={{ color: "var(--c-accent-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์รอสินค้า / ของไม่ครบ</b><span className="status-chip" style={{ color: "var(--c-accent-deep)", background: "var(--c-accent-bg)" }}>{salesWaitingOrders.length} งาน · ดูสถานะเท่านั้น</span></div>{salesWaitingOrdersVisible.map(order => <article key={`sales-waiting-${order.id}`} style={{ background: "white", border: "1px solid var(--c-accent-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><ReworkNotice order={order} compact />{Array.isArray(order.missingItems) && order.missingItems.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", color: "var(--c-warn-deep)", borderRadius: "6px", padding: "var(--sp-3)", fontSize: "12px" }}><b>รายการที่รอ:</b> {order.missingItems.join(", ")}</div>}<small className="muted">อัปเดตล่าสุด {formatThaiDateTime(order.updatedAt || order.createdAt)} · ฝ่ายขายรอห้องแพ็คตรวจสอบก่อนส่งเข้าคิว</small></article>)}</div>}
             <div className={displayTab === "chiangmai" ? "ops-pack-work" : ""} style={{ display: "grid", gap: "var(--sp-5)" }}>
@@ -6109,6 +6170,7 @@ export default function App() {
                   </div>
                   {displayTab === "chiangmai" && isPreparationReadyForDriver(order) && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-danger-dark)", background: "var(--c-danger-bg-strong)", border: "1px solid var(--c-danger-border)", fontWeight: 800 }}>พร้อมส่งคนขับ</span>}
                   {displayTab === "chiangmai" && canSalesCompleteChiangmaiOrder(order) && <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", width: "fit-content", fontWeight: 800 }}><input type="checkbox" checked={salesCompletionSelectedSet.has(order.id)} disabled={salesCompletionSubmitting} onChange={() => toggleSalesCompletionOrder(order.id)} /> เลือกจบงานโดยฝ่ายขาย</label>}
+                  {displayTab === "chiangmai" && canSalesDeleteChiangmaiOrder(order) && salesDeleteEligibleIds.includes(order.id) && <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", width: "fit-content", color: "var(--c-danger-deep)", fontWeight: 800 }}><input type="checkbox" checked={salesDeleteSelectedSet.has(order.id)} disabled={salesDeleteSubmitting} onChange={() => toggleSalesDeleteOrder(order.id)} /> เลือกลบออเดอร์นี้</label>}
                   {displayTab === "chiangmai" && isReadyDriverBacklog(order) && !isTodayOrder(order) && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-warn-deep)", background: "var(--c-warn-bg-strong)", border: "1px solid var(--c-warn-border)", fontWeight: 800 }}>ค้างจากวันก่อน · รอส่งเข้าคิวคนขับ</span>}
                   <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>
                     เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์"} · {order.boxes || 0} กล่อง
