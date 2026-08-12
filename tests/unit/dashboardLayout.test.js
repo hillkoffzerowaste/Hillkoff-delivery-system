@@ -18,4 +18,11 @@ describe("dashboard layout", () => {
     expect(normalizedPageSource).toContain('<section className="panel">\n              <div className="panel-head"><h2>เปิดออเดอร์ส่งของ</h2>');
     expect(normalizedPageSource).toContain('<section className="panel">\n              <div className="panel-head"><h2>เพิ่มลูกค้าใหม่</h2>');
   });
+
+  it("offers individual and select-all sales completion on the Chiang Mai preparation page", () => {
+    expect(pageSource).toContain('canSalesCompleteChiangmaiOrder(order)');
+    expect(pageSource).toContain('เลือกทั้งหมดที่จบงานได้');
+    expect(pageSource).toContain('จบงานที่เลือก');
+    expect(pageSource).toContain('/api/orders/chiangmai-complete');
+  });
 });
