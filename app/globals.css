@@ -1,3 +1,20 @@
+@import "@hillkoffzerowaste/sales-workspace/styles.css";
+
+.skip-link {
+  position: fixed;
+  z-index: 3000;
+  top: 8px;
+  left: 8px;
+  padding: 8px 12px;
+  border: 2px solid var(--c-brand);
+  border-radius: 4px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  transform: translateY(-160%);
+}
+
+.skip-link:focus { transform: translateY(0); }
+
 * {
   box-sizing: border-box;
 }
@@ -19,6 +36,7 @@
 }
 
 html {
+  --font-kanit: "Kanit";
   scroll-behavior: smooth;
 }
 

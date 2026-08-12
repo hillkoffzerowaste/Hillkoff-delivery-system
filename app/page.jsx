@@ -13,6 +13,8 @@ import OrderReviewQrCode from "./components/OrderReviewQrCode";
 import VehicleInspectionReport from "./components/VehicleInspectionReport";
 import DispatchDashboard from "./components/DispatchDashboard";
 import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
+import { SalesWorkspace as SharedSalesWorkspace } from "@hillkoffzerowaste/sales-workspace";
+import { createDeliverySalesAdapter } from "../lib/sharedSalesAdapter";
 import {
   buildChiangmaiRoundGroups,
   canRerouteOrder,
@@ -83,6 +85,12 @@ import {
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
 const initialDrivers = [];
+const SHARED_SALES_VIEW_BY_TAB = Object.freeze({
+  sales: "overview",
+  "sales-outstation": "outstation",
+  dispatch: "dispatch",
+  chiangmai: "chiangmai"
+});
 
 const ZONES = ["เมืองเชียงใหม่", "แม่ริม", "สันกำแพง", "ดอยสะเก็ด", "หางดง", "สันป่าตอง", "ลำพูน", "ลำปาง", "เชียงราย", "พะเยา"];
 const STATUS = ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง", "ส่งสำเร็จ", "ติดปัญหา", "ยกเลิก"];
@@ -1521,6 +1529,10 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
+  const sharedSalesAdapter = useMemo(
+    () => createDeliverySalesAdapter(authenticatedApiFetch),
+    [authenticatedApiFetch]
+  );
   const hasInitialCustomers = (state.customers || []).length > 0;
 
   useEffect(() => {
@@ -4921,7 +4933,9 @@ export default function App() {
 
   if (!auth.role || auth.role === "driver-register") {
     return (
-      <main className="login-page">
+      <>
+      <a className="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+      <main id="main" tabIndex={-1} className="login-page">
         <section className="login-panel">
           <div className="brand login-brand">
             <img className="brand-logo" src="/hillkoff-logo.png" alt="Hillkoff" />
@@ -4994,6 +5008,7 @@ export default function App() {
           )}
         </section>
       </main>
+      </>
     );
   }
 
@@ -5005,7 +5020,8 @@ export default function App() {
 
   return (
     <>
-      <main>
+      <a className="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+      <main id="main" tabIndex={-1}>
       <aside className="sidebar">
         <div className="brand">
           <img className="brand-logo" src="/hillkoff-logo.png" alt="Hillkoff" />
@@ -5123,7 +5139,16 @@ export default function App() {
           </div>
         )}
 
-        {displayTab === "sales" && (
+        {Object.hasOwn(SHARED_SALES_VIEW_BY_TAB, displayTab) && (
+          <SharedSalesWorkspace
+            adapter={sharedSalesAdapter}
+            initialView={SHARED_SALES_VIEW_BY_TAB[displayTab]}
+            actorLabel={auth.name || auth.email || "ฝ่ายขาย"}
+            operationalRoles={["sales"]}
+          />
+        )}
+
+        {displayTab === "sales-legacy" && (
           <>
             <div className="sales-grid">
             <div className="sales-status-tabs" style={{ gridColumn: "1 / -1" }}>
@@ -5801,7 +5826,7 @@ export default function App() {
             </>
           )}
 
-        {displayTab === "sales-outstation" && (
+        {displayTab === "sales-outstation-legacy" && (
           <section className="panel role-workspace">
             <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งานที่กำลังเตรียม</span></div>
             <p className="muted">งานต่างจังหวัดเลือกได้ทั้งส่งตรงห้องแพ็คหรือผ่านสโตร์ก่อน สถานะอัปเดตทันทีตามขั้นตอนตรวจสินค้า</p>
@@ -6029,7 +6054,7 @@ export default function App() {
           </section>
         )}
 
-        {["chiangmai", "driver-prep"].includes(displayTab) && (
+        {displayTab === "driver-prep" && (
           <section className={displayTab === "chiangmai" ? "panel role-workspace ops-workspace" : "panel"}>
             <div className="panel-head">
               <h2>{displayTab === "driver-prep" ? "เช็คสถานะออเดอร์เชียงใหม่" : "ออเดอร์ส่งเชียงใหม่และจังหวัดใกล้เคียง"}</h2>
@@ -6173,7 +6198,7 @@ export default function App() {
           </div>
         )}
 
-        {displayTab === "dispatch" && (
+        {displayTab === "dispatch-legacy" && (
           <DispatchDashboard
             apiFetch={authenticatedApiFetch}
             role={auth.role}

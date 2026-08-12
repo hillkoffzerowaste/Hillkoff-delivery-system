@@ -9,6 +9,7 @@ const ENDPOINTS = [
   { method: "POST", path: "/api/v1/orders/delete", scopes: ["orders:write"], description: "ลบออเดอร์" },
   { method: "PATCH", path: "/api/v1/orders/workflow", scopes: ["orders:write"], description: "เปลี่ยนสถานะออเดอร์ตาม workflow" },
   { method: "PATCH", path: "/api/v1/orders/chiangmai-rounds", scopes: ["orders:write"], description: "จัดรอบส่งเชียงใหม่" },
+  { method: "POST", path: "/api/v1/orders/chiangmai-complete", scopes: ["orders:write"], description: "จบงานเชียงใหม่ที่ตรวจครบเป็นชุด" },
   { method: "POST", path: "/api/v1/orders/dispatch-dashboard", scopes: ["reports:read"], description: "สรุปภาพรวมการจ่ายงาน" },
   { method: "POST", path: "/api/v1/orders/report-range", scopes: ["reports:read"], description: "รายงานออเดอร์ตามช่วงวันที่" },
   { method: "GET", path: "/api/v1/customers", scopes: ["customers:read"], description: "ค้นหาลูกค้า (?q= หรือ ?all=true)" },

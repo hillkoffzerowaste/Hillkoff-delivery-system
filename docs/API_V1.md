@@ -72,6 +72,7 @@ key ที่มี `roles: ["*"]` จะถูกจับคู่กับบ
 | POST | `/api/v1/orders/delete` | `orders:write` |
 | PATCH | `/api/v1/orders/workflow` | `orders:write` |
 | PATCH | `/api/v1/orders/chiangmai-rounds` | `orders:write` |
+| POST | `/api/v1/orders/chiangmai-complete` | `orders:write` |
 | POST | `/api/v1/orders/dispatch-dashboard` | `reports:read` |
 | POST | `/api/v1/orders/report-range` | `reports:read` |
 | GET | `/api/v1/customers?q=` หรือ `?all=true` | `customers:read` |
