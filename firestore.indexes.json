@@ -65,5 +65,17 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "customer_search_cache",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "customer_search_cache",
+      "fieldPath": "data",
+      "indexes": []
+    }
+  ]
 }

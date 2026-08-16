@@ -1,15 +1,22 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { compactCustomerSearch, normalizeCustomerSearch } from "../../../../lib/customerSearchIndex";
+import { readCustomerSearchCache, writeCustomerSearchCache } from "../../../../lib/customerSearchCache";
 
 export const runtime = "nodejs";
 
 const MAX_RESULTS = 50;
 const MAX_CANDIDATES = 120;
 const MAX_ALL_RESULTS = 1000;
-// ดัชนีลูกค้าเปลี่ยนไม่บ่อย ยืดอายุแคชเพื่อลดการยิงคำค้นเดิมซ้ำในหนึ่งชั่วโมงทำงาน
-const CACHE_TTL_MS = 15 * 60_000;
-const cache = new Map();
 const pending = new Map();
+
+// terms และ searchKeys เป็นดัชนีสำหรับ query ฝั่งเซิร์ฟเวอร์เท่านั้น (อย่างละไม่เกิน 200 ค่าต่อราย)
+// ไม่มีผู้ใช้ฝั่ง client จึงตัดออกทั้งจาก response และจากสิ่งที่เก็บลงแคช
+function toPublicCustomer(id, data) {
+  const { terms, searchKeys, ...rest } = data || {};
+  void terms;
+  void searchKeys;
+  return { id, ...rest };
+}
 
 function normalize(value) {
   return compactCustomerSearch(value);
@@ -36,32 +43,30 @@ export async function GET(request) {
     const normalizedQuery = normalizeCustomerSearch(query);
     if (!loadAll && normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
     const cacheKey = loadAll ? `__all_customers__:${allResultsLimit}` : normalizedQuery;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Response.json({ ok: true, data: cached.data });
+    const cached = await readCustomerSearchCache(db, cacheKey);
+    if (cached) return Response.json({ ok: true, data: cached });
 
     if (pending.has(cacheKey)) return Response.json({ ok: true, data: await pending.get(cacheKey) });
     const search = (async () => {
-    if (loadAll) {
-      const snap = await db.collection("customer_search").orderBy("updatedAt", "desc").limit(allResultsLimit).get();
-      const data = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
-      cache.set(cacheKey, { at: Date.now(), data });
-      if (cache.size > 100) cache.delete(cache.keys().next().value);
-      return data;
-    }
-    const toMatches = (docs) => docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })).filter((data) => matches(data, query));
-    const prefixSnap = await db.collection("customer_search").where("terms", "array-contains", normalizedQuery).limit(MAX_RESULTS).get();
-    let results = toMatches(prefixSnap.docs);
-    if (!results.length) {
-      const searchKey = compactCustomerSearch(query).slice(0, 3);
-      const keySnap = await db.collection("customer_search").where("searchKeys", "array-contains", searchKey).limit(MAX_CANDIDATES).get();
-      results = toMatches(keySnap.docs);
-    }
-    results = results
-      .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
-      .slice(0, MAX_RESULTS);
-    cache.set(cacheKey, { at: Date.now(), data: results });
-    if (cache.size > 100) cache.delete(cache.keys().next().value);
-    return results;
+      if (loadAll) {
+        const snap = await db.collection("customer_search").orderBy("updatedAt", "desc").limit(allResultsLimit).get();
+        const data = snap.docs.map((doc) => toPublicCustomer(doc.id, doc.data()));
+        await writeCustomerSearchCache(db, cacheKey, data);
+        return data;
+      }
+      const toMatches = (docs) => docs.map((doc) => toPublicCustomer(doc.id, doc.data())).filter((data) => matches(data, query));
+      const prefixSnap = await db.collection("customer_search").where("terms", "array-contains", normalizedQuery).limit(MAX_RESULTS).get();
+      let results = toMatches(prefixSnap.docs);
+      if (!results.length) {
+        const searchKey = compactCustomerSearch(query).slice(0, 3);
+        const keySnap = await db.collection("customer_search").where("searchKeys", "array-contains", searchKey).limit(MAX_CANDIDATES).get();
+        results = toMatches(keySnap.docs);
+      }
+      results = results
+        .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+        .slice(0, MAX_RESULTS);
+      await writeCustomerSearchCache(db, cacheKey, results);
+      return results;
     })();
     pending.set(cacheKey, search);
     try { return Response.json({ ok: true, data: await search }); }

@@ -1,4 +1,5 @@
 import { customerSearchRecord, normalizeCustomerSearch } from "../../../../lib/customerSearchIndex";
+import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCache";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
@@ -99,6 +100,8 @@ export async function POST(request) {
         data: duplicateResponse
       }, { status: 409 });
     }
+    // ดัชนีเปลี่ยนแล้ว ต้องเดินเลขเวอร์ชันเพื่อให้ผลค้นหาที่แคชไว้หมดอายุทันทีทุก instance
+    await bumpCustomerSearchIndexVersion(db);
     return Response.json({ ok: true, data: { id: customerId } });
   } catch (error) { return errorResponse(error); }
 }

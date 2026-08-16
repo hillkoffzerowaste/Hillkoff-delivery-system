@@ -3,6 +3,7 @@ import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
+import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCache";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
@@ -182,6 +183,16 @@ export async function POST(request) {
     try {
       const transactionResult = await db.runTransaction(async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
+        const searchIndexRef = db.collection("customer_search").doc(next.customerId);
+        const searchIndexSnap = await transaction.get(searchIndexRef);
+        // ทุกออเดอร์เขียนทับดัชนีลูกค้าเสมอ แต่ส่วนใหญ่ค่าไม่เปลี่ยน จึงเดินเลขเวอร์ชันแคช
+        // เฉพาะตอนที่ค้นหาแล้วจะได้ผลต่างจากเดิมจริง ไม่งั้นแคชจะถูกล้างทิ้งทุกครั้งที่ขายของ
+        const previousIndex = searchIndexSnap.exists ? searchIndexSnap.data() || {} : null;
+        const searchIndexChanged = !previousIndex
+          || String(previousIndex.name || "") !== String(next.customerName || "")
+          || String(previousIndex.phone || "") !== String(next.customerPhone || "")
+          || String(previousIndex.zone || "") !== String(next.zone || "")
+          || String(previousIndex.address || "") !== String(next.address || "");
         if (orderSnap.exists) {
           const existing = orderSnap.data() || {};
           const sameRequest = String(existing.createdByUid || "") === String(decoded.uid || "")
@@ -196,11 +207,12 @@ export async function POST(request) {
         }
         transaction.create(orderRef, next);
         transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
-        transaction.set(db.collection("customer_search").doc(next.customerId), customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
+        transaction.set(searchIndexRef, customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
         for (const reservation of bookingRefs) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
-        return { alreadyExists: false };
+        return { alreadyExists: false, searchIndexChanged };
       });
       if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });
+      if (transactionResult?.searchIndexChanged) await bumpCustomerSearchIndexVersion(db);
     } catch (error) {
       if (error?.code === 6 || error?.code === "already-exists") {
         return Response.json({ ok: false, error: "Order id already exists" }, { status: 409 });

@@ -1,3 +1,4 @@
+import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCache";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
@@ -21,6 +22,7 @@ export async function POST(request) {
     batch.delete(db.collection("customers").doc(customerId));
     batch.delete(db.collection("customer_search").doc(customerId));
     await batch.commit();
+    await bumpCustomerSearchIndexVersion(db);
     return Response.json({ ok: true, data: { id: customerId } });
   } catch (error) { return errorResponse(error); }
 }
