@@ -6,7 +6,7 @@ import { createOrderReviewPayload, createOrderReviewUrl } from "../../lib/orderR
 
 const qrOptions = { errorCorrectionLevel: "H", margin: 3, width: 220 };
 
-export default function OrderReviewQrCode({ orderId, className = "" }) {
+export default function OrderReviewQrCode({ orderId, className = "", delivered = false }) {
   const [imageSrc, setImageSrc] = useState("");
   const payload = createOrderReviewPayload(orderId);
 
@@ -17,6 +17,8 @@ export default function OrderReviewQrCode({ orderId, className = "" }) {
       .catch(() => { if (active) setImageSrc(""); });
     return () => { active = false; };
   }, [orderId]);
+
+  if (delivered) return null;
 
   return (
     <div className={["order-review-qr", className].filter(Boolean).join(" ")} data-review-qr-payload={payload}>

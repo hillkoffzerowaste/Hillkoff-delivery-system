@@ -29,6 +29,7 @@ import {
 } from "../lib/preparationWorkflow";
 import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import { isDriverQueueVisibleToDriver, isExpiredDriverQueueForSales } from "../lib/driverQueuePolicy";
+import { removeDriverPodPhoto, shouldShowDriverOrderReviewQr } from "../lib/driverDeliveryDraft";
 import {
   AlertTriangle,
   Archive,
@@ -976,6 +977,7 @@ export default function App() {
     return Boolean(serviceDate) && serviceDate < todayServiceDate && isOpenDeliveryStatus(o?.status);
   };
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
+  const [closedDriverDeliveryOrderIds, setClosedDriverDeliveryOrderIds] = useState({});
   const [showDriverDailyReport, setShowDriverDailyReport] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const [activeSalesStatusPanel, setActiveSalesStatusPanel] = useState(null);
@@ -2460,6 +2462,8 @@ export default function App() {
       return new Date(a.acceptedAt || a.updatedAt || a.createdAt || 0).getTime() - new Date(b.acceptedAt || b.updatedAt || b.createdAt || 0).getTime();
     });
   const driverDeliveryOrders = [...driverCurrentDeliveryOrders, ...driverReorderableOrders];
+  const deferredDriverDeliveryOrders = driverDeliveryOrders.filter(order => closedDriverDeliveryOrderIds[order.id]);
+  const visibleDriverDeliveryOrders = driverDeliveryOrders.filter(order => !closedDriverDeliveryOrderIds[order.id]);
   const driverTodayRouteTasks = (routeTasks || [])
     .filter(task => task.driverId === driverId && String(task?.serviceDate || "") === todayServiceDate)
     .slice()
@@ -4193,6 +4197,23 @@ export default function App() {
     } catch (error) {
       setSyncStatus(`❌ บันทึกรูป POD ไม่สำเร็จ: ${error.message || error}`);
     }
+  };
+
+  const removePodPhoto = (order, index) => {
+    const files = Array.isArray(podFilesRef.current[order.id]) ? podFilesRef.current[order.id] : [];
+    const previews = podPreviewsByOrder[order.id] || [];
+    const removedPreview = previews[index];
+    const next = removeDriverPodPhoto(files, previews, index);
+    if (removedPreview) {
+      try { URL.revokeObjectURL(removedPreview); } catch {}
+    }
+    podFilesRef.current[order.id] = next.files;
+    setPodPreviewsByOrder(prev => ({ ...prev, [order.id]: next.previews }));
+    setState(prev => ({
+      ...prev,
+      orders: prev.orders.map(item => item.id === order.id ? { ...item, photo: next.previews[0] || "", sharedToLine: false } : item)
+    }));
+    setSyncStatus(next.files.length ? "✅ ลบรูป POD แล้ว เหลือ " + next.files.length + "/5 รูป" : "✅ ลบรูป POD แล้ว ถ่ายใหม่ได้");
   };
 
   // POD รูปภาพเก็บไว้เฉพาะในเครื่องระหว่างเตรียมแชร์เท่านั้น
@@ -6614,8 +6635,19 @@ export default function App() {
 	              <section className="panel">
 	                <div className="panel-head"><h2><Car size={15} className="i-inline" aria-hidden="true" /> ลำดับส่งของฉัน</h2><span>{driverDeliveryOrders.length} งาน</span></div>
 	                <div className="driver-sequence-help">ลากการ์ดเพื่อจัดลำดับได้ · งานที่กำลังจัดส่งจะถูกตรึงบนสุด · งานใหม่จะต่อท้ายอัตโนมัติ</div>
+	                {deferredDriverDeliveryOrders.length > 0 && (
+	                  <div style={{ display: "grid", gap: "var(--sp-3)", marginBottom: "var(--sp-5)", padding: "var(--sp-4)", background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px" }}>
+	                    <b style={{ color: "var(--c-warn-dark)", fontSize: "12px" }}>งานที่ปิดไว้ชั่วคราว · ยังไม่ยกเลิกงาน</b>
+	                    {deferredDriverDeliveryOrders.map(order => (
+	                      <div key={order.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}>
+	                        <span style={{ fontSize: "12px" }}>{order.id} · {order.customerName}</span>
+	                        <button type="button" className="secondary" style={{ padding: "var(--sp-3) var(--sp-4)", fontSize: "11px" }} onClick={() => setClosedDriverDeliveryOrderIds(previous => { const next = { ...previous }; delete next[order.id]; return next; })}>เปิดแก้ไขต่อ</button>
+	                      </div>
+	                    ))}
+	                  </div>
+	                )}
 	                <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "var(--sp-6)" }}>
-	                  {driverDeliveryOrders.map((order, sequenceIndex) => (
+	                  {visibleDriverDeliveryOrders.map((order, sequenceIndex) => (
 	                    <div key={order.id} className={`driver-sequence-card ${order.status === "กำลังจัดส่ง" ? "locked" : ""}`} draggable={order.status === "กำลังส่ง"} onDragStart={() => setDriverSequenceDragId(order.id)} onDragOver={(event) => { if (order.status === "กำลังส่ง") event.preventDefault(); }} onDrop={() => { if (order.status === "กำลังส่ง") dropDriverSequence(order.id); }} style={{ background: "var(--c-info-bg)", padding: "var(--sp-6)", borderRadius: "8px", border: `2px solid ${statusColor[order.status]}`, display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
                       <div className="driver-sequence-bar">{order.status === "กำลังจัดส่ง" ? <span><MapPin size={15} className="i-inline" aria-hidden="true" /> กำลังนำส่ง · ตรึงลำดับ</span> : <><span><Menu size={15} className="i-inline" aria-hidden="true" /> ลำดับ {sequenceIndex - driverCurrentDeliveryOrders.length + 1}</span><div><button className="secondary" disabled={sequenceIndex === driverCurrentDeliveryOrders.length} onClick={() => moveDriverSequence(order.id, -1)}>↑</button><button className="secondary" disabled={sequenceIndex === driverDeliveryOrders.length - 1} onClick={() => moveDriverSequence(order.id, 1)}>↓</button></div></>}</div>
                       <div>
@@ -6638,7 +6670,7 @@ export default function App() {
 
                       <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)", justifyItems: "center" }}>
                         <b style={{ color: "var(--c-warn-dark)", fontSize: "12px" }}>QR รีวิวออเดอร์นี้</b>
-                        <OrderReviewQrCode orderId={order.id} />
+                        {shouldShowDriverOrderReviewQr(order) && <OrderReviewQrCode orderId={order.id} />}
                         <small style={{ color: "var(--c-text-muted)", textAlign: "center" }}>ลูกค้าสแกนหลังรับสินค้า · กรณีของไม่ครบก็รีวิวได้</small>
                       </div>
                       
@@ -6661,19 +6693,24 @@ export default function App() {
 	                              className="secondary"
 	                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
 	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
-                              onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
+	                              onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
+	                            <button
+	                              className="secondary"
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1" }}
+	                              onClick={() => setClosedDriverDeliveryOrderIds(previous => ({ ...previous, [order.id]: true }))}
+	                            >ปิดไว้ก่อน · ทำรายการอื่น</button>
                           </>
                         )}
                         {order.status === "กำลังจัดส่ง" && (
                           <>
 	                            <div style={{ gridColumn: "1 / -1", display: "grid", gap: "var(--sp-3)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "8px", padding: "var(--sp-4)" }}>
 	                              <b style={{ color: "var(--c-info-deep)", fontSize: "12px" }}>1. ตรวจสอบสินค้าและบันทึกหมายเหตุ *</b>
-	                              <select value={driverDeliveryCompleteness[order.id] || ""} onChange={event => setDriverDeliveryCompleteness(previous => ({ ...previous, [order.id]: event.target.value }))} disabled={(podPreviewsByOrder[order.id] || []).length > 0}>
+	                              <select value={driverDeliveryCompleteness[order.id] || ""} onChange={event => setDriverDeliveryCompleteness(previous => ({ ...previous, [order.id]: event.target.value }))}>
 	                                <option value="">-- เลือกผลตรวจสินค้า --</option>
 	                                <option value="complete">✅ สินค้าครบ</option>
 	                                <option value="incomplete">⚠️ สินค้าไม่ครบ / ต้องส่งแก้ไข</option>
 	                              </select>
-	                              <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={event => setDriverNoteDrafts(drafts => ({ ...drafts, [order.id]: event.target.value }))} placeholder="หมายเหตุชัดเจน เช่น ครบทุกกล่อง หรือขาดสินค้าอะไร จำนวนเท่าไร" rows={2} disabled={(podPreviewsByOrder[order.id] || []).length > 0} />
+	                              <textarea value={driverNoteDrafts[order.id] ?? order.driverNote ?? ""} onChange={event => setDriverNoteDrafts(drafts => ({ ...drafts, [order.id]: event.target.value }))} placeholder="หมายเหตุชัดเจน เช่น ครบทุกกล่อง หรือขาดสินค้าอะไร จำนวนเท่าไร" rows={2} />
 	                              <small style={{ color: "var(--c-info-dark)" }}>{requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) ? "กรณีสินค้าไม่ครบ ต้องกรอกหมายเหตุก่อนถ่ายรูป/ส่ง LINE" : "เลือกผลตรวจสินค้าแล้วถ่ายรูป/ส่ง LINE ได้เลย"}</small>
 	                            </div>
 	                            <label 
@@ -6687,9 +6724,14 @@ export default function App() {
 	                            </label>
 	                            <button
 	                              className="secondary"
-	                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
-	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
+                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
                               onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
+                            <button
+                              className="secondary"
+                              style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1" }}
+                              onClick={() => setClosedDriverDeliveryOrderIds(previous => ({ ...previous, [order.id]: true }))}
+                            >ปิดไว้ก่อน · ทำรายการอื่น</button>
                           </>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && (
@@ -6722,8 +6764,8 @@ export default function App() {
                       </div>
 
                       {/* Photo Preview */}
-                      {(podPreviewsByOrder[order.id] || []).length > 0 && (
-                        <div style={{ marginTop: "var(--sp-4)" }}><b style={{ display: "block", marginBottom: "var(--sp-3)", fontSize: "12px", color: "var(--c-brand-dark)" }}><Camera size={15} className="i-inline" aria-hidden="true" /> รูป POD {(podPreviewsByOrder[order.id] || []).length}/5</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "var(--sp-3)" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ borderRadius: "6px", overflow: "hidden", border: "2px solid var(--c-brand-light)", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>)}</div></div>
+                       {(podPreviewsByOrder[order.id] || []).length > 0 && (
+                         <div style={{ marginTop: "var(--sp-4)" }}><b style={{ display: "block", marginBottom: "var(--sp-3)", fontSize: "12px", color: "var(--c-brand-dark)" }}><Camera size={15} className="i-inline" aria-hidden="true" /> รูป POD {(podPreviewsByOrder[order.id] || []).length}/5 · แตะลบรูปที่ถ่ายผิดได้</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "var(--sp-3)" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ position: "relative", borderRadius: "6px", overflow: "hidden", border: "2px solid var(--c-brand-light)", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button type="button" className="secondary" aria-label={`ลบรูป POD ${index + 1}`} style={{ position: "absolute", top: "var(--sp-2)", right: "var(--sp-2)", minHeight: "32px", minWidth: "32px", padding: "var(--sp-2)", background: "var(--c-surface)", color: "var(--c-danger-dark)" }} onClick={() => removePodPhoto(order, index)}><XCircle size={15} aria-hidden="true" /></button></div>)}</div></div>
                       )}
                       
                       {order.status === "ส่งสำเร็จ" && (
@@ -6791,10 +6833,6 @@ export default function App() {
 	                            <b style={{ fontSize: "15px", display: "block", color: "var(--c-text)" }}>{order.customerName}</b>
 	                            <small style={{ color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
 	                            {order.deliveredAt && <small style={{ color: "var(--c-brand)", fontWeight: "bold" }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> {order.deliveredAt}</small>}
-	                          </div>
-	                          <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", justifyItems: "center", gap: "var(--sp-2)" }}>
-	                            <b style={{ color: "var(--c-warn-dark)", fontSize: "12px" }}>ให้ลูกค้าสแกนรีวิว</b>
-	                            <OrderReviewQrCode orderId={order.id} />
 	                          </div>
 	                          {order.photo?.startsWith?.("data:") && (
 	                            <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid var(--c-line)" }}>
