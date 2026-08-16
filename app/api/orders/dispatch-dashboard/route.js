@@ -10,7 +10,7 @@ export async function POST(request) {
     const selectedDate = String(body.selectedDate || "").slice(0, 10);
     const plan = dispatchDashboardReadPlan(selectedDate);
     const snapshots = await Promise.all(plan.map((spec) => (
-      db.collection(spec.collection).where(spec.field, spec.op, spec.value).limit(1000).get()
+      db.collection(spec.collection).where(spec.field, spec.op, spec.value).limit(spec.limit || 500).get()
     )));
     const unique = new Map();
     for (const snap of snapshots) {

@@ -4,8 +4,10 @@ import { compactCustomerSearch, normalizeCustomerSearch } from "../../../../lib/
 export const runtime = "nodejs";
 
 const MAX_RESULTS = 50;
-const MAX_CANDIDATES = 250;
+const MAX_CANDIDATES = 120;
 const MAX_ALL_RESULTS = 1000;
+// ดัชนีลูกค้าเปลี่ยนไม่บ่อย ยืดอายุแคชเพื่อลดการยิงคำค้นเดิมซ้ำในหนึ่งชั่วโมงทำงาน
+const CACHE_TTL_MS = 15 * 60_000;
 const cache = new Map();
 const pending = new Map();
 
@@ -35,7 +37,7 @@ export async function GET(request) {
     if (!loadAll && normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
     const cacheKey = loadAll ? `__all_customers__:${allResultsLimit}` : normalizedQuery;
     const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.at < 5 * 60_000) return Response.json({ ok: true, data: cached.data });
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Response.json({ ok: true, data: cached.data });
 
     if (pending.has(cacheKey)) return Response.json({ ok: true, data: await pending.get(cacheKey) });
     const search = (async () => {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { INITIAL_CUSTOMER_RESULTS_LIMIT, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, INITIAL_CUSTOMER_RESULTS_LIMIT, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
@@ -1133,6 +1133,14 @@ export default function App() {
 	    };
 	  }, []);
 
+	  // แท็บถูกแปลงเป็นความต้องการซิงก์ก่อนเข้า effect เพื่อให้การสลับแท็บที่ต้องการชุด listener
+	  // เดียวกันไม่ต้องถอดแล้วต่อใหม่ (การต่อใหม่แต่ละครั้งคือการอ่านเอกสารทั้งชุดซ้ำ)
+	  const ordersSyncMode = getOrdersSyncMode(displayTab);
+	  const needsActiveOrders = needsActiveOrdersQuery(displayTab);
+	  const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
+	  const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
+	  const needsDriverAssessments = String(displayTab || "") === "settings";
+
 	  // Firestore sync (minimize reads): subscribe only where realtime is needed.
 	  useEffect(() => {
 	    if (typeof window === "undefined") return;
@@ -1158,12 +1166,8 @@ export default function App() {
       setSyncStatus("🟢 ระบบเชื่อมต่อแบบเรียลไทม์");
 	    };
 
-    const ordersSyncMode = getOrdersSyncMode(displayTab);
     const needsOrdersRealtime = ordersSyncMode !== "none";
     const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
-    const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
-	    const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
-	    const needsDriverAssessments = String(displayTab || "") === "settings";
 	    const needsChat = Boolean(chatOpen);
 
       if (needsChat) {
@@ -1251,7 +1255,7 @@ export default function App() {
           operationalOrdersSnapshotsRef.current = { recent: [], active: [] };
           const ordersQ = fb.query(fb.collection(db, "orders"), fb.orderBy("updatedAt", "desc"), fb.limit(effectiveOrdersLimit));
 	          attachOrderQuery(ordersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "recent"), onOrderError);
-          if (needsActiveOrdersQuery(displayTab)) {
+          if (needsActiveOrders) {
             const activeOrdersQ = fb.query(fb.collection(db, "orders"), fb.where("queueStatus", "in", ["preparing", "ready", "queued"]), fb.limit(250));
 	          attachOrderQuery(activeOrdersQ, (snap) => applyOrderRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })), "active"), onOrderError);
           }
@@ -1362,7 +1366,7 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, displayTab, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate, isPageVisible]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, needsRouteTasksRealtime, needsDriverLocations, needsDriverAssessments, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate, isPageVisible]);
 
   // Driver location: record only on "check-in" events (no continuous tracking)
 
@@ -2293,7 +2297,7 @@ export default function App() {
       } catch (error) {
         if (sequence === historicalCustomerSearchSeqRef.current) setSyncStatus(`⚠️ ค้นหาข้อมูลเก่าไม่สำเร็จ: ${error?.message || error}`);
       }
-    }, 350);
+    }, CUSTOMER_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [auth.role, customerQuery, orderCustomerSearch, refreshAuthToken]);
 

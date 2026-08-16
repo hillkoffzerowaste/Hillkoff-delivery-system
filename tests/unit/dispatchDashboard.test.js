@@ -36,8 +36,8 @@ describe("sales dispatch dashboard", () => {
 
   it("reads only the selected date and open delivery queues", () => {
     expect(dispatchDashboardReadPlan("2026-07-26")).toEqual([
-      { collection: "orders", field: "serviceDate", op: "==", value: "2026-07-26" },
-      { collection: "orders", field: "queueStatus", op: "in", value: ["preparing", "ready", "queued"] }
+      { collection: "orders", field: "serviceDate", op: "==", value: "2026-07-26", limit: 500 },
+      { collection: "orders", field: "queueStatus", op: "in", value: ["preparing", "ready", "queued"], limit: 300 }
     ]);
   });
 });

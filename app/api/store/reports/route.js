@@ -6,8 +6,13 @@ export const runtime = "nodejs";
 
 const REPORT_TYPES = ["booking", "online"];
 const REPORT_STATUSES = ["draft", "saved", "waiting", "partial"];
+// การอ่านที่ผูกช่วงวันไว้แล้วจะหยุดที่ขอบของวันนั้นเอง จึงตั้งเพดานไว้สูงได้โดยไม่กินโควตา
+// ส่วนการค้นหาที่ไม่ระบุวันต้องกวาดเอกสารล่าสุดมากรองในหน่วยความจำ จึงต้องคุมเพดานให้แคบ
 const REPORT_PAGE_LIMIT = 250;
+const REPORT_SEARCH_LIMIT = 100;
 const KPI_REPORT_LIMIT = 1000;
+const ALERT_PAGE_LIMIT = 200;
+const ALERT_WINDOW_DAYS = 60;
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
@@ -85,9 +90,10 @@ export async function GET(request) {
     const alerts = params.get("alerts") === "true";
     if (alerts) {
       if (profile.role !== "store") return Response.json({ ok: false, error: "Store access required" }, { status: 403 });
+      const alertCutoff = new Date(Date.now() - ALERT_WINDOW_DAYS * 86_400_000).toISOString();
       const [storeIssueSnap, packIssueSnap] = await Promise.all([
-        db.collection("store_reports").where("status", "in", ["waiting", "partial"]).get(),
-        db.collection("store_reports").where("packStatus", "in", ["waiting", "partial", "returned"]).get()
+        db.collection("store_reports").where("status", "in", ["waiting", "partial"]).where("createdAt", ">=", alertCutoff).orderBy("createdAt", "desc").limit(ALERT_PAGE_LIMIT).get(),
+        db.collection("store_reports").where("packStatus", "in", ["waiting", "partial", "returned"]).where("createdAt", ">=", alertCutoff).orderBy("createdAt", "desc").limit(ALERT_PAGE_LIMIT).get()
       ]);
       const incompleteById = new Map();
       [...storeIssueSnap.docs, ...packIssueSnap.docs].forEach((doc) => {
@@ -129,7 +135,8 @@ export async function GET(request) {
     if (fromDateRange) query = query.where("createdAt", ">=", fromDateRange.start);
     query = query.orderBy("createdAt", "desc");
     if (dateRange) query = query.startAt(dateRange.end).endAt(dateRange.start);
-    const snap = await query.limit(kpi ? KPI_REPORT_LIMIT : REPORT_PAGE_LIMIT).get();
+    const pageLimit = kpi ? KPI_REPORT_LIMIT : dateRange ? REPORT_PAGE_LIMIT : REPORT_SEARCH_LIMIT;
+    const snap = await query.limit(pageLimit).get();
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
       if (!isStoreReportVisibleToRole(item, profile.role, includeDeleted)) return false;
