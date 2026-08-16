@@ -1,12 +1,11 @@
-import { Kanit } from "next/font/google";
+import "@fontsource/kanit/300.css";
+import "@fontsource/kanit/400.css";
+import "@fontsource/kanit/500.css";
+import "@fontsource/kanit/600.css";
+import "@fontsource/kanit/700.css";
+import "@fontsource/kanit/800.css";
+import "@fontsource/kanit/900.css";
 import "./globals.css";
-
-const kanit = Kanit({
-  subsets: ["thai", "latin"],
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-  variable: "--font-kanit",
-  display: "swap"
-});
 
 export const metadata = {
   title: "Hillkoff Delivery System",
@@ -35,7 +34,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="th" className={kanit.variable}>
+    <html lang="th">
       <body>{children}</body>
     </html>
   );

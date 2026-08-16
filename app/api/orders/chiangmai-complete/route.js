@@ -16,13 +16,18 @@ export async function POST(request) {
       : [];
     if (!selectedIds.length) return Response.json({ ok: false, error: "No selected orders" }, { status: 400 });
     if (selectedIds.length > 200) return Response.json({ ok: false, error: "Selection exceeds 200 orders" }, { status: 409 });
+    if (selectedIds.some((id) => id.length > 120 || id.includes("/"))) {
+      return Response.json({ ok: false, error: "Invalid order id" }, { status: 400 });
+    }
 
     const refs = selectedIds.map((id) => db.collection("orders").doc(id));
+    const auditRef = db.collection("audit_logs").doc();
     const now = new Date().toISOString();
     const batchId = `sales_complete_${Date.now()}`;
     const completedOrders = [];
 
     await db.runTransaction(async (transaction) => {
+      completedOrders.length = 0;
       const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
       const blockingOrderIds = snapshots
         .filter((snapshot) => !snapshot.exists || !canSalesCompleteChiangmaiOrder(snapshot.data()))
@@ -38,16 +43,15 @@ export async function POST(request) {
         transaction.set(snapshot.ref.collection("activity").doc(), history);
         completedOrders.push({ id: snapshot.id, ...order, ...patch });
       });
-    });
-
-    await db.collection("audit_logs").add({
-      action: "sales_complete_bulk",
-      batchId,
-      count: selectedIds.length,
-      orderIds: selectedIds,
-      uid: profile.uid,
-      role: profile.role,
-      createdAt: now
+      transaction.set(auditRef, {
+        action: "sales_complete_bulk",
+        batchId,
+        count: selectedIds.length,
+        orderIds: selectedIds,
+        uid: profile.uid,
+        role: profile.role,
+        createdAt: now
+      });
     });
     const syncResults = await Promise.allSettled(completedOrders.map((order) => syncDeliveryOrderToSheet(db, order.id, order)));
     if (syncResults.some((result) => result.status === "rejected")) {

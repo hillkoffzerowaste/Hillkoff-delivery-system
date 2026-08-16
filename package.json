@@ -19,7 +19,8 @@
     "backup:restore": "node lib/backup/cli.js restore"
   },
   "dependencies": {
-    "@hillkoffzerowaste/sales-workspace": "0.1.0",
+    "@fontsource/kanit": "5.3.0",
+    "@hillkoffzerowaste/sales-workspace": "0.2.2",
     "firebase": "12.16.0",
     "firebase-admin": "13.6.0",
     "html5-qrcode": "^2.3.8",

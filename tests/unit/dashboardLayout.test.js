@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const pageSource = await readFile(new URL("../../app/page.jsx", import.meta.url), "utf8");
+const layoutSource = await readFile(new URL("../../app/layout.jsx", import.meta.url), "utf8");
 const normalizedPageSource = pageSource.replaceAll("\r\n", "\n");
 
 describe("dashboard layout", () => {
@@ -32,5 +33,20 @@ describe("dashboard layout", () => {
     expect(pageSource).toContain('ลบออเดอร์ที่เลือก');
     expect(pageSource).toContain('/api/orders/chiangmai-delete-bulk');
     expect(pageSource).toContain('ลบออเดอร์ที่กรอกผิด');
+  });
+
+  it("renders the published shared sales workspace for every sales operations tab", () => {
+    expect(pageSource).toContain('import { SalesWorkspace as SharedSalesWorkspace } from "@hillkoffzerowaste/sales-workspace"');
+    expect(pageSource).toContain("Object.hasOwn(SHARED_SALES_VIEW_BY_TAB, displayTab)");
+    expect(pageSource).toContain("adapter={sharedSalesAdapter}");
+    expect(pageSource).toContain('sales: "overview"');
+    expect(pageSource).toContain('"sales-outstation": "outstation"');
+    expect(pageSource).toContain('dispatch: "dispatch"');
+    expect(pageSource).toContain('chiangmai: "chiangmai"');
+  });
+
+  it("bundles Kanit locally so production builds do not depend on Google Fonts", () => {
+    expect(layoutSource).not.toContain('next/font/google');
+    expect(layoutSource).toContain('@fontsource/kanit/400.css');
   });
 });

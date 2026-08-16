@@ -15,17 +15,17 @@ function createDb(initialOrders) {
   const orders = new Map(Object.entries(initialOrders));
   const activity = [];
   const audits = [];
-  const refFor = (id) => ({
-    id,
-    collection: () => ({ doc: () => ({ kind: "activity", orderId: id }) })
-  });
+  const refFor = (id) => ({ id, collection: () => ({ doc: () => ({ kind: "activity", orderId: id }) }) });
   return {
     orders,
     activity,
     audits,
     collection(name) {
       if (name === "orders") return { doc: refFor };
-      if (name === "audit_logs") return { add: async (value) => audits.push(value) };
+      if (name === "audit_logs") return {
+        doc: () => ({ kind: "audit" }),
+        add: async () => { throw new Error("audit must be part of the order transaction"); }
+      };
       throw new Error(`unexpected collection ${name}`);
     },
     async runTransaction(callback) {
@@ -36,6 +36,7 @@ function createDb(initialOrders) {
       });
       writes.forEach(({ ref, value }) => {
         if (ref.kind === "activity") activity.push({ orderId: ref.orderId, ...value });
+        else if (ref.kind === "audit") audits.push(value);
         else orders.set(ref.id, { ...orders.get(ref.id), ...value });
       });
     }
@@ -63,8 +64,7 @@ describe("sales Chiang Mai bulk completion route", () => {
   it("completes several checked and unqueued orders as one audited batch", async () => {
     const response = await post(["A", "B"]);
     expect(response?.status).toBe(200);
-    const json = await response.json();
-    expect(json).toMatchObject({ ok: true, data: { count: 2, completedIds: ["A", "B"] } });
+    expect(await response.json()).toMatchObject({ ok: true, data: { count: 2, completedIds: ["A", "B"] } });
     expect(state.db.orders.get("A")).toMatchObject({ status: "ส่งสำเร็จ", queueStatus: "completed", salesCompletedBy: "ฝ่ายขายหนึ่ง" });
     expect(state.db.activity).toHaveLength(2);
     expect(state.db.audits).toHaveLength(1);
