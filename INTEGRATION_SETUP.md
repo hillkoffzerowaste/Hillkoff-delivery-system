@@ -1,11 +1,12 @@
 # Hillkoff Integration Setup
 
-## Public API v1 (แอปโปรเจกต์อื่นเชื่อมเข้ามา)
+## Public API v1 (ยกเลิกแล้ว)
 
-แอปภายนอกเรียกระบบผ่าน `/api/v1/*` ด้วย API key `hk_live_...` ที่ออกจากหน้า `/admin/api-clients`
-ดูรายละเอียด scope, endpoint, ตัวอย่าง curl และวิธีจัดการกุญแจได้ที่ [`docs/API_V1.md`](docs/API_V1.md)
+ระบบ API กลางสำหรับให้แอปภายนอกเชื่อมเข้ามา (`/api/v1/*`, กุญแจ `hk_live_...`, หน้า `/admin/api-clients`)
+ถูกถอดออกทั้งหมดเมื่อ 2026-08-16 เพราะเลิกใช้แล้ว แอปที่เคยพ่วงไว้คือ `scan-to-sheet` และถูกเพิกถอนกุญแจแล้ว
 
-ไม่ต้องตั้ง environment variable เพิ่ม — กุญแจถูกเก็บเป็น SHA-256 hash ใน Firestore collection `api_clients`
+ตอนนี้ทุก endpoint รับเฉพาะ Firebase ID token ของผู้ใช้ในระบบเท่านั้น ถ้าต้องเปิดให้แอปภายนอกเชื่อมอีกครั้ง
+ให้ย้อนดูโค้ดเดิมจากประวัติ git แทนการเขียนใหม่
 
 ## Google Login + OTP (Firebase)
 
