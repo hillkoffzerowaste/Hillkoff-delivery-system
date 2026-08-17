@@ -3338,6 +3338,28 @@ button:focus-visible, a:focus-visible, summary:focus-visible, [role="button"]:fo
 
 .stranded-row-main b { word-break: break-all; }
 
+.stranded-counts,
+.stranded-row-tags {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.stranded-row-tags { justify-content: flex-end; }
+
+.stranded-actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.stranded-actions button { flex: 1 1 auto; }
+
+.stranded-panel .stranded-cancel {
+  color: var(--c-danger-deep);
+  background: var(--c-danger-bg-strong);
+}
+
 @media (max-width: 700px) {
   .stranded-row { flex-wrap: wrap; }
 }

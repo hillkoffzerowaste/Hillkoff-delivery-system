@@ -85,10 +85,22 @@ import {
 } from "lucide-react";
 
 const STRANDED_REASON_LABEL = Object.freeze({
+  never_accepted: "ไม่มีคนขับรับ",
   no_check_in: "ไม่ได้กดไปถึงแล้ว",
   no_pod_photo: "ไม่มีรูป POD",
   line_share_incomplete: "ยังไม่ได้ส่ง LINE",
   not_confirmed: "ยังไม่กดยืนยัน"
+});
+
+const STRANDED_CATEGORY_LABEL = Object.freeze({
+  in_flight: "คนขับถืองานอยู่",
+  expired_queue: "คิวหมดอายุ · คนขับมองไม่เห็น"
+});
+
+const STRANDED_ACTION_DONE_LABEL = Object.freeze({
+  complete: "ปิดเป็นส่งสำเร็จแล้ว",
+  requeue: "ส่งกลับเข้าคิวคนขับแล้ว",
+  cancel: "ยกเลิกแล้ว"
 });
 
 const STORE_KEY = "hillkoff-delivery-ops:v2";
@@ -1617,27 +1629,34 @@ export default function App() {
     loadStrandedOrders();
   }, [displayTab, isPageVisible, loadStrandedOrders]);
 
-  const closeStrandedOrders = async () => {
-    const selectedIds = strandedSelectedIds.filter((id) => strandedOrders.some((order) => order.id === id));
-    if (!selectedIds.length) return setSyncStatus("⚠️ กรุณาเลือกงานค้างที่จะปิด");
+  const selectedStrandedOrders = strandedOrders.filter((order) => strandedSelectedIds.includes(order.id));
+  // ปุ่มเปิดใช้ได้เฉพาะเมื่อทุกใบที่เลือกรองรับ action นั้น ไม่งั้นกดแล้วจะถูก API ปฏิเสธทั้งชุด
+  const strandedActionAvailable = (action) => (
+    selectedStrandedOrders.length > 0
+    && selectedStrandedOrders.every((order) => (order.allowedActions || []).includes(action))
+  );
+
+  const runStrandedAction = async (action, confirmText) => {
+    const selectedIds = selectedStrandedOrders.map((order) => order.id);
+    if (!selectedIds.length) return setSyncStatus("⚠️ กรุณาเลือกงานค้างก่อน");
     const reason = strandedReason.trim();
-    if (reason.length < 5) return setSyncStatus("⚠️ กรุณาระบุเหตุผลที่ปิดงานย้อนหลัง อย่างน้อย 5 ตัวอักษร");
-    if (!window.confirm(`ปิดงานค้าง ${selectedIds.length} งานเป็น "ส่งสำเร็จ" ย้อนหลังใช่ไหม?\n\nระบบจะบันทึกว่าปิดโดย ${auth.name || auth.email} พร้อมเหตุผล และแยกไว้ว่าไม่ใช่คนขับกดยืนยันเอง`)) return;
+    if (reason.length < 5) return setSyncStatus("⚠️ กรุณาระบุเหตุผล อย่างน้อย 5 ตัวอักษร");
+    if (!window.confirm(`${confirmText} ${selectedIds.length} งานใช่ไหม?\n\nระบบจะบันทึกว่าทำโดย ${auth.name || auth.email} พร้อมเหตุผล`)) return;
     setStrandedSubmitting(true);
     try {
       const res = await authenticatedApiFetch("/api/orders/stranded", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedIds, reason })
+        body: JSON.stringify({ action, selectedIds, reason })
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setSyncStatus(`✅ ปิดงานค้างแล้ว ${json.data.count} งาน`);
+      setSyncStatus(`✅ ${STRANDED_ACTION_DONE_LABEL[action]} ${json.data.count} งาน`);
       setStrandedSelectedIds([]);
       setStrandedReason("");
       await loadStrandedOrders();
     } catch (error) {
-      setSyncStatus(`❌ ปิดงานค้างไม่สำเร็จ: ${error?.message || error}`);
+      setSyncStatus(`❌ ทำรายการไม่สำเร็จ: ${error?.message || error}`);
     } finally {
       setStrandedSubmitting(false);
     }
@@ -5998,11 +6017,17 @@ export default function App() {
                     <RefreshCw size={15} className="i-inline" aria-hidden="true" /> {strandedLoading ? "กำลังโหลด..." : "รีเฟรช"}
                   </button>
                 </div>
+                {strandedOrders.length > 0 && (
+                  <div className="stranded-counts">
+                    <span className="status-chip">คนขับถืองานอยู่ {strandedOrders.filter((order) => order.category === "in_flight").length}</span>
+                    <span className="status-chip">คิวหมดอายุ {strandedOrders.filter((order) => order.category === "expired_queue").length}</span>
+                  </div>
+                )}
                 {strandedLoading && !strandedOrders.length && <p className="muted">กำลังตรวจงานค้าง...</p>}
                 {!strandedLoading && !strandedOrders.length && <p className="muted">ไม่มีงานค้างจากวันก่อน ✅</p>}
                 {strandedOrders.length > 0 && (
                   <>
-                    <p className="muted">คนขับรับงานไปแล้วแต่ไม่ได้กดปิดงาน ถ้ายืนยันว่าส่งถึงลูกค้าแล้วให้เลือกและปิดย้อนหลังได้ ระบบจะบันทึกชื่อผู้ปิดกับเหตุผลไว้ และแยกไว้ว่าไม่ใช่คนขับกดยืนยันเอง</p>
+                    <p className="muted">เลือกงานที่ต้องการ กรอกเหตุผล แล้วเลือกว่าจะทำอะไร — ระบบบันทึกชื่อผู้ทำกับเหตุผลไว้ทุกใบ และแยกไว้ว่าไม่ใช่คนขับกดยืนยันเอง งาน &quot;คิวหมดอายุ&quot; คนขับมองไม่เห็นแล้ว ถ้ายังต้องส่งต้องกดส่งกลับเข้าคิว</p>
                     <label className="stranded-select-all">
                       <input
                         type="checkbox"
@@ -6024,12 +6049,15 @@ export default function App() {
                             <b>{order.id}</b>
                             <span>{order.customerName || "-"}{order.zone ? ` · ${order.zone}` : ""}</span>
                             <small className="muted">
-                              {order.serviceDate} · ค้าง {order.daysStranded} วัน · {order.status}
+                              {order.queueDate || order.serviceDate} · ค้าง {order.daysStranded} วัน · {order.status}
                               {order.driverName ? ` · ${order.driverName}` : ""}
                               {order.cod ? ` · COD ฿${order.cod.toLocaleString("th-TH")}` : ""}
                             </small>
                           </span>
-                          <span className="status-chip">{STRANDED_REASON_LABEL[order.strandedReason] || order.strandedReason}</span>
+                          <span className="stranded-row-tags">
+                            <span className="status-chip">{STRANDED_CATEGORY_LABEL[order.category] || order.category}</span>
+                            <span className="status-chip">{STRANDED_REASON_LABEL[order.strandedReason] || order.strandedReason}</span>
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -6037,16 +6065,34 @@ export default function App() {
                       type="text"
                       value={strandedReason}
                       onChange={(event) => setStrandedReason(event.target.value)}
-                      placeholder="เหตุผลที่ปิดย้อนหลัง เช่น ยืนยันกับคนขับแล้วว่าส่งถึงลูกค้าวันที่ ..."
+                      placeholder="เหตุผล เช่น ยืนยันกับคนขับแล้วว่าส่งถึงลูกค้าวันที่ ... / ลูกค้าเลื่อนส่ง / ออเดอร์ซ้ำ"
                       maxLength={1000}
                     />
-                    <button
-                      className="primary"
-                      onClick={closeStrandedOrders}
-                      disabled={strandedSubmitting || !strandedSelectedIds.length || strandedReason.trim().length < 5}
-                    >
-                      <CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> {strandedSubmitting ? "กำลังปิดงาน..." : `ปิดงานที่เลือกเป็นส่งสำเร็จ (${strandedSelectedIds.length})`}
-                    </button>
+                    <div className="stranded-actions">
+                      <button
+                        className="primary"
+                        onClick={() => runStrandedAction("complete", "ปิดเป็น \"ส่งสำเร็จ\" ย้อนหลัง")}
+                        disabled={strandedSubmitting || !strandedActionAvailable("complete") || strandedReason.trim().length < 5}
+                      >
+                        <CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> ปิดเป็นส่งสำเร็จ ({selectedStrandedOrders.length})
+                      </button>
+                      <button
+                        className="secondary"
+                        onClick={() => runStrandedAction("requeue", "ส่งกลับเข้าคิวให้คนขับเห็นอีกครั้ง")}
+                        disabled={strandedSubmitting || !strandedActionAvailable("requeue") || strandedReason.trim().length < 5}
+                        title={selectedStrandedOrders.some((order) => order.category === "in_flight") ? "งานที่คนขับถืออยู่ส่งกลับเข้าคิวที่นี่ไม่ได้ ใช้การโยกงานของคนขับแทน" : ""}
+                      >
+                        <RefreshCw size={15} className="i-inline" aria-hidden="true" /> ส่งกลับเข้าคิว ({selectedStrandedOrders.length})
+                      </button>
+                      <button
+                        className="secondary stranded-cancel"
+                        onClick={() => runStrandedAction("cancel", "ยกเลิก")}
+                        disabled={strandedSubmitting || !strandedActionAvailable("cancel") || strandedReason.trim().length < 5}
+                      >
+                        <XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิกงาน ({selectedStrandedOrders.length})
+                      </button>
+                    </div>
+                    {strandedSubmitting && <p className="muted">กำลังบันทึก...</p>}
                   </>
                 )}
               </div>
