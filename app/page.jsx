@@ -6676,12 +6676,9 @@ export default function App() {
                       
                       {order.address && <small style={{ color: "var(--c-text-faint)", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "var(--sp-4)" }}><Inbox size={15} className="i-inline" aria-hidden="true" /> {order.address}</small>}
 
-                      <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)", justifyItems: "center" }}>
-                        <b style={{ color: "var(--c-warn-dark)", fontSize: "12px" }}>QR รีวิวออเดอร์นี้</b>
-                        {shouldShowDriverOrderReviewQr(order) && <OrderReviewQrCode orderId={order.id} />}
-                        <small style={{ color: "var(--c-text-muted)", textAlign: "center" }}>ลูกค้าสแกนหลังรับสินค้า · กรณีของไม่ครบก็รีวิวได้</small>
-                      </div>
-                      
+                      {shouldShowDriverOrderReviewQr(order) && <OrderReviewQrCode orderId={order.id} />}
+
+
                       {/* Status Actions */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-4)" }}>
                         {order.status === "กำลังส่ง" && (

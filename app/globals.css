@@ -21,7 +21,7 @@
   display: grid;
   justify-items: center;
   gap: 4px;
-  color: #6b7280;
+  color: var(--c-text-muted);
   font-size: 10px;
   text-align: center;
 }
@@ -3233,4 +3233,49 @@ h2 .i-inline, .panel-head .i-inline { vertical-align: -4px; }
 button:focus-visible, a:focus-visible, summary:focus-visible, [role="button"]:focus-visible {
   outline: 2px solid var(--c-brand);
   outline-offset: 2px;
+}
+
+/* QR รีวิวคนขับ: พับไว้เป็นค่าเริ่มต้นเพื่อไม่ให้การ์ดออเดอร์ยาวจนคนขับต้องเลื่อนมาก
+   คนขับกดเปิดเองตอนจะให้ลูกค้าสแกน ต้องอยู่ท้ายไฟล์เพราะ .secondary ประกาศไว้ก่อนหน้า */
+.order-review-qr-box {
+  background: var(--c-warn-bg);
+  border: 1px solid var(--c-warn-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.order-review-qr-box .order-review-qr-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  color: var(--c-warn-dark);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.order-review-qr-hint {
+  margin-left: auto;
+  color: var(--c-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.order-review-qr-panel {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: center;
+}
+
+/* กันไม่ให้ display ด้านบนชนะ attribute hidden */
+.order-review-qr-panel[hidden] {
+  display: none;
+}
+
+.order-review-qr-note {
+  color: var(--c-text-muted);
+  text-align: center;
 }
