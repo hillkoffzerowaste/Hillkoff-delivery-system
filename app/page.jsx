@@ -84,6 +84,13 @@ import {
   XCircle
 } from "lucide-react";
 
+const STRANDED_REASON_LABEL = Object.freeze({
+  no_check_in: "ไม่ได้กดไปถึงแล้ว",
+  no_pod_photo: "ไม่มีรูป POD",
+  line_share_incomplete: "ยังไม่ได้ส่ง LINE",
+  not_confirmed: "ยังไม่กดยืนยัน"
+});
+
 const STORE_KEY = "hillkoff-delivery-ops:v2";
 const initialDrivers = [];
 
@@ -971,16 +978,16 @@ export default function App() {
     return sourceDate ? toServiceDateKey(sourceDate) : "";
   };
   const isTodayOrder = (o) => getOrderServiceDate(o) === todayServiceDate;
-  const isOpenDeliveryStatus = (status) => ["รอคนขับรับ", "กำลังส่ง", "กำลังจัดส่ง"].includes(String(status || ""));
-  const isBacklogOrder = (o) => {
-    const serviceDate = getOrderServiceDate(o);
-    return Boolean(serviceDate) && serviceDate < todayServiceDate && isOpenDeliveryStatus(o?.status);
-  };
   const [showDeliveredHistory, setShowDeliveredHistory] = useState(false);
   const [closedDriverDeliveryOrderIds, setClosedDriverDeliveryOrderIds] = useState({});
   const [showDriverDailyReport, setShowDriverDailyReport] = useState(false);
   const [showAllCustomers, setShowAllCustomers] = useState(false);
   const [activeSalesStatusPanel, setActiveSalesStatusPanel] = useState(null);
+  const [strandedOrders, setStrandedOrders] = useState([]);
+  const [strandedLoading, setStrandedLoading] = useState(false);
+  const [strandedSelectedIds, setStrandedSelectedIds] = useState([]);
+  const [strandedReason, setStrandedReason] = useState("");
+  const [strandedSubmitting, setStrandedSubmitting] = useState(false);
   const [podPreviewsByOrder, setPodPreviewsByOrder] = useState({});
   const podFilesRef = useRef({}); // { [orderId]: File[] } kept on-device only (not synced)
   const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
@@ -1588,6 +1595,54 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayTab, reportExportMode, reportExportDate, reportExportStartDate, reportExportEndDate, state.auth?.role]);
 
+  // งานค้างต้องถามจากเซิร์ฟเวอร์ ไม่ใช้รายการ orders ในเครื่อง เพราะรายการนั้นจำกัดตาม updatedAt
+  // งานที่ค้างมาหลายวันจึงหลุดออกจากหน้าต่างนั้นไปแล้วและจะไม่ถูกมองเห็นเลย
+  const loadStrandedOrders = useCallback(async () => {
+    if (!["sales", "admin"].includes(state.auth?.role)) return;
+    setStrandedLoading(true);
+    try {
+      const res = await authenticatedApiFetch("/api/orders/stranded");
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStrandedOrders(Array.isArray(json.data?.orders) ? json.data.orders : []);
+    } catch (error) {
+      setSyncStatus(`⚠️ โหลดงานค้างไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setStrandedLoading(false);
+    }
+  }, [authenticatedApiFetch, state.auth?.role]);
+
+  useEffect(() => {
+    if (displayTab !== "sales" || !isPageVisible) return;
+    loadStrandedOrders();
+  }, [displayTab, isPageVisible, loadStrandedOrders]);
+
+  const closeStrandedOrders = async () => {
+    const selectedIds = strandedSelectedIds.filter((id) => strandedOrders.some((order) => order.id === id));
+    if (!selectedIds.length) return setSyncStatus("⚠️ กรุณาเลือกงานค้างที่จะปิด");
+    const reason = strandedReason.trim();
+    if (reason.length < 5) return setSyncStatus("⚠️ กรุณาระบุเหตุผลที่ปิดงานย้อนหลัง อย่างน้อย 5 ตัวอักษร");
+    if (!window.confirm(`ปิดงานค้าง ${selectedIds.length} งานเป็น "ส่งสำเร็จ" ย้อนหลังใช่ไหม?\n\nระบบจะบันทึกว่าปิดโดย ${auth.name || auth.email} พร้อมเหตุผล และแยกไว้ว่าไม่ใช่คนขับกดยืนยันเอง`)) return;
+    setStrandedSubmitting(true);
+    try {
+      const res = await authenticatedApiFetch("/api/orders/stranded", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedIds, reason })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setSyncStatus(`✅ ปิดงานค้างแล้ว ${json.data.count} งาน`);
+      setStrandedSelectedIds([]);
+      setStrandedReason("");
+      await loadStrandedOrders();
+    } catch (error) {
+      setSyncStatus(`❌ ปิดงานค้างไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setStrandedSubmitting(false);
+    }
+  };
+
   const resolveComplaint = async (order) => {
     const note = window.prompt(`ระบุเหตุผล/วิธีแก้ไขก่อนปิดปัญหาออเดอร์ "${order.id}":`, "");
     if (note === null) return;
@@ -2157,7 +2212,6 @@ export default function App() {
     .sort((a, b) => routeTaskSortValue(b) - routeTaskSortValue(a));
   const driverRouteTasks = (routeTasks || []).filter(task => task.driverId === driverId);
   const activeDriverRouteTasks = driverRouteTasks.filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก");
-  const backlogUndelivered = (orders || []).filter(isBacklogOrder);
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
   const fetchStoreReports = async ({ date = "", query = "", type = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
@@ -5937,12 +5991,65 @@ export default function App() {
                   </>
                 )}
               </div>
-              {backlogUndelivered.length > 0 && (
-                <div style={{ marginTop: "var(--sp-5)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", padding: "var(--sp-5)", borderRadius: "8px", fontSize: "12px" }}>
-                  <b style={{ color: "var(--c-info-dark)" }}><Pin size={15} className="i-inline" aria-hidden="true" /> งานค้างส่งจากวันก่อน: {backlogUndelivered.length} งาน</b>
-                  <div className="muted" style={{ marginTop: "var(--sp-2)" }}>นับเฉพาะงานวันก่อนที่ยังรอคนขับรับ/กำลังส่ง/กำลังจัดส่ง</div>
+              <div className="stranded-panel">
+                <div className="stranded-head">
+                  <b><Pin size={15} className="i-inline" aria-hidden="true" /> งานค้างจากวันก่อน {strandedOrders.length > 0 ? `${strandedOrders.length} งาน` : ""}</b>
+                  <button className="secondary" onClick={loadStrandedOrders} disabled={strandedLoading}>
+                    <RefreshCw size={15} className="i-inline" aria-hidden="true" /> {strandedLoading ? "กำลังโหลด..." : "รีเฟรช"}
+                  </button>
                 </div>
-              )}
+                {strandedLoading && !strandedOrders.length && <p className="muted">กำลังตรวจงานค้าง...</p>}
+                {!strandedLoading && !strandedOrders.length && <p className="muted">ไม่มีงานค้างจากวันก่อน ✅</p>}
+                {strandedOrders.length > 0 && (
+                  <>
+                    <p className="muted">คนขับรับงานไปแล้วแต่ไม่ได้กดปิดงาน ถ้ายืนยันว่าส่งถึงลูกค้าแล้วให้เลือกและปิดย้อนหลังได้ ระบบจะบันทึกชื่อผู้ปิดกับเหตุผลไว้ และแยกไว้ว่าไม่ใช่คนขับกดยืนยันเอง</p>
+                    <label className="stranded-select-all">
+                      <input
+                        type="checkbox"
+                        checked={strandedSelectedIds.length === strandedOrders.length}
+                        onChange={(event) => setStrandedSelectedIds(event.target.checked ? strandedOrders.map((order) => order.id) : [])}
+                      /> เลือกทั้งหมด ({strandedOrders.length})
+                    </label>
+                    <div className="stranded-list">
+                      {strandedOrders.map((order) => (
+                        <label key={order.id} className="stranded-row">
+                          <input
+                            type="checkbox"
+                            checked={strandedSelectedIds.includes(order.id)}
+                            onChange={() => setStrandedSelectedIds((current) => current.includes(order.id)
+                              ? current.filter((id) => id !== order.id)
+                              : [...current, order.id])}
+                          />
+                          <span className="stranded-row-main">
+                            <b>{order.id}</b>
+                            <span>{order.customerName || "-"}{order.zone ? ` · ${order.zone}` : ""}</span>
+                            <small className="muted">
+                              {order.serviceDate} · ค้าง {order.daysStranded} วัน · {order.status}
+                              {order.driverName ? ` · ${order.driverName}` : ""}
+                              {order.cod ? ` · COD ฿${order.cod.toLocaleString("th-TH")}` : ""}
+                            </small>
+                          </span>
+                          <span className="status-chip">{STRANDED_REASON_LABEL[order.strandedReason] || order.strandedReason}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={strandedReason}
+                      onChange={(event) => setStrandedReason(event.target.value)}
+                      placeholder="เหตุผลที่ปิดย้อนหลัง เช่น ยืนยันกับคนขับแล้วว่าส่งถึงลูกค้าวันที่ ..."
+                      maxLength={1000}
+                    />
+                    <button
+                      className="primary"
+                      onClick={closeStrandedOrders}
+                      disabled={strandedSubmitting || !strandedSelectedIds.length || strandedReason.trim().length < 5}
+                    >
+                      <CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> {strandedSubmitting ? "กำลังปิดงาน..." : `ปิดงานที่เลือกเป็นส่งสำเร็จ (${strandedSelectedIds.length})`}
+                    </button>
+                  </>
+                )}
+              </div>
             </section>
           </div>
             </>
