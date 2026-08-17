@@ -3433,6 +3433,14 @@ export default function App() {
     }
   };
 
+  // นับรูป POD จากทั้ง preview ในเครื่องและค่าที่บันทึกไว้แล้ว เพราะ preview หายเมื่อรีโหลด
+  // ถ้าดูแค่ preview ออเดอร์ที่ถ่ายรูปไว้แล้วแต่สลับแอปจะไม่เหลือปุ่มจบงานให้กด
+  const driverPodPhotoCount = (order) => (
+    (podPreviewsByOrder[order.id] || []).length
+    || Number(order.podPhotoCount) || 0
+    || (order.photo ? 1 : 0)
+  );
+
   const archivePackOrder = async (order) => {
     if (!window.confirm(`นำออเดอร์ "${order.id}" ออกจากคิวห้องแพ็คใช่ไหม?\n\nข้อมูลและ Log จะยังคงถูกเก็บไว้`)) return;
     const reason = window.prompt("ระบุเหตุผล เช่น ส่งไปแล้ว / ออเดอร์ค้าง / รายการซ้ำ:", "");
@@ -4580,6 +4588,7 @@ export default function App() {
       // happen silently after awaiting the backend save below. Only mark the job complete
       // once we know the share actually went out (or there's no share sheet to open at all).
       let shareOutcome = "none";
+      let shareError = "";
       try {
         try { await navigator.clipboard?.writeText?.(text); } catch {}
         if (!navigator?.share) {
@@ -4592,8 +4601,11 @@ export default function App() {
           shareOutcome = "shared";
         }
       } catch (error) {
-        setSyncStatus(`⚠️ ยังไม่ได้บันทึกจบงาน: เปิดแชร์ LINE ไม่สำเร็จ (${error?.name === "AbortError" ? "ถูกยกเลิก" : error?.message || error}) — กดส่งอีกครั้งได้เลย (${order.id})`);
-        return;
+        // LINE เป็นช่องทางแจ้งข่าว ไม่ใช่บันทึกหลักของการส่งของ เดิมถ้าปิดหน้าต่างแชร์ทิ้ง
+        // จะ return ออกไปโดยไม่บันทึกอะไรเลย คนขับที่ส่งของจริงแล้วจึงเหลืองานค้างไว้ในมือ
+        // ตอนนี้บันทึกจบงานต่อเสมอ แล้วรายงานผลของ LINE แยกออกมาให้กดส่งซ้ำได้
+        shareOutcome = "failed";
+        shareError = error?.name === "AbortError" ? "ปิดหน้าต่างแชร์" : String(error?.message || error);
       }
 
       try {
@@ -4607,6 +4619,7 @@ export default function App() {
         const savedLabel = deliveryCompleteness === "incomplete" ? "บันทึกงานแก้ไขแล้ว" : "บันทึกส่งสำเร็จแล้ว";
         setSyncStatus(
           shareOutcome === "shared" ? `✅ ${savedLabel} และเปิดแชร์ LINE แล้ว ${files.length} รูป (${order.id})`
+          : shareOutcome === "failed" ? `✅ ${savedLabel} · ยังไม่ได้ส่ง LINE (${shareError}) — คัดลอกข้อความไว้แล้ว กดส่ง LINE ซ้ำได้ (${order.id})`
           : `✅ ${savedLabel} และคัดลอกข้อความ LINE แล้ว (${order.id})`
         );
       } catch (error) {
@@ -6739,13 +6752,23 @@ export default function App() {
                             >ปิดไว้ก่อน · ทำรายการอื่น</button>
                           </>
 	                        )}
-	                        {order.status === "กำลังจัดส่ง" && (podPreviewsByOrder[order.id] || []).length > 0 && !order.sharedToLine && (
+	                        {order.status === "กำลังจัดส่ง" && driverPodPhotoCount(order) > 0 && !order.sharedToLine && (
 	                          <button
 	                            className="primary"
 	                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1", background: "var(--c-info)" }}
 	                            disabled={!driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())}
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
 	                          >{driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
+	                        )}
+	                        {/* ทางออกกรณีถ่ายรูปไม่ได้ ก่อนหน้านี้ออเดอร์ที่ไม่มีรูปจะไม่มีปุ่มจบงานเลย
+	                            คนขับส่งของจริงแล้วแต่ปิดงานไม่ได้ งานจึงค้างในระบบข้ามวัน แลกกับการบังคับให้เขียนเหตุผล */}
+	                        {order.status === "กำลังจัดส่ง" && driverPodPhotoCount(order) === 0 && !order.sharedToLine && (
+	                          <button
+	                            className="secondary"
+	                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1" }}
+	                            disabled={!driverDeliveryCompleteness[order.id] || !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim()}
+	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
+	                          >จบงานโดยไม่มีรูป POD · ต้องระบุเหตุผลในหมายเหตุ</button>
 	                        )}
 	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
 	                          <button
