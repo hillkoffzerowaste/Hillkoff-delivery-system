@@ -35,14 +35,19 @@ describe("dashboard layout", () => {
     expect(pageSource).toContain('ลบออเดอร์ที่กรอกผิด');
   });
 
-  it("renders the published shared sales workspace for every sales operations tab", () => {
-    expect(pageSource).toContain('import { SalesWorkspace as SharedSalesWorkspace } from "@hillkoffzerowaste/sales-workspace"');
-    expect(pageSource).toContain("Object.hasOwn(SHARED_SALES_VIEW_BY_TAB, displayTab)");
-    expect(pageSource).toContain("adapter={sharedSalesAdapter}");
-    expect(pageSource).toContain('sales: "overview"');
-    expect(pageSource).toContain('"sales-outstation": "outstation"');
-    expect(pageSource).toContain('dispatch: "dispatch"');
-    expect(pageSource).toContain('chiangmai: "chiangmai"');
+  it("renders the in-app sales screens directly, with no shared workspace package", () => {
+    expect(pageSource).not.toContain("@hillkoffzerowaste/sales-workspace");
+    expect(pageSource).not.toContain("SharedSalesWorkspace");
+    expect(pageSource).not.toContain("sharedSalesAdapter");
+    expect(pageSource).not.toContain("SHARED_SALES_VIEW_BY_TAB");
+  });
+
+  it("owns every sales operations tab in this app, with no -legacy detour", () => {
+    expect(pageSource).toContain('{displayTab === "sales" && (');
+    expect(pageSource).toContain('{displayTab === "sales-outstation" && (');
+    expect(pageSource).toContain('{displayTab === "dispatch" && (');
+    expect(pageSource).toContain('{["chiangmai", "driver-prep"].includes(displayTab) && (');
+    expect(pageSource).not.toContain("-legacy\"");
   });
 
   it("bundles Kanit locally so production builds do not depend on Google Fonts", () => {
