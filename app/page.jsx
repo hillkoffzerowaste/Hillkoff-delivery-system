@@ -29,6 +29,7 @@ import {
 } from "../lib/preparationWorkflow";
 import { aggregateLatestDriverReviews } from "../lib/orderReview";
 import { isDriverQueueVisibleToDriver, isExpiredDriverQueueForSales } from "../lib/driverQueuePolicy";
+import { isSalesDispatchActivityOnDate } from "../lib/salesDispatchActivity";
 import { removeDriverPodPhoto, shouldShowDriverOrderReviewQr } from "../lib/driverDeliveryDraft";
 import {
   AlertTriangle,
@@ -2198,6 +2199,7 @@ export default function App() {
   });
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
+  const salesDispatchOrdersToday = (orders || []).filter((order) => isSalesDispatchActivityOnDate(order, todayServiceDate));
   const expiredDriverQueueOrders = (orders || [])
     .filter((order) => isExpiredDriverQueueForSales(order, todayServiceDate))
     .slice()
@@ -5939,12 +5941,12 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ใหม่ (วันนี้)</h2><span>รอคนขับรับ {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length}</span></div>
-              {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
+              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ใหม่ (วันนี้)</h2><span>รอคนขับรับ {salesDispatchOrdersToday.filter(o => o.status === "รอคนขับรับ").length}</span></div>
+              {salesDispatchOrdersToday.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
                 <p className="muted">ไม่มีออเดอร์ใหม่</p>
               ) : (
                 <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>
-                  {todayOrdersOnly.filter(o => o.status === "รอคนขับรับ").map(order => (
+                  {salesDispatchOrdersToday.filter(o => o.status === "รอคนขับรับ").map(order => (
                     <div key={order.id} style={{ background: "var(--c-warn-bg)", padding: "var(--sp-5)", borderRadius: "6px", borderLeft: "4px solid var(--c-warn)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-4)" }}>
                       <div style={{ flex: 1 }}>
                         <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
@@ -5961,23 +5963,23 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
+              <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {salesDispatchOrdersToday.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {salesDispatchOrdersToday.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
               <div style={{ display: "flex", gap: "var(--sp-6)", marginBottom: "var(--sp-7)" }}>
                 <div style={{ flex: 1, background: "var(--c-warn-bg-strong)", padding: "var(--sp-6)", borderRadius: "6px", borderLeft: "4px solid var(--c-warn)" }}>
                   <small style={{ color: "var(--c-warn-deep)" }}>⏳ กำลังส่ง</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "var(--c-warn)" }}>{todayOrdersOnly.filter(o => o.status === "กำลังส่ง").length}</b>
+                  <b style={{ fontSize: "20px", display: "block", color: "var(--c-warn)" }}>{salesDispatchOrdersToday.filter(o => o.status === "กำลังส่ง").length}</b>
                 </div>
                 <div style={{ flex: 1, background: "var(--c-brand-bg)", padding: "var(--sp-6)", borderRadius: "6px", borderLeft: "4px solid var(--c-brand-light)" }}>
                   <small style={{ color: "var(--c-brand-dark)" }}>✓ สำเร็จ</small>
-                  <b style={{ fontSize: "20px", display: "block", color: "var(--c-brand-light)" }}>{todayOrdersOnly.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
+                  <b style={{ fontSize: "20px", display: "block", color: "var(--c-brand-light)" }}>{salesDispatchOrdersToday.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</b>
                 </div>
               </div>
               <div className="scroll-box">
-                {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 && completedTodayRouteTasks.length === 0 ? (
+                {salesDispatchOrdersToday.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").length === 0 && completedTodayRouteTasks.length === 0 ? (
                   <p className="muted">ยังไม่มีการส่ง</p>
                 ) : (
                   <>
-                    {todayOrdersOnly.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
+                    {salesDispatchOrdersToday.filter(o => o.status === "กำลังส่ง" || o.status === "ส่งสำเร็จ").sort((a, b) => (a.status === "กำลังส่ง" ? -1 : 1)).map(order => {
                       const driver = drivers.find(d => d.id === order.driverId);
                       const driverName = order.driverName || driver?.name || (order.driverId ? order.driverId : "");
                       return (
