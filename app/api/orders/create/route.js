@@ -7,6 +7,7 @@ import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCa
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
+import { isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
 
 export const runtime = "nodejs";
 
@@ -80,7 +81,15 @@ export async function POST(request) {
   if (!/^[A-Za-z0-9._-]{1,120}$/.test(orderId)) return Response.json({ ok: false, error: "Invalid order id" }, { status: 400 });
 
   try {
-    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin", "store"]);
+    const { profile, db, decoded } = await requireProfile(request, ["sales", "admin", "store", "pack"]);
+    const packAssistEntry = profile.role === "pack";
+    if (packAssistEntry) {
+      try {
+        validatePackAssistOrder(order);
+      } catch (error) {
+        throw Object.assign(error, { status: 403 });
+      }
+    }
     const bookingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber]).map(normalizeBookingNumber).filter(Boolean))].slice(0, 20);
     if (bookingNumbers.some((value) => !BOOKING_NUMBER_PATTERN.test(value))) {
       return Response.json({ ok: false, error: "กรุณากรอกเลขที่ใบสั่งจองรูปแบบ PREFIX-1234" }, { status: 400 });
@@ -111,6 +120,9 @@ export async function POST(request) {
     const workflowType = preparation.workflowType;
     const storeAssistEntry = profile.role === "store";
     const createdByName = clean(profile.name || profile.email, 200);
+    const assistEntryNote = packAssistEntry
+      ? `ห้องแพ็คช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "ห้องแพ็ค"}`
+      : storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "";
     const requestedRoundCode = clean(order.chiangmaiRoundCode, 20);
     const roundCode = resolveOptionalChiangmaiRound({ deliveryMethod, queueStatus: preparation.queueStatus }, requestedRoundCode);
     const roundDate = roundCode ? resolveNextRoundDate(toServiceDateKey(now), roundCode) : "";
@@ -132,11 +144,13 @@ export async function POST(request) {
       driverName: clean(order.driverName, 200),
       salesName: createdByName,
       salesPhone: clean(profile.phone, 40),
-      orderEntrySource: storeAssistEntry ? "store_assist" : "sales",
+      orderEntrySource: packAssistEntry ? "pack_assist" : storeAssistEntry ? "store_assist" : "sales",
       createdByRole: profile.role,
       createdByName,
       storeAssistEntryAt: storeAssistEntry ? now : "",
-      storeAssistEntryNote: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "",
+      storeAssistEntryNote: storeAssistEntry ? assistEntryNote : "",
+      packAssistEntryAt: packAssistEntry ? now : "",
+      packAssistEntryNote: packAssistEntry ? assistEntryNote : "",
       status: preparation.status,
       workflowType,
       deliveryMethod,
@@ -144,7 +158,7 @@ export async function POST(request) {
       bookingNumbers,
       bookingMonthKey: serviceDate.slice(0, 7),
       bookingNumberMissing: bookingNumbers.length === 0,
-      bookingNumberNotice: bookingNumbers.length === 0 ? (storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
+      bookingNumberNotice: bookingNumbers.length === 0 ? (packAssistEntry ? "ห้องแพ็คช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
       shippingCarrier: deliveryMethod === "outstation" ? String(order.shippingCarrier || "").trim().slice(0, 100) : "",
       storeStatus: preparation.storeStatus,
       packStatus: preparation.packStatus,
@@ -156,7 +170,7 @@ export async function POST(request) {
       packCheckerName: "",
       packPhotos: [],
       missingItems: [],
-      workflowHistory: [{ action: "created", role: profile.role, uid: decoded.uid, at: now, note: storeAssistEntry ? `สโตร์ช่วยคีย์ออเดอร์เร่งด่วนโดย ${createdByName || "สโตร์"}` : "" }],
+      workflowHistory: [{ action: "created", role: profile.role, uid: decoded.uid, at: now, note: assistEntryNote }],
       photo: "",
       checkInAt: "",
       deliveredAt: "",
@@ -185,6 +199,15 @@ export async function POST(request) {
         const orderSnap = await transaction.get(orderRef);
         const searchIndexRef = db.collection("customer_search").doc(next.customerId);
         const searchIndexSnap = await transaction.get(searchIndexRef);
+        const existingCustomerOrders = packAssistEntry
+          ? await transaction.get(db.collection("orders").where("customerId", "==", next.customerId))
+          : null;
+        const blockingOrder = existingCustomerOrders?.docs
+          .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+          .find((existing) => isBlockingPackAssistOrder(existing, next.customerId));
+        if (blockingOrder) {
+          throw Object.assign(new Error(packAssistDuplicateMessage(blockingOrder)), { status: 409, blockingOrderId: blockingOrder.id });
+        }
         // ทุกออเดอร์เขียนทับดัชนีลูกค้าเสมอ แต่ส่วนใหญ่ค่าไม่เปลี่ยน จึงเดินเลขเวอร์ชันแคช
         // เฉพาะตอนที่ค้นหาแล้วจะได้ผลต่างจากเดิมจริง ไม่งั้นแคชจะถูกล้างทิ้งทุกครั้งที่ขายของ
         const previousIndex = searchIndexSnap.exists ? searchIndexSnap.data() || {} : null;

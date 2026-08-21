@@ -32,7 +32,7 @@ function matches(data, query) {
 
 export async function GET(request) {
   try {
-    const { db } = await requireProfile(request, ["sales", "admin", "store"]);
+    const { db } = await requireProfile(request, ["sales", "admin", "store", "pack"]);
     const params = new URL(request.url).searchParams;
     const loadAll = params.get("all") === "true";
     const query = String(params.get("q") || "").trim();
