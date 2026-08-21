@@ -32,6 +32,7 @@ import { isDriverQueueVisibleToDriver, isExpiredDriverQueueForSales } from "../l
 import { isSalesDispatchActivityOnDate } from "../lib/salesDispatchActivity";
 import { removeDriverPodPhoto, shouldShowDriverOrderReviewQr } from "../lib/driverDeliveryDraft";
 import { getPackStoreCheckingOrders } from "../lib/packStoreChecking";
+import { buildDriverQueueNotice, getDriverQueueOrdersForNotice } from "../lib/driverQueueMessage";
 import {
   AlertTriangle,
   Archive,
@@ -2202,6 +2203,7 @@ export default function App() {
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const salesDispatchOrdersToday = (orders || []).filter((order) => isSalesDispatchActivityOnDate(order, todayServiceDate));
+  const salesPendingDriverQueueOrders = getDriverQueueOrdersForNotice(salesDispatchOrdersToday, todayServiceDate);
   const expiredDriverQueueOrders = (orders || [])
     .filter((order) => isExpiredDriverQueueForSales(order, todayServiceDate))
     .slice()
@@ -4625,6 +4627,20 @@ export default function App() {
     })();
   };
 
+  const copyPendingDriverQueueToLine = async () => {
+    if (!salesPendingDriverQueueOrders.length) {
+      setSyncStatus("⚠️ ไม่มีออเดอร์ที่คนขับกดรับได้ในขณะนี้");
+      return;
+    }
+    const text = buildDriverQueueNotice(salesPendingDriverQueueOrders);
+    try {
+      await navigator.clipboard?.writeText?.(text);
+      setSyncStatus(`✅ คัดลอกข้อความแจ้งคนขับ ${salesPendingDriverQueueOrders.length} ออเดอร์แล้ว · นำไปวางใน LINE ได้เลย`);
+    } catch {
+      setSyncStatus(`⚠️ คัดลอกอัตโนมัติไม่ได้ กรุณาคัดลอกข้อความนี้เอง:\n${text}`);
+    }
+  };
+
   const shareOrderToLine = (order, noteDraft) => {
     (async () => {
       let completedOrder = null;
@@ -5944,12 +5960,12 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ใหม่ (วันนี้)</h2><span>รอคนขับรับ {salesDispatchOrdersToday.filter(o => o.status === "รอคนขับรับ").length}</span></div>
-              {salesDispatchOrdersToday.filter(o => o.status === "รอคนขับรับ").length === 0 ? (
+              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ใหม่ (วันนี้)</h2><div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}><span>รอคนขับรับ {salesPendingDriverQueueOrders.length}</span>{salesPendingDriverQueueOrders.length > 0 && <button type="button" className="primary" style={{ padding: "var(--sp-2) var(--sp-4)", fontSize: "12px" }} onClick={copyPendingDriverQueueToLine}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> คัดลอกแจ้งคนขับทั้งหมด</button>}</div></div>
+              {salesPendingDriverQueueOrders.length === 0 ? (
                 <p className="muted">ไม่มีออเดอร์ใหม่</p>
               ) : (
                 <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>
-                  {salesDispatchOrdersToday.filter(o => o.status === "รอคนขับรับ").map(order => (
+                  {salesPendingDriverQueueOrders.map(order => (
                     <div key={order.id} style={{ background: "var(--c-warn-bg)", padding: "var(--sp-5)", borderRadius: "6px", borderLeft: "4px solid var(--c-warn)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-4)" }}>
                       <div style={{ flex: 1 }}>
                         <b style={{ display: "block", fontSize: "13px" }}>{order.id} · {order.customerName}</b>
