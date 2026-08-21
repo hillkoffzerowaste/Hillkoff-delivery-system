@@ -71,10 +71,15 @@ describe("pack confirmation driver queue workflow", () => {
     expect(state.db.activity).toContainEqual(expect.objectContaining({ action: "pack_update", driverQueue: "queued_automatically" }));
   });
 
-  it("keeps scheduled Chiang Mai rounds out of the immediate driver queue", async () => {
+  it("queues a scheduled Chiang Mai company-driver order as soon as Pack confirms it", async () => {
     const response = await patchOrder("ROUND", { packStatus: "checked", packCheckerName: "ผู้แพ็คหนึ่ง" });
 
     expect(response.status).toBe(200);
-    expect(state.db.orders.get("ROUND")).toMatchObject({ packStatus: "checked", queueStatus: "ready" });
+    expect(state.db.orders.get("ROUND")).toMatchObject({
+      packStatus: "checked",
+      queueStatus: "queued",
+      status: "รอคนขับรับ",
+      driverQueuePolicyVersion: 2
+    });
   });
 });

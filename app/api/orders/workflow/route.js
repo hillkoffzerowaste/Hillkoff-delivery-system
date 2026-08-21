@@ -241,8 +241,7 @@ export async function PATCH(request) {
       };
       if (["checked", "partial"].includes(body.packStatus)) {
         const autoQueueForDriver = body.packStatus === "checked"
-          && order.deliveryMethod === "company_driver"
-          && !String(order.chiangmaiRoundCode || "").trim();
+          && order.deliveryMethod === "company_driver";
         if (autoQueueForDriver) {
           Object.assign(patch, buildDriverQueuePolicyPatch(now), { queuedBy: profile.name || profile.email });
           Object.assign(history, { driverQueue: "queued_automatically" });
