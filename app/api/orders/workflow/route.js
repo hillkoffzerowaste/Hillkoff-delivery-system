@@ -240,7 +240,15 @@ export async function PATCH(request) {
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.packStatus)) {
-        patch.queueStatus = ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+        const autoQueueForDriver = body.packStatus === "checked"
+          && order.deliveryMethod === "company_driver"
+          && !String(order.chiangmaiRoundCode || "").trim();
+        if (autoQueueForDriver) {
+          Object.assign(patch, buildDriverQueuePolicyPatch(now), { queuedBy: profile.name || profile.email });
+          Object.assign(history, { driverQueue: "queued_automatically" });
+        } else {
+          patch.queueStatus = ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
+        }
         if (["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && body.packStatus === "checked") {
           patch.status = order.deliveryMethod === "customer_pickup" ? "แพ็คเสร็จ · รอลูกค้ารับหน้าร้าน" : "แพ็คเสร็จ · รอ Grab รับสินค้า";
           patch.grabReadyAt = now;
@@ -308,7 +316,7 @@ export async function PATCH(request) {
     } catch (syncError) {
       console.warn("Delivery sheet sync failed after workflow update", syncError?.message || syncError);
     }
-    if (action === "queue" || (action === "reroute" && patch.queueStatus === "queued")) {
+    if (patch.queueStatus === "queued" && order.queueStatus !== "queued") {
       try {
         const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
         const tokens = snap.docs.map((doc) => doc.id).filter(Boolean);
