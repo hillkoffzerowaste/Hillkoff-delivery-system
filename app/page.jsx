@@ -5354,6 +5354,9 @@ export default function App() {
                 <button type="button" className="primary wide" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
                   <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
                 </button>
+                <button type="button" className="secondary wide" onClick={logout}>
+                  ออกจากระบบเพื่อล็อกอินใหม่
+                </button>
                 {vehicleUsageStatus && (
                   <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "var(--c-brand-dark)" : vehicleUsageStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
                     {vehicleUsageStatus}
