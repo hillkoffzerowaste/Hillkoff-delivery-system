@@ -760,6 +760,8 @@ export default function App() {
   // Settings tab: account list, outstation sender defaults, checker names, backup/restore
   const [staffAccounts, setStaffAccounts] = useState([]);
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false);
+  const [driverPasswordResetForm, setDriverPasswordResetForm] = useState({ phone: "", password: "", confirmPassword: "" });
+  const [driverPasswordResetSubmitting, setDriverPasswordResetSubmitting] = useState(false);
   const [outstationSenderForm, setOutstationSenderForm] = useState({ name: "", addressLines: ["", "", ""] });
   const [outstationSenderLoading, setOutstationSenderLoading] = useState(false);
   const [outstationSenderSaving, setOutstationSenderSaving] = useState(false);
@@ -4008,6 +4010,42 @@ export default function App() {
       setStaffAccountForm({ username: "", password: "", name: "", role: "store" });
       setSyncStatus(`✅ สร้างบัญชี ${json.data.username} สำเร็จ`);
     } catch (e) { setSyncStatus(`❌ สร้างบัญชีไม่สำเร็จ: ${e?.message || e}`); }
+  };
+
+  const resetDriverPassword = async () => {
+    const phone = digitsOnly(driverPasswordResetForm.phone);
+    const password = String(driverPasswordResetForm.password || "");
+    if (phone.length < 9 || phone.length > 15) {
+      setSyncStatus("⚠️ กรุณากรอก Username (เบอร์โทร) ของคนขับให้ถูกต้อง");
+      return;
+    }
+    if (password.length < 8 || password.length > 72 || password !== password.trim()) {
+      setSyncStatus("⚠️ รหัสชั่วคราวต้องมี 8–72 ตัวอักษร และห้ามเว้นวรรคต้นหรือท้าย");
+      return;
+    }
+    if (password !== driverPasswordResetForm.confirmPassword) {
+      setSyncStatus("⚠️ ยืนยันรหัสชั่วคราวไม่ตรงกัน");
+      return;
+    }
+    if (!window.confirm(`รีเซ็ตรหัสของคนขับหมายเลข ${phone} หรือไม่?\n\nอุปกรณ์ที่เคยเข้าสู่ระบบจะต้องเข้าสู่ระบบใหม่`)) return;
+
+    setDriverPasswordResetSubmitting(true);
+    try {
+      const idToken = await refreshAuthToken(true);
+      const res = await fetch("/api/admin/driver-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ phone, password })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setDriverPasswordResetForm({ phone: "", password: "", confirmPassword: "" });
+      setSyncStatus(`✅ รีเซ็ตรหัส${json?.data?.driverName ? `ของ ${json.data.driverName}` : "คนขับ"} แล้ว — ให้เข้าสู่ระบบใหม่ด้วยรหัสชั่วคราว`);
+    } catch (error) {
+      setSyncStatus(`❌ รีเซ็ตรหัสคนขับไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setDriverPasswordResetSubmitting(false);
+    }
   };
 
   const setupDailyDeliverySheet = async () => {
@@ -7716,6 +7754,19 @@ export default function App() {
                   <div className="panel-head"><h2><Truck size={15} className="i-inline" aria-hidden="true" /> ข้อมูลรถและคนขับ</h2><span>ย้ายไปแท็บรายงานตรวจรถ</span></div>
                   <p className="muted" style={{ margin: 0 }}>จัดการรถและคนขับ (เพิ่ม/แก้ไข/ปิดใช้งาน) ย้ายไปรวมอยู่ที่แท็บ &ldquo;รายงานตรวจรถ&rdquo; มุมมอง &ldquo;จัดการข้อมูล&rdquo; แล้ว เพื่อไม่ให้มีหน้าจัดการซ้ำกัน 2 ที่</p>
                   <button className="secondary wide" style={{ marginTop: "var(--sp-5)" }} onClick={() => selectAppTab("driver-sop-report")}>ไปที่รายงานตรวจรถ</button>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-head"><h2><KeyRound size={15} className="i-inline" aria-hidden="true" /> รีเซ็ตรหัสผ่านคนขับ</h2><span>ผู้ดูแลระบบเท่านั้น</span></div>
+                  <p className="muted" style={{ margin: "0 0 var(--sp-5)" }}>ตั้งรหัสชั่วคราวใหม่หลังยืนยันตัวตนแล้ว ระบบจะล้างอุปกรณ์ที่เคยจำการเข้าสู่ระบบและให้คนขับเข้าสู่ระบบใหม่</p>
+                  <div className="form-grid two">
+                    <input aria-label="Username คนขับ (เบอร์โทร)" value={driverPasswordResetForm.phone} onChange={e => setDriverPasswordResetForm(p => ({ ...p, phone: e.target.value }))} placeholder="Username คนขับ (เบอร์โทร)" inputMode="tel" autoComplete="off" />
+                    <input aria-label="รหัสชั่วคราว" type="password" value={driverPasswordResetForm.password} onChange={e => setDriverPasswordResetForm(p => ({ ...p, password: e.target.value }))} placeholder="รหัสชั่วคราว 8–72 ตัวอักษร" autoComplete="new-password" />
+                    <input aria-label="ยืนยันรหัสชั่วคราว" type="password" value={driverPasswordResetForm.confirmPassword} onChange={e => setDriverPasswordResetForm(p => ({ ...p, confirmPassword: e.target.value }))} placeholder="ยืนยันรหัสชั่วคราว" autoComplete="new-password" />
+                  </div>
+                  <button className="primary" style={{ marginTop: "var(--sp-5)" }} onClick={resetDriverPassword} disabled={driverPasswordResetSubmitting}>
+                    <KeyRound size={16} /> {driverPasswordResetSubmitting ? "กำลังรีเซ็ต..." : "รีเซ็ตรหัสผ่าน"}
+                  </button>
                 </section>
 
                 <section className="panel">
