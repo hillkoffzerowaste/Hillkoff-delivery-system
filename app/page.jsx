@@ -1005,6 +1005,11 @@ export default function App() {
   const [strandedSelectedIds, setStrandedSelectedIds] = useState([]);
   const [strandedReason, setStrandedReason] = useState("");
   const [strandedSubmitting, setStrandedSubmitting] = useState(false);
+  const [showManualDeliveryCompletion, setShowManualDeliveryCompletion] = useState(false);
+  const [manualDeliverySelectedIds, setManualDeliverySelectedIds] = useState([]);
+  const [manualDeliveryDriverIds, setManualDeliveryDriverIds] = useState({});
+  const [manualDeliveryReason, setManualDeliveryReason] = useState("");
+  const [manualDeliverySubmitting, setManualDeliverySubmitting] = useState(false);
   const [podPreviewsByOrder, setPodPreviewsByOrder] = useState({});
   const podFilesRef = useRef({}); // { [orderId]: File[] } kept on-device only (not synced)
   const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
@@ -1155,7 +1160,7 @@ export default function App() {
 	  const needsActiveOrders = needsActiveOrdersQuery(displayTab);
 	  const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
 	  const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
-	  const needsDriverAssessments = String(displayTab || "") === "settings";
+	  const needsDriverAssessments = ["settings", "sales"].includes(String(displayTab || ""));
 
 	  // Firestore sync (minimize reads): subscribe only where realtime is needed.
 	  useEffect(() => {
@@ -2205,6 +2210,7 @@ export default function App() {
   const routeTasks = state.routeTasks || [];
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const salesDispatchOrdersToday = (orders || []).filter((order) => isSalesDispatchActivityOnDate(order, todayServiceDate));
+  const manualDeliveryOrders = salesDispatchOrdersToday.filter((order) => ["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || "")));
   const salesPendingDriverQueueOrders = getDriverQueueOrdersForNotice(salesDispatchOrdersToday, todayServiceDate);
   const expiredDriverQueueOrders = (orders || [])
     .filter((order) => isExpiredDriverQueueForSales(order, todayServiceDate))
@@ -2509,6 +2515,40 @@ export default function App() {
     (driverAssessments || []).forEach(a => addDriver(a.driverId, a));
     return Array.from(map.values()).sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
   }, [driverAssessmentDrivers, drivers, orders, state.driverLocations, driverAssessments]);
+  const selectedManualDeliveryOrders = manualDeliveryOrders.filter((order) => manualDeliverySelectedIds.includes(order.id));
+  const openManualDeliveryCompletion = () => {
+    setManualDeliverySelectedIds(manualDeliveryOrders.map((order) => order.id));
+    setManualDeliveryDriverIds(Object.fromEntries(manualDeliveryOrders.map((order) => [order.id, order.driverId || ""])));
+    setManualDeliveryReason("");
+    setShowManualDeliveryCompletion(true);
+  };
+  const submitManualDeliveryCompletion = async () => {
+    if (!selectedManualDeliveryOrders.length) return setSyncStatus("⚠️ กรุณาเลือกงานที่ต้องการจบ");
+    const reason = manualDeliveryReason.trim();
+    if (reason.length < 5) return setSyncStatus("⚠️ กรุณาระบุเหตุผล อย่างน้อย 5 ตัวอักษร");
+    const items = selectedManualDeliveryOrders.map((order) => ({ orderId: order.id, driverId: manualDeliveryDriverIds[order.id] || "" }));
+    if (items.some((item) => !item.driverId)) return setSyncStatus("⚠️ กรุณาเลือกคนขับผู้ส่งจริงให้ครบทุกงานที่เลือก");
+    if (!window.confirm(`จบงานแทนคนขับ ${items.length} งานใช่ไหม?\n\nระบบจะบันทึกชื่อผู้ส่งจริง เหตุผล และชื่อฝ่ายขายผู้ทำรายการ`)) return;
+    setManualDeliverySubmitting(true);
+    try {
+      const res = await authenticatedApiFetch("/api/orders/manual-delivery-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, reason })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setShowManualDeliveryCompletion(false);
+      setManualDeliverySelectedIds([]);
+      setManualDeliveryDriverIds({});
+      setManualDeliveryReason("");
+      setSyncStatus(`✅ จบงานแทนคนขับแล้ว ${json.data.count} งาน`);
+    } catch (error) {
+      setSyncStatus(`❌ จบงานแทนคนขับไม่สำเร็จ: ${error?.message || error}`);
+    } finally {
+      setManualDeliverySubmitting(false);
+    }
+  };
   const todayAssessmentByDriver = useMemo(() => {
     const map = new Map();
     (driverAssessments || []).forEach(a => {
@@ -6023,7 +6063,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> สรุปการส่งของ (วันนี้)</h2><span>กำลังส่ง {salesDispatchOrdersToday.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {salesDispatchOrdersToday.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span></div>
+              <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> สรุปการส่งของ (วันนี้)</h2><div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", flexWrap: "wrap", justifyContent: "flex-end" }}><span>กำลังส่ง {salesDispatchOrdersToday.filter(o => o.status === "กำลังส่ง").length} + สำเร็จ {salesDispatchOrdersToday.filter(o => o.status === "ส่งสำเร็จ").length + completedTodayRouteTasks.length}</span><button type="button" className="secondary" style={{ padding: "var(--sp-2) var(--sp-4)", fontSize: "12px" }} onClick={openManualDeliveryCompletion} disabled={!manualDeliveryOrders.length}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> จบงานแทนคนขับ</button></div></div>
               <div style={{ display: "flex", gap: "var(--sp-6)", marginBottom: "var(--sp-7)" }}>
                 <div style={{ flex: 1, background: "var(--c-warn-bg-strong)", padding: "var(--sp-6)", borderRadius: "6px", borderLeft: "4px solid var(--c-warn)" }}>
                   <small style={{ color: "var(--c-warn-deep)" }}>⏳ กำลังส่ง</small>
@@ -6503,6 +6543,33 @@ export default function App() {
               <label className="field-label" htmlFor="online-return-reason">ของผิด / เหตุผลที่ต้องตรวจสอบใหม่ *</label>
               <textarea id="online-return-reason" rows={4} value={onlineReturnReason} onChange={event => setOnlineReturnReason(event.target.value)} placeholder="ระบุรายการที่ผิดและสิ่งที่สโตร์ต้องตรวจสอบ" autoFocus />
               <div className="modal-actions"><button className="secondary" onClick={() => { setOnlineReturnTarget(null); setOnlineReturnReason(""); }}>ยกเลิก</button><button className="primary" disabled={!onlineReturnReason.trim()} onClick={async () => { const target = onlineReturnTarget; const reason = onlineReturnReason; setOnlineReturnTarget(null); setOnlineReturnReason(""); await updateReportPackStatus(target, "returned", reason); }}>ยืนยันส่งกลับสโตร์</button></div>
+            </section>
+          </div>
+        )}
+
+        {showManualDeliveryCompletion && (
+          <div className="modal-backdrop" role="presentation">
+            <section className="panel modal-card" role="dialog" aria-modal="true" aria-labelledby="manual-delivery-title" style={{ width: "min(760px, 100%)", maxHeight: "90vh", overflowY: "auto" }}>
+              <div className="panel-head"><h2 id="manual-delivery-title"><CheckCircle2 size={16} className="i-inline" aria-hidden="true" /> จบงานแทนคนขับ</h2><button type="button" className="secondary" onClick={() => setShowManualDeliveryCompletion(false)} disabled={manualDeliverySubmitting}>ปิด</button></div>
+              <p className="muted">เลือกงานและคนขับผู้ส่งจริง ระบบจะเปลี่ยนชื่อคนขับในรายงาน พร้อมบันทึกชื่อฝ่ายขาย เหตุผล และสถานะว่าไม่ได้ยืนยันโดยคนขับ</p>
+              <div style={{ display: "grid", gap: "var(--sp-4)" }}>
+                {manualDeliveryOrders.map((order) => {
+                  const selected = manualDeliverySelectedIds.includes(order.id);
+                  return (
+                    <article key={order.id} style={{ display: "grid", gap: "var(--sp-3)", padding: "var(--sp-5)", border: "1px solid var(--c-line)", borderRadius: "6px", background: "var(--c-surface-subtle)" }}>
+                      <label style={{ display: "flex", alignItems: "flex-start", gap: "var(--sp-3)", cursor: "pointer" }}>
+                        <input type="checkbox" checked={selected} disabled={manualDeliverySubmitting} onChange={() => setManualDeliverySelectedIds((current) => current.includes(order.id) ? current.filter((id) => id !== order.id) : [...current, order.id])} />
+                        <span><b>{order.id} · {order.customerName || "ไม่ระบุลูกค้า"}</b><small className="muted" style={{ display: "block" }}>{order.zone || order.address || "-"} · สถานะ {order.status}</small></span>
+                      </label>
+                      <label style={{ display: "grid", gap: "var(--sp-2)" }}><span>คนขับผู้ส่งจริง *</span><select value={manualDeliveryDriverIds[order.id] || ""} disabled={!selected || manualDeliverySubmitting || !driverAssessmentRoster.length} onChange={(event) => setManualDeliveryDriverIds((current) => ({ ...current, [order.id]: event.target.value }))}><option value="">-- เลือกคนขับ --</option>{driverAssessmentRoster.map((driver) => <option key={driver.id} value={driver.id}>{driver.name || driver.id}</option>)}</select>{order.driverName && <small className="muted">ผู้รับงานเดิม: {order.driverName}</small>}</label>
+                    </article>
+                  );
+                })}
+              </div>
+              {!driverAssessmentRoster.length && <p className="muted">กำลังโหลดรายชื่อคนขับ...</p>}
+              <label className="field-label" htmlFor="manual-delivery-reason">เหตุผลที่ปิดแทนคนขับ *</label>
+              <textarea id="manual-delivery-reason" rows={3} value={manualDeliveryReason} onChange={(event) => setManualDeliveryReason(event.target.value)} disabled={manualDeliverySubmitting} placeholder="เช่น ยืนยันกับคนขับแล้วว่าส่งถึงลูกค้า / คนขับลืมกดยืนยัน" />
+              <div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowManualDeliveryCompletion(false)} disabled={manualDeliverySubmitting}>ยกเลิก</button><button type="button" className="primary" onClick={submitManualDeliveryCompletion} disabled={manualDeliverySubmitting || !driverAssessmentRoster.length || !selectedManualDeliveryOrders.length || manualDeliveryReason.trim().length < 5}>{manualDeliverySubmitting ? "กำลังบันทึก..." : `ยืนยันจบงาน (${selectedManualDeliveryOrders.length})`}</button></div>
             </section>
           </div>
         )}
