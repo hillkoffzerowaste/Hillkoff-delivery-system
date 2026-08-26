@@ -1,3 +1,4 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
@@ -234,12 +235,17 @@ export async function POST(request) {
           }
           const registry = bookingSnap.data() || {};
           if (packAssistEntry && canPackAssistShareBooking(registry)) {
-            sharedStoreBookings.push({ bookingNumber: reservation.bookingNumber, reportId: String(registry.sourceId || ""), createdBy: String(registry.createdBy || "") });
+            sharedStoreBookings.push({ bookingNumber: reservation.bookingNumber, reportId: String(registry.sourceId || ""), createdBy: String(registry.createdBy || ""), ref: reservation.ref });
             continue;
           }
           throw Object.assign(new Error(bookingConflictMessage(registry)), { status: 409 });
         }
-        transaction.create(orderRef, sharedStoreBookings.length ? { ...next, storeBookingRegistryLinks: sharedStoreBookings } : next);
+        const sharedLinks = sharedStoreBookings.map(({ ref, ...link }) => link);
+        transaction.create(orderRef, sharedLinks.length ? { ...next, storeBookingRegistryLinks: sharedLinks } : next);
+        // บันทึกว่าออเดอร์นี้ยืมการจองของรายงานสโตร์อยู่ เพื่อให้ตอนลบรายงานรู้ว่ายังปล่อยเลขคืนไม่ได้
+        for (const shared of sharedStoreBookings) {
+          transaction.update(shared.ref, { sharedWithOrderIds: FieldValue.arrayUnion(orderId) });
+        }
         transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
         transaction.set(searchIndexRef, customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
         for (const reservation of reservationsToCreate) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));

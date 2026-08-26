@@ -1,5 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
-import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, canReleaseStoreReportReservation, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
@@ -382,12 +382,17 @@ export async function PUT(request) {
     if (bookingChanged && bookingNumber) {
       const serviceDate = String(item.serviceDate || bangkokDateKey(item.createdAt));
       const registryRef = db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, bookingNumber));
+      // เลขเดิมต้องถูกปล่อยคืนด้วย ไม่งั้นแก้เลขทีเดียวก็ทิ้งการจองเก่าค้างไว้ตลอดเดือน
+      const previousId = bookingRegistryId(serviceDate, item.bookingNumber);
+      const previousRef = previousId && previousId !== registryRef.id ? db.collection("booking_month_registry").doc(previousId) : null;
       await db.runTransaction(async (transaction) => {
         const registrySnap = await transaction.get(registryRef);
+        const previousSnap = previousRef ? await transaction.get(previousRef) : null;
         if (registrySnap.exists) throw Object.assign(new Error(bookingConflictMessage(registrySnap.data())), { status: 409 });
         transaction.set(ref, patch, { merge: true });
         transaction.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
         transaction.create(registryRef, bookingRegistryRecord({ serviceDate, bookingNumber, source: "store_reports", sourceId: id, createdAt: updatedAt, createdBy: profile.name || profile.email }));
+        if (previousSnap?.exists && canReleaseStoreReportReservation(previousSnap.data(), id)) transaction.delete(previousRef);
       });
     } else {
       const batch = db.batch();
@@ -429,10 +434,21 @@ export async function DELETE(request) {
       });
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }
-    const batch = db.batch();
-    batch.set(ref, patch, { merge: true });
-    batch.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
-    await batch.commit();
-    return Response.json({ ok: true, data: { id, ...item, ...patch } });
+    // รายงานที่ไม่ได้ผูกกับออเดอร์เป็นเจ้าของการจองเลขเอง ต้องปล่อยคืนตอนลบ ไม่งั้นเลขจะล็อกค้าง
+    // ทั้งเดือนโดยไม่มีทางเคลียร์ (ไม่มี path กู้รายงานคืน) แต่ปล่อยได้เฉพาะที่ไม่มีออเดอร์ยืมอยู่
+    const registryId = bookingRegistryId(String(item.serviceDate || bangkokDateKey(item.createdAt)), item.bookingNumber);
+    let releasedBookingNumber = "";
+    await db.runTransaction(async (transaction) => {
+      const registryRef = registryId ? db.collection("booking_month_registry").doc(registryId) : null;
+      const registrySnap = registryRef ? await transaction.get(registryRef) : null;
+      const releasable = registrySnap?.exists && canReleaseStoreReportReservation(registrySnap.data(), id);
+      transaction.set(ref, patch, { merge: true });
+      transaction.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
+      if (releasable) {
+        transaction.delete(registryRef);
+        releasedBookingNumber = normalizeBookingNumber(item.bookingNumber);
+      }
+    });
+    return Response.json({ ok: true, data: { id, ...item, ...patch, releasedBookingNumber } });
   } catch (error) { return errorResponse(error); }
 }

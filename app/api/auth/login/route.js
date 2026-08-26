@@ -131,13 +131,16 @@ export async function POST(request) {
     const trustedDeviceHashes = Array.isArray(existing.trustedDeviceHashes)
       ? existing.trustedDeviceHashes.map(String).filter(Boolean).slice(-8)
       : [];
-    const isDeviceTrusted = Boolean(deviceHash && trustedDeviceHashes.includes(deviceHash));
+
+    // ต้องเช็ค lockout ก่อนตรวจรหัสผ่าน ไม่ใช่เช็คแค่ตอนรหัสผิด: ถ้าเช็คทีหลัง รหัสที่ถูกจะ
+    // ผ่านได้ทั้งที่ล็อกอยู่ และช่วงที่ล็อกจะกลายเป็นช่องให้เดารหัสฟรีไม่จำกัด เพราะรหัสผิด
+    // ตอนล็อกคืน 429 โดยไม่นับ attempt เพิ่ม จึงเดาได้เร็วเท่าไหร่ก็ได้จนเจอรหัสที่ถูก
+    const lockedUntilMs = await getLoginLimit(db, phone);
+    if (lockedUntilMs > Date.now()) {
+      return Response.json({ ok: false, error: "TOO_MANY_LOGIN_ATTEMPTS", retryAt: new Date(lockedUntilMs).toISOString() }, { status: 429 });
+    }
 
     if (!passwordMatches(existing, password)) {
-      const lockedUntilMs = await getLoginLimit(db, phone);
-      if (lockedUntilMs > Date.now()) {
-        return Response.json({ ok: false, error: "TOO_MANY_LOGIN_ATTEMPTS", retryAt: new Date(lockedUntilMs).toISOString() }, { status: 429 });
-      }
       const nextLockedUntilMs = await recordPasswordFailure(db, phone);
       return Response.json({
         ok: false,
