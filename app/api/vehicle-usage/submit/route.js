@@ -35,8 +35,18 @@ function timestampMillis(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// ต้องเรียง serviceDate จากใหม่ไปเก่าที่ฝั่งเซิร์ฟเวอร์ ไม่ใช่ดึงมา 100 รายการตามลำดับ key แล้วเรียงใน
+// หน่วยความจำ พอรถคันหนึ่งมี event เกิน limit งานล่าสุดอาจไม่ติดมา ทำให้ auto-close ไม่ทำงานหรือใช้
+// เลขไมล์ของงานเก่าผิดคัน (ตอนตรวจ รถที่ใช้มากสุดอยู่ที่ 97/100 แล้ว)
+// เมื่อเรียงจากใหม่ไปเก่า limit จะตัดแต่ของเก่าที่ไม่ต้องการ ผลลัพธ์จึงไม่เพี้ยนแม้ event จะโตขึ้นเรื่อยๆ
+// ต้องมี composite index vehicleId ASC + serviceDate DESC (อยู่ใน firestore.indexes.json)
 async function findLatestPreviousVehicleEvent(db, { vehicleId, serviceDate }) {
-  const snap = await db.collection("vehicle_usage_events").where("vehicleId", "==", vehicleId).limit(100).get();
+  const snap = await db.collection("vehicle_usage_events")
+    .where("vehicleId", "==", vehicleId)
+    .where("serviceDate", "<", serviceDate)
+    .orderBy("serviceDate", "desc")
+    .limit(50)
+    .get();
   return snap.docs
     .map((doc) => ({ doc, data: doc.data() || {} }))
     .filter(({ data }) => !data.autoClosed && String(data.serviceDate || "") < serviceDate)

@@ -41,6 +41,14 @@
       ]
     },
     {
+      "collectionGroup": "vehicle_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vehicleId", "order": "ASCENDING" },
+        { "fieldPath": "serviceDate", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "store_reports",
       "queryScope": "COLLECTION",
       "fields": [
