@@ -61,7 +61,12 @@ export async function PATCH(request) {
     if (typeof body.active === "boolean") patch.active = body.active;
     if (body.name) patch.name = String(body.name).trim();
     await db.collection("users").doc(uid).set(patch, { merge: true });
-    await getAdminAuth().updateUser(uid, { disabled: patch.active === false, ...(patch.name ? { displayName: patch.name } : {}) });
+    // ต้องส่ง disabled เฉพาะตอนที่ body ระบุ active มาจริง ไม่งั้นการแก้แค่ชื่อจะได้
+    // disabled: false ติดไปด้วย (undefined === false เป็น false) แล้วปลดแบนบัญชีที่แอดมินปิดไว้
+    const authUpdate = {};
+    if (typeof body.active === "boolean") authUpdate.disabled = !body.active;
+    if (patch.name) authUpdate.displayName = patch.name;
+    if (Object.keys(authUpdate).length) await getAdminAuth().updateUser(uid, authUpdate);
     return Response.json({ ok: true });
   } catch (error) { return errorResponse(error); }
 }
