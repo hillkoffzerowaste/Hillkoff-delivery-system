@@ -17,6 +17,8 @@ Use this skill for changes to this repository's delivery workflow, role-based UI
 
 - Send writes to protected business data (`orders`, `customers`, workflow records, reports, and vehicle data) through the appropriate `app/api/**` route, which verifies the Firebase ID token and role. Do not add direct client-side Firestore writes for those resources.
 - Use a Firestore transaction for check-then-write operations that could race. Follow the existing API route patterns.
+- When reserving booking numbers in `booking_month_registry`, write `source` from `ORDER_REGISTRY_SOURCE` and read it through `isOrderRegistrySource` (`lib/bookingRegistry.js`). A hardcoded string here silently orphans reservations: the delete routes never release the number and the Store report path returns 409 instead of linking back to the order.
+- Any driver-ownership check must require a non-empty `driverId` before comparing, not just equality. Orders closed by sales keep `driverId: ""`, so a bare comparison lets a driver profile without a `driverId` overwrite their delivery history.
 - Do not run data scripts with `--apply`, change Firestore rules or indexes, modify role allowlists, alter environment variables, or deploy without the user's explicit authorization.
 
 ## Make focused, verifiable changes
