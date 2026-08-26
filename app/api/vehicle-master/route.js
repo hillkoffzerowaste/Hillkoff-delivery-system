@@ -29,10 +29,12 @@ export async function POST(request) {
       id, assetCode: clean(body.assetCode || id, 120), plate: clean(body.plate, 80),
       vehicleType: clean(body.vehicleType), brand: clean(body.brand, 100), model: clean(body.model, 100),
       responsiblePerson: clean(body.responsiblePerson), department: clean(body.department),
-      active: body.active !== false, createdAt: snap.data()?.createdAt || now,
+      createdAt: snap.data()?.createdAt || now,
       createdBy: snap.data()?.createdBy || profile.email || profile.uid,
       updatedAt: now, updatedBy: profile.email || profile.uid
     };
+    // เหมือน driver-master: PATCH ที่ไม่ส่ง active มาต้องไม่ปลดปิดใช้งานรถที่เลิกใช้แล้ว
+    if (typeof body.active === "boolean" || !snap.exists) record.active = typeof body.active === "boolean" ? body.active : true;
     await ref.set(record, { merge: true });
     await db.collection("audit_logs").add({ action: snap.exists ? "vehicle_updated" : "vehicle_created", targetId: id, role: profile.role, uid: profile.uid, createdAt: now });
     return Response.json({ ok: true, data: record });
