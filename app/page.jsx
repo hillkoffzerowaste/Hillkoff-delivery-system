@@ -892,6 +892,8 @@ export default function App() {
   const [kpiAutoRefresh, setKpiAutoRefresh] = useState(false);
   const [storeReportIssues, setStoreReportIssues] = useState({ booking: { count: 0, items: [] }, online: { count: 0, items: [] } });
   const storeReportsFetchInFlightRef = useRef(false);
+  // นับรุ่นของคำขอ เพื่อให้ผลที่มาถึงสลับลำดับไม่ทับผลของคำขอล่าสุด
+  const storeReportsFetchGenerationRef = useRef(0);
   // การ refresh อัตโนมัติอ่านคำค้นล่าสุดจาก ref ไม่ใช่จาก closure ของ effect ถ้าใส่ storeReportQuery
   // เป็น dep ตรงๆ effect จะ refetch ทุกตัวอักษรที่พิมพ์ แต่ถ้าไม่ใส่เลย interval จะยิงด้วยคำค้นเก่า
   // แล้วทับผลค้นหาที่ผู้ใช้เพิ่งค้นทิ้ง
@@ -2253,7 +2255,11 @@ export default function App() {
   const auth = state.auth || {};
   const fetchStoreReports = async ({ date = "", query = "", type = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
     if (!["store", "pack"].includes(auth.role)) return;
-    if (storeReportsFetchInFlightRef.current) return;
+    // การ refresh เบื้องหลังข้ามได้ถ้ามีคำขอค้างอยู่ แต่คำขอที่ผู้ใช้กดเอง (ค้นหา/เปลี่ยนแท็บ)
+    // ต้องไม่ถูกทิ้งเงียบๆ ไม่งั้นกดค้นหาตอน refresh อัตโนมัติทำงานอยู่จะไม่เกิดอะไรขึ้นเลย
+    if (silent && storeReportsFetchInFlightRef.current) return;
+    const generation = storeReportsFetchGenerationRef.current + 1;
+    storeReportsFetchGenerationRef.current = generation;
     storeReportsFetchInFlightRef.current = true;
     if (!silent) setStoreReportsLoading(true);
     try {
@@ -2269,13 +2275,19 @@ export default function App() {
       const res = await authenticatedApiFetch(`/api/store/reports${params.size ? `?${params.toString()}` : ""}`);
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      // ผลของคำขอที่ถูกแทนที่ไปแล้วมาถึงช้า ต้องทิ้ง ไม่งั้นจะทับผลของคำขอล่าสุด
+      if (generation !== storeReportsFetchGenerationRef.current) return;
       setStoreReports(Array.isArray(json.data) ? json.data : []);
       setStoreReportsUpdatedAt(new Date());
     } catch (error) {
+      if (generation !== storeReportsFetchGenerationRef.current) return;
       setSyncStatus(`❌ โหลดรายงานสโตร์ไม่สำเร็จ: ${error?.message || error}`);
     } finally {
-      storeReportsFetchInFlightRef.current = false;
-      if (!silent) setStoreReportsLoading(false);
+      // เฉพาะคำขอล่าสุดที่เคลียร์ flag ได้ คำขอเก่าที่เพิ่งจบต้องไม่ปลดล็อกทับคำขอที่ยังวิ่งอยู่
+      if (generation === storeReportsFetchGenerationRef.current) {
+        storeReportsFetchInFlightRef.current = false;
+        if (!silent) setStoreReportsLoading(false);
+      }
     }
   };
   const fetchStoreReportIssues = useCallback(async () => {
