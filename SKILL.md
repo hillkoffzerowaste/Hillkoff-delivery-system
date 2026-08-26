@@ -19,6 +19,8 @@ Use this skill for changes to this repository's delivery workflow, role-based UI
 - Use a Firestore transaction for check-then-write operations that could race. Follow the existing API route patterns.
 - When reserving booking numbers in `booking_month_registry`, write `source` from `ORDER_REGISTRY_SOURCE` and read it through `isOrderRegistrySource` (`lib/bookingRegistry.js`). A hardcoded string here silently orphans reservations: the delete routes never release the number and the Store report path returns 409 instead of linking back to the order.
 - Any driver-ownership check must require a non-empty `driverId` before comparing, not just equality. Orders closed by sales keep `driverId: ""`, so a bare comparison lets a driver profile without a `driverId` overwrite their delivery history.
+- A booking reservation can be *borrowed*: a pack-assist order shares a `store_reports`-owned registry doc instead of creating its own. Release a reservation only through `canReleaseStoreReportReservation`, which requires an empty `sharedWithOrderIds`. Releasing without that check allows the same booking number to be issued twice.
+- Rate-limit and lockout checks belong *before* the credential comparison. Checking them only on the failure path lets a correct credential through while locked, and makes the lockout window a free unlimited guessing oracle.
 - Do not run data scripts with `--apply`, change Firestore rules or indexes, modify role allowlists, alter environment variables, or deploy without the user's explicit authorization.
 
 ## Make focused, verifiable changes
