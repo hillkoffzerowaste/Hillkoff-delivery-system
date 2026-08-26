@@ -21,6 +21,7 @@ Use this skill for changes to this repository's delivery workflow, role-based UI
 - Any driver-ownership check must require a non-empty `driverId` before comparing, not just equality. Orders closed by sales keep `driverId: ""`, so a bare comparison lets a driver profile without a `driverId` overwrite their delivery history.
 - A booking reservation can be *borrowed*: a pack-assist order shares a `store_reports`-owned registry doc instead of creating its own. Release a reservation only through `canReleaseStoreReportReservation`, which requires an empty `sharedWithOrderIds`. Releasing without that check allows the same booking number to be issued twice.
 - Rate-limit and lockout checks belong *before* the credential comparison. Checking them only on the failure path lets a correct credential through while locked, and makes the lockout window a free unlimited guessing oracle.
+- `npm run booking:audit-registry` audits `booking_month_registry` for reservations whose owner is gone and rebuilds `sharedWithOrderIds` from live order data. It is dry-run by default; `--apply` writes. Applied on 2026-08-26 after a full backup: normalised 10 legacy `source` values, wrote 2,697 borrower lists, released 18 orphaned booking numbers. A clean re-run should report all zeroes — a non-zero count means something is stranding reservations again.
 - Do not run data scripts with `--apply`, change Firestore rules or indexes, modify role allowlists, alter environment variables, or deploy without the user's explicit authorization.
 
 ## Make focused, verifiable changes
