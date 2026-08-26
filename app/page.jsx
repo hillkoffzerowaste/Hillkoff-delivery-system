@@ -892,6 +892,10 @@ export default function App() {
   const [kpiAutoRefresh, setKpiAutoRefresh] = useState(false);
   const [storeReportIssues, setStoreReportIssues] = useState({ booking: { count: 0, items: [] }, online: { count: 0, items: [] } });
   const storeReportsFetchInFlightRef = useRef(false);
+  // การ refresh อัตโนมัติอ่านคำค้นล่าสุดจาก ref ไม่ใช่จาก closure ของ effect ถ้าใส่ storeReportQuery
+  // เป็น dep ตรงๆ effect จะ refetch ทุกตัวอักษรที่พิมพ์ แต่ถ้าไม่ใส่เลย interval จะยิงด้วยคำค้นเก่า
+  // แล้วทับผลค้นหาที่ผู้ใช้เพิ่งค้นทิ้ง
+  const storeReportQueryRef = useRef("");
   const [storeDraftRows, setStoreDraftRows] = useState({ booking: [], online: [] });
   const [showStoreReportConfirm, setShowStoreReportConfirm] = useState("");
   const [storeReportConfirmIds, setStoreReportConfirmIds] = useState([]);
@@ -2296,6 +2300,9 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [auth.role, fetchStoreReportIssues]);
   useEffect(() => {
+    storeReportQueryRef.current = storeReportQuery;
+  });
+  useEffect(() => {
     const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
     const reportType = isStoreBookingEntryView || ["store-booking", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
     const shouldFetchReports = (auth.role === "store" && (isStoreBookingEntryView || ["store-booking", "store-online", "store-dashboard"].includes(displayTab)))
@@ -2307,7 +2314,7 @@ export default function App() {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (isKpi) fetchStoreReports({ includeDeleted: true, kpi: true, silent: true });
-      else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: storeReportIncludeDeleted, silent: true });
+      else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQueryRef.current : "", type: reportType, includeDeleted: storeReportIncludeDeleted, silent: true });
     }, isKpi ? REPORT_REFRESH_INTERVALS.kpi : REPORT_REFRESH_INTERVALS.reports);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
