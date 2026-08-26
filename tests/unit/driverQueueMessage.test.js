@@ -22,11 +22,12 @@ describe("driver queue LINE notice", () => {
     const pending = getDriverQueueOrdersForNotice([
       queueOrder(),
       queueOrder({ id: "ASSIGNED", driverId: "driver-1" }),
-      queueOrder({ id: "EXPIRED", driverQueueDate: "2026-08-20" }),
+      queueOrder({ id: "STILL_IN_WINDOW", driverQueueDate: "2026-08-20" }),
+      queueOrder({ id: "EXPIRED", driverQueueDate: "2026-08-18" }),
       queueOrder({ id: "DELIVERING", status: "กำลังส่ง" })
     ], TODAY);
 
-    expect(pending.map((order) => order.id)).toEqual(["DO-001"]);
+    expect(pending.map((order) => order.id)).toEqual(["DO-001", "STILL_IN_WINDOW"]);
   });
 
   it("builds a concise message that asks drivers to accept every listed job", () => {

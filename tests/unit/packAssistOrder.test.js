@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../lib/packAssistOrder";
+import { canPackAssistShareBooking, isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../lib/packAssistOrder";
 
 describe("Pack urgent order policy", () => {
   it("allows only a direct Pack route with a company driver", () => {
@@ -13,6 +13,12 @@ describe("Pack urgent order policy", () => {
     expect(isBlockingPackAssistOrder({ customerId: "customer-1", queueStatus: "queued", status: "รอคนขับรับ" }, "customer-1")).toBe(true);
     expect(isBlockingPackAssistOrder({ customerId: "customer-1", queueStatus: "completed", status: "ส่งสำเร็จ" }, "customer-1")).toBe(false);
     expect(isBlockingPackAssistOrder({ customerId: "customer-2", queueStatus: "preparing" }, "customer-1")).toBe(false);
+  });
+
+  it("reuses a booking number the Store already keyed, but never one owned by another order", () => {
+    expect(canPackAssistShareBooking({ source: "store_reports", sourceId: "report-1" })).toBe(true);
+    expect(canPackAssistShareBooking({ source: "orders", sourceId: "order-1" })).toBe(false);
+    expect(canPackAssistShareBooking({})).toBe(false);
   });
 
   it("tells Pack to wait for an order still being checked by Store", () => {

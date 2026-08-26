@@ -7,7 +7,7 @@ import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCa
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
-import { isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
+import { canPackAssistShareBooking, isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
 
 export const runtime = "nodejs";
 
@@ -224,14 +224,25 @@ export async function POST(request) {
           if (sameRequest) return { alreadyExists: true };
           throw Object.assign(new Error("Order id already exists"), { status: 409 });
         }
+        const reservationsToCreate = [];
+        const sharedStoreBookings = [];
         for (const reservation of bookingRefs) {
           const bookingSnap = await transaction.get(reservation.ref);
-          if (bookingSnap.exists) throw Object.assign(new Error(bookingConflictMessage(bookingSnap.data())), { status: 409 });
+          if (!bookingSnap.exists) {
+            reservationsToCreate.push(reservation);
+            continue;
+          }
+          const registry = bookingSnap.data() || {};
+          if (packAssistEntry && canPackAssistShareBooking(registry)) {
+            sharedStoreBookings.push({ bookingNumber: reservation.bookingNumber, reportId: String(registry.sourceId || ""), createdBy: String(registry.createdBy || "") });
+            continue;
+          }
+          throw Object.assign(new Error(bookingConflictMessage(registry)), { status: 409 });
         }
-        transaction.create(orderRef, next);
+        transaction.create(orderRef, sharedStoreBookings.length ? { ...next, storeBookingRegistryLinks: sharedStoreBookings } : next);
         transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
         transaction.set(searchIndexRef, customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
-        for (const reservation of bookingRefs) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
+        for (const reservation of reservationsToCreate) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
         return { alreadyExists: false, searchIndexChanged };
       });
       if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });

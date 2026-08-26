@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  DRIVER_QUEUE_ACTIVE_DAYS,
   DRIVER_QUEUE_POLICY_VERSION,
   buildDriverQueuePolicyPatch,
+  driverQueueVisibleUntil,
   isDriverQueueVisibleToDriver,
   isExpiredDriverQueueForSales,
   refreshVersionedDriverQueuePatch,
@@ -9,6 +11,7 @@ import {
 
 const TODAY = "2026-07-29";
 const YESTERDAY = "2026-07-28";
+const THREE_DAYS_AGO = "2026-07-26";
 const NOW_ISO = "2026-07-29T01:00:00.000Z";
 
 const version2YesterdayUnassigned = {
@@ -17,6 +20,11 @@ const version2YesterdayUnassigned = {
   queueStatus: "queued",
   status: "รอคนขับรับ",
   driverId: "",
+};
+
+const version2ExpiredUnassigned = {
+  ...version2YesterdayUnassigned,
+  driverQueueDate: THREE_DAYS_AGO,
 };
 
 const version2TodayUnassigned = {
@@ -70,8 +78,13 @@ describe("isDriverQueueVisibleToDriver", () => {
     expect(isDriverQueueVisibleToDriver(version2TodayUnassigned, TODAY)).toBe(true);
   });
 
-  it("hides a version-2 unassigned order from yesterday", () => {
-    expect(isDriverQueueVisibleToDriver(version2YesterdayUnassigned, TODAY)).toBe(false);
+  it("keeps a version-2 unassigned order visible inside the 3-day window", () => {
+    expect(isDriverQueueVisibleToDriver(version2YesterdayUnassigned, TODAY)).toBe(true);
+    expect(isDriverQueueVisibleToDriver({ ...version2YesterdayUnassigned, driverQueueDate: "2026-07-27" }, TODAY)).toBe(true);
+  });
+
+  it("hides a version-2 unassigned order once the 3-day window has passed", () => {
+    expect(isDriverQueueVisibleToDriver(version2ExpiredUnassigned, TODAY)).toBe(false);
   });
 
   it("keeps a version-2 assigned active order visible across calendar days", () => {
@@ -86,17 +99,27 @@ describe("isDriverQueueVisibleToDriver", () => {
   it("keeps legacy orders on their existing behavior", () => {
     expect(isDriverQueueVisibleToDriver(legacyYesterdayUnassigned, TODAY)).toBe(true);
     expect(isDriverQueueVisibleToDriver({
-      ...version2YesterdayUnassigned,
+      ...version2ExpiredUnassigned,
       driverQueuePolicyVersion: undefined,
     }, TODAY)).toBe(true);
   });
 });
 
+describe("driver queue window", () => {
+  it("keeps a queued job alive for 3 days counting the day it was queued", () => {
+    expect(DRIVER_QUEUE_ACTIVE_DAYS).toBe(3);
+    expect(driverQueueVisibleUntil({ driverQueueDate: TODAY })).toBe("2026-07-31");
+    expect(driverQueueVisibleUntil({ driverQueueDate: THREE_DAYS_AGO })).toBe("2026-07-28");
+    expect(driverQueueVisibleUntil({ driverQueueDate: "" })).toBe("");
+  });
+});
+
 describe("isExpiredDriverQueueForSales", () => {
-  it("returns only version-2 unassigned queues from before today", () => {
-    expect(isExpiredDriverQueueForSales(version2YesterdayUnassigned, TODAY)).toBe(true);
+  it("returns only version-2 unassigned queues older than the 3-day window", () => {
+    expect(isExpiredDriverQueueForSales(version2ExpiredUnassigned, TODAY)).toBe(true);
+    expect(isExpiredDriverQueueForSales(version2YesterdayUnassigned, TODAY)).toBe(false);
     expect(isExpiredDriverQueueForSales(version2TodayUnassigned, TODAY)).toBe(false);
-    expect(isExpiredDriverQueueForSales(version2YesterdayAssignedActive, TODAY)).toBe(false);
+    expect(isExpiredDriverQueueForSales({ ...version2YesterdayAssignedActive, driverQueueDate: THREE_DAYS_AGO }, TODAY)).toBe(false);
     expect(isExpiredDriverQueueForSales(legacyYesterdayUnassigned, TODAY)).toBe(false);
   });
 });
