@@ -123,6 +123,49 @@ describe("Firestore role isolation", () => {
     }));
   });
 
+  it("denies a driver profile with a blank driverId any claim on unassigned work", async () => {
+    // โปรไฟล์คนขับที่ยังไม่มี driverId ต้องไม่ match ออเดอร์ที่ driverId ว่างทุกใบ
+    await seedProfile("driver-blank", "driver", { phone: "0814444444", phoneDigits: "0814444444", driverId: "" });
+    // งานที่ฝ่ายขายปิดเองแล้ว: driverId ว่างและไม่ได้อยู่ในคิว
+    await seed("orders/SALES_CLOSED", { driverId: "", status: "ส่งสำเร็จ", queueStatus: "completed" });
+    await seed("orders/QUEUED", { driverId: "", driverName: "", status: "รอคนขับรับ", queueStatus: "queued" });
+    await seed("route_tasks/T-BLANK", { driverId: "", stops: [] });
+    const db = dbFor("driver-blank");
+
+    // งานที่ฝ่ายขายปิดแล้วต้องมองไม่เห็นและแก้ไม่ได้ ทั้งที่ driverId ตรงกันแบบว่างเท่าว่าง
+    await assertFails(getDoc(doc(db, "orders/SALES_CLOSED")));
+    await assertFails(updateDoc(doc(db, "orders/SALES_CLOSED"), {
+      status: "กำลังส่ง",
+      updatedAt: "2026-08-26T00:00:00.000Z"
+    }));
+    // คิวที่เปิดอยู่ คนขับทุกคนอ่านได้ตามปกติ (ไม่ผูกกับตัวตน) แต่ต้องรับงานไม่ได้
+    await assertSucceeds(getDoc(doc(db, "orders/QUEUED")));
+    await assertFails(updateDoc(doc(db, "orders/QUEUED"), {
+      driverId: "",
+      driverName: "driver-user",
+      status: "กำลังส่ง",
+      updatedAt: "2026-08-26T00:00:00.000Z"
+    }));
+    // งานที่ผูกกับตัวตนคนขับต้องมองไม่เห็น
+    await assertFails(getDoc(doc(db, "route_tasks/T-BLANK")));
+  });
+
+  it("still lets a driver with a real driverId claim and read their own work", async () => {
+    await seedProfile("driver-ok", "driver", { phone: "0815555555", phoneDigits: "0815555555", driverId: "driver_0815555555" });
+    await seed("orders/QUEUED", { driverId: "", driverName: "", status: "รอคนขับรับ", queueStatus: "queued" });
+    await seed("route_tasks/T-OK", { driverId: "driver_0815555555", stops: [] });
+    const db = dbFor("driver-ok");
+
+    await assertSucceeds(getDoc(doc(db, "orders/QUEUED")));
+    await assertSucceeds(updateDoc(doc(db, "orders/QUEUED"), {
+      driverId: "driver_0815555555",
+      driverName: "driver-user",
+      status: "กำลังส่ง",
+      updatedAt: "2026-08-26T00:00:00.000Z"
+    }));
+    await assertSucceeds(getDoc(doc(db, "route_tasks/T-OK")));
+  });
+
   it("prevents a driver from changing protected order fields", async () => {
     await seedProfile("driver-1", "driver", { phone: "0812222222", phoneDigits: "0812222222", driverId: "driver_0812222222" });
     await seed("orders/O-1", { driverId: "driver_0812222222", status: "กำลังส่ง", queueStatus: "queued", customerName: "Original" });
