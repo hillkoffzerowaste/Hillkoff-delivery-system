@@ -1,5 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
-import { BOOKING_NUMBER_PATTERN, bookingRegistryId, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { BOOKING_NUMBER_PATTERN, bookingRegistryId, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 
 export const runtime = "nodejs";
 
@@ -53,7 +53,7 @@ export async function POST(request) {
       reservationSnapshots.forEach((reservationSnap, index) => {
         const reservation = reservations[index];
         const record = reservationSnap.data() || {};
-        if (reservationSnap.exists && record.source === "orders" && String(record.sourceId || "") === orderId) {
+        if (reservationSnap.exists && isOrderRegistrySource(record.source) && String(record.sourceId || "") === orderId) {
           transaction.delete(reservation.ref);
           releasedBookingNumbers.push(reservation.bookingNumber);
         }

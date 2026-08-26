@@ -1,5 +1,5 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
-import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
 
 export const runtime = "nodejs";
@@ -196,7 +196,7 @@ export async function POST(request) {
         if (registrySnap.exists) {
           const registry = registrySnap.data() || {};
           // ฝ่ายขายเป็นเจ้าของเลขนี้อยู่แล้ว: เก็บรายงานสโตร์ไว้และเติมรายละเอียดกลับเข้าออเดอร์เดิม
-          if (registry.source === "orders" && validDocId(String(registry.sourceId || ""))) {
+          if (isOrderRegistrySource(registry.source) && validDocId(String(registry.sourceId || ""))) {
             const orderRef = db.collection("orders").doc(String(registry.sourceId));
             const orderSnap = await transaction.get(orderRef);
             if (orderSnap.exists) {

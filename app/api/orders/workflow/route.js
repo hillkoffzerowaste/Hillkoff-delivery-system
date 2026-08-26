@@ -1,7 +1,7 @@
 import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
-import { bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumberList, parseBookingNumberList } from "../../../../lib/bookingRegistry";
+import { ORDER_REGISTRY_SOURCE, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumberList, parseBookingNumberList } from "../../../../lib/bookingRegistry";
 import { buildReroutePatch, driverReworkPatch } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
 import { buildDriverQueuePolicyPatch, refreshVersionedDriverQueuePatch } from "../../../../lib/driverQueuePolicy";
@@ -44,7 +44,9 @@ export async function PATCH(request) {
       Object.assign(patch, reroute.patch);
       Object.assign(history, reroute.history);
     } else if (profile.role === "driver" && ["driver_cancel", "driver_complete", "driver_rework"].includes(action)) {
-      if (String(order.driverId || "") !== String(profile.driverId || "")) {
+      // ต้องเช็คว่า driverId ไม่ว่างด้วย ไม่ใช่แค่เท่ากัน: โปรไฟล์คนขับที่ยังไม่มี driverId จะ match
+      // ออเดอร์ที่ driverId ว่าง (เช่น งานที่ฝ่ายขายปิดเองแล้ว) และแก้ประวัติการส่งของงานนั้นได้
+      if (!String(profile.driverId || "") || String(order.driverId || "") !== String(profile.driverId || "")) {
         throw Object.assign(new Error("Driver can update only an assigned order"), { status: 403 });
       }
       if (action === "driver_cancel") {
@@ -134,7 +136,7 @@ export async function PATCH(request) {
         if (regSnap.exists && regSnap.data()?.sourceId !== orderId) {
           throw Object.assign(new Error(bookingConflictMessage(regSnap.data())), { status: 409 });
         }
-        if (!regSnap.exists) bookingReservationsToCreate.push({ ref: regRef, data: bookingRegistryRecord({ serviceDate, bookingNumber: num, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) });
+        if (!regSnap.exists) bookingReservationsToCreate.push({ ref: regRef, data: bookingRegistryRecord({ serviceDate, bookingNumber: num, source: ORDER_REGISTRY_SOURCE, sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) });
       }
       for (const num of update.toRemove) {
         const regId = bookingRegistryId(serviceDate, num);
@@ -185,7 +187,7 @@ export async function PATCH(request) {
           if (regSnap.exists && regSnap.data()?.sourceId !== orderId) {
             throw Object.assign(new Error(bookingConflictMessage(regSnap.data())), { status: 409 });
           }
-          if (!regSnap.exists) bookingReservationsToCreate.push({ ref: regRef, data: bookingRegistryRecord({ serviceDate, bookingNumber: num, source: "order", sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) });
+          if (!regSnap.exists) bookingReservationsToCreate.push({ ref: regRef, data: bookingRegistryRecord({ serviceDate, bookingNumber: num, source: ORDER_REGISTRY_SOURCE, sourceId: orderId, customerName: order.customerName, createdAt: now, createdBy: profile.name || profile.uid }) });
         }
         for (const num of toRemove) {
           const regId = bookingRegistryId(serviceDate, num);

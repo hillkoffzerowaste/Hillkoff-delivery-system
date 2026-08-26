@@ -26,7 +26,8 @@ export default defineConfig([
     "build/**",
     "node_modules/**",
     "repo/**",
-    "repo.worktrees/**",
+    // worktree แต่ละอันมี .next และ snapshot ของ app/ ของตัวเอง ถ้าไม่กันไว้ lint จะพังทั้ง npm run check
+    ".worktrees/**",
     "google-apps-script/**"
   ])
 ]);

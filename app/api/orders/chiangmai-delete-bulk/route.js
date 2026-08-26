@@ -1,4 +1,4 @@
-import { BOOKING_NUMBER_PATTERN, bookingRegistryId, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { BOOKING_NUMBER_PATTERN, bookingRegistryId, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { canSalesDeleteChiangmaiOrder } from "../../../../lib/preparationWorkflow";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
@@ -53,7 +53,7 @@ export async function POST(request) {
       const deletableReservations = reservationSnapshots
         .map((snapshot, index) => ({ snapshot, item: reservationItems[index] }))
         .filter(({ snapshot, item }) => snapshot.exists
-          && snapshot.data()?.source === "orders"
+          && isOrderRegistrySource(snapshot.data()?.source)
           && String(snapshot.data()?.sourceId || "") === item.orderId);
       const activityCount = existing.reduce((count, snapshot) => count + (activityById.get(snapshot.id)?.length || 0), 0);
       const totalWrites = existing.length * 2 + activityCount + deletableReservations.length;
