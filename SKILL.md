@@ -28,4 +28,4 @@ Use this skill for changes to this repository's delivery workflow, role-based UI
 
 ## Delivery
 
-Report the affected workflow, files changed, verification performed, and any checks that could not run. Create a new commit for verified task-related changes; push only when the user explicitly asks.
+Report the affected workflow, files changed, verification performed, and any checks that could not run. Create a new commit for verified task-related changes; push only when the user explicitly asks. อัพเดท skill ทุกครั้งที่ รันโปรเจค แก้ไชล่าสุด
