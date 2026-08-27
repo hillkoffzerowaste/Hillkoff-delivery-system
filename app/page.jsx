@@ -6881,23 +6881,6 @@ export default function App() {
 
         {auth.role === "driver" && displayTab === "driver" && (
           <div style={{ display: "grid", gap: "var(--sp-7)" }}>
-            {/* ส่วนข้อมูลคนขับ */}
-            <section className="panel" style={{ background: "var(--c-brand-bg)", borderLeft: "4px solid var(--c-brand-light)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-7)", flexWrap: "wrap" }}>
-                <div>
-                  {drivers.filter(driver => driver.id === driverId).map(driver => (
-                    <div key={driver.id}>
-                      <b style={{ fontSize: "16px", display: "block" }}><User size={15} className="i-inline" aria-hidden="true" /> {driver.name}</b>
-                      <small style={{ color: "var(--c-text-muted)" }}><Car size={15} className="i-inline" aria-hidden="true" /> {driver.plate} · 📍 {driver.zone}</small>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <b style={{ fontSize: "20px", color: "var(--c-brand-light)", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
-                </div>
-              </div>
-            </section>
-
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
               const pending = driverInboxOrders;
@@ -8128,7 +8111,7 @@ export default function App() {
       style={{
         position: "fixed",
         right: "16px",
-        bottom: "88px",
+        bottom: "calc(88px + env(safe-area-inset-bottom))",
         width: "52px",
         height: "52px",
         borderRadius: "999px",
