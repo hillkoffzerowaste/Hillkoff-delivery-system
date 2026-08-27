@@ -43,6 +43,11 @@ describe("driver new-order inbox stays out of the way", () => {
     expect(pageSource).toContain("const driverInboxExpanded = driverInboxOpen ?? driverDeliveryOrders.length === 0;");
   });
 
+  it("keeps the delivered-history panel collapsed until the driver opens it", () => {
+    expect(pageSource).toContain("const [driverHistoryOpen, setDriverHistoryOpen] = useState(false);");
+    expect(pageSource).toContain("{driverHistoryOpen && (<>");
+  });
+
   it("shows the pending count as a red badge on both the tab and the collapsed header", () => {
     expect(pageSource).toContain("มีออเดอร์ใหม่รอรับ ${driverInboxOrders.length} งาน");
     expect(pageSource).toContain("มีออเดอร์ใหม่รอรับ ${pending.length} งาน");

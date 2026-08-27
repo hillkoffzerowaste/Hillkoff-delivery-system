@@ -978,7 +978,7 @@ export default function App() {
 
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
-    ? (tab === "driver-sop" ? "driver-sop" : tab === "driver-vehicle" ? "driver-vehicle" : tab === "driver-prep" ? "driver-prep" : tab === "driver-dashboard" ? "driver-dashboard" : "driver")
+    ? (["driver-sop", "driver-vehicle", "driver-prep", "driver-dashboard", "driver-route"].includes(tab) ? tab : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? (["pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : state.auth?.role === "accounting" ? "driver-sop-report"
@@ -1019,6 +1019,7 @@ export default function App() {
   const [podPreviewsByOrder, setPodPreviewsByOrder] = useState({});
   const [lineShareHoldByOrder, setLineShareHoldByOrder] = useState({}); // { [orderId]: เหตุผลที่ LINE ยังไม่ออก }
   const [driverInboxOpen, setDriverInboxOpen] = useState(null); // null = ยังไม่แตะ ใช้ค่าอัตโนมัติตามจำนวนงานในมือ
+  const [driverHistoryOpen, setDriverHistoryOpen] = useState(false);
   const podFilesRef = useRef({}); // { [orderId]: File[] } kept on-device only (not synced)
   const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
   const reportPhotoFileRef = useRef(null);
@@ -5421,6 +5422,7 @@ export default function App() {
           {auth.role === "driver" && (
             <>
               <button type="button" className={displayTab === "driver" ? "active" : ""} onClick={() => selectAppTab("driver")}><Truck size={18} /> งานจัดส่ง{driverInboxOrders.length > 0 && <span className="nav-count-badge" aria-label={`มีออเดอร์ใหม่รอรับ ${driverInboxOrders.length} งาน`}>{driverInboxOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "driver-route" ? "active" : ""} onClick={() => selectAppTab("driver-route")}><Route size={18} /> งานวิ่งสาขา{activeDriverRouteTasks.length > 0 && <span className="nav-count-badge" aria-label={`งานวิ่งที่กำลังทำ ${activeDriverRouteTasks.length} งาน`}>{activeDriverRouteTasks.length}</span>}</button>
               <button type="button" className={displayTab === "driver-prep" ? "active" : ""} onClick={() => selectAppTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
               <button type="button" className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => selectAppTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
               <button type="button" className={displayTab === "driver-sop" ? "active" : ""} onClick={() => selectAppTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
@@ -6773,7 +6775,48 @@ export default function App() {
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-5)", flexWrap: "wrap" }}><strong style={{ fontSize: "28px", color: "var(--c-warn-dark)" }}><Star size={15} className="i-inline" aria-hidden="true" /> {driverReview.average}</strong><span className="muted">จาก {driverReview.count} รีวิว</span></div>
               {driverReview.latestFeedback && <div style={{ background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-5)" }}><b>ข้อเสนอแนะล่าสุด</b><p style={{ margin: "var(--sp-2) 0 0" }}>{driverReview.latestFeedback}</p></div>}
             </div> : <p className="muted" style={{ margin: 0 }}>ยังไม่มีรีวิวจากลูกค้า</p>}
-          </section></div>;
+          </section>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-info)" }}>
+              <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-6)" }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>รายงานการทำงานวันนี้</h2>
+                  <span>{todayServiceDate}</span>
+                </div>
+                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowDriverDailyReport(v => !v)}>
+                    <FileText size={14} /> {showDriverDailyReport ? "ซ่อนรายงาน" : "ดูรายงาน"}
+                  </button>
+                  <button className="primary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => copyToClipboard(buildDriverDailyWorkReport())}>
+                    <ClipboardList size={14} /> คัดลอก
+                  </button>
+                </div>
+              </div>
+              <p className="muted" style={{ margin: "var(--sp-5) 0 0" }}>
+                COD วันนี้ ฿{money(driverTodayWorkSummary.cod)} · COD ส่งสำเร็จ ฿{money(driverTodayWorkSummary.codDone)}
+              </p>
+              {showDriverDailyReport && (
+                <pre style={{ margin: "var(--sp-6) 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-6)", color: "var(--c-text-strong)", fontSize: "12px", lineHeight: 1.6 }}>
+                  {buildDriverDailyWorkReport()}
+                </pre>
+              )}
+            </section>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-brand-light)" }}>
+              <div className="panel-head"><h2><BellRing size={15} className="i-inline" aria-hidden="true" /> แจ้งเตือนออเดอร์ใหม่</h2><span>ตั้งค่าเฉพาะเครื่องนี้</span></div>
+              <div style={{ display: "flex", gap: "var(--sp-4)", alignItems: "center", flexWrap: "wrap", marginTop: 0 }}>
+                <button
+                  className={notificationPermission === "granted" ? "primary" : "secondary"}
+                  onClick={() => ensureWebPushForDriver(state.auth, { showStatus: true })}
+                >
+                  <BellRing size={16} /> {notificationPermission === "granted" ? "แจ้งเตือนเปิดอยู่" : "เปิดแจ้งเตือนออเดอร์"}
+                </button>
+                <small style={{ color: notificationPermission === "denied" ? "var(--c-danger-dark)" : "var(--c-text-muted)" }}>
+                  {pushStatus || (notificationPermission === "denied"
+                    ? "เบราว์เซอร์บล็อกการแจ้งเตือน ต้องปลดบล็อกใน Settings ของเว็บ"
+                    : "รับแจ้งเตือนเมื่อมีออเดอร์ใหม่ แม้ไม่ได้เปิดหน้าแอพอยู่")}
+                </small>
+              </div>
+            </section>
+          </div>;
         })()}
 
         {(["sales", "admin"].includes(auth.role)) && displayTab === "driver-ratings" && (
@@ -6806,161 +6849,6 @@ export default function App() {
                   <b style={{ fontSize: "20px", color: "var(--c-brand-light)", display: "block" }}>{driverOrders.filter(o => o.status !== "ส่งสำเร็จ" && o.driverId === driverId).length}</b>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "var(--sp-4)", alignItems: "center", flexWrap: "wrap", marginTop: "var(--sp-6)" }}>
-                <button
-                  className={notificationPermission === "granted" ? "primary" : "secondary"}
-                  onClick={() => ensureWebPushForDriver(state.auth, { showStatus: true })}
-                >
-                  <BellRing size={16} /> {notificationPermission === "granted" ? "แจ้งเตือนเปิดอยู่" : "เปิดแจ้งเตือนออเดอร์"}
-                </button>
-                <small style={{ color: notificationPermission === "denied" ? "var(--c-danger-dark)" : "var(--c-text-muted)" }}>
-                  {pushStatus || (notificationPermission === "denied"
-                    ? "เบราว์เซอร์บล็อกการแจ้งเตือน ต้องปลดบล็อกใน Settings ของเว็บ"
-                    : "รับแจ้งเตือนเมื่อมีออเดอร์ใหม่ แม้ไม่ได้เปิดหน้าแอพอยู่")}
-                </small>
-              </div>
-            </section>
-
-            <section className="panel" style={{ borderLeft: "4px solid var(--c-info)" }}>
-              <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-6)" }}>
-                <div>
-                  <h2 style={{ margin: 0 }}>รายงานการทำงานวันนี้</h2>
-                  <span>{todayServiceDate}</span>
-                </div>
-                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowDriverDailyReport(v => !v)}>
-                    <FileText size={14} /> {showDriverDailyReport ? "ซ่อนรายงาน" : "ดูรายงาน"}
-                  </button>
-                  <button className="primary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => copyToClipboard(buildDriverDailyWorkReport())}>
-                    <ClipboardList size={14} /> คัดลอก
-                  </button>
-                </div>
-              </div>
-              <p className="muted" style={{ margin: "var(--sp-5) 0 0" }}>
-                COD วันนี้ ฿{money(driverTodayWorkSummary.cod)} · COD ส่งสำเร็จ ฿{money(driverTodayWorkSummary.codDone)}
-              </p>
-              {showDriverDailyReport && (
-                <pre style={{ margin: "var(--sp-6) 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-6)", color: "var(--c-text-strong)", fontSize: "12px", lineHeight: 1.6 }}>
-                  {buildDriverDailyWorkReport()}
-                </pre>
-              )}
-            </section>
-
-            <section className="panel" style={{ borderLeft: "4px solid var(--c-brand-cyan)" }}>
-              <div className="panel-head"><h2><Route size={15} className="i-inline" aria-hidden="true" /> งานวิ่งสาขา / งานวิ่งไกล</h2><span>{activeDriverRouteTasks.length} งานกำลังทำ</span></div>
-              <div style={{ display: "grid", gap: "var(--sp-6)" }}>
-                <div className="segmented" style={{ marginBottom: 0 }}>
-                  <button className={routeTaskForm.type === "branch" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "branch", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งสาขา</button>
-                  <button className={routeTaskForm.type === "long" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "long", origin: p.origin || "สาขาสำนักงานใหญ่", longDirection: p.longDirection || "outbound" }))}>วิ่งไกล</button>
-                </div>
-
-                {routeTaskForm.type === "long" && (
-                  <div className="segmented" style={{ marginBottom: 0 }}>
-                    <button
-                      className={routeTaskForm.longDirection !== "return" ? "active" : ""}
-                      onClick={() => setRouteTaskForm(p => ({ ...p, longDirection: "outbound", origin: "สาขาสำนักงานใหญ่" }))}
-                    >
-                      ขาไป
-                    </button>
-                    <button
-                      className={routeTaskForm.longDirection === "return" ? "active" : ""}
-                      onClick={() => setRouteTaskForm(p => ({ ...p, longDirection: "return", origin: "ร้านหอมไกล จ.ชลบุรี" }))}
-                    >
-                      ขากลับเชียงใหม่
-                    </button>
-                  </div>
-                )}
-
-                <div className="form-grid two">
-                  <select value={routeTaskForm.origin} onChange={e => setRouteTaskForm(p => ({ ...p, origin: e.target.value }))}>
-                    {[...BRANCH_ROUTE_STOPS, ...LONG_ROUTE_STOPS].map(stop => <option key={stop} value={stop}>ต้นทาง: {stop}</option>)}
-                  </select>
-                  {routeTaskForm.type === "branch" ? (
-                    <select value={routeTaskForm.branchDestination} onChange={e => setRouteTaskForm(p => ({ ...p, branchDestination: e.target.value }))}>
-                      {BRANCH_ROUTE_STOPS.map(stop => <option key={stop} value={stop}>ปลายทาง: {stop}</option>)}
-                    </select>
-                  ) : (
-                    <div style={{ display: "grid", gap: "var(--sp-4)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)" }}>
-                      <b style={{ fontSize: "12px", color: "var(--c-text-strong)" }}>
-                        ปลายทาง{routeTaskForm.longDirection === "return" ? "ขากลับ: เลือกตามลำดับ" : "ขาไป: เลือกได้ 1 จุด หรือรวม 2 จุดตามลำดับ"}
-                      </b>
-                      {[0, 1].map(index => {
-                        const field = routeTaskForm.longDirection === "return" ? "longReturnDestinations" : "longDestinations";
-                        const options = routeTaskForm.longDirection === "return" ? LONG_ROUTE_RETURN_STOPS : LONG_ROUTE_STOPS;
-                        const current = routeTaskForm[field] || [];
-                        return (
-                          <select
-                            key={index}
-                            value={current[index] || ""}
-                            onChange={e => setRouteTaskForm(p => {
-                              const next = [...(p[field] || [])];
-                              next[index] = e.target.value;
-                              return { ...p, [field]: next };
-                            })}
-                          >
-                            <option value="">{index === 0 ? "ปลายทางจุดที่ 1" : "ปลายทางจุดที่ 2 (ไม่เลือกได้)"}</option>
-                            {options.map(stop => <option key={stop} value={stop}>{index === 0 ? "จุดที่ 1" : "จุดที่ 2"}: {stop}</option>)}
-                          </select>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <textarea value={routeTaskForm.note} onChange={e => setRouteTaskForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุงานวิ่ง เช่น รับของกลับ / เอกสาร / รอบร่วม" rows={2} />
-                <button className="primary wide" onClick={createRouteTask}><MapPinned size={18} /> เริ่มงานวิ่ง</button>
-
-                {activeDriverRouteTasks.length > 0 && (
-                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "var(--sp-6)" }}>
-                    {activeDriverRouteTasks.map(task => {
-                      const taskColor = routeTaskStatusColor[task.status] || "var(--c-info-dark)";
-                      return (
-                        <div key={task.id} style={{ background: "var(--c-info-bg)", padding: "var(--sp-6)", borderRadius: "8px", border: `2px solid ${taskColor}`, display: "grid", gap: "var(--sp-5)" }}>
-                          <div>
-                            <b style={{ color: taskColor, display: "block" }}>{task.type === "long" ? `งานวิ่งไกล${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : "งานวิ่งสาขา"} · {task.id}</b>
-                            <small style={{ color: "var(--c-text-strong)" }}>{task.origin} → {task.destinationSummary}</small><br />
-                            {task.note && <small style={{ color: "var(--c-text-muted)" }}>{task.note}</small>}
-                          </div>
-                          <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}><MapPin size={15} className="i-inline" aria-hidden="true" /> เช็คอินระหว่างทาง</button>
-                          <div style={{ display: "grid", gap: "var(--sp-4)" }}>
-                            {(task.stops || []).map(stop => (
-                              <div key={stop.id} style={{ background: "white", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-4)" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "baseline" }}>
-                                  <b>{stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name}</b>
-                                  <small style={{ color: stop.checkedInAt ? "var(--c-brand-dark)" : "var(--c-warn-deep)", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
-                                </div>
-                                {stop.checkedInAt && <small style={{ color: "var(--c-text-muted)" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
-                                {stop.note && <small style={{ color: "var(--c-text-muted)" }}>{stop.note}</small>}
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-4)" }}>
-                                  <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
-                                  <label className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    📷 ถ่ายรูป
-                                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) uploadRouteTaskPhoto(task, stop.id, file);
-                                      e.target.value = "";
-                                    }} />
-                                  </label>
-                                </div>
-                                {(stop.photo || stop.checkedInAt) && (
-                                  <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", background: "var(--c-info)" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
-                                    💬 แชร์ LINE จุดนี้
-                                  </button>
-                                )}
-                                {stop.photo && (
-                                  <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid var(--c-line)" }}>
-                                    <img src={stop.photo} alt="route check-in" style={{ width: "100%", height: "auto" }} />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", background: "var(--c-brand-bg)", color: "var(--c-brand-dark)" }} onClick={() => completeRouteTask(task)}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> จบงานวิ่ง</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             </section>
 
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
@@ -6970,14 +6858,14 @@ export default function App() {
                 <section className="panel">
                   <button
                     type="button"
-                    className="driver-inbox-toggle"
+                    className="driver-section-toggle"
                     aria-expanded={driverInboxExpanded}
                     onClick={() => setDriverInboxOpen(!driverInboxExpanded)}
                   >
                     <span><Package size={15} className="i-inline" aria-hidden="true" /> รับออเดอร์ใหม่</span>
                     {pending.length > 0 && <span className="nav-count-badge" aria-label={`มีออเดอร์ใหม่รอรับ ${pending.length} งาน`}>{pending.length}</span>}
                     {driverInboxUrgentCount > 0 && <span className="nav-count-badge" style={{ background: "var(--c-danger-deep)" }} aria-label={`ในนั้นเป็นงานเร่งด่วนส่งตรงคนขับ ${driverInboxUrgentCount} งาน`}><Siren size={13} className="i-inline" aria-hidden="true" /> {driverInboxUrgentCount}</span>}
-                    <span className="driver-inbox-toggle-hint">{driverInboxExpanded ? "ซ่อนรายการ ▲" : pending.length > 0 ? "ดูและกดรับ ▼" : "ไม่มีงานใหม่ ▼"}</span>
+                    <span className="driver-section-toggle-hint">{driverInboxExpanded ? "ซ่อนรายการ ▲" : pending.length > 0 ? "ดูและกดรับ ▼" : "ไม่มีงานใหม่ ▼"}</span>
                   </button>
                   {driverInboxExpanded && (pending.length === 0
                     ? <p className="muted" style={{ margin: "var(--sp-5) 0 0" }}>ยังไม่มีออเดอร์ใหม่รอรับในขณะนี้</p>
@@ -7208,11 +7096,19 @@ export default function App() {
 	            {/* สรุป/ประวัติส่งสำเร็จประจำวัน */}
 	            {(driverTodayCompletedOrders.length > 0 || driverTodayCompletedRouteTasks.length > 0 || orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0) && (
 	              <section className="panel" style={{ background: "var(--c-surface-subtle)" }}>
-	                <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-6)" }}>
-	                  <div>
-	                    <h2 style={{ margin: 0 }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> ประวัติส่งสำเร็จวันนี้</h2>
-	                    <span>ออเดอร์ {driverTodayCompletedOrders.length} · งานวิ่ง {driverTodayCompletedRouteTasks.length}</span>
-	                  </div>
+	                {/* ประวัติเป็นข้อมูลย้อนหลัง ไม่ใช่งานที่ต้องทำ จึงพับไว้เสมอและโชว์แค่ตัวเลขสรุปที่หัวข้อ */}
+	                <button
+	                  type="button"
+	                  className="driver-section-toggle"
+	                  aria-expanded={driverHistoryOpen}
+	                  onClick={() => setDriverHistoryOpen(open => !open)}
+	                >
+	                  <span><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> ประวัติส่งสำเร็จวันนี้</span>
+	                  <span className="driver-section-toggle-count">ออเดอร์ {driverTodayCompletedOrders.length} · งานวิ่ง {driverTodayCompletedRouteTasks.length}</span>
+	                  <span className="driver-section-toggle-hint">{driverHistoryOpen ? "ซ่อนรายการ ▲" : "ดูรายการ ▼"}</span>
+	                </button>
+	                {driverHistoryOpen && (<>
+	                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--sp-5)" }}>
 	                  <button className="secondary" style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px" }} onClick={() => setShowDeliveredHistory(v => !v)}>
 	                    {showDeliveredHistory ? "ซ่อนย้อนหลัง" : "ดูย้อนหลัง"}
 	                  </button>
@@ -7295,6 +7191,7 @@ export default function App() {
 	                  </div>
 	                  );
 	                })()}
+	                </>)}
 	              </section>
 	            )}
 
@@ -7304,6 +7201,127 @@ export default function App() {
                 <p style={{ color: "var(--c-text-muted)", margin: "var(--sp-4) 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>
               </section>
             )}
+          </div>
+        )}
+
+        {auth.role === "driver" && displayTab === "driver-route" && (
+          <div style={{ display: "grid", gap: "var(--sp-7)" }}>
+            <section className="panel" style={{ borderLeft: "4px solid var(--c-brand-cyan)" }}>
+              <div className="panel-head"><h2><Route size={15} className="i-inline" aria-hidden="true" /> งานวิ่งสาขา / งานวิ่งไกล</h2><span>{activeDriverRouteTasks.length} งานกำลังทำ</span></div>
+              <div style={{ display: "grid", gap: "var(--sp-6)" }}>
+                <div className="segmented" style={{ marginBottom: 0 }}>
+                  <button className={routeTaskForm.type === "branch" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "branch", origin: p.origin || "สาขาสำนักงานใหญ่" }))}>วิ่งสาขา</button>
+                  <button className={routeTaskForm.type === "long" ? "active" : ""} onClick={() => setRouteTaskForm(p => ({ ...p, type: "long", origin: p.origin || "สาขาสำนักงานใหญ่", longDirection: p.longDirection || "outbound" }))}>วิ่งไกล</button>
+                </div>
+
+                {routeTaskForm.type === "long" && (
+                  <div className="segmented" style={{ marginBottom: 0 }}>
+                    <button
+                      className={routeTaskForm.longDirection !== "return" ? "active" : ""}
+                      onClick={() => setRouteTaskForm(p => ({ ...p, longDirection: "outbound", origin: "สาขาสำนักงานใหญ่" }))}
+                    >
+                      ขาไป
+                    </button>
+                    <button
+                      className={routeTaskForm.longDirection === "return" ? "active" : ""}
+                      onClick={() => setRouteTaskForm(p => ({ ...p, longDirection: "return", origin: "ร้านหอมไกล จ.ชลบุรี" }))}
+                    >
+                      ขากลับเชียงใหม่
+                    </button>
+                  </div>
+                )}
+
+                <div className="form-grid two">
+                  <select value={routeTaskForm.origin} onChange={e => setRouteTaskForm(p => ({ ...p, origin: e.target.value }))}>
+                    {[...BRANCH_ROUTE_STOPS, ...LONG_ROUTE_STOPS].map(stop => <option key={stop} value={stop}>ต้นทาง: {stop}</option>)}
+                  </select>
+                  {routeTaskForm.type === "branch" ? (
+                    <select value={routeTaskForm.branchDestination} onChange={e => setRouteTaskForm(p => ({ ...p, branchDestination: e.target.value }))}>
+                      {BRANCH_ROUTE_STOPS.map(stop => <option key={stop} value={stop}>ปลายทาง: {stop}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ display: "grid", gap: "var(--sp-4)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)" }}>
+                      <b style={{ fontSize: "12px", color: "var(--c-text-strong)" }}>
+                        ปลายทาง{routeTaskForm.longDirection === "return" ? "ขากลับ: เลือกตามลำดับ" : "ขาไป: เลือกได้ 1 จุด หรือรวม 2 จุดตามลำดับ"}
+                      </b>
+                      {[0, 1].map(index => {
+                        const field = routeTaskForm.longDirection === "return" ? "longReturnDestinations" : "longDestinations";
+                        const options = routeTaskForm.longDirection === "return" ? LONG_ROUTE_RETURN_STOPS : LONG_ROUTE_STOPS;
+                        const current = routeTaskForm[field] || [];
+                        return (
+                          <select
+                            key={index}
+                            value={current[index] || ""}
+                            onChange={e => setRouteTaskForm(p => {
+                              const next = [...(p[field] || [])];
+                              next[index] = e.target.value;
+                              return { ...p, [field]: next };
+                            })}
+                          >
+                            <option value="">{index === 0 ? "ปลายทางจุดที่ 1" : "ปลายทางจุดที่ 2 (ไม่เลือกได้)"}</option>
+                            {options.map(stop => <option key={stop} value={stop}>{index === 0 ? "จุดที่ 1" : "จุดที่ 2"}: {stop}</option>)}
+                          </select>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <textarea value={routeTaskForm.note} onChange={e => setRouteTaskForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุงานวิ่ง เช่น รับของกลับ / เอกสาร / รอบร่วม" rows={2} />
+                <button className="primary wide" onClick={createRouteTask}><MapPinned size={18} /> เริ่มงานวิ่ง</button>
+
+                {activeDriverRouteTasks.length > 0 && (
+                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "var(--sp-6)" }}>
+                    {activeDriverRouteTasks.map(task => {
+                      const taskColor = routeTaskStatusColor[task.status] || "var(--c-info-dark)";
+                      return (
+                        <div key={task.id} style={{ background: "var(--c-info-bg)", padding: "var(--sp-6)", borderRadius: "8px", border: `2px solid ${taskColor}`, display: "grid", gap: "var(--sp-5)" }}>
+                          <div>
+                            <b style={{ color: taskColor, display: "block" }}>{task.type === "long" ? `งานวิ่งไกล${task.routeDirection === "return" ? "ขากลับเชียงใหม่" : "ขาไป"}` : "งานวิ่งสาขา"} · {task.id}</b>
+                            <small style={{ color: "var(--c-text-strong)" }}>{task.origin} → {task.destinationSummary}</small><br />
+                            {task.note && <small style={{ color: "var(--c-text-muted)" }}>{task.note}</small>}
+                          </div>
+                          <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px" }} onClick={() => addRouteTaskMidwayCheckIn(task)}><MapPin size={15} className="i-inline" aria-hidden="true" /> เช็คอินระหว่างทาง</button>
+                          <div style={{ display: "grid", gap: "var(--sp-4)" }}>
+                            {(task.stops || []).map(stop => (
+                              <div key={stop.id} style={{ background: "white", border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-4)" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", alignItems: "baseline" }}>
+                                  <b>{stop.kind === "midway" ? "เช็คอินระหว่างทาง" : stop.name}</b>
+                                  <small style={{ color: stop.checkedInAt ? "var(--c-brand-dark)" : "var(--c-warn-deep)", fontWeight: 800 }}>{stop.checkedInAt ? "เช็คอินแล้ว" : "รอเช็คอิน"}</small>
+                                </div>
+                                {stop.checkedInAt && <small style={{ color: "var(--c-text-muted)" }}>{stop.checkedInAt}{stop.sharedToLine ? " · แชร์ LINE แล้ว" : ""}</small>}
+                                {stop.note && <small style={{ color: "var(--c-text-muted)" }}>{stop.note}</small>}
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-4)" }}>
+                                  <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px" }} onClick={() => checkInRouteTaskStop(task, stop.id)}>✓ เช็คอิน</button>
+                                  <label className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    📷 ถ่ายรูป
+                                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) uploadRouteTaskPhoto(task, stop.id, file);
+                                      e.target.value = "";
+                                    }} />
+                                  </label>
+                                </div>
+                                {(stop.photo || stop.checkedInAt) && (
+                                  <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", background: "var(--c-info)" }} onClick={() => shareRouteTaskStopToLine(task, stop)}>
+                                    💬 แชร์ LINE จุดนี้
+                                  </button>
+                                )}
+                                {stop.photo && (
+                                  <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid var(--c-line)" }}>
+                                    <img src={stop.photo} alt="route check-in" style={{ width: "100%", height: "auto" }} />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px", minHeight: "44px", background: "var(--c-brand-bg)", color: "var(--c-brand-dark)" }} onClick={() => completeRouteTask(task)}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> จบงานวิ่ง</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         )}
 

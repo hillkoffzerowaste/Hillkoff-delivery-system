@@ -2383,8 +2383,8 @@ input:focus,select:focus,textarea:focus { border-color:#63aaa8; box-shadow:0 0 0
   font-weight: 700;
 }
 
-/* หัวข้อกล่องรับออเดอร์ใหม่ กดพับ/กางได้ ให้กินความกว้างเต็มเพื่อกดด้วยนิ้วโป้งได้ทั้งแถบ */
-.driver-inbox-toggle {
+/* หัวข้อกล่องพับได้ในหน้าคนขับ ให้กินความกว้างเต็มเพื่อกดด้วยนิ้วโป้งได้ทั้งแถบ */
+.driver-section-toggle {
   width: 100%;
   min-height: 48px;
   display: flex;
@@ -2401,14 +2401,20 @@ input:focus,select:focus,textarea:focus { border-color:#63aaa8; box-shadow:0 0 0
   cursor: pointer;
 }
 
-.driver-inbox-toggle .nav-count-badge { margin-left: 0; }
+.driver-section-toggle .nav-count-badge { margin-left: 0; }
 
-.driver-inbox-toggle-hint {
+.driver-section-toggle-hint {
   margin-left: auto;
   color: var(--c-text-muted);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.driver-section-toggle-count {
+  color: var(--c-text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .driver-sequence-card {
