@@ -4306,7 +4306,9 @@ export default function App() {
 	    setSyncStatus(`⏳ กำลังบันทึกข้อมูลลูกค้า "${nextCustomer.name}"...`);
 	    const saved = await upsertCustomerToFirestore(nextCustomer);
 	    if (!saved.ok) {
-	      setSyncStatus(`⚠️ แก้ไขข้อมูลลูกค้าไม่สำเร็จ: ${saved.error}`);
+	      setSyncStatus(saved.data?.duplicateId
+	        ? `⚠️ แก้ไขไม่สำเร็จ: ${saved.data.duplicateField || "ข้อมูล"}นี้ซ้ำกับลูกค้า "${saved.data.duplicateName}" อยู่แล้ว`
+	        : `⚠️ แก้ไขข้อมูลลูกค้าไม่สำเร็จ: ${saved.error}`);
 	      return;
 	    }
 	    setState(prev => ({ ...prev, customers: prev.customers.map(c => c.id === id ? nextCustomer : c) }));

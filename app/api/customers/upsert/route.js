@@ -63,7 +63,13 @@ export async function POST(request) {
     const customerRef = db.collection("customers").doc(customerId);
     let duplicateResponse = null;
     await db.runTransaction(async (transaction) => {
-      if (duplicateQueries.length) {
+      const current = await transaction.get(customerRef);
+      const currentData = current.exists ? current.data() || {} : {};
+      // ข้อมูลซ้ำที่ค้างอยู่ในระบบไม่ควรล็อกไม่ให้แก้ไขฟิลด์อื่น จึงตรวจซ้ำเฉพาะตอนที่ชื่อหรือเบอร์เปลี่ยนจริง
+      const identityChanged = !current.exists
+        || normalizeCustomerSearch(currentData.name) !== next.nameKey
+        || String(currentData.phoneDigits || currentData.phone || "").replace(/\D/g, "") !== next.phoneDigits;
+      if (duplicateQueries.length && identityChanged) {
         const duplicateSnapshots = await Promise.all(duplicateQueries.map((query) => transaction.get(query)));
         const duplicateIds = new Set();
         duplicateSnapshots.forEach((snapshot) => snapshot.docs.forEach((doc) => duplicateIds.add(doc.id)));
@@ -82,7 +88,6 @@ export async function POST(request) {
           return;
         }
       }
-      const current = await transaction.get(customerRef);
       transaction.set(customerRef, {
         ...next,
         updatedByUid: profile.uid,
