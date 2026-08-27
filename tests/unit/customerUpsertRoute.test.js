@@ -11,13 +11,16 @@ vi.mock("../../lib/workflowAuth.js", () => ({
 }));
 vi.mock("../../lib/customerSearchCache.js", () => ({ bumpCustomerSearchIndexVersion: vi.fn(async () => {}) }));
 
-function createDb(initialCustomers) {
+function createDb(initialCustomers, searchOnlyCustomers = {}) {
   const customers = new Map(Object.entries(initialCustomers));
-  const search = new Map(Object.entries(initialCustomers).map(([id, customer]) => [id, {
+  const indexRecord = (customer) => ({
+    name: customer.name,
     nameKey: String(customer.name || "").toLowerCase().replace(/\s+/g, ""),
     phoneDigits: String(customer.phone || "").replace(/\D/g, ""),
     terms: []
-  }]));
+  });
+  const search = new Map(Object.entries({ ...initialCustomers, ...searchOnlyCustomers })
+    .map(([id, customer]) => [id, indexRecord(customer)]));
   const store = (name) => (name === "customers" ? customers : search);
   const collection = (name) => ({
     doc: (id) => ({ kind: name, id }),
@@ -77,6 +80,16 @@ describe("customer upsert route", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ ok: false, data: { duplicateId: "cus-2", duplicateField: "ชื่อลูกค้า" } });
     expect(state.db.customers.get("cus-1").name).toBe("ร้านกาแฟดอย");
+  });
+
+  it("saves a customer that only exists in the search index and shares a name with another record", async () => {
+    state.db = createDb(
+      { "cus-2": { name: "ร้านชาเขียว", phone: "0899999999" } },
+      { "cus-index-only": { name: "ร้านชาเขียว", phone: "0899999999" } }
+    );
+    const response = await post({ id: "cus-index-only", name: "ร้านชาเขียว", phone: "0899999999", address: "ที่อยู่ใหม่" });
+    expect(response.status).toBe(200);
+    expect(state.db.customers.get("cus-index-only")).toMatchObject({ address: "ที่อยู่ใหม่" });
   });
 
   it("blocks a brand new customer that reuses an existing phone number", async () => {

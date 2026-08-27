@@ -61,12 +61,14 @@ export async function POST(request) {
       duplicateQueries.push(db.collection("customer_search").where("terms", "array-contains", next.phoneDigits.slice(0, 40)).limit(20));
     }
     const customerRef = db.collection("customers").doc(customerId);
+    const searchRef = db.collection("customer_search").doc(customerId);
     let duplicateResponse = null;
     await db.runTransaction(async (transaction) => {
-      const current = await transaction.get(customerRef);
-      const currentData = current.exists ? current.data() || {} : {};
+      const [current, currentSearch] = await Promise.all([transaction.get(customerRef), transaction.get(searchRef)]);
+      // ลูกค้าบางรายมีแต่ doc ในดัชนีค้นหา (หน้าเว็บแสดงจากดัชนี) การแก้ไขรายนั้นคือการแก้ของเดิม ไม่ใช่การสร้างใหม่
+      const currentData = current.exists ? current.data() || {} : (currentSearch.exists ? currentSearch.data() || {} : null);
       // ข้อมูลซ้ำที่ค้างอยู่ในระบบไม่ควรล็อกไม่ให้แก้ไขฟิลด์อื่น จึงตรวจซ้ำเฉพาะตอนที่ชื่อหรือเบอร์เปลี่ยนจริง
-      const identityChanged = !current.exists
+      const identityChanged = !currentData
         || normalizeCustomerSearch(currentData.name) !== next.nameKey
         || String(currentData.phoneDigits || currentData.phone || "").replace(/\D/g, "") !== next.phoneDigits;
       if (duplicateQueries.length && identityChanged) {
@@ -95,7 +97,7 @@ export async function POST(request) {
         updatedByName: String(profile.name || profile.email || "").slice(0, 200),
         ...(!current.exists ? { createdAt: new Date().toISOString(), createdByUid: profile.uid } : {})
       }, { merge: true });
-      transaction.set(db.collection("customer_search").doc(customerId), customerSearchRecord(next), { merge: true });
+      transaction.set(searchRef, customerSearchRecord(next), { merge: true });
     });
 
     if (duplicateResponse) {
