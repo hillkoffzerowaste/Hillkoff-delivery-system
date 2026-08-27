@@ -2010,13 +2010,13 @@ export default function App() {
 		    }
 		  };
 
-		  const upsertCustomerToFirestore = async (customer) => {
+		  const upsertCustomerToFirestore = async (customer, { allowDuplicatePhone = false } = {}) => {
 		    try {
 		      const idToken = await refreshAuthToken(true);
 		      const res = await fetch("/api/customers/upsert", {
 		        method: "POST",
 		        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-		        body: JSON.stringify({ idToken, customer })
+		        body: JSON.stringify({ idToken, customer, allowDuplicatePhone })
 		      });
 		      const json = await res.json().catch(() => null);
 		      if (!res.ok || !json?.ok) {
@@ -2671,7 +2671,18 @@ export default function App() {
 	    const id = generateCustomerId();
 	    const nextCustomer = { id, ...customerForm, name: normalizedName };
 	    setSyncStatus(`⏳ กำลังบันทึกลูกค้า "${nextCustomer.name}"...`);
-    const saved = await upsertCustomerToFirestore(nextCustomer);
+    let saved = await upsertCustomerToFirestore(nextCustomer, { allowDuplicatePhone: Boolean(existingByPhone) });
+    if (!saved.ok && saved.data?.canOverride) {
+      const confirmed = window.confirm(
+        `เบอร์ ${nextCustomer.phone} ใช้อยู่กับลูกค้า "${saved.data.duplicateName}" แล้ว\n\nยืนยันเพิ่มเป็นลูกค้ารายใหม่โดยใช้เบอร์เดียวกันหรือไม่?`
+      );
+      if (!confirmed) {
+        setSelectedCustomerId(saved.data.duplicateId);
+        setSyncStatus(`ℹ️ เลือกข้อมูลลูกค้า "${saved.data.duplicateName}" ที่ใช้เบอร์นี้อยู่แล้ว`);
+        return;
+      }
+      saved = await upsertCustomerToFirestore(nextCustomer, { allowDuplicatePhone: true });
+    }
     if (!saved.ok) {
       if (saved.data?.duplicateId) {
         setSelectedCustomerId(saved.data.duplicateId);
@@ -4304,7 +4315,17 @@ export default function App() {
 	      return;
 	    }
 	    setSyncStatus(`⏳ กำลังบันทึกข้อมูลลูกค้า "${nextCustomer.name}"...`);
-	    const saved = await upsertCustomerToFirestore(nextCustomer);
+	    let saved = await upsertCustomerToFirestore(nextCustomer);
+	    if (!saved.ok && saved.data?.canOverride) {
+	      const confirmed = window.confirm(
+	        `เบอร์ ${nextCustomer.phone} ใช้อยู่กับลูกค้า "${saved.data.duplicateName}" แล้ว\n\nยืนยันบันทึกโดยใช้เบอร์เดียวกันหรือไม่? (เช่น คนละสาขาของบริษัทเดียวกัน)`
+	      );
+	      if (!confirmed) {
+	        setSyncStatus("ℹ️ ยกเลิกการบันทึก ข้อมูลลูกค้ายังเป็นค่าเดิม");
+	        return;
+	      }
+	      saved = await upsertCustomerToFirestore(nextCustomer, { allowDuplicatePhone: true });
+	    }
 	    if (!saved.ok) {
 	      setSyncStatus(saved.data?.duplicateId
 	        ? `⚠️ แก้ไขไม่สำเร็จ: ${saved.data.duplicateField || "ข้อมูล"}นี้ซ้ำกับลูกค้า "${saved.data.duplicateName}" อยู่แล้ว`

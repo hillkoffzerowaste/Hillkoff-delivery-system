@@ -51,12 +51,12 @@ function createDb(initialCustomers, searchOnlyCustomers = {}) {
   };
 }
 
-async function post(customer) {
+async function post(customer, allowDuplicatePhone = false) {
   const route = await import("../../app/api/customers/upsert/route.js");
   return route.POST(new Request("http://localhost/api/customers/upsert", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer test" },
-    body: JSON.stringify({ customer })
+    body: JSON.stringify({ customer, allowDuplicatePhone })
   }));
 }
 
@@ -92,9 +92,26 @@ describe("customer upsert route", () => {
     expect(state.db.customers.get("cus-index-only")).toMatchObject({ address: "ที่อยู่ใหม่" });
   });
 
-  it("blocks a brand new customer that reuses an existing phone number", async () => {
+  it("warns about a reused phone number but lets the save through once confirmed", async () => {
+    const warned = await post({ id: "cus-1", name: "ร้านกาแฟดอย สาขาสอง", phone: "0899999999" });
+    expect(warned.status).toBe(409);
+    expect(await warned.json()).toMatchObject({ data: { duplicateId: "cus-2", duplicateField: "เบอร์โทร", canOverride: true } });
+
+    const confirmed = await post({ id: "cus-1", name: "ร้านกาแฟดอย สาขาสอง", phone: "0899999999" }, true);
+    expect(confirmed.status).toBe(200);
+    expect(state.db.customers.get("cus-1")).toMatchObject({ name: "ร้านกาแฟดอย สาขาสอง", phoneDigits: "0899999999" });
+  });
+
+  it("never lets a confirmed phone override through when the name itself is the duplicate", async () => {
+    const response = await post({ id: "cus-1", name: "ร้านชาเขียว", phone: "0899999999" }, true);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ data: { duplicateField: "ชื่อลูกค้า", canOverride: false } });
+    expect(state.db.customers.get("cus-1").name).toBe("ร้านกาแฟดอย");
+  });
+
+  it("blocks a brand new customer that reuses an existing phone number until it is confirmed", async () => {
     const response = await post({ id: "cus-new", name: "ร้านใหม่", phone: "0899999999" });
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ data: { duplicateId: "cus-2", duplicateField: "เบอร์โทร" } });
+    expect(await response.json()).toMatchObject({ data: { duplicateId: "cus-2", duplicateField: "เบอร์โทร", canOverride: true } });
   });
 });

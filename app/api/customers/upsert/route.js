@@ -41,6 +41,7 @@ export async function POST(request) {
 
   const customer = payload?.customer && typeof payload.customer === "object" ? payload.customer : null;
   const customerId = String(customer?.id || "").trim();
+  const allowDuplicatePhone = payload?.allowDuplicatePhone === true;
 
   if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "Invalid customer id" }, { status: 400 });
 
@@ -76,17 +77,23 @@ export async function POST(request) {
         const duplicateIds = new Set();
         duplicateSnapshots.forEach((snapshot) => snapshot.docs.forEach((doc) => duplicateIds.add(doc.id)));
         const customerSnapshots = await Promise.all(Array.from(duplicateIds).map((id) => transaction.get(db.collection("customers").doc(id))));
-        const duplicate = customerSnapshots.map((snapshot) => ({ id: snapshot.id, data: snapshot.exists ? snapshot.data() || {} : {} })).find(({ id, data }) => {
-          if (id === customerId || !data.name) return false;
-          const candidateName = normalizeCustomerSearch(data.name);
-          const candidatePhone = String(data.phoneDigits || data.phone || "").replace(/\D/g, "");
-          return candidateName === next.nameKey || (next.phoneDigits.length >= 8 && next.phoneDigits.length <= 15 && candidatePhone === next.phoneDigits);
-        });
+        const candidates = customerSnapshots
+          .map((snapshot) => ({ id: snapshot.id, data: snapshot.exists ? snapshot.data() || {} : {} }))
+          .filter(({ id, data }) => id !== customerId && data.name);
+        const usablePhone = next.phoneDigits.length >= 8 && next.phoneDigits.length <= 15;
+        const nameDuplicate = candidates.find(({ data }) => normalizeCustomerSearch(data.name) === next.nameKey);
+        // สาขาของบริษัทเดียวกันใช้เบอร์กลางร่วมกันเป็นเรื่องปกติ เบอร์ซ้ำที่ชื่อไม่ซ้ำจึงเป็นคำเตือนที่ยืนยันข้ามได้
+        const phoneDuplicate = usablePhone
+          ? candidates.find(({ data }) => String(data.phoneDigits || data.phone || "").replace(/\D/g, "") === next.phoneDigits)
+          : null;
+        const duplicate = nameDuplicate || (allowDuplicatePhone ? null : phoneDuplicate);
         if (duplicate) {
-          const duplicateData = duplicate.data;
-          const duplicatePhone = String(duplicateData.phoneDigits || duplicateData.phone || "").replace(/\D/g, "");
-          const duplicateField = next.phoneDigits.length >= 8 && next.phoneDigits.length <= 15 && duplicatePhone === next.phoneDigits ? "เบอร์โทร" : "ชื่อลูกค้า";
-          duplicateResponse = { duplicateId: duplicate.id, duplicateName: duplicateData.name || duplicate.id, duplicateField };
+          duplicateResponse = {
+            duplicateId: duplicate.id,
+            duplicateName: duplicate.data.name || duplicate.id,
+            duplicateField: nameDuplicate ? "ชื่อลูกค้า" : "เบอร์โทร",
+            canOverride: !nameDuplicate
+          };
           return;
         }
       }
