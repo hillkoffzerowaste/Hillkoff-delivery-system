@@ -5339,6 +5339,8 @@ export default function App() {
               <button className="secondary wide" onClick={logout}>กลับไปหน้า Login</button>
             </>
           )}
+          {/* แถบสถานะหลักอยู่ในหน้าหลังล็อกอิน ถ้าไม่ซ้ำไว้ตรงนี้ ข้อความรหัสผิด/บัญชีถูกล็อกจะไม่มีที่แสดงเลย */}
+          {syncStatus && <div className="sync-banner" role="status" aria-live="polite" style={{ marginTop: "var(--sp-5)", marginBottom: 0 }}>{syncStatus}</div>}
         </section>
       </main>
       </>
