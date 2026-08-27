@@ -49,7 +49,6 @@ import {
   FileSpreadsheet,
   FileText,
   FolderSync,
-  Home,
   Inbox,
   KeyRound,
   Link2,
@@ -1032,6 +1031,18 @@ export default function App() {
   const operationalOrdersSnapshotsRef = useRef({ recent: [], active: [] });
   
   const pendingOrderUpdatesRef = useRef(new Set()); // Track orders being updated to debounce button clicks
+  // ref อ่านได้ทันทีในตัว guard แต่ไม่ทำให้ปุ่มรีเรนเดอร์ ปุ่มที่กดไปแล้วจึงไม่เคยกลายเป็น disabled จริง
+  // จึงมิเรอร์ค่าเดียวกันลง state ให้ UI ใช้ ส่วน logic ยังอ่าน ref เพื่อกันการกดซ้ำแบบ synchronous
+  const [pendingOrderUpdateIds, setPendingOrderUpdateIds] = useState([]);
+  const markOrderUpdatePending = (orderId) => {
+    pendingOrderUpdatesRef.current.add(orderId);
+    setPendingOrderUpdateIds((ids) => ids.includes(orderId) ? ids : [...ids, orderId]);
+  };
+  const clearOrderUpdatePending = (orderId) => {
+    pendingOrderUpdatesRef.current.delete(orderId);
+    setPendingOrderUpdateIds((ids) => ids.filter((id) => id !== orderId));
+  };
+  const isOrderUpdatePending = (orderId) => pendingOrderUpdateIds.includes(orderId);
   const ordersToSyncRef = useRef(new Set());
   const routeTasksToSyncRef = useRef(new Set());
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
@@ -2611,11 +2622,22 @@ export default function App() {
   const driverDeliveryOrders = [...driverCurrentDeliveryOrders, ...driverReorderableOrders];
   const deferredDriverDeliveryOrders = driverDeliveryOrders.filter(order => closedDriverDeliveryOrderIds[order.id]);
   const visibleDriverDeliveryOrders = driverDeliveryOrders.filter(order => !closedDriverDeliveryOrderIds[order.id]);
+  const driverDeliveredOrders = (orders || []).filter(order => order.driverId === driverId && order.status === "ส่งสำเร็จ")
+    .slice()
+    .sort((a, b) => {
+      const av = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+      const bv = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+      if (bv !== av) return bv - av;
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    });
+  const driverDeliveredToday = driverDeliveredOrders.filter(isTodayOrder);
+  const driverDeliveredBacklog = driverDeliveredOrders.filter(order => !isTodayOrder(order));
+  const driverDeliveredCodTotal = driverDeliveredOrders.reduce((sum, order) => sum + Number(order.cod || 0), 0);
   const driverInboxOrders = (orders || []).filter(order => order.status === "รอคนขับรับ"
     && order.queueStatus === "queued"
     && !order.driverId
     && isDriverQueueVisibleToDriver(order, todayServiceDate)
-    && !pendingOrderUpdatesRef.current.has(order.id));
+    && !isOrderUpdatePending(order.id));
   const driverInboxUrgentCount = driverInboxOrders.filter(order => order.workflowType === "direct_driver").length;
   // คนขับที่มีงานในมืออยู่แล้วต้องเลื่อนผ่านการ์ดรับงานใหม่ทุกใบก่อนถึงงานที่กำลังส่ง จึงพับไว้ให้
   // ถ้ายังไม่แตะปุ่มพับเอง (null) ค่าจะปรับตามจำนวนงานในมือที่โหลดเข้ามาทีหลังได้เอง
@@ -3214,7 +3236,7 @@ export default function App() {
     ordersToSyncRef.current.add(id);
     setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
 	    setTimeout(() => {
-	      try { pendingOrderUpdatesRef.current.delete(id); } catch {}
+	      try { clearOrderUpdatePending(id); } catch {}
 	    }, 250);
 	  };
 
@@ -3276,7 +3298,7 @@ export default function App() {
     const authenticatedDriverId = state.auth?.driverId || driverId || "";
     if (!authenticatedDriverId) return setSyncStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกแล้วเข้าระบบใหม่");
     if (pendingOrderUpdatesRef.current.has(order.id)) return;
-    pendingOrderUpdatesRef.current.add(order.id);
+    markOrderUpdatePending(order.id);
     const nextSequence = driverReorderableOrders.reduce((max, item) => Math.max(max, Number(item.driverSequence) || 0), 0) + 1;
     const driverName = drivers.find((driver) => driver.id === authenticatedDriverId)?.name || state.auth?.name || "";
     const acceptedAt = new Date().toISOString();
@@ -3303,7 +3325,7 @@ export default function App() {
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...rollback } : item) }));
       setSyncStatus(`❌ รับออเดอร์ไม่สำเร็จ: ${error?.message || error}`);
     } finally {
-      pendingOrderUpdatesRef.current.delete(order.id);
+      clearOrderUpdatePending(order.id);
     }
   };
 
@@ -3590,19 +3612,23 @@ export default function App() {
     const reason = window.prompt("📝 เหตุผลในการยกเลิก/เลื่อนส่ง:", "");
     if (reason === null) return;
     if (!reason.trim()) return setSyncStatus("⚠️ กรุณาระบุเหตุผลก่อนส่งออเดอร์กลับเข้าคิว");
-    pendingOrderUpdatesRef.current.add(order.id);
+    markOrderUpdatePending(order.id);
     try { await updatePreparationWorkflow(order, "driver_cancel", { reason: reason.trim() }); }
-    finally { pendingOrderUpdatesRef.current.delete(order.id); }
+    finally {
+      clearOrderUpdatePending(order.id);
+      // งานกลับเข้าคิวแล้ว ถ้าไม่ล้าง hold ไว้ ป้ายเตือนเก่าจะโผล่อีกครั้งตอนคนขับรับงานเดิมใหม่
+      setLineShareHoldByOrder((holds) => { const next = { ...holds }; delete next[order.id]; return next; });
+    }
   };
 
   const completeDriverDeliveryOrder = async (order, { deliveredAt, driverNote, podPhotoCount, deliveryCompleteness }) => {
     if (pendingOrderUpdatesRef.current.has(order.id)) return { ok: false, error: "Order update in progress" };
-    pendingOrderUpdatesRef.current.add(order.id);
+    markOrderUpdatePending(order.id);
     try {
       const action = deliveryCompleteness === "incomplete" ? "driver_rework" : "driver_complete";
       return await updatePreparationWorkflow(order, action, { deliveredAt, driverNote, podPhotoCount, deliveryCompleteness });
     } finally {
-      pendingOrderUpdatesRef.current.delete(order.id);
+      clearOrderUpdatePending(order.id);
     }
   };
 
@@ -4389,7 +4415,7 @@ export default function App() {
 
   const persistDriverOrderPatch = async (order, patch) => {
     if (pendingOrderUpdatesRef.current.has(order.id)) return { ok: false, error: "Order update in progress" };
-    pendingOrderUpdatesRef.current.add(order.id);
+    markOrderUpdatePending(order.id);
     const nextPatch = { ...patch, updatedAt: new Date().toISOString() };
     setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...nextPatch } : item) }));
     try {
@@ -4402,7 +4428,7 @@ export default function App() {
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...rollback } : item) }));
       return { ok: false, error: error?.message || String(error) };
     } finally {
-      pendingOrderUpdatesRef.current.delete(order.id);
+      clearOrderUpdatePending(order.id);
     }
   };
 
@@ -4782,6 +4808,28 @@ export default function App() {
     }
   };
 
+  // ประวัติที่ปิดงานแล้วต้องแชร์ข้อความได้โดยไม่ยิง driver_complete ซ้ำ ไม่งั้น deliveryAttemptNumber
+  // จะเพิ่มทุกครั้งและ snapshot รถจะถูกคำนวณใหม่จากวันที่กด ทับรถที่ใช้ส่งจริงของวันนั้น
+  const shareCompletedOrderSummary = (order) => {
+    (async () => {
+      const text = buildLineMessageForOrder(order);
+      let copied = false;
+      try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
+      if (!navigator?.share) {
+        setSyncStatus(copied ? `✅ คัดลอกสรุป "${order.id}" แล้ว นำไปวางในกลุ่ม LINE ได้เลย` : `⚠️ คัดลอกไม่สำเร็จ กรุณาคัดลอกข้อความนี้เอง:\n${text}`);
+        return;
+      }
+      try {
+        await navigator.share({ text });
+        setSyncStatus(`✅ เปิดแชร์สรุป "${order.id}" แล้ว`);
+      } catch (error) {
+        setSyncStatus(error?.name === "AbortError"
+          ? `⚠️ ปิดหน้าต่างแชร์ · ${copied ? "ข้อความถูกคัดลอกไว้แล้ว" : "ยังไม่ได้คัดลอกข้อความ"} (${order.id})`
+          : `❌ แชร์สรุปไม่สำเร็จ: ${error?.message || error} (${order.id})`);
+      }
+    })();
+  };
+
   const shareOrderToLine = (order, noteDraft, { skipLineShare = false } = {}) => {
     (async () => {
       let completedOrder = null;
@@ -4789,11 +4837,10 @@ export default function App() {
       let deliveryCompleteness = "";
       let files = [];
       try {
-        const isActiveDelivery = ["กำลังส่ง", "กำลังจัดส่ง"].includes(order.status);
-        deliveryCompleteness = driverDeliveryCompleteness[order.id] || order.deliveryCompleteness || (order.status === "ส่งสำเร็จ" ? "complete" : "");
+        deliveryCompleteness = driverDeliveryCompleteness[order.id] || order.deliveryCompleteness || "";
         const driverNote = String(noteDraft ?? order.driverNote ?? "").trim();
-        if (isActiveDelivery && !deliveryCompleteness) throw new Error("กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูปและส่ง LINE");
-        if (isActiveDelivery && requiresDriverDeliveryNote(deliveryCompleteness) && !driverNote) throw new Error("กรณีสินค้าไม่ครบ กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
+        if (!deliveryCompleteness) throw new Error("กรุณาระบุว่าสินค้าครบหรือไม่ครบก่อนถ่ายรูปและส่ง LINE");
+        if (requiresDriverDeliveryNote(deliveryCompleteness) && !driverNote) throw new Error("กรณีสินค้าไม่ครบ กรุณาระบุหมายเหตุจากคนขับก่อนถ่ายรูปและส่ง LINE");
         const deliveredAt = order.deliveredAt || new Date().toLocaleString("th-TH");
         files = Array.isArray(podFilesRef.current?.[order.id]) ? podFilesRef.current[order.id] : podFilesRef.current?.[order.id] ? [podFilesRef.current[order.id]] : [];
         completedOrder = {
@@ -5578,15 +5625,15 @@ export default function App() {
                         <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}>
                           <button
                             className="primary"
-                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            disabled={isOrderUpdatePending(order.id)}
                             onClick={async () => {
                               if (pendingOrderUpdatesRef.current.has(order.id)) return;
-                              pendingOrderUpdatesRef.current.add(order.id);
+                              markOrderUpdatePending(order.id);
                               try {
                                 const result = await updatePreparationWorkflow(order, "queue");
                                 if (result.ok) setSyncStatus(`✅ ส่งออเดอร์ ${order.id} กลับเข้าคิวคนขับวันนี้แล้ว`);
                               } finally {
-                                pendingOrderUpdatesRef.current.delete(order.id);
+                                clearOrderUpdatePending(order.id);
                               }
                             }}
                           >
@@ -5595,7 +5642,7 @@ export default function App() {
                           <button
                             className="secondary danger"
                             aria-label={`ลบออเดอร์ ${order.id}`}
-                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                            disabled={isOrderUpdatePending(order.id)}
                             onClick={() => deleteOrder(order.id)}
                           >
                             ลบ
@@ -6909,8 +6956,8 @@ export default function App() {
                         
                         <button 
                           className="primary" 
-                          style={{ width: "100%", padding: "var(--sp-5)", fontWeight: "bold", fontSize: "13px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1, cursor: pendingOrderUpdatesRef.current.has(order.id) ? "not-allowed" : "pointer" }} 
-                          disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                          style={{ width: "100%", padding: "var(--sp-5)", fontWeight: "bold", fontSize: "13px", opacity: isOrderUpdatePending(order.id) ? 0.5 : 1, cursor: isOrderUpdatePending(order.id) ? "not-allowed" : "pointer" }} 
+                          disabled={isOrderUpdatePending(order.id)}
                           onClick={() => {
                             acceptDriverDeliveryOrder(order);
                           }}>✓ รับออเดอร์นี้</button>
@@ -6969,8 +7016,8 @@ export default function App() {
                           <>
 	                            <button
 	                              className="primary"
-	                              style={{ padding: "var(--sp-4)", fontSize: "12px", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
-	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", opacity: isOrderUpdatePending(order.id) ? 0.5 : 1 }}
+	                              disabled={isOrderUpdatePending(order.id)}
 	                              onClick={async () => {
 	                                setSyncStatus(`⏳ กำลังบันทึกว่าถึงจุดหมาย "${order.id}"...`);
 	                                const saved = await persistDriverOrderPatch(order, { status: "กำลังจัดส่ง", checkInAt: new Date().toLocaleString("th-TH") });
@@ -6980,8 +7027,8 @@ export default function App() {
 	                              }}><Car size={15} className="i-inline" aria-hidden="true" /> ไปถึงแล้ว</button>
 	                            <button
 	                              className="secondary"
-	                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
-	                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: isOrderUpdatePending(order.id) ? 0.5 : 1 }}
+	                              disabled={isOrderUpdatePending(order.id)}
 	                              onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
 	                            <button
 	                              className="secondary"
@@ -7013,8 +7060,8 @@ export default function App() {
 	                            </label>
 	                            <button
 	                              className="secondary"
-                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
-                              disabled={pendingOrderUpdatesRef.current.has(order.id)}
+                              style={{ padding: "var(--sp-4)", fontSize: "12px", background: "var(--c-danger-bg-strong)", color: "var(--c-danger-deep)", opacity: isOrderUpdatePending(order.id) ? 0.5 : 1 }}
+                              disabled={isOrderUpdatePending(order.id)}
                               onClick={() => cancelDriverDeliveryOrder(order)}><XCircle size={15} className="i-inline" aria-hidden="true" /> ยกเลิก</button>
                             <button
                               className="secondary"
@@ -7056,36 +7103,11 @@ export default function App() {
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
 	                          >จบงานโดยไม่มีรูป POD · ต้องระบุเหตุผลในหมายเหตุ</button>
 	                        )}
-	                        {order.status === "กำลังจัดส่ง" && order.photo && order.sharedToLine && (
-	                          <button
-	                            className="primary"
-	                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1", background: "var(--c-info-dark)", opacity: pendingOrderUpdatesRef.current.has(order.id) ? 0.5 : 1 }}
-	                            disabled={pendingOrderUpdatesRef.current.has(order.id)}
-	                            onClick={() => {
-	                              pendingOrderUpdatesRef.current.add(order.id);
-	                              updateOrder(order.id, { status: "ส่งสำเร็จ", queueStatus: "completed", deliveredAt: new Date().toLocaleString("th-TH"), driverName: order.driverName || state.auth?.name || "", driverId: order.driverId || state.auth?.driverId || driverId || "", complaint: "" });
-	                              setSyncStatus(`✅ ส่งออเดอร์ "${order.id}" สำเร็จแล้ว`);
-	                            }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> ส่งสำเร็จแล้ว</button>
-	                        )}
-                        {order.status === "ส่งสำเร็จ" && (
-                          <button
-                            className="secondary"
-                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1" }}
-                            onClick={() => {
-                              alert(`✅ ส่งสำเร็จแล้ว\n\n📦 ออเดอร์: ${order.customerName}\n📍 ${order.zone}\n💰 COD: ฿${money(order.cod || 0)}\n📸 POD: ✅ มี\n\nสามารถรับอีกงานได้`);
-                            }}><Home size={15} className="i-inline" aria-hidden="true" /> ส่งเสร็จสิ้น</button>
-                        )}
                       </div>
 
                       {/* Photo Preview */}
                        {(podPreviewsByOrder[order.id] || []).length > 0 && (
                          <div style={{ marginTop: "var(--sp-4)" }}><b style={{ display: "block", marginBottom: "var(--sp-3)", fontSize: "12px", color: "var(--c-brand-dark)" }}><Camera size={15} className="i-inline" aria-hidden="true" /> รูป POD {(podPreviewsByOrder[order.id] || []).length}/5 · แตะลบรูปที่ถ่ายผิดได้</b><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "var(--sp-3)" }}>{(podPreviewsByOrder[order.id] || []).map((preview, index) => <div key={preview} style={{ position: "relative", borderRadius: "6px", overflow: "hidden", border: "2px solid var(--c-brand-light)", aspectRatio: "1 / 1" }}><img src={preview} alt={`POD ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button type="button" className="secondary" aria-label={`ลบรูป POD ${index + 1}`} style={{ position: "absolute", top: "var(--sp-2)", right: "var(--sp-2)", minHeight: "32px", minWidth: "32px", padding: "var(--sp-2)", background: "var(--c-surface)", color: "var(--c-danger-dark)" }} onClick={() => removePodPhoto(order, index)}><XCircle size={15} aria-hidden="true" /></button></div>)}</div></div>
-                      )}
-                      
-                      {order.status === "ส่งสำเร็จ" && (
-                        <div style={{ background: "var(--c-brand-bg)", padding: "var(--sp-3)", borderRadius: "4px", fontSize: "11px", color: "var(--c-brand-dark)", fontWeight: "bold", textAlign: "center" }}>
-                          ✅ {order.deliveredAt}
-                        </div>
                       )}
                     </div>
                   ))}
@@ -7094,7 +7116,7 @@ export default function App() {
 	            )}
 
 	            {/* สรุป/ประวัติส่งสำเร็จประจำวัน */}
-	            {(driverTodayCompletedOrders.length > 0 || driverTodayCompletedRouteTasks.length > 0 || orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").length > 0) && (
+	            {(driverTodayCompletedRouteTasks.length > 0 || driverDeliveredOrders.length > 0) && (
 	              <section className="panel" style={{ background: "var(--c-surface-subtle)" }}>
 	                {/* ประวัติเป็นข้อมูลย้อนหลัง ไม่ใช่งานที่ต้องทำ จึงพับไว้เสมอและโชว์แค่ตัวเลขสรุปที่หัวข้อ */}
 	                <button
@@ -7113,33 +7135,12 @@ export default function App() {
 	                    {showDeliveredHistory ? "ซ่อนย้อนหลัง" : "ดูย้อนหลัง"}
 	                  </button>
 	                </div>
-	                {(() => {
-	                  const deliveredAll = orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").slice().sort((a, b) => {
-	                    const av = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
-	                    const bv = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
-	                    if (bv !== av) return bv - av;
-	                    return String(b.id || "").localeCompare(String(a.id || ""));
-	                  });
-	                  const deliveredToday = deliveredAll.filter(isTodayOrder);
-	                  const deliveredHistory = deliveredAll.filter(o => !isTodayOrder(o));
-	                  const codAll = deliveredAll.reduce((sum, o) => sum + Number(o.cod || 0), 0);
-	                  return (
-	                    <div style={{ color: "var(--c-text-muted)", fontSize: "12px" }}>
-	                      วันนี้ {deliveredToday.length + driverTodayCompletedRouteTasks.length} งาน · ย้อนหลัง {deliveredHistory.length} งาน · รวม COD ออเดอร์ ฿{money(codAll)}
-	                    </div>
-	                  );
-	                })()}
+	                <div style={{ color: "var(--c-text-muted)", fontSize: "12px" }}>
+	                  วันนี้ {driverDeliveredToday.length + driverTodayCompletedRouteTasks.length} งาน · ย้อนหลัง {driverDeliveredBacklog.length} งาน · รวม COD ออเดอร์ ฿{money(driverDeliveredCodTotal)}
+	                </div>
 
 	                {(() => {
-	                  const deliveredAll = orders.filter(o => o.driverId === driverId && o.status === "ส่งสำเร็จ").slice().sort((a, b) => {
-	                    const av = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
-	                    const bv = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
-	                    if (bv !== av) return bv - av;
-	                    return String(b.id || "").localeCompare(String(a.id || ""));
-	                  });
-	                  const deliveredToday = deliveredAll.filter(isTodayOrder);
-	                  const deliveredHistory = deliveredAll.filter(o => !isTodayOrder(o));
-	                  const visibleDelivered = showDeliveredHistory ? [...deliveredToday, ...deliveredHistory] : deliveredToday;
+	                  const visibleDelivered = showDeliveredHistory ? [...driverDeliveredToday, ...driverDeliveredBacklog] : driverDeliveredToday;
 	                  const visibleRouteTasks = driverTodayCompletedRouteTasks;
 	                  return (
 	                  <div className="scroll-box mobile-flow" style={{ marginTop: "var(--sp-5)", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "var(--sp-6)" }}>
@@ -7156,12 +7157,7 @@ export default function App() {
 	                            <small style={{ color: "var(--c-text-muted)" }}><MapPin size={15} className="i-inline" aria-hidden="true" /> {order.zone} · 💰 ฿{money(order.cod || 0)}</small><br/>
 	                            {order.deliveredAt && <small style={{ color: "var(--c-brand)", fontWeight: "bold" }}><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> {order.deliveredAt}</small>}
 	                          </div>
-	                          {order.photo?.startsWith?.("data:") && (
-	                            <div style={{ borderRadius: "6px", overflow: "hidden", border: "1px solid var(--c-line)" }}>
-	                              <img src={order.photo} alt="pod" style={{ width: "100%", height: "auto" }} />
-	                            </div>
-	                          )}
-	                          <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => shareOrderToLine(order)}>
+	                          <button className="primary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => shareCompletedOrderSummary(order)}>
 	                            💬 แชร์สรุปสั้น (LINE)
 	                          </button>
 	                        </div>
@@ -7195,7 +7191,9 @@ export default function App() {
 	              </section>
 	            )}
 
-            {driverOrders.length === 0 && driverRouteTasks.length === 0 && (
+            {/* งานวิ่งย้ายไปแท็บของตัวเองแล้ว เงื่อนไขนี้จึงต้องดูแค่ออเดอร์ ไม่ใช่ routeTasks
+                ไม่งั้นคนขับที่มีแต่งานวิ่งจะเห็นแท็บนี้ว่างเปล่าโดยไม่มีข้อความบอก */}
+            {driverOrders.length === 0 && driverInboxOrders.length === 0 && (
               <section className="panel" style={{ background: "var(--c-surface-muted)", textAlign: "center", padding: "var(--sp-10) var(--sp-7)" }}>
                 <p style={{ fontSize: "32px", margin: "0" }}><Moon size={15} className="i-inline" aria-hidden="true" /> </p>
                 <p style={{ color: "var(--c-text-muted)", margin: "var(--sp-4) 0 0" }}>ยังไม่มีออเดอร์ ลองรีเฟรช</p>

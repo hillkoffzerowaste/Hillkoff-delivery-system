@@ -38,6 +38,29 @@ describe("driver delivery completion has no dead end", () => {
   });
 });
 
+describe("delivered history never rewrites the delivery record", () => {
+  it("shares the summary without calling the completion workflow again", () => {
+    // driver_complete รับสถานะ "ส่งสำเร็จ" ด้วย กดแชร์จากประวัติจึงเพิ่ม deliveryAttemptNumber
+    // และคำนวณ snapshot รถใหม่จากวันที่กด ทับรถที่ใช้ส่งจริงของวันนั้น
+    expect(pageSource).toContain("const shareCompletedOrderSummary = (order) => {");
+    expect(pageSource).toContain("onClick={() => shareCompletedOrderSummary(order)}");
+    expect(pageSource).not.toContain("onClick={() => shareOrderToLine(order)}");
+  });
+
+  it("keeps one derived delivered list instead of recomputing it per render block", () => {
+    expect(pageSource).toContain("const driverDeliveredOrders = (orders || []).filter(");
+    expect(pageSource).not.toContain('const deliveredAll = orders.filter(o => o.driverId === driverId');
+  });
+});
+
+describe("pending-order buttons reflect the in-flight save", () => {
+  it("drives disabled state from state, not from the ref that never re-renders", () => {
+    expect(pageSource).toContain("const [pendingOrderUpdateIds, setPendingOrderUpdateIds] = useState([]);");
+    expect(pageSource).toContain("disabled={isOrderUpdatePending(order.id)}");
+    expect(pageSource).not.toContain("disabled={pendingOrderUpdatesRef.current.has(order.id)}");
+  });
+});
+
 describe("driver new-order inbox stays out of the way", () => {
   it("collapses the inbox by default only when the driver already has jobs in hand", () => {
     expect(pageSource).toContain("const driverInboxExpanded = driverInboxOpen ?? driverDeliveryOrders.length === 0;");
