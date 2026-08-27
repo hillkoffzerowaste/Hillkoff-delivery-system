@@ -1017,6 +1017,8 @@ export default function App() {
   const [manualDeliveryReason, setManualDeliveryReason] = useState("");
   const [manualDeliverySubmitting, setManualDeliverySubmitting] = useState(false);
   const [podPreviewsByOrder, setPodPreviewsByOrder] = useState({});
+  const [lineShareHoldByOrder, setLineShareHoldByOrder] = useState({}); // { [orderId]: เหตุผลที่ LINE ยังไม่ออก }
+  const [driverInboxOpen, setDriverInboxOpen] = useState(null); // null = ยังไม่แตะ ใช้ค่าอัตโนมัติตามจำนวนงานในมือ
   const podFilesRef = useRef({}); // { [orderId]: File[] } kept on-device only (not synced)
   const workPhotoFilesRef = useRef({}); // Store/pack photos are device-only and can be shared from this browser.
   const reportPhotoFileRef = useRef(null);
@@ -2608,6 +2610,15 @@ export default function App() {
   const driverDeliveryOrders = [...driverCurrentDeliveryOrders, ...driverReorderableOrders];
   const deferredDriverDeliveryOrders = driverDeliveryOrders.filter(order => closedDriverDeliveryOrderIds[order.id]);
   const visibleDriverDeliveryOrders = driverDeliveryOrders.filter(order => !closedDriverDeliveryOrderIds[order.id]);
+  const driverInboxOrders = (orders || []).filter(order => order.status === "รอคนขับรับ"
+    && order.queueStatus === "queued"
+    && !order.driverId
+    && isDriverQueueVisibleToDriver(order, todayServiceDate)
+    && !pendingOrderUpdatesRef.current.has(order.id));
+  const driverInboxUrgentCount = driverInboxOrders.filter(order => order.workflowType === "direct_driver").length;
+  // คนขับที่มีงานในมืออยู่แล้วต้องเลื่อนผ่านการ์ดรับงานใหม่ทุกใบก่อนถึงงานที่กำลังส่ง จึงพับไว้ให้
+  // ถ้ายังไม่แตะปุ่มพับเอง (null) ค่าจะปรับตามจำนวนงานในมือที่โหลดเข้ามาทีหลังได้เอง
+  const driverInboxExpanded = driverInboxOpen ?? driverDeliveryOrders.length === 0;
   const driverTodayRouteTasks = (routeTasks || [])
     .filter(task => task.driverId === driverId && String(task?.serviceDate || "") === todayServiceDate)
     .slice()
@@ -4770,7 +4781,7 @@ export default function App() {
     }
   };
 
-  const shareOrderToLine = (order, noteDraft) => {
+  const shareOrderToLine = (order, noteDraft, { skipLineShare = false } = {}) => {
     (async () => {
       let completedOrder = null;
       let text = "";
@@ -4814,7 +4825,9 @@ export default function App() {
       let shareError = "";
       try {
         try { await navigator.clipboard?.writeText?.(text); } catch {}
-        if (!navigator?.share) {
+        if (skipLineShare) {
+          shareOutcome = "skipped";
+        } else if (!navigator?.share) {
           shareOutcome = "unsupported";
         } else {
           const photoSheet = await createLinePhotoSheet(files, `${order.id} · ${order.customerName || ""}`);
@@ -4824,11 +4837,17 @@ export default function App() {
           shareOutcome = "shared";
         }
       } catch (error) {
-        // LINE เป็นช่องทางแจ้งข่าว ไม่ใช่บันทึกหลักของการส่งของ เดิมถ้าปิดหน้าต่างแชร์ทิ้ง
-        // จะ return ออกไปโดยไม่บันทึกอะไรเลย คนขับที่ส่งของจริงแล้วจึงเหลืองานค้างไว้ในมือ
-        // ตอนนี้บันทึกจบงานต่อเสมอ แล้วรายงานผลของ LINE แยกออกมาให้กดส่งซ้ำได้
         shareOutcome = "failed";
-        shareError = error?.name === "AbortError" ? "ปิดหน้าต่างแชร์" : String(error?.message || error);
+        shareError = error?.name === "AbortError" ? "ปิดหน้าต่างแชร์/จอพับ" : String(error?.message || error);
+      }
+
+      // รูปหลักฐานอยู่แค่ในเครื่อง ถ้าปิดงานตอนแชร์ไม่ออก (จอพับ สลับแอป หรือปิดหน้าต่างแชร์)
+      // ประวัติจะขึ้นส่งสำเร็จโดยไม่มีรูปในกลุ่ม แล้ว clearPodPhotos ก็ล้างรูปทิ้งจนส่งซ้ำไม่ได้
+      // จึงค้างงานไว้พร้อมรูปเดิม และให้ทางออกแยกไว้ที่ปุ่ม "บันทึกจบงานโดยยังไม่ส่ง LINE"
+      if (shareOutcome === "failed") {
+        setLineShareHoldByOrder((holds) => ({ ...holds, [order.id]: shareError }));
+        setSyncStatus(`⚠️ ยังไม่ได้ส่ง LINE (${shareError}) · ยังไม่บันทึกจบงาน — เก็บรูป ${files.length} รูปและหมายเหตุไว้แล้ว กดส่ง LINE ซ้ำได้เลย (${order.id})`);
+        return;
       }
 
       try {
@@ -4842,17 +4861,19 @@ export default function App() {
         const savedLabel = deliveryCompleteness === "incomplete" ? "บันทึกงานแก้ไขแล้ว" : "บันทึกส่งสำเร็จแล้ว";
         setSyncStatus(
           shareOutcome === "shared" ? `✅ ${savedLabel} และเปิดแชร์ LINE แล้ว ${files.length} รูป (${order.id})`
-          : shareOutcome === "failed" ? `✅ ${savedLabel} · ยังไม่ได้ส่ง LINE (${shareError}) — คัดลอกข้อความไว้แล้ว กดส่ง LINE ซ้ำได้ (${order.id})`
+          : shareOutcome === "skipped" ? `✅ ${savedLabel} · ยังไม่ได้ส่งรูปเข้า LINE — คัดลอกข้อความไว้แล้ว ต้องส่งในกลุ่มเอง (${order.id})`
           : `✅ ${savedLabel} และคัดลอกข้อความ LINE แล้ว (${order.id})`
         );
       } catch (error) {
-        setSyncStatus(`❌ แชร์ LINE สำเร็จ แต่บันทึกจบงานไม่สำเร็จ: ${error?.message || error} — ลองกดส่งอีกครั้ง (${order.id})`);
+        setSyncStatus(`❌ บันทึกจบงานไม่สำเร็จ: ${error?.message || error} — รูปและหมายเหตุยังอยู่ครบ ลองกดส่งอีกครั้ง (${order.id})`);
         return;
-      } finally {
-        clearPodPhotos(order.id);
-        setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
-        setDriverDeliveryCompleteness((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
       }
+
+      // ล้างร่างได้เฉพาะเมื่อบันทึกสำเร็จจริง ถ้าล้างใน finally รูปจะหายตอนบันทึกล้มเหลวด้วย
+      clearPodPhotos(order.id);
+      setLineShareHoldByOrder((holds) => { const next = { ...holds }; delete next[order.id]; return next; });
+      setDriverNoteDrafts((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
+      setDriverDeliveryCompleteness((drafts) => { const next = { ...drafts }; delete next[order.id]; return next; });
     })();
   };
 
@@ -5399,7 +5420,7 @@ export default function App() {
           )}
           {auth.role === "driver" && (
             <>
-              <button type="button" className={displayTab === "driver" ? "active" : ""} onClick={() => selectAppTab("driver")}><Truck size={18} /> งานจัดส่ง</button>
+              <button type="button" className={displayTab === "driver" ? "active" : ""} onClick={() => selectAppTab("driver")}><Truck size={18} /> งานจัดส่ง{driverInboxOrders.length > 0 && <span className="nav-count-badge" aria-label={`มีออเดอร์ใหม่รอรับ ${driverInboxOrders.length} งาน`}>{driverInboxOrders.length}</span>}</button>
               <button type="button" className={displayTab === "driver-prep" ? "active" : ""} onClick={() => selectAppTab("driver-prep")}><PackagePlus size={18} /> เช็คออเดอร์เชียงใหม่</button>
               <button type="button" className={displayTab === "driver-vehicle" ? "active" : ""} onClick={() => selectAppTab("driver-vehicle")}><FileSpreadsheet size={18} /> บันทึกการใช้รถ</button>
               <button type="button" className={displayTab === "driver-sop" ? "active" : ""} onClick={() => selectAppTab("driver-sop")}><ClipboardList size={18} /> ตรวจรถประจำวัน</button>
@@ -6944,15 +6965,23 @@ export default function App() {
 
             {/* ส่วนรับออเดอร์ (Pending Orders Grid) */}
             {(() => {
-              const pending = orders.filter(o => o.status === "รอคนขับรับ"
-                && o.queueStatus === "queued"
-                && !o.driverId
-                && isDriverQueueVisibleToDriver(o, todayServiceDate)
-                && !pendingOrderUpdatesRef.current.has(o.id));
+              const pending = driverInboxOrders;
               return (
                 <section className="panel">
-                  <div className="panel-head"><h2><Package size={15} className="i-inline" aria-hidden="true" /> รับออเดอร์ใหม่</h2><span>{pending.length} งาน</span></div>
-                  <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "var(--sp-6)" }}>
+                  <button
+                    type="button"
+                    className="driver-inbox-toggle"
+                    aria-expanded={driverInboxExpanded}
+                    onClick={() => setDriverInboxOpen(!driverInboxExpanded)}
+                  >
+                    <span><Package size={15} className="i-inline" aria-hidden="true" /> รับออเดอร์ใหม่</span>
+                    {pending.length > 0 && <span className="nav-count-badge" aria-label={`มีออเดอร์ใหม่รอรับ ${pending.length} งาน`}>{pending.length}</span>}
+                    {driverInboxUrgentCount > 0 && <span className="nav-count-badge" style={{ background: "var(--c-danger-deep)" }} aria-label={`ในนั้นเป็นงานเร่งด่วนส่งตรงคนขับ ${driverInboxUrgentCount} งาน`}><Siren size={13} className="i-inline" aria-hidden="true" /> {driverInboxUrgentCount}</span>}
+                    <span className="driver-inbox-toggle-hint">{driverInboxExpanded ? "ซ่อนรายการ ▲" : pending.length > 0 ? "ดูและกดรับ ▼" : "ไม่มีงานใหม่ ▼"}</span>
+                  </button>
+                  {driverInboxExpanded && (pending.length === 0
+                    ? <p className="muted" style={{ margin: "var(--sp-5) 0 0" }}>ยังไม่มีออเดอร์ใหม่รอรับในขณะนี้</p>
+                    : <div className="scroll-box mobile-flow" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: "var(--sp-6)", marginTop: "var(--sp-5)" }}>
                     {pending.map(order => {
                       const salesName = order.salesName || "ไม่มี";
                       const salesPhone = order.salesPhone || "-";
@@ -7000,7 +7029,7 @@ export default function App() {
                       </div>
                     );
                   })}
-                </div>
+                </div>)}
               </section>
             );
             })()}
@@ -7112,7 +7141,22 @@ export default function App() {
 	                            style={{ padding: "var(--sp-4)", fontSize: "12px", gridColumn: "1 / -1", background: "var(--c-info)" }}
 	                            disabled={!driverDeliveryCompleteness[order.id] || (requiresDriverDeliveryNote(driverDeliveryCompleteness[order.id]) && !(driverNoteDrafts[order.id] ?? order.driverNote ?? "").trim())}
 	                            onClick={() => shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "")}
-	                          >{driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
+	                          >{lineShareHoldByOrder[order.id] ? "🔁 ส่ง LINE อีกครั้ง (รูปเดิม)" : driverDeliveryCompleteness[order.id] === "incomplete" ? "⚠️ แจ้งสินค้าไม่ครบ + ส่งพร้อม LINE" : "✅ ส่งสำเร็จ + ส่งพร้อม LINE"}</button>
+	                        )}
+	                        {order.status === "กำลังจัดส่ง" && !order.sharedToLine && lineShareHoldByOrder[order.id] && (
+	                          <div style={{ gridColumn: "1 / -1", display: "grid", gap: "var(--sp-3)", background: "var(--c-warn-bg)", border: "1px solid var(--c-warn-border)", borderRadius: "8px", padding: "var(--sp-4)" }}>
+	                            <b style={{ fontSize: "12px", color: "var(--c-warn-deep)" }}>⚠️ รูปยังไม่ถึงกลุ่ม LINE ({lineShareHoldByOrder[order.id]})</b>
+	                            <small style={{ color: "var(--c-warn-dark)" }}>งานนี้ยังไม่ขึ้นประวัติส่งสำเร็จ รูปและหมายเหตุถูกเก็บไว้ครบ กดปุ่มส่ง LINE ด้านบนซ้ำได้เลย</small>
+	                            <button
+	                              type="button"
+	                              className="secondary"
+	                              style={{ padding: "var(--sp-4)", fontSize: "12px" }}
+	                              onClick={() => {
+	                                if (!confirm(`ปิดงาน "${order.id}" โดยยังไม่ส่งรูปเข้า LINE ใช่ไหม?\n\nรูปหลักฐานในเครื่องจะถูกล้าง ต้องส่งข้อความในกลุ่มเอง (ระบบคัดลอกข้อความไว้แล้ว)`)) return;
+	                                shareOrderToLine(order, driverNoteDrafts[order.id] ?? order.driverNote ?? "", { skipLineShare: true });
+	                              }}
+	                            >บันทึกจบงานโดยยังไม่ส่ง LINE</button>
+	                          </div>
 	                        )}
 	                        {/* ทางออกกรณีถ่ายรูปไม่ได้ ก่อนหน้านี้ออเดอร์ที่ไม่มีรูปจะไม่มีปุ่มจบงานเลย
 	                            คนขับส่งของจริงแล้วแต่ปิดงานไม่ได้ งานจึงค้างในระบบข้ามวัน แลกกับการบังคับให้เขียนเหตุผล */}

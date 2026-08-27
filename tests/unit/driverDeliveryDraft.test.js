@@ -18,11 +18,35 @@ describe("driver delivery completion has no dead end", () => {
     expect(pageSource).toContain("จบงานโดยไม่มีรูป POD");
   });
 
-  it("records the delivery even when the LINE share is cancelled", () => {
-    // เดิม catch ของ navigator.share จะ return ออกไปโดยไม่บันทึกอะไรเลย
+  it("holds the job with its photos when the LINE share never went out", () => {
+    // เดิมบันทึกจบงานทุกกรณี ประวัติจึงขึ้นส่งสำเร็จทั้งที่รูปไม่ถึงกลุ่ม แล้วรูปก็ถูกล้างจนส่งซ้ำไม่ได้
     expect(pageSource).toContain('shareOutcome = "failed"');
-    expect(pageSource).toContain("ยังไม่ได้ส่ง LINE");
-    expect(pageSource).not.toContain("ยังไม่ได้บันทึกจบงาน");
+    expect(pageSource).toContain('if (shareOutcome === "failed") {');
+    expect(pageSource).toContain("setLineShareHoldByOrder((holds) => ({ ...holds, [order.id]: shareError }))");
+    expect(pageSource).toContain("ยังไม่บันทึกจบงาน");
+  });
+
+  it("keeps the photos when saving the completion fails", () => {
+    // clearPodPhotos อยู่ใน finally ทำให้รูปหายแม้บันทึกไม่สำเร็จ กดส่งซ้ำก็ไม่มีรูปเหลือ
+    expect(pageSource).not.toContain("} finally {\n        clearPodPhotos(order.id);");
+  });
+
+  it("still leaves an explicit way out when LINE keeps failing", () => {
+    expect(pageSource).toContain("บันทึกจบงานโดยยังไม่ส่ง LINE");
+    expect(pageSource).toContain("{ skipLineShare: true }");
+    expect(pageSource).toContain('shareOutcome = "skipped"');
+  });
+});
+
+describe("driver new-order inbox stays out of the way", () => {
+  it("collapses the inbox by default only when the driver already has jobs in hand", () => {
+    expect(pageSource).toContain("const driverInboxExpanded = driverInboxOpen ?? driverDeliveryOrders.length === 0;");
+  });
+
+  it("shows the pending count as a red badge on both the tab and the collapsed header", () => {
+    expect(pageSource).toContain("มีออเดอร์ใหม่รอรับ ${driverInboxOrders.length} งาน");
+    expect(pageSource).toContain("มีออเดอร์ใหม่รอรับ ${pending.length} งาน");
+    expect(pageSource).toContain("ในนั้นเป็นงานเร่งด่วนส่งตรงคนขับ ${driverInboxUrgentCount} งาน");
   });
 });
 

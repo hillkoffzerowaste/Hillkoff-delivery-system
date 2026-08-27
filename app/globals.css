@@ -2383,6 +2383,34 @@ input:focus,select:focus,textarea:focus { border-color:#63aaa8; box-shadow:0 0 0
   font-weight: 700;
 }
 
+/* หัวข้อกล่องรับออเดอร์ใหม่ กดพับ/กางได้ ให้กินความกว้างเต็มเพื่อกดด้วยนิ้วโป้งได้ทั้งแถบ */
+.driver-inbox-toggle {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-surface-subtle);
+  color: var(--c-text-heading);
+  font-size: 16px;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.driver-inbox-toggle .nav-count-badge { margin-left: 0; }
+
+.driver-inbox-toggle-hint {
+  margin-left: auto;
+  color: var(--c-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .driver-sequence-card {
   cursor: grab;
   transition: box-shadow .16s ease, opacity .16s ease;
