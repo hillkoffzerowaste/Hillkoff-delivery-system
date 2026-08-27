@@ -2705,7 +2705,9 @@ summary:focus-visible {
     position: sticky;
     top: 0;
     z-index: 900;
-    padding: 10px 12px;
+    /* บล็อกนี้อยู่หลังกฎ 1080px จึงทับ padding ที่นั่น ต้องเผื่อ safe-area ซ้ำที่นี่
+       ไม่งั้นชื่อแอปจะทับนาฬิกาของเครื่องเวลาเปิดเป็น PWA เต็มจอ */
+    padding: max(10px, env(safe-area-inset-top)) 12px 10px;
     box-shadow: 0 8px 20px rgba(20, 67, 65, .18);
   }
 

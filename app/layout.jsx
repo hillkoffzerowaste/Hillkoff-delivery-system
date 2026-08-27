@@ -15,7 +15,9 @@ export const metadata = {
   appleWebApp: {
     capable: true,
     title: "Hillkoff Delivery",
-    statusBarStyle: "black-translucent"
+    // black-translucent ทำให้เนื้อหาไต่ขึ้นใต้นาฬิกาเอง ต้องพึ่ง safe-area ทุกจุดที่แตะขอบจอ
+    // ซึ่งพลาดมาแล้วครั้งหนึ่ง ใช้ default ให้ระบบเว้นแถบสถานะให้แทน
+    statusBarStyle: "default"
   },
   icons: {
     icon: [
@@ -28,8 +30,7 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#173534",
-  viewportFit: "cover"
+  themeColor: "#173534"
 };
 
 export default function RootLayout({ children }) {
