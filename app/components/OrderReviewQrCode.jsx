@@ -7,24 +7,24 @@ import { createOrderReviewPayload, createOrderReviewUrl } from "../../lib/orderR
 
 const qrOptions = { errorCorrectionLevel: "H", margin: 3, width: 220 };
 
-export default function OrderReviewQrCode({ orderId, className = "", delivered = false }) {
+export default function OrderReviewQrCode({ orderId, orderReviewToken, className = "", delivered = false }) {
   const [imageSrc, setImageSrc] = useState("");
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const payload = createOrderReviewPayload(orderId);
+  const payload = orderReviewToken ? createOrderReviewPayload(orderId, orderReviewToken) : "";
 
   // สร้างภาพ QR ตอนคนขับกดเปิดเท่านั้น การ์ดหนึ่งรอบมีหลายสิบออเดอร์
   // ถ้าสร้างล่วงหน้าทุกใบจะเสียแรงเครื่องไปกับ QR ที่ไม่มีใครดู
   useEffect(() => {
     if (!open) return undefined;
     let active = true;
-    QRCode.toDataURL(createOrderReviewUrl(window.location.origin, orderId), qrOptions)
+    QRCode.toDataURL(createOrderReviewUrl(window.location.origin, orderId, orderReviewToken), qrOptions)
       .then((value) => { if (active) setImageSrc(value); })
       .catch(() => { if (active) setImageSrc(""); });
     return () => { active = false; };
-  }, [orderId, open]);
+  }, [orderId, orderReviewToken, open]);
 
-  if (delivered) return null;
+  if (delivered || !payload) return null;
 
   return (
     <div className={["order-review-qr-box", className].filter(Boolean).join(" ")} data-review-qr-payload={payload}>

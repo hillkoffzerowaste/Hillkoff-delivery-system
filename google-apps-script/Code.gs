@@ -132,6 +132,7 @@ var VEHICLES = [
 ];
 
 function doGet(e) {
+  requireDashboardAccess();
   if (e && e.parameter && e.parameter.action === "setup") {
     return jsonResponse({ ok: false, error: "GET setup is disabled" });
   }
@@ -139,6 +140,16 @@ function doGet(e) {
     .evaluate()
     .setTitle("Hillkoff Vehicle Dashboard")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function requireDashboardAccess() {
+  var allowed = String(PropertiesService.getScriptProperties().getProperty("HILLKOFF_DASHBOARD_ALLOWED_EMAILS") || "")
+    .split(",")
+    .map(function(value) { return String(value || "").trim().toLowerCase(); })
+    .filter(function(value) { return value; });
+  var email = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
+  if (!allowed.length) throw new Error("Dashboard allowlist is not configured");
+  if (!email || allowed.indexOf(email) === -1) throw new Error("Unauthorized dashboard user");
 }
 
 function serveSetupJson() {
@@ -267,6 +278,7 @@ function refreshSummaries() {
 }
 
 function getWebDashboardData(filters) {
+  requireDashboardAccess();
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
@@ -321,6 +333,7 @@ function getWebDashboardData(filters) {
 }
 
 function refreshWebSummaries() {
+  requireDashboardAccess();
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
@@ -411,6 +424,7 @@ function getOrCreateBackupFolder() {
 }
 
 function saveDashboardFuelBill(payload) {
+  requireDashboardAccess();
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
@@ -455,9 +469,9 @@ function saveDashboardFuelBill(payload) {
     var values = sheet.getDataRange().getValues();
     var targetRow = findRowByColumnValue(values, 0, id);
     if (targetRow > 0) {
-      sheet.getRange(targetRow, 1, 1, FUEL_BILL_HEADERS.length).setValues([row]);
+      sheet.getRange(targetRow, 1, 1, FUEL_BILL_HEADERS.length).setValues([safeSheetRow(row)]);
     } else {
-      sheet.appendRow(row);
+      sheet.appendRow(safeSheetRow(row));
       targetRow = sheet.getLastRow();
     }
     logSync(ss, "manual_dashboard_fuel", "OK", dashboardEditorMessage("saved fuel bill from dashboard", data.editorName), id);
@@ -473,6 +487,7 @@ function saveDashboardFuelBill(payload) {
 }
 
 function saveDashboardUsageSegment(payload) {
+  requireDashboardAccess();
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
@@ -1008,7 +1023,7 @@ function upsertDailyDeliveryOrder(payload) {
   ]];
   var row = findDeliveryOrderRow(sheet, order.id);
   if (!row) row = sheet.getLastRow() + 1;
-  sheet.getRange(row, 1, 1, DELIVERY_HEADERS.length).setValues(rowValues);
+  sheet.getRange(row, 1, 1, DELIVERY_HEADERS.length).setValues([safeSheetRow(rowValues[0])]);
   var color = deliveryStatusColor(overall);
   sheet.getRange(row, 1, 1, DELIVERY_HEADERS.length).setBackground("#ffffff");
   sheet.getRange(row, 17).setBackground(color).setFontWeight("bold");
@@ -1635,10 +1650,10 @@ function upsertDailyMileage(ss, payload) {
   ];
 
   if (targetRow > 0) {
-    sheet.getRange(targetRow, 1, 1, DAILY_USAGE_HEADERS.length).setValues([row]);
+    sheet.getRange(targetRow, 1, 1, DAILY_USAGE_HEADERS.length).setValues([safeSheetRow(row)]);
     return { action: "updated", row: targetRow, recordKey: recordKey };
   }
-  sheet.appendRow(row);
+  sheet.appendRow(safeSheetRow(row));
   return { action: "inserted", row: sheet.getLastRow(), recordKey: recordKey };
 }
 
@@ -1677,10 +1692,10 @@ function appendFuelBill(ss, payload) {
     if (payload.allowFuelBillUpdate !== true) {
       return { action: "duplicate_skipped", row: existingRow, id: id };
     }
-    sheet.getRange(existingRow, 1, 1, FUEL_BILL_HEADERS.length).setValues([row]);
+    sheet.getRange(existingRow, 1, 1, FUEL_BILL_HEADERS.length).setValues([safeSheetRow(row)]);
     return { action: "updated", row: existingRow, id: id };
   }
-  sheet.appendRow(row);
+  sheet.appendRow(safeSheetRow(row));
   return { action: "inserted", row: sheet.getLastRow(), id: id };
 }
 
@@ -1692,10 +1707,10 @@ function appendUsageSegment(ss, payload) {
   var existingRow = findRowByColumnValue(values, 0, id);
   var row = buildUsageSegmentRow(payload, id);
   if (existingRow > 0) {
-    sheet.getRange(existingRow, 1, 1, USAGE_SEGMENT_HEADERS.length).setValues([row]);
+    sheet.getRange(existingRow, 1, 1, USAGE_SEGMENT_HEADERS.length).setValues([safeSheetRow(row)]);
     return { action: "updated", row: existingRow, id: id };
   }
-  sheet.appendRow(row);
+  sheet.appendRow(safeSheetRow(row));
   return { action: "inserted", row: sheet.getLastRow(), id: id };
 }
 
@@ -1721,7 +1736,7 @@ function replaceUsageSegments(ss, payload) {
     sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(sheet.getLastColumn(), USAGE_SEGMENT_HEADERS.length)).clearContent();
   }
   if (output.length) {
-    sheet.getRange(2, 1, output.length, USAGE_SEGMENT_HEADERS.length).setValues(output);
+    sheet.getRange(2, 1, output.length, USAGE_SEGMENT_HEADERS.length).setValues(safeSheetRows(output));
   }
   return { action: "replaced", rows: output.length };
 }
@@ -1749,7 +1764,7 @@ function buildUsageSegmentRow(payload, id) {
 
 function logSync(ss, action, status, message, payloadId) {
   var sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.syncLogs, SYNC_LOG_HEADERS);
-  sheet.appendRow([new Date(), text(action), text(status), text(message), text(payloadId)]);
+  sheet.appendRow(safeSheetRow([new Date(), text(action), text(status), text(message), text(payloadId)]));
 }
 
 function findRowByColumnValue(values, zeroBasedColumn, needle) {
@@ -1766,6 +1781,20 @@ function getSheetNames(ss) {
 function text(value) {
   if (value === null || value === undefined) return "";
   return String(value).trim();
+}
+
+function safeCellText(value) {
+  return text(value).replace(/^(\s*[=+\-@])/, "'$1");
+}
+
+function safeSheetRow(values) {
+  return values.map(function(value) {
+    return typeof value === "string" ? safeCellText(value) : value;
+  });
+}
+
+function safeSheetRows(rows) {
+  return rows.map(safeSheetRow);
 }
 
 function numberOrBlank(value) {

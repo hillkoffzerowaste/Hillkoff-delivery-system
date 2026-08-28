@@ -101,12 +101,13 @@ Reserved for syncing in-day usage segments if the app later sends them to Apps S
 6. Open the execution log or run the Web App later to get the generated spreadsheet URL.
 7. Click **Deploy > New deployment**.
 8. Select **Web app**.
-9. Set **Execute as** to `Me`.
-10. Set **Who has access** to `Anyone with the link`.
+9. Set **Execute as** to `User accessing the web app`.
+10. Set **Who has access** to approved Hillkoff users only; never select `Anyone with the link`.
 11. Deploy and copy the Web App URL.
-12. Open **Project Settings > Script Properties** and add a long random value as
-    `HILLKOFF_SYNC_SHARED_SECRET`.
-13. Add the Web App URL and the same secret to the Next.js environment:
+12. Open **Project Settings > Script Properties** and add `HILLKOFF_DASHBOARD_ALLOWED_EMAILS` with a comma-separated email allowlist.
+13. Add a long random value as
+   `HILLKOFF_SYNC_SHARED_SECRET`.
+14. Add the Web App URL and the same secret to the Next.js environment:
 
 ```text
 GOOGLE_MILEAGE_WEB_APP_URL=https://script.google.com/macros/s/.../exec

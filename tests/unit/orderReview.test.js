@@ -10,16 +10,19 @@ import {
 
 describe("order review QR contract", () => {
   it("creates and parses a versioned per-order payload and URL", () => {
-    const payload = createOrderReviewPayload("DO-20260726-001");
-    expect(payload).toBe("HKO2|DO-20260726-001");
-    expect(parseOrderReviewPayload(payload)).toEqual({ orderId: "DO-20260726-001" });
-    const url = createOrderReviewUrl("https://delivery.example", "DO-20260726-001");
-    expect(url).toContain("/order-review?t=HKO2%7CDO-20260726-001");
-    expect(parseOrderReviewPayload(url)).toEqual({ orderId: "DO-20260726-001" });
+    const token = "a".repeat(32);
+    const payload = createOrderReviewPayload("DO-20260726-001", token);
+    expect(payload).toBe(`HKO3|DO-20260726-001|${token}`);
+    expect(parseOrderReviewPayload(payload)).toEqual({ orderId: "DO-20260726-001", token });
+    const url = createOrderReviewUrl("https://delivery.example", "DO-20260726-001", token);
+    expect(url).toContain(`/order-review?t=HKO3%7CDO-20260726-001%7C${token}`);
+    expect(parseOrderReviewPayload(url)).toEqual({ orderId: "DO-20260726-001", token });
   });
 
   it("rejects malformed payloads and order IDs", () => {
-    expect(() => createOrderReviewPayload("bad/order")).toThrow("Invalid order ID");
+    expect(() => createOrderReviewPayload("bad/order", "a".repeat(32))).toThrow("Invalid order ID");
+    expect(() => createOrderReviewPayload("DO-1", "short")).toThrow("Invalid order review token");
+    expect(() => parseOrderReviewPayload("HKO2|DO-1")).toThrow("Invalid order review QR payload");
     expect(() => parseOrderReviewPayload("HKO1|DO-1")).toThrow("Invalid order review QR payload");
     expect(() => parseOrderReviewPayload("HKO2|bad/order")).toThrow("Invalid order review QR payload");
   });

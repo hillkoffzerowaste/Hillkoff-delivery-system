@@ -73,30 +73,10 @@ service cloud.firestore {
       ]);
     }
 
-    function driverOrderUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let did = driverId();
-      let ownExisting = did != "" && resource.data.driverId == did;
-      let validClaim = resource.data.driverId == "" &&
-        resource.data.queueStatus == "queued" &&
-        did != "" && request.resource.data.driverId == did;
-      return hasRole(["driver"]) &&
-        changed.hasOnly([
-          "driverId", "driverName", "status", "sharedToLine", "checkInAt",
-          "deliveredAt", "complaint", "driverNote", "driverSequence",
-          "driverSequenceServiceDate", "driverSequenceUpdatedAt",
-          "driverSequenceUpdatedBy", "acceptedAt", "updatedAt"
-        ]) &&
-        (ownExisting || validClaim) &&
-        request.resource.data.driverId in [did, ""] &&
-        request.resource.data.status is string &&
-        request.resource.data.status.size() <= 40;
-    }
-
-    match /orders/{orderId} {
+      match /orders/{orderId} {
       allow read: if hasRole(["sales", "admin", "store", "pack"]) ||
         (hasRole(["driver"]) && driverOrderRead());
-      allow update: if salesOrderUpdate() || driverOrderUpdate();
+        allow update: if salesOrderUpdate();
       allow create, delete: if false;
 
       match /activity/{activityId} {

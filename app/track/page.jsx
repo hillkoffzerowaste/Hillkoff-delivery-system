@@ -15,6 +15,7 @@ function formatDate(value) {
 
 export default function TrackPage() {
   const [phone, setPhone] = useState("");
+  const [orderId, setOrderId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [order, setOrder] = useState(null);
@@ -28,7 +29,7 @@ export default function TrackPage() {
     setSearched(true);
 
     try {
-      const res = await fetch(`/api/public/track?phone=${encodeURIComponent(phone)}`);
+      const res = await fetch(`/api/public/track?orderId=${encodeURIComponent(orderId)}&phone=${encodeURIComponent(phone)}`);
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "ค้นหาไม่สำเร็จ");
       setOrder(json.data || null);
@@ -49,7 +50,7 @@ export default function TrackPage() {
 
         <div className="track-hero">
           <h1>เช็กสถานะส่งง่ายๆ</h1>
-          <p>เพียงกรอกเบอร์โทร!</p>
+          <p>กรอกเลขออเดอร์และเบอร์โทรเพื่อยืนยันตัวตน</p>
         </div>
 
         <div className="track-map" aria-hidden="true">
@@ -68,11 +69,19 @@ export default function TrackPage() {
 
         <form onSubmit={searchOrder} className="track-form">
           <input
+            value={orderId}
+            onChange={(event) => setOrderId(event.target.value.trim())}
+            autoComplete="off"
+            placeholder="เลขออเดอร์"
+            required
+          />
+          <input
             value={phone}
             onChange={(event) => setPhone(event.target.value.replace(/[^\d+\-\s]/g, ""))}
             inputMode="tel"
             autoComplete="tel"
             placeholder="กรอกเบอร์โทรศัพท์ของคุณที่นี่..."
+            required
           />
           <button type="submit" disabled={loading}>
             {loading ? "กำลังค้นหา..." : "ติดตามพัสดุ"}

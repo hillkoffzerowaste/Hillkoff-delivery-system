@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import crypto from "node:crypto";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
@@ -176,6 +177,7 @@ export async function POST(request) {
       checkInAt: "",
       deliveredAt: "",
       deliveryAttemptNumber: 0,
+      orderReviewToken: crypto.randomBytes(24).toString("base64url"),
       lastDeliveryDriverId: "",
       lastDeliveryDriverName: "",
       lastDeliveryAt: "",

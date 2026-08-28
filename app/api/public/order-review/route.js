@@ -1,4 +1,5 @@
 import { getAdminDb } from "../../../../lib/firebaseAdmin";
+import crypto from "node:crypto";
 import {
   canReviewOrder,
   latestDeliveryIdentity,
@@ -36,13 +37,20 @@ function noStore(response) {
   return response;
 }
 
+function hasReviewToken(order, token) {
+  const expected = Buffer.from(String(order?.orderReviewToken || ""));
+  const supplied = Buffer.from(String(token || ""));
+  return expected.length >= 32 && expected.length === supplied.length && crypto.timingSafeEqual(expected, supplied);
+}
+
 export async function GET(request) {
   try {
     const token = new URL(request.url).searchParams.get("t") || "";
-    const { orderId } = parseOrderReviewPayload(token);
+    const { orderId, token: reviewToken } = parseOrderReviewPayload(token);
     const snap = await getAdminDb().collection("orders").doc(orderId).get();
     if (!snap.exists) return noStore(Response.json({ ok: false, error: "ไม่พบออเดอร์นี้" }, { status: 404 }));
     const order = { id: snap.id, ...(snap.data() || {}) };
+    if (!hasReviewToken(order, reviewToken)) return noStore(Response.json({ ok: false, error: "QR รีวิวไม่ถูกต้อง" }, { status: 400 }));
     if (!canReviewOrder(order)) {
       return noStore(Response.json({ ok: false, error: "ออเดอร์นี้ยังไม่เปิดให้รีวิว" }, { status: 409 }));
     }
@@ -62,7 +70,7 @@ export async function POST(request) {
   }
 
   try {
-    const { orderId } = parseOrderReviewPayload(body?.token);
+    const { orderId, token: reviewToken } = parseOrderReviewPayload(body?.token);
     const { rating, feedback } = normalizeOrderReviewInput({ rating: body?.rating, feedback: body?.feedback });
     const db = getAdminDb();
     const orderRef = db.collection("orders").doc(orderId);
@@ -74,9 +82,13 @@ export async function POST(request) {
       const snap = await transaction.get(orderRef);
       if (!snap.exists) throw Object.assign(new Error("Order not found"), { status: 404 });
       const order = { id: snap.id, ...(snap.data() || {}) };
+      if (!hasReviewToken(order, reviewToken)) throw Object.assign(new Error("Invalid order review token"), { status: 400 });
       if (!canReviewOrder(order)) throw Object.assign(new Error("Order is not reviewable"), { status: 409 });
       const identity = latestDeliveryIdentity(order);
       const attempt = Math.max(1, Number(order.deliveryAttemptNumber) || 1);
+      if (Number(order.deliveryReviewAttempt) === attempt) {
+        throw Object.assign(new Error("Order already reviewed for this delivery attempt"), { status: 409 });
+      }
       const review = {
         orderId,
         rating,

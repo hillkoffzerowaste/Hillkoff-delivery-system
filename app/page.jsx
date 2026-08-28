@@ -6998,7 +6998,7 @@ export default function App() {
                       
                       {order.address && <small style={{ color: "var(--c-text-faint)", borderTop: `1px solid ${statusColor[order.status]}`, paddingTop: "var(--sp-4)" }}><Inbox size={15} className="i-inline" aria-hidden="true" /> {order.address}</small>}
 
-                      {shouldShowDriverOrderReviewQr(order) && <OrderReviewQrCode orderId={order.id} />}
+                      {shouldShowDriverOrderReviewQr(order) && <OrderReviewQrCode orderId={order.id} orderReviewToken={order.orderReviewToken} />}
 
 
                       {/* Status Actions */}

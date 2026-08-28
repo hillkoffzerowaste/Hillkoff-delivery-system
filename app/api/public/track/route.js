@@ -8,8 +8,7 @@ const trackAttempts = globalThis.__hillkoffTrackAttempts || new Map();
 globalThis.__hillkoffTrackAttempts = trackAttempts;
 
 function requestClientKey(request) {
-  const forwarded = String(request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
-  return forwarded || String(request.headers.get("x-real-ip") || "unknown").trim();
+  return String(request.headers.get("x-real-ip") || "unknown").trim();
 }
 
 function isRateLimited(request) {
@@ -92,32 +91,23 @@ export async function GET(request) {
   }
   const { searchParams } = new URL(request.url);
   const phoneDigits = normalizePhoneDigits(searchParams.get("phone"));
+  const orderId = String(searchParams.get("orderId") || "").trim();
 
   if (phoneDigits.length < 8 || phoneDigits.length > 15) {
     return Response.json({ ok: false, error: "กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(orderId)) {
+    return Response.json({ ok: false, error: "กรุณากรอกเลขออเดอร์ให้ถูกต้อง" }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
 
   try {
     const db = getAdminDb();
-    let candidates = [];
-
-    const phoneSnap = await db
-      .collection("orders")
-      .where("customerPhoneDigits", "==", phoneDigits)
-      .orderBy("updatedAt", "desc")
-      .limit(10)
-      .get();
-
-    candidates = phoneSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-    candidates.sort((a, b) => {
-      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      return bTime - aTime;
-    });
-
-    const order = candidates[0];
-    if (!order) {
+    const snap = await db.collection("orders").doc(orderId).get();
+    if (!snap.exists) {
+      return Response.json({ ok: true, data: null }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const order = { id: snap.id, ...(snap.data() || {}) };
+    if (String(order.customerPhoneDigits || "") !== phoneDigits) {
       return Response.json({ ok: true, data: null }, { headers: { "Cache-Control": "no-store" } });
     }
 

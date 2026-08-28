@@ -102,14 +102,14 @@ describe("Firestore role isolation", () => {
     await assertSucceeds(getDoc(doc(dbFor("driver-1"), "orders/INCOMPLETE")));
   });
 
-  it("allows a driver to claim a queued order and blocks hidden preparation work", async () => {
+  it("lets a driver read queued work but blocks direct workflow mutations", async () => {
     await seedProfile("driver-1", "driver", { phone: "0812222222", phoneDigits: "0812222222", driverId: "driver_0812222222" });
     await seed("orders/QUEUED", { driverId: "", driverName: "", status: "รอคนขับรับ", queueStatus: "queued", customerName: "A" });
     await seed("orders/PREPARING", { driverId: "", driverName: "", status: "รอจัดเตรียมสินค้า", queueStatus: "preparing", customerName: "B" });
     const db = dbFor("driver-1");
     await assertSucceeds(getDoc(doc(db, "orders/QUEUED")));
     await assertFails(getDoc(doc(db, "orders/PREPARING")));
-    await assertSucceeds(updateDoc(doc(db, "orders/QUEUED"), {
+    await assertFails(updateDoc(doc(db, "orders/QUEUED"), {
       driverId: "driver_0812222222",
       driverName: "driver-user",
       status: "กำลังส่ง",
@@ -150,14 +150,14 @@ describe("Firestore role isolation", () => {
     await assertFails(getDoc(doc(db, "route_tasks/T-BLANK")));
   });
 
-  it("still lets a driver with a real driverId claim and read their own work", async () => {
+  it("lets a driver read queued work but denies direct workflow updates", async () => {
     await seedProfile("driver-ok", "driver", { phone: "0815555555", phoneDigits: "0815555555", driverId: "driver_0815555555" });
     await seed("orders/QUEUED", { driverId: "", driverName: "", status: "รอคนขับรับ", queueStatus: "queued" });
     await seed("route_tasks/T-OK", { driverId: "driver_0815555555", stops: [] });
     const db = dbFor("driver-ok");
 
     await assertSucceeds(getDoc(doc(db, "orders/QUEUED")));
-    await assertSucceeds(updateDoc(doc(db, "orders/QUEUED"), {
+    await assertFails(updateDoc(doc(db, "orders/QUEUED"), {
       driverId: "driver_0815555555",
       driverName: "driver-user",
       status: "กำลังส่ง",

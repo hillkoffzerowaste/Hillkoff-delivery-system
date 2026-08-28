@@ -36,7 +36,8 @@ const completeOrder = {
   driverId: "driver-1",
   driverName: "คนขับหนึ่ง",
   deliveredAt: "2026-07-26T10:00:00.000Z",
-  deliveryAttemptNumber: 1
+  deliveryAttemptNumber: 1,
+  orderReviewToken: "a".repeat(32)
 };
 
 describe("public order review route", () => {
@@ -44,7 +45,7 @@ describe("public order review route", () => {
 
   it("loads an eligible order without exposing private customer fields", async () => {
     setupDb({ ...completeOrder, customerPhone: "0812345678", address: "secret" });
-    const response = await GET(new Request("https://delivery.example/api/public/order-review?t=HKO2%7CDO-1"));
+    const response = await GET(new Request(`https://delivery.example/api/public/order-review?t=HKO3%7CDO-1%7C${"a".repeat(32)}`));
     const json = await response.json();
     expect(response.status).toBe(200);
     expect(json.data).toMatchObject({ orderId: "DO-1", customerName: "ร้านกาแฟ", driverName: "คนขับหนึ่ง" });
@@ -53,8 +54,8 @@ describe("public order review route", () => {
   });
 
   it("rejects an order before delivery", async () => {
-    setupDb({ status: "กำลังส่ง", driverId: "driver-1", driverName: "คนขับหนึ่ง" });
-    const response = await GET(new Request("https://delivery.example/api/public/order-review?t=HKO2%7CDO-1"));
+    setupDb({ status: "กำลังส่ง", driverId: "driver-1", driverName: "คนขับหนึ่ง", orderReviewToken: "a".repeat(32) });
+    const response = await GET(new Request(`https://delivery.example/api/public/order-review?t=HKO3%7CDO-1%7C${"a".repeat(32)}`));
     expect(response.status).toBe(409);
   });
 
@@ -65,12 +66,13 @@ describe("public order review route", () => {
       lastDeliveryDriverId: "driver-1",
       lastDeliveryDriverName: "คนขับหนึ่ง",
       lastDeliveryAt: "2026-07-26T10:00:00.000Z",
-      deliveryAttemptNumber: 1
+      deliveryAttemptNumber: 1,
+      orderReviewToken: "a".repeat(32)
     });
     const response = await POST(new Request("https://delivery.example/api/public/order-review", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "HKO2|DO-1", rating: 2, feedback: "ของไม่ครบ" })
+      body: JSON.stringify({ token: `HKO3|DO-1|${"a".repeat(32)}`, rating: 2, feedback: "ของไม่ครบ" })
     }));
     const json = await response.json();
     expect(response.status).toBe(200);
@@ -89,10 +91,24 @@ describe("public order review route", () => {
     const response = await POST(new Request("https://delivery.example/api/public/order-review", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "HKO2|DO-1", rating: 5, feedback: "ส่งแก้ไขครบแล้ว" })
+      body: JSON.stringify({ token: `HKO3|DO-1|${"a".repeat(32)}`, rating: 5, feedback: "ส่งแก้ไขครบแล้ว" })
     }));
     expect(response.status).toBe(200);
     expect(db.state.order.latestDeliveryReview).toMatchObject({ rating: 5, attempt: 2 });
     expect(db.state.order.deliveryReviewCount).toBe(2);
+  });
+
+  it("rejects a second review for the same delivery attempt", async () => {
+    setupDb({
+      ...completeOrder,
+      deliveryReviewAttempt: 1,
+      latestDeliveryReview: { rating: 5, attempt: 1 }
+    });
+    const response = await POST(new Request("https://delivery.example/api/public/order-review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: `HKO3|DO-1|${"a".repeat(32)}`, rating: 1, feedback: "ซ้ำ" })
+    }));
+    expect(response.status).toBe(409);
   });
 });
