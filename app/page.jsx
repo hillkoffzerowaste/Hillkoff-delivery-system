@@ -33,6 +33,7 @@ import { isSalesDispatchActivityOnDate } from "../lib/salesDispatchActivity";
 import { removeDriverPodPhoto, shouldShowDriverOrderReviewQr } from "../lib/driverDeliveryDraft";
 import { getPackStoreCheckingOrders } from "../lib/packStoreChecking";
 import { buildDriverQueueNotice, getDriverQueueOrdersForNotice } from "../lib/driverQueueMessage";
+import { applyCustomerDeliveryDefault, customerDefaultAppliesToTab, customerDefaultDeliveryMethod } from "../lib/customerDeliveryPreference";
 import {
   AlertTriangle,
   Archive,
@@ -730,7 +731,7 @@ export default function App() {
   const [googleOtpCode, setGoogleOtpCode] = useState("");
   const [googleOtpDevCode, setGoogleOtpDevCode] = useState("");
   const [editingCustomerId, setEditingCustomerId] = useState(null);
-  const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [editCustomerForm, setEditCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "", defaultDeliveryMethod: "company_driver" });
   const [lastCheckerNames, setLastCheckerNames] = useState({ store: "", pack: "" });
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
@@ -836,7 +837,7 @@ export default function App() {
   const [outstationHistoryResults, setOutstationHistoryResults] = useState([]);
   const [outstationHistoryLoading, setOutstationHistoryLoading] = useState(false);
   const [outstationHistorySearched, setOutstationHistorySearched] = useState(false);
-  const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+  const [customerForm, setCustomerForm] = useState({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "", defaultDeliveryMethod: "company_driver" });
   const [orderForm, setOrderForm] = useState({
     pickupWaitMinutes: "5",
     qty: "",
@@ -2590,6 +2591,11 @@ export default function App() {
     return map;
   }, [driverAssessments]);
   const selectedCustomer = customers.find(customer => customer.id === selectedCustomerId) || null;
+  const selectedCustomerDeliveryMethod = customerDefaultDeliveryMethod(selectedCustomer);
+  useEffect(() => {
+    if (!selectedCustomer || !customerDefaultAppliesToTab(displayTab)) return;
+    setOrderForm(previous => applyCustomerDeliveryDefault(previous, selectedCustomer));
+  }, [displayTab, selectedCustomerId, selectedCustomerDeliveryMethod]);
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
     if (order.queueStatus && order.queueStatus !== "queued") return false;
@@ -2732,7 +2738,7 @@ export default function App() {
 	      customers: [nextCustomer, ...(prev.customers || []).filter(customer => customer.id !== id)]
 	    }));
 	    setSelectedCustomerId(id);
-	    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "" });
+	    setCustomerForm({ name: "", contact: "", phone: "", zone: "เมืองเชียงใหม่", address: "", mapUrl: "", note: "", defaultDeliveryMethod: "company_driver" });
 	    setSyncStatus(`✅ บันทึกลูกค้า "${nextCustomer.name}" สำเร็จ`);
 	  };
 
@@ -5934,7 +5940,7 @@ export default function App() {
                   <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
                     <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => {
                       setEditingCustomerId(selectedCustomer.id);
-                      setEditCustomerForm(selectedCustomer);
+                      setEditCustomerForm({ ...selectedCustomer, defaultDeliveryMethod: customerDefaultDeliveryMethod(selectedCustomer) });
                     }}><Pencil size={15} className="i-inline" aria-hidden="true" /> แก้ไขข้อมูล</button>
                     <button className="secondary" style={{ padding: "var(--sp-4)", fontSize: "12px" }} onClick={() => loadCustomerOrderHistory(selectedCustomer)} disabled={customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id}>
                       {customerHistoryLoading && customerHistoryCustomerId === selectedCustomer.id ? "กำลังโหลด…" : "📚 ดูประวัติออเดอร์"}
@@ -5977,6 +5983,7 @@ export default function App() {
                   <input value={editCustomerForm.contact} onChange={e => setEditCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
                   <input value={editCustomerForm.phone} onChange={e => setEditCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
                   <select value={editCustomerForm.zone} onChange={e => setEditCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
+                  <select value={editCustomerForm.defaultDeliveryMethod} onChange={e => setEditCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select>
                 </div>
                 <input value={editCustomerForm.address} onChange={e => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
                 <input value={editCustomerForm.mapUrl} onChange={e => setEditCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
@@ -6103,6 +6110,7 @@ export default function App() {
                 <input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" />
                 <input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" />
                 <select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select>
+                <select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select>
               </div>
               <input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" />
               <input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" />
@@ -6445,7 +6453,7 @@ export default function App() {
               {(() => { const query = orderCustomerSearch.trim(); const matches = customers.filter(customer => customerMatchesQuery(customer, query)).slice(0, 10); if (!query) return <small className="muted">พิมพ์อย่างน้อย 3 ตัวอักษร ระบบจะแสดงข้อมูลลูกค้าทันที</small>; if (query.length < 3) return <small className="muted">พิมพ์เพิ่มอีก {3 - query.length} ตัวอักษรเพื่อค้นหาฐานลูกค้ากลาง</small>; if (!matches.length) return <small className="muted">กำลังค้นหา หรือยังไม่พบลูกค้าที่ตรงกัน</small>; return <div style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "260px", overflowY: "auto" }}>{matches.map(customer => <button key={customer.id} type="button" onClick={() => { setSelectedCustomerId(customer.id); setOrderCustomerSearch(""); }} style={{ textAlign: "left", border: "1px solid var(--c-line-strong)", background: "var(--c-surface)", borderRadius: "8px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{customer.name}</b><span style={{ display: "block", fontSize: "12px", color: "var(--c-text-soft)", marginTop: "var(--sp-1)" }}>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ") || "-"}</span>{customer.address && <small className="muted" style={{ display: "block", marginTop: "var(--sp-1)" }}>{customer.address}</small>}</button>)}</div>; })()}
               {selectedCustomerId && (() => { const customer = customers.find(item => item.id === selectedCustomerId); return customer ? <div className="customer-detail"><div><b>{customer.name}</b><p>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ")}</p><p>{customer.address || "-"}</p></div></div> : null; })()}
             </div>
-            {auth.role !== "pack" && <><div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button></>}
+            {auth.role !== "pack" && <><div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select><select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button></>}
             <div className="form-grid two">{auth.role === "pack" ? <div className="status-chip" style={{ alignSelf: "center", width: "fit-content" }}>คนขับบริษัท · ส่งตรงห้องแพ็ค</div> : <select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "store_route" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select>}<select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
             <div style={{ display: "grid", gap: "var(--sp-3)" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">{auth.role === "pack" ? "งานด่วนเว้นว่างได้ · ถ้าสโตร์คีย์เลขใบสั่งจองนี้ไว้แล้ว ใช้เลขเดิมได้เลย ระบบจะผูกให้อัตโนมัติ" : "เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง"}</small></div>
             <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />

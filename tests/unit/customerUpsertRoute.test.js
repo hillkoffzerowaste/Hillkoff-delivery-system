@@ -114,4 +114,17 @@ describe("customer upsert route", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ data: { duplicateId: "cus-2", duplicateField: "เบอร์โทร", canOverride: true } });
   });
+
+  it("persists an editable outstation default in both customer records", async () => {
+    const response = await post({
+      id: "cus-1",
+      name: "ร้านกาแฟดอย",
+      phone: "0812345678",
+      defaultDeliveryMethod: "outstation"
+    });
+
+    expect(response.status).toBe(200);
+    expect(state.db.customers.get("cus-1")).toMatchObject({ defaultDeliveryMethod: "outstation" });
+    expect(state.db.search.get("cus-1")).toMatchObject({ defaultDeliveryMethod: "outstation" });
+  });
 });

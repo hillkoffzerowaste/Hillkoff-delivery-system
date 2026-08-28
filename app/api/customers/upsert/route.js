@@ -18,6 +18,7 @@ function cleanCustomer(customer) {
     address: clean(customer.address, 1500),
     mapUrl: clean(customer.mapUrl, 1500),
     note: clean(customer.note, 3000),
+    defaultDeliveryMethod: customer.defaultDeliveryMethod === "outstation" ? "outstation" : "company_driver",
     updatedAt: new Date().toISOString()
   };
 }
