@@ -2472,6 +2472,8 @@ export default function App() {
     return `hillkoff_latest_vehicle:${driverKey}`;
   }, [auth.role, auth.driverId, auth.phone, driverId]);
   const [latestDriverVehicleId, setLatestDriverVehicleId] = useState("");
+  // ค่ารถถูกล็อกแล้วเมื่อคนขับเลือกเอง หรือกู้ค่าที่บันทึกไว้ของวันนี้ — ค่าเริ่มต้นอัตโนมัติต้องไม่ทับ
+  const driverVehiclePickedRef = useRef(false);
   const [availableVehicles, setAvailableVehicles] = useState(HILLKOFF_VEHICLES);
   useEffect(() => {
     if (auth.role !== "driver" || !["driver-vehicle", "driver-sop", "driver"].includes(displayTab)) return;
@@ -2502,10 +2504,12 @@ export default function App() {
       if (saved?.odometerStart && saved?.vehicleId) {
         setDailyVehicleStartSaved(true);
         setDriverOdometerStart(formatWithCommas(saved.odometerStart));
+        driverVehiclePickedRef.current = true;
         setDriverVehicleId(saved.vehicleId);
         return;
       }
     } catch {}
+    driverVehiclePickedRef.current = false;
     setDailyVehicleStartSaved(false);
   }, [dailyVehicleStartKey]);
   const needsDailyVehicleStart = auth.role === "driver" && (!dailyVehicleStartSaved || !driverOdometerStart || !selectedDriverVehicle?.id);
@@ -2520,12 +2524,28 @@ export default function App() {
       setLatestDriverVehicleId("");
     }
   }, [latestDriverVehicleKey]);
+  // เครื่องใหม่หรือล้างแคชแล้ว localStorage จะว่าง จึงถามรถคันล่าสุดจากโปรไฟล์คนขับที่เซิร์ฟเวอร์ด้วย
+  useEffect(() => {
+    if (auth.role !== "driver" || !latestDriverVehicleKey) return;
+    authenticatedApiFetch("/api/vehicle-usage/latest")
+      .then((response) => response.json())
+      .then((json) => {
+        const vehicleId = json?.ok ? String(json.data?.vehicleId || "") : "";
+        if (!vehicleId) return;
+        setLatestDriverVehicleId(vehicleId);
+        try { localStorage.setItem(latestDriverVehicleKey, vehicleId); } catch {}
+      })
+      .catch(() => {});
+  }, [auth.role, latestDriverVehicleKey, authenticatedApiFetch]);
   useEffect(() => {
     if (auth.role !== "driver") return;
-    if (driverVehicleId) return;
-    const nextVehicle = findVehicleById(latestDriverVehicleId) || findDefaultVehicleForDriver(selectedDriverProfile);
-    if (nextVehicle?.id) setDriverVehicleId(nextVehicle.id);
-  }, [auth.role, driverVehicleId, latestDriverVehicleId, selectedDriverProfile]);
+    if (driverVehiclePickedRef.current) return;
+    // ทะเบียนล่าสุดกับรายชื่อรถมาถึงคนละจังหวะ ถ้าหยุดตั้งแต่มีค่าแล้วจะค้างที่ค่าเดาแรกตลอด
+    const nextVehicle = availableVehicles.find((vehicle) => vehicle.id === latestDriverVehicleId || vehicle.assetCode === latestDriverVehicleId)
+      || findVehicleById(latestDriverVehicleId)
+      || findDefaultVehicleForDriver(selectedDriverProfile);
+    if (nextVehicle?.id && nextVehicle.id !== driverVehicleId) setDriverVehicleId(nextVehicle.id);
+  }, [auth.role, driverVehicleId, latestDriverVehicleId, selectedDriverProfile, availableVehicles]);
   const driverAssessmentRoster = useMemo(() => {
     const map = new Map();
     const addDriver = (id, data = {}) => {
@@ -5537,6 +5557,7 @@ export default function App() {
                   <select
                     value={selectedDriverVehicleId}
                     onChange={e => {
+                      driverVehiclePickedRef.current = true;
                       setDriverVehicleId(e.target.value);
                       setDriverVehicleChangedToday(true);
                     }}
@@ -7342,6 +7363,7 @@ export default function App() {
                       <select
                         value={selectedDriverVehicleId}
                         onChange={e => {
+                          driverVehiclePickedRef.current = true;
                           setDriverVehicleId(e.target.value);
                           setDriverVehicleChangedToday(true);
                         }}
@@ -7358,6 +7380,7 @@ export default function App() {
                         style={{ padding: "var(--sp-3) var(--sp-5)", fontSize: "12px", width: "fit-content" }}
                         onClick={() => {
                           if (defaultDriverVehicle?.id) {
+                            driverVehiclePickedRef.current = true;
                             setDriverVehicleId(defaultDriverVehicle.id);
                             setDriverVehicleChangedToday(false);
                           }

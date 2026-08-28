@@ -227,6 +227,21 @@ export async function POST(request) {
     };
 
     await eventRef.set(event, { merge: true });
+
+    // จำรถคันล่าสุดไว้ที่โปรไฟล์คนขับ เพื่อให้วันถัดไปฟอร์มเริ่มใช้รถเลือกทะเบียนเดิมให้เลย
+    // เก็บฝั่งเซิร์ฟเวอร์เพราะ localStorage หายตอนเปลี่ยนเครื่องหรือล้างแคช และห้ามให้ล้มทั้งงาน
+    if (doc?.ref) {
+      try {
+        await doc.ref.set({
+          lastVehicleId: vehicle.id,
+          lastVehiclePlate: vehicle.plate || "",
+          lastVehicleUsedAt: serviceDate
+        }, { merge: true });
+      } catch (error) {
+        console.warn("remember last vehicle failed", error?.message || error);
+      }
+    }
+
     scheduleGoogleSync(eventRef, {
       ...event,
       createdAt: new Date().toISOString(),
