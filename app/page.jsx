@@ -846,7 +846,7 @@ export default function App() {
     codAmount: "",
     salesNote: "",
     bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "",
-    workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: ""
+    workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7)
   });
   const [chiangmaiRoundFilter, setChiangmaiRoundFilter] = useState("normal");
   const [salesCompletionSelectedIds, setSalesCompletionSelectedIds] = useState([]);
@@ -3101,6 +3101,11 @@ export default function App() {
     
     const id = generateOrderId();
     const serviceDate = toServiceDateKey(new Date());
+    const bookingMonthKey = String(orderForm.bookingMonthKey || "").slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(bookingMonthKey)) {
+      setSyncStatus("❌ กรุณาเลือกรอบเดือนของเลขที่ใบสั่งจอง");
+      return;
+    }
     const nextOrder = {
       id,
       serviceDate,
@@ -3123,6 +3128,7 @@ export default function App() {
       workflowType, deliveryMethod: orderForm.deliveryMethod,
       bookingNumber: bookingNumbers[0] || "",
       bookingNumbers,
+      bookingMonthKey,
       bookingNumberMissing: bookingNumbers.length === 0,
       bookingNumberNotice: bookingNumbers.length === 0 ? "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "",
       shippingCarrier: orderForm.deliveryMethod === "outstation" ? String(orderForm.shippingCarrier || "").trim() : "",
@@ -3196,7 +3202,7 @@ export default function App() {
         const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
         return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
       });
-      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "" });
+      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7) });
       setSelectedCustomerId("");
       setOrderCustomerSearch("");
       setShowOrderConfirm(false);
@@ -6120,7 +6126,7 @@ export default function App() {
                   <div style={{ color: "var(--c-text-muted)", fontSize: "12px", textAlign: "center" }}>บาท</div>
                 </div>
               </div>
-              <div style={{ display: "grid", gap: "var(--sp-3)" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><div style={{ display: "grid", gridTemplateColumns: orderForm.bookingPrefix === "custom" ? "92px minmax(92px, .8fr) 1fr auto" : "92px 1fr auto", gap: "var(--sp-4)" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value, bookingCustomPrefix: e.target.value === "custom" ? "" : p.bookingCustomPrefix }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>{orderForm.bookingPrefix === "custom" && <input value={orderForm.bookingCustomPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingCustomPrefix: e.target.value.replace(/-/g, "").trim().toUpperCase().slice(0, 20) }))} placeholder="รหัสหน้า" aria-label="กรอกรหัสหน้าเอง" />}<input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); const prefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase(); if (!prefix) return setSyncStatus("❌ กรุณากรอกรหัสหน้า"); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${prefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--sp-3)" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--c-danger-deep)", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">ตรวจซ้ำจากรหัสเต็ม เช่น CSP-1234 และ CSR-1234 ใช้พร้อมกันได้ · กรอกรหัสหน้าเองได้โดยไม่ใช้คำว่า OTHER · รหัสเดียวกันห้ามซ้ำภายในเดือน</small></div>
+              <div style={{ display: "grid", gap: "var(--sp-3)" }}><span style={{ fontSize: "12px", fontWeight: 800 }}>เลขที่ใบสั่งจอง * <small className="muted">(เพิ่มได้หลายเลข · สร้างเพียง 1 ออเดอร์)</small></span><label style={{ display: "grid", gap: "var(--sp-2)" }}><span className="muted">รอบเดือนของใบสั่งจอง</span><input type="month" value={orderForm.bookingMonthKey} onChange={e => setOrderForm(p => ({ ...p, bookingMonthKey: e.target.value }))} /></label><div style={{ display: "grid", gridTemplateColumns: orderForm.bookingPrefix === "custom" ? "92px minmax(92px, .8fr) 1fr auto" : "92px 1fr auto", gap: "var(--sp-4)" }}><select value={orderForm.bookingPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingPrefix: e.target.value, bookingCustomPrefix: e.target.value === "custom" ? "" : p.bookingCustomPrefix }))}><option value="CSP">CSP</option><option value="CSR">CSR</option><option value="TSR">TSR</option><option value="AS7">AS7</option><option value="AS2">AS2</option><option value="AS1">AS1</option><option value="AS6">AS6</option><option value="custom">เพิ่มรหัสเอง</option></select>{orderForm.bookingPrefix === "custom" && <input value={orderForm.bookingCustomPrefix} onChange={e => setOrderForm(p => ({ ...p, bookingCustomPrefix: e.target.value.replace(/-/g, "").trim().toUpperCase().slice(0, 20) }))} placeholder="รหัสหน้า" aria-label="กรอกรหัสหน้าเอง" />}<input value={orderForm.bookingDigits} onChange={e => setOrderForm(p => ({ ...p, bookingDigits: digitsOnly(e.target.value).slice(0, 4) }))} inputMode="numeric" maxLength={4} placeholder="ตัวเลข 4 หลัก" /><button type="button" className="secondary" onClick={() => { const digits = digitsOnly(orderForm.bookingDigits); const prefix = String(orderForm.bookingPrefix === "custom" ? orderForm.bookingCustomPrefix : orderForm.bookingPrefix || "").replace(/-/g, "").trim().toUpperCase(); if (!prefix) return setSyncStatus("❌ กรุณากรอกรหัสหน้า"); if (digits.length !== 4) return setSyncStatus("❌ กรุณากรอกเลขให้ครบ 4 หลัก"); const value = `${prefix}-${digits}`; setOrderForm(p => ({ ...p, bookingDigits: "", bookingNumbers: [...new Set([...(p.bookingNumbers || []), value])] })); }}>เพิ่มเลข</button></div>{(orderForm.bookingNumbers || []).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--sp-3)" }}>{orderForm.bookingNumbers.map(value => <span key={value} className="status-chip">{value}<button type="button" aria-label={`ลบ ${value}`} onClick={() => setOrderForm(p => ({ ...p, bookingNumbers: p.bookingNumbers.filter(item => item !== value) }))} style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--c-danger-deep)", fontWeight: 900 }}>×</button></span>)}</div>}<small className="muted">ตรวจซ้ำจากรหัสเต็ม เช่น CSP-1234 และ CSR-1234 ใช้พร้อมกันได้ · ระบบตรวจซ้ำเฉพาะเลขในรอบเดือนที่เลือก</small></div>
               <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ส่งออเดอร์เข้าคิวเตรียมสินค้า</button>
             </section>
 

@@ -44,7 +44,7 @@ export async function POST(request) {
       const bookingNumbers = [...new Set((Array.isArray(currentOrder.bookingNumbers) ? currentOrder.bookingNumbers : [currentOrder.bookingNumber])
         .map(normalizeBookingNumber)
         .filter((bookingNumber) => BOOKING_NUMBER_PATTERN.test(bookingNumber)))];
-      const serviceDate = String(currentOrder.serviceDate || currentOrder.createdAt || "").slice(0, 10);
+      const serviceDate = String(currentOrder.bookingMonthKey || currentOrder.serviceDate || currentOrder.createdAt || "").slice(0, 10);
       const reservations = bookingNumbers
         .map((bookingNumber) => ({ bookingNumber, registryId: bookingRegistryId(serviceDate, bookingNumber) }))
         .filter((reservation) => reservation.registryId)

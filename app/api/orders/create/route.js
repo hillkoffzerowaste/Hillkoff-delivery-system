@@ -6,7 +6,7 @@ import { pushLineText } from "../../../../lib/lineOa";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCache";
-import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
+import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingMonthKey, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
 import { canPackAssistShareBooking, isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
@@ -115,8 +115,11 @@ export async function POST(request) {
     const requestedServiceDate = clean(order.serviceDate, 10);
     const serviceDate = requestedServiceDate || toServiceDateKey(now);
     if (!validDateKey(serviceDate)) return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
+    const requestedBookingMonth = clean(order.bookingMonthKey, 7);
+    const bookingMonth = requestedBookingMonth || bookingMonthKey(serviceDate);
+    if (!bookingMonthKey(bookingMonth)) return Response.json({ ok: false, error: "Invalid booking month" }, { status: 400 });
     const orderRef = db.collection("orders").doc(orderId);
-    const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(serviceDate, value)) }));
+    const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(bookingMonth, value)) }));
     const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
     const preparation = initialPreparationStatuses(deliveryMethod, order.workflowType);
     const workflowType = preparation.workflowType;
@@ -158,7 +161,7 @@ export async function POST(request) {
       deliveryMethod,
       bookingNumber: bookingNumber.slice(0, 100),
       bookingNumbers,
-      bookingMonthKey: serviceDate.slice(0, 7),
+      bookingMonthKey: bookingMonth,
       bookingNumberMissing: bookingNumbers.length === 0,
       bookingNumberNotice: bookingNumbers.length === 0 ? (packAssistEntry ? "ห้องแพ็คช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : storeAssistEntry ? "สโตร์ช่วยเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง" : "ฝ่ายขายเปิดออเดอร์โดยยังไม่มีเลขใบสั่งจอง") : "",
       shippingCarrier: deliveryMethod === "outstation" ? String(order.shippingCarrier || "").trim().slice(0, 100) : "",
@@ -250,7 +253,7 @@ export async function POST(request) {
         }
         transaction.set(orderRef.collection("activity").doc(), next.workflowHistory[0]);
         transaction.set(searchIndexRef, customerSearchRecord({ name: next.customerName, phone: next.customerPhone, zone: next.zone, address: next.address, mapUrl: next.mapUrl }), { merge: true });
-        for (const reservation of reservationsToCreate) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
+        for (const reservation of reservationsToCreate) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate: bookingMonth, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: orderId, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
         return { alreadyExists: false, searchIndexChanged };
       });
       if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });

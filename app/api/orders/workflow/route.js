@@ -127,7 +127,7 @@ export async function PATCH(request) {
       const currentValues = Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber].filter(Boolean);
       const update = prepareBookingNumberUpdate(currentValues, body.bookingNumbers ?? body.bookingNumber);
       if (!update.ok) throw Object.assign(new Error(update.error), { status: 400 });
-      const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
+      const serviceDate = String(order.bookingMonthKey || order.serviceDate || order.createdAt || now).slice(0, 10);
       for (const num of update.toAdd) {
         const regId = bookingRegistryId(serviceDate, num);
         if (!regId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });
@@ -178,7 +178,7 @@ export async function PATCH(request) {
         const desiredSet = new Set(desired);
         const toAdd = desired.filter((v) => !currentSet.has(v));
         const toRemove = current.filter((v) => !desiredSet.has(v));
-        const serviceDate = String(order.serviceDate || order.createdAt || now).slice(0, 10);
+        const serviceDate = String(order.bookingMonthKey || order.serviceDate || order.createdAt || now).slice(0, 10);
         for (const num of toAdd) {
           const regId = bookingRegistryId(serviceDate, num);
           if (!regId) throw Object.assign(new Error("Invalid booking month"), { status: 400 });

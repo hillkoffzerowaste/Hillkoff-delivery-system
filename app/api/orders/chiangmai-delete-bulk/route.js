@@ -8,7 +8,7 @@ function bookingReservations(db, order = {}) {
   const bookingNumbers = [...new Set((Array.isArray(order.bookingNumbers) ? order.bookingNumbers : [order.bookingNumber])
     .map(normalizeBookingNumber)
     .filter((bookingNumber) => BOOKING_NUMBER_PATTERN.test(bookingNumber)))];
-  const serviceDate = String(order.serviceDate || order.createdAt || "").slice(0, 10);
+  const serviceDate = String(order.bookingMonthKey || order.serviceDate || order.createdAt || "").slice(0, 10);
   return bookingNumbers
     .map((bookingNumber) => ({ bookingNumber, registryId: bookingRegistryId(serviceDate, bookingNumber) }))
     .filter((item) => item.registryId)
