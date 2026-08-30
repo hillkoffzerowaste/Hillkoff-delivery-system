@@ -26,8 +26,27 @@ export async function GET(request) {
     }
     const scope = clean(params.get("scope"), 40);
     if (scope && !["store_pickup", "outstation"].includes(scope)) return Response.json({ ok: false, error: "Invalid search scope" }, { status: 400 });
-    const queryText = clean(params.get("q")).toLowerCase();
+    const rawQuery = clean(params.get("q"));
+    const queryText = rawQuery.toLowerCase();
     if (queryText.length < 2) return Response.json({ ok: false, error: "Enter at least 2 characters" }, { status: 400 });
+    // เส้นทางที่ผู้ใช้ใช้มากที่สุดคือเลขออเดอร์, เลขใบสั่งจอง และเบอร์โทร
+    // ให้ใช้ indexed lookup ก่อนเสมอ แทนการไล่อ่านประวัติทั้ง collection แบบ substring scan
+    if (/^[A-Za-z0-9._-]{1,120}$/.test(rawQuery)) {
+      const exact = await db.collection("orders").doc(rawQuery).get();
+      if (exact.exists) return Response.json({ ok: true, data: [{ id: exact.id, ...(exact.data() || {}) }] });
+    }
+    const phoneDigits = queryText.replace(/\D/g, "");
+    const indexedQueries = [
+      db.collection("orders").where("bookingNumber", "==", rawQuery).limit(MAX_SEARCH_RESULTS).get(),
+      db.collection("orders").where("bookingNumbers", "array-contains", rawQuery).limit(MAX_SEARCH_RESULTS).get()
+    ];
+    if (phoneDigits.length >= 8) indexedQueries.push(
+      db.collection("orders").where("customerPhoneDigits", "==", phoneDigits).limit(MAX_SEARCH_RESULTS).get()
+    );
+    const indexed = await Promise.all(indexedQueries);
+    const indexedData = new Map();
+    indexed.forEach((snap) => snap.docs.forEach((doc) => indexedData.set(doc.id, { id: doc.id, ...(doc.data() || {}) })));
+    if (indexedData.size) return Response.json({ ok: true, data: [...indexedData.values()].slice(0, MAX_SEARCH_RESULTS) });
     const data = [];
     let cursor = null;
     let scanned = 0;

@@ -5,6 +5,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 const ROLES = ["sales", "admin", "accounting"];
+const MAX_RANGE_DAYS = 92;
 const rows = (snap) => snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
 async function executeRead(db, spec) {
@@ -29,6 +30,10 @@ export async function POST(request) {
       from: String(body.from || "").slice(0, 10),
       to: String(body.to || "").slice(0, 10)
     };
+    const spanDays = Math.round((Date.parse(`${filters.to}T00:00:00Z`) - Date.parse(`${filters.from}T00:00:00Z`)) / 86_400_000) + 1;
+    if (!Number.isFinite(spanDays) || spanDays < 1 || spanDays > MAX_RANGE_DAYS) {
+      return Response.json({ ok: false, error: `Date range must be 1 to ${MAX_RANGE_DAYS} days` }, { status: 400 });
+    }
     const plan = vehicleReportReadPlan(filters);
     const [usageEvents, fuelBills, assessments, ordersByServiceDate, ordersByDeliveryDate, ordersByUpdatedAt, vehicles] = await Promise.all([
       ...plan.map((spec) => executeRead(db, spec)),

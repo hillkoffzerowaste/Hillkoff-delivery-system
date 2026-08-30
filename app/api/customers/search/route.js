@@ -42,11 +42,14 @@ export async function GET(request) {
       : MAX_ALL_RESULTS;
     const normalizedQuery = normalizeCustomerSearch(query);
     if (!loadAll && normalizedQuery.length < 3) return Response.json({ ok: false, error: "Enter at least 3 characters" }, { status: 400 });
-    const cacheKey = loadAll ? `__all_customers__:${allResultsLimit}` : normalizedQuery;
-    const cached = await readCustomerSearchCache(db, cacheKey);
-    if (cached) return Response.json({ ok: true, data: cached });
-
-    if (pending.has(cacheKey)) return Response.json({ ok: true, data: await pending.get(cacheKey) });
+    // คำค้นขณะพิมพ์มี hit-rate ข้าม serverless instance ต่ำ แต่ cache miss เพิ่ม 2 reads
+    // และ 1 write ของ cache เอง จึงสงวน Firestore cache ไว้สำหรับรายการเต็มที่มีขนาดใหญ่
+    const cacheKey = loadAll ? `__all_customers__:${allResultsLimit}` : "";
+    if (cacheKey) {
+      const cached = await readCustomerSearchCache(db, cacheKey);
+      if (cached) return Response.json({ ok: true, data: cached });
+      if (pending.has(cacheKey)) return Response.json({ ok: true, data: await pending.get(cacheKey) });
+    }
     const search = (async () => {
       if (loadAll) {
         const snap = await db.collection("customer_search").orderBy("updatedAt", "desc").limit(allResultsLimit).get();
@@ -65,12 +68,11 @@ export async function GET(request) {
       results = results
         .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
         .slice(0, MAX_RESULTS);
-      await writeCustomerSearchCache(db, cacheKey, results);
       return results;
     })();
-    pending.set(cacheKey, search);
+    if (cacheKey) pending.set(cacheKey, search);
     try { return Response.json({ ok: true, data: await search }); }
-    finally { pending.delete(cacheKey); }
+    finally { if (cacheKey) pending.delete(cacheKey); }
   } catch (error) {
     return errorResponse(error);
   }

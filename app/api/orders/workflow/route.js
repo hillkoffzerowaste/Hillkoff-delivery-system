@@ -30,7 +30,38 @@ export async function PATCH(request) {
     const bookingReservationsToCreate = [];
     const bookingReservationsToDelete = [];
 
-    if (["sales", "admin"].includes(profile.role) && action === "reroute") {
+    if (profile.role === "driver" && action === "driver_accept") {
+      const driverId = String(profile.driverId || "").trim();
+      if (!driverId || String(order.driverId || "") || String(order.queueStatus || "") !== "queued") {
+        throw Object.assign(new Error("Order is no longer available"), { status: 409 });
+      }
+      const driverName = String(profile.name || "").trim().slice(0, 200);
+      patch.driverId = driverId;
+      patch.driverName = driverName;
+      patch.status = "กำลังส่ง";
+      patch.acceptedAt = now;
+      patch.driverSequence = Math.max(1, Math.min(10_000, Number(body?.driverSequence) || 1));
+      patch.driverSequenceServiceDate = bangkokDateKey(now);
+      patch.driverSequenceUpdatedAt = now;
+      patch.driverSequenceUpdatedBy = driverName || driverId;
+      Object.assign(history, { result: "accepted", driverId });
+    } else if (profile.role === "driver" && action === "driver_checkin") {
+      if (!String(profile.driverId || "") || String(order.driverId || "") !== String(profile.driverId || "")) {
+        throw Object.assign(new Error("Driver can update only an assigned order"), { status: 403 });
+      }
+      const checkInAt = String(body?.checkInAt || now).trim().slice(0, 80);
+      if (!checkInAt) throw Object.assign(new Error("Check-in time is required"), { status: 400 });
+      patch.status = "กำลังจัดส่ง";
+      patch.checkInAt = checkInAt;
+      Object.assign(history, { result: "checked_in" });
+    } else if (["sales", "admin"].includes(profile.role) && action === "sales_assign") {
+      const driverId = String(body?.driverId || "").trim().slice(0, 120);
+      const driverName = String(body?.driverName || "").trim().slice(0, 200);
+      patch.driverId = driverId;
+      patch.driverName = driverName;
+      patch.status = driverId ? "กำลังส่ง" : "รอคนขับรับ";
+      Object.assign(history, { result: driverId ? "assigned" : "unassigned", driverId });
+    } else if (["sales", "admin"].includes(profile.role) && action === "reroute") {
       const reason = String(body.reason || "").trim().slice(0, 1000);
       if (!reason) throw Object.assign(new Error("Reroute reason is required"), { status: 400 });
       const target = body.target && typeof body.target === "object" ? body.target : null;

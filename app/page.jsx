@@ -1044,7 +1044,6 @@ export default function App() {
     setPendingOrderUpdateIds((ids) => ids.filter((id) => id !== orderId));
   };
   const isOrderUpdatePending = (orderId) => pendingOrderUpdateIds.includes(orderId);
-  const ordersToSyncRef = useRef(new Set());
   const routeTasksToSyncRef = useRef(new Set());
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
@@ -1823,50 +1822,6 @@ export default function App() {
     } catch {}
   }, [chatMessages, state.auth?.phone, lastEmergencySeenIdFromStorage]);
 
-	  const upsertOrderToFirestore = useCallback(async (order) => {
-	    try {
-	      const db = getFirestoreDb();
-	      const orderForDB = {
-	        customerId: order.customerId || "",
-	        customerName: order.customerName || "",
-	        customerPhone: order.customerPhone || "",
-	        zone: order.zone || "",
-	        address: order.address || "",
-	        mapUrl: order.mapUrl || "",
-	        window: order.window || "",
-	        boxes: Number(order.boxes || 0),
-	        packageUnit: order.packageUnit === "bag" ? "bag" : "box",
-	        cod: Number(order.cod || 0),
-	        driverId: order.driverId || "",
-	        driverName: order.driverName || "",
-	        salesName: order.salesName || "",
-	        salesPhone: order.salesPhone || "",
-	        status: order.status || "รอคนขับรับ",
-	        ...(order.queueStatus !== undefined ? { queueStatus: order.queueStatus || "" } : {}),
-	        // POD is stored on-device only; never persist photo/blob URLs to Firestore
-	        sharedToLine: Boolean(order.sharedToLine),
-	        checkInAt: order.checkInAt || "",
-	        deliveredAt: order.deliveredAt || "",
-	        complaint: order.complaint || "",
-	        salesNote: order.salesNote || "",
-	        driverNote: order.driverNote || "",
-	        ...(order.driverSequence !== undefined ? {
-	          driverSequence: Math.max(0, Number(order.driverSequence) || 0),
-	          driverSequenceServiceDate: order.driverSequenceServiceDate || "",
-	          driverSequenceUpdatedAt: order.driverSequenceUpdatedAt || "",
-	          driverSequenceUpdatedBy: order.driverSequenceUpdatedBy || ""
-	        } : {}),
-	        ...(order.acceptedAt !== undefined ? { acceptedAt: order.acceptedAt || "" } : {}),
-	        createdAt: order.createdAt || new Date().toISOString(),
-	        updatedAt: new Date().toISOString()
-	      };
-	      await fb.setDoc(fb.doc(db, "orders", String(order.id)), orderForDB, { merge: true });
-	      return { ok: true };
-	    } catch (e) {
-	      return { ok: false, error: e?.message || String(e) };
-		    }
-		  }, []);
-
 		  const upsertDriverLocationToFirestore = async (payload) => {
 		    try {
 		      const db = getFirestoreDb();
@@ -1917,30 +1872,6 @@ export default function App() {
 		      return { ok: false, error: e?.message || String(e) };
 		    }
 		  }, []);
-
-  useEffect(() => {
-    const ids = [...ordersToSyncRef.current];
-    if (!ids.length) return;
-    ids.forEach((id) => ordersToSyncRef.current.delete(id));
-    const orders = ids.map((id) => (state.orders || []).find((order) => order.id === id)).filter(Boolean);
-    void Promise.all(orders.map(async (order) => {
-      const { ok, error } = await upsertOrderToFirestore(order);
-      if (!ok) {
-        console.error(`Failed to sync order ${order.id}:`, error);
-        return;
-      }
-      try {
-        const idToken = await refreshAuthToken(true);
-        await fetch("/api/orders/sync-sheet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-          body: JSON.stringify({ orderId: order.id })
-        });
-      } catch (sheetError) {
-        console.warn(`Failed to sync order ${order.id} to delivery sheet`, sheetError);
-      }
-    }));
-  }, [state.orders, refreshAuthToken, upsertOrderToFirestore]);
 
   useEffect(() => {
     const ids = [...routeTasksToSyncRef.current];
@@ -2615,7 +2546,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedCustomer || !customerDefaultAppliesToTab(displayTab)) return;
     setOrderForm(previous => applyCustomerDeliveryDefault(previous, selectedCustomer));
-  }, [displayTab, selectedCustomerId, selectedCustomerDeliveryMethod]);
+  }, [displayTab, selectedCustomer, selectedCustomerId, selectedCustomerDeliveryMethod]);
   // Driver can only see: (1) available orders (no driverId assigned), or (2) orders assigned to them specifically
   const driverOrders = orders.filter(order => {
     if (order.queueStatus && order.queueStatus !== "queued") return false;
@@ -3264,25 +3195,31 @@ export default function App() {
     }
   };
 
-  const updateOrder = (id, patch) => {
-    ordersToSyncRef.current.add(id);
-    setState(prev => ({ ...prev, orders: prev.orders.map(order => order.id === id ? { ...order, ...patch } : order) }));
-	    setTimeout(() => {
-	      try { clearOrderUpdatePending(id); } catch {}
-	    }, 250);
-	  };
-
-  const saveDriverSequence = (nextOrders) => {
+  const saveDriverSequence = async (nextOrders) => {
+    const previousOrders = state.orders || [];
     const now = new Date().toISOString();
-    nextOrders.forEach((order, index) => {
-      updateOrder(order.id, {
+    const ids = nextOrders.map((order) => order.id);
+    setState((prev) => ({ ...prev, orders: prev.orders.map((order) => {
+      const index = ids.indexOf(order.id);
+      return index < 0 ? order : {
+        ...order,
         driverSequence: index + 1,
         driverSequenceServiceDate: todayServiceDate,
         driverSequenceUpdatedAt: now,
         driverSequenceUpdatedBy: state.auth?.name || driverId || "driver"
+      };
+    }) }));
+    try {
+      const res = await authenticatedApiFetch("/api/orders/resequence", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderIds: ids })
       });
-    });
-    setSyncStatus("✅ บันทึกลำดับส่งของแล้ว");
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setSyncStatus("✅ บันทึกลำดับส่งของแล้ว");
+    } catch (error) {
+      setState((prev) => ({ ...prev, orders: previousOrders }));
+      setSyncStatus(`❌ บันทึกลำดับส่งไม่สำเร็จ: ${error?.message || error}`);
+    }
   };
 
   const resetAllOrders = async () => {
@@ -3311,7 +3248,7 @@ export default function App() {
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= driverReorderableOrders.length) return;
     const next = driverReorderableOrders.slice();
     [next[currentIndex], next[nextIndex]] = [next[nextIndex], next[currentIndex]];
-    saveDriverSequence(next);
+    void saveDriverSequence(next);
   };
 
   const dropDriverSequence = (targetId) => {
@@ -3323,7 +3260,7 @@ export default function App() {
     const [moved] = next.splice(sourceIndex, 1);
     next.splice(targetIndex, 0, moved);
     setDriverSequenceDragId("");
-    saveDriverSequence(next);
+    void saveDriverSequence(next);
   };
 
   const acceptDriverDeliveryOrder = async (order) => {
@@ -3348,9 +3285,8 @@ export default function App() {
     setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...patch } : item) }));
     setSyncStatus(`⏳ กำลังรับออเดอร์ "${order.id}"...`);
     try {
-      const db = getFirestoreDb();
-      await fb.updateDoc(fb.doc(db, "orders", String(order.id)), patch);
-      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...patch } : item) }));
+      const saved = await updatePreparationWorkflow(order, "driver_accept", { driverSequence: nextSequence });
+      if (!saved.ok) throw new Error(saved.error);
       setSyncStatus(`✅ รับออเดอร์ "${order.id}" และเพิ่มท้ายลำดับส่งแล้ว`);
     } catch (error) {
       const rollback = Object.fromEntries(Object.keys(patch).map((key) => [key, order[key]]));
@@ -4440,25 +4376,19 @@ export default function App() {
 	      setSyncStatus(`⚠️ ลบลูกค้าไม่สำเร็จ: ${e?.message || e}`);
 	    }
 	  };
-  const assignDriver = (id, nextDriverId) => updateOrder(id, {
-    driverId: nextDriverId,
-    status: nextDriverId ? "กำลังส่ง" : "รอคนขับรับ"
-  });
+  const assignDriver = async (id, nextDriverId) => {
+    const order = (state.orders || []).find((item) => item.id === id);
+    if (!order) return;
+    const driver = (state.drivers || []).find((item) => item.id === nextDriverId);
+    await updatePreparationWorkflow(order, "sales_assign", { driverId: nextDriverId, driverName: driver?.name || "" });
+  };
 
   const persistDriverOrderPatch = async (order, patch) => {
     if (pendingOrderUpdatesRef.current.has(order.id)) return { ok: false, error: "Order update in progress" };
     markOrderUpdatePending(order.id);
-    const nextPatch = { ...patch, updatedAt: new Date().toISOString() };
-    setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...nextPatch } : item) }));
     try {
-      const db = getFirestoreDb();
-      await fb.updateDoc(fb.doc(db, "orders", String(order.id)), nextPatch);
-      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...nextPatch } : item) }));
-      return { ok: true };
-    } catch (error) {
-      const rollback = Object.fromEntries(Object.keys(nextPatch).map((key) => [key, order[key]]));
-      setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...rollback } : item) }));
-      return { ok: false, error: error?.message || String(error) };
+      if (patch.status !== "กำลังจัดส่ง" || !patch.checkInAt) throw new Error("Unsupported driver update");
+      return await updatePreparationWorkflow(order, "driver_checkin", { checkInAt: patch.checkInAt });
     } finally {
       clearOrderUpdatePending(order.id);
     }
@@ -4957,7 +4887,7 @@ export default function App() {
     })();
   };
 
-  const checkIn = id => {
+  const checkIn = async (id) => {
     if (!driverId) {
       setSyncStatus("⚠️ คนขับยังไม่ได้เลือก กรุณาตั้งค่าประจำตัวให้ถูกต้อง");
       return;
@@ -4971,7 +4901,8 @@ export default function App() {
     }
 
     const checkInTime = new Date().toLocaleString("th-TH");
-    updateOrder(id, { checkInAt: checkInTime });
+    const saved = await persistDriverOrderPatch(order, { status: "กำลังจัดส่ง", checkInAt: checkInTime });
+    if (!saved.ok) return;
     
     if (driver) {
       setState(prev => ({
