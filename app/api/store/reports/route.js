@@ -75,6 +75,16 @@ function appendReportHistory(item, event) {
   return [...(Array.isArray(item?.workflowHistory) ? item.workflowHistory : []).slice(-99), event];
 }
 
+function linkedOrderSummary(id, order = {}) {
+  return {
+    id: String(id || ""),
+    customerName: order.customerName || "",
+    zone: order.zone || "",
+    address: order.address || "",
+    deliveryMethod: order.deliveryMethod || ""
+  };
+}
+
 export async function GET(request) {
   try {
     const { profile, db } = await requireProfile(request, ["store", "pack", "admin"]);
@@ -120,7 +130,7 @@ export async function GET(request) {
         const linkedSnap = await db.collection("orders").doc(String(item.linkedOrderId)).get();
         if (linkedSnap.exists) {
           const linked = linkedSnap.data() || {};
-          item.linkedOrder = { id: linkedSnap.id, customerName: linked.customerName || "", zone: linked.zone || "", address: linked.address || "", deliveryMethod: linked.deliveryMethod || "" };
+          item.linkedOrder = linkedOrderSummary(linkedSnap.id, linked);
         }
       }
       return Response.json({ ok: true, data: item });
@@ -143,13 +153,19 @@ export async function GET(request) {
       if (!queryText) return true;
       return [item.bookingNumber, item.detail, item.note, item.status, item.createdBy].join(" ").toLowerCase().includes(queryText);
     });
-    const linkedIds = kpi ? [] : [...new Set(data.map((item) => String(item.linkedOrderId || "")).filter(validDocId))].slice(0, 500);
+    const linkedIds = kpi ? [] : [...new Set(data
+      .filter((item) => !item.linkedOrderSummary)
+      .map((item) => String(item.linkedOrderId || ""))
+      .filter(validDocId))].slice(0, 500);
     const linkedSnaps = linkedIds.length ? await db.getAll(...linkedIds.map((id) => db.collection("orders").doc(id))) : [];
     const linkedOrders = new Map(linkedSnaps.filter((linkedSnap) => linkedSnap.exists).map((linkedSnap) => {
       const linked = linkedSnap.data() || {};
-      return [linkedSnap.id, { id: linkedSnap.id, customerName: linked.customerName || "", zone: linked.zone || "", address: linked.address || "", deliveryMethod: linked.deliveryMethod || "" }];
+      return [linkedSnap.id, linkedOrderSummary(linkedSnap.id, linked)];
     }));
-    return Response.json({ ok: true, data: data.map((item) => linkedOrders.has(String(item.linkedOrderId || "")) ? { ...item, linkedOrder: linkedOrders.get(String(item.linkedOrderId)) } : item), requestedBy: profile.name || profile.email });
+    return Response.json({ ok: true, data: data.map((item) => {
+      const linkedOrder = item.linkedOrderSummary || linkedOrders.get(String(item.linkedOrderId || ""));
+      return linkedOrder ? { ...item, linkedOrder } : item;
+    }), requestedBy: profile.name || profile.email });
   } catch (error) {
     return errorResponse(error);
   }
@@ -201,6 +217,7 @@ export async function POST(request) {
             const orderSnap = await transaction.get(orderRef);
             if (orderSnap.exists) {
               item.linkedOrderId = orderSnap.id;
+              item.linkedOrderSummary = linkedOrderSummary(orderSnap.id, orderSnap.data() || {});
               item.registryShared = true;
               const linked = linkedOrderUpdates.get(orderSnap.id) || { ref: orderRef, order: orderSnap.data() || {}, items: [] };
               linked.items.push(item);

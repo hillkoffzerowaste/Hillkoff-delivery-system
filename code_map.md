@@ -660,7 +660,7 @@
 
 ## 7. Firestore — Collections, Rules, Indexes
 
-### 7.1 Collections (30 ตัว ที่โค้ดอ้างถึงจริง)
+### 7.1 Collections (31 ตัว ที่โค้ดอ้างถึงจริง)
 
 | กลุ่ม | Collection | เขียนโดย |
 | --- | --- | --- |
@@ -675,6 +675,7 @@
 | | `vehicle_usage_events`, `vehicle_odometer_audits` | `/api/vehicle-usage/submit`, `/api/vehicle-report/odometer` |
 | | `fuel_bills` | `/api/fuel-bills/submit` |
 | | `driver_daily_assessments`, `driver_weekly_assessments` | `/api/driver-assessments/submit` |
+| | `driver_delivery_sequences` | `/api/orders/resequence` |
 | | `driver_locations` | client (Rules: คนขับเขียนได้เฉพาะ doc ตัวเอง + ตรวจพิกัด) |
 | ต่างจังหวัด | `outstation_label_settings`, `outstation_recipient_addresses` | `/api/outstation-labels/*` |
 | | `outstation_label_jobs` (+ `items`, `events`) | `/api/outstation-labels/jobs` |
@@ -866,7 +867,6 @@ store_reports: type ASC,                 createdAt DESC
 | เปลี่ยนเพดานจำนวน read | `lib/firestoreReadPolicy.js` |
 | เพิ่ม action ของ Google Sheet | `google-apps-script/Code.gs` (`doPost`) + `lib/googleAppsScript.js` / `lib/deliverySheetSync.js` |
 | เปลี่ยนข้อความที่ลูกค้าเห็นตอน track | `app/api/public/track/route.js` (`serializeOrder`, `publicStatus`, `maskCustomerName`) |
-
 
 
 

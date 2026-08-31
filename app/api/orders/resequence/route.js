@@ -4,6 +4,29 @@ export const runtime = "nodejs";
 
 const MAX_ORDERS = 200;
 
+function serviceDateKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(value)
+    .reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function sequenceRef(db, driverId, serviceDate) {
+  const safeDriverId = String(driverId).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120);
+  return db.collection("driver_delivery_sequences").doc(`${serviceDate}_${safeDriverId}`);
+}
+
+export async function GET(request) {
+  try {
+    const { profile, db } = await requireProfile(request, ["driver"]);
+    const driverId = String(profile.driverId || "").trim();
+    const serviceDate = String(new URL(request.url).searchParams.get("serviceDate") || serviceDateKey()).slice(0, 10);
+    if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) return Response.json({ ok: false, error: "Invalid sequence request" }, { status: 400 });
+    const snap = await sequenceRef(db, driverId, serviceDate).get();
+    return Response.json({ ok: true, data: { serviceDate, orderIds: Array.isArray(snap.data()?.orderIds) ? snap.data().orderIds : [] } });
+  } catch (error) { return errorResponse(error); }
+}
+
 export async function POST(request) {
   try {
     const { profile, db } = await requireProfile(request, ["driver"]);
@@ -13,26 +36,15 @@ export async function POST(request) {
     if (!driverId || !ids.length || ids.length > MAX_ORDERS || ids.some((id) => !/^[A-Za-z0-9._-]{1,120}$/.test(String(id)))) {
       return Response.json({ ok: false, error: "Invalid order sequence" }, { status: 400 });
     }
-    const refs = ids.map((id) => db.collection("orders").doc(String(id)));
-    const snapshots = await db.getAll(...refs);
-    if (snapshots.some((snap) => !snap.exists || String(snap.data()?.driverId || "") !== driverId || String(snap.data()?.status || "") !== "กำลังส่ง")) {
-      return Response.json({ ok: false, error: "One or more orders are no longer assigned to you" }, { status: 409 });
-    }
     const now = new Date().toISOString();
-    const serviceDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" })
-      .formatToParts(new Date()).reduce((value, part) => ({ ...value, [part.type]: part.value }), {});
-    const serviceDateKey = `${serviceDate.year}-${serviceDate.month}-${serviceDate.day}`;
-    const batch = db.batch();
-    snapshots.forEach((snap, index) => {
-      batch.update(snap.ref, {
-        driverSequence: index + 1,
-        driverSequenceServiceDate: serviceDateKey,
-        driverSequenceUpdatedAt: now,
-        driverSequenceUpdatedBy: String(profile.name || driverId).slice(0, 200),
-        updatedAt: now
-      });
-    });
-    await batch.commit();
-    return Response.json({ ok: true, data: { orderIds: ids, updatedAt: now } });
+    const serviceDate = serviceDateKey();
+    await sequenceRef(db, driverId, serviceDate).set({
+      driverId,
+      serviceDate,
+      orderIds: ids,
+      updatedAt: now,
+      updatedBy: String(profile.name || driverId).slice(0, 200)
+    }, { merge: true });
+    return Response.json({ ok: true, data: { serviceDate, orderIds: ids, updatedAt: now } });
   } catch (error) { return errorResponse(error); }
 }

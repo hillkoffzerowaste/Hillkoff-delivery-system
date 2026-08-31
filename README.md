@@ -186,7 +186,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | งาน | `orders` (+ subcollection `activity`, `items`), `route_tasks`, `booking_month_registry` |
 | ลูกค้า | `customers`, `customer_search`, `delivery_reviews` |
 | ผู้ใช้ | `users`, `users_by_phone`, `login_events`, `login_rate_limits`, `otp_sessions`, `otp_rate_limits` |
-| รถ/คนขับ | `vehicle_master`, `vehicle_usage_events`, `vehicle_odometer_audits`, `fuel_bills`, `driver_daily_assessments`, `driver_weekly_assessments`, `driver_locations` |
+| รถ/คนขับ | `vehicle_master`, `vehicle_usage_events`, `vehicle_odometer_audits`, `fuel_bills`, `driver_daily_assessments`, `driver_weekly_assessments`, `driver_locations`, `driver_delivery_sequences` |
 | ต่างจังหวัด | `outstation_label_settings`, `outstation_recipient_addresses` |
 | รายงาน | `store_reports` (+ `history`), `events`, `activity` |
 | ระบบ | `app_settings`, `audit_logs`, `notifications`, `push_tokens`, `line_webhook_events`, `chat_messages`, `chat_meta` |

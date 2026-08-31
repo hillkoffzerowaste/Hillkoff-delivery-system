@@ -720,6 +720,7 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [driverId, setDriverId] = useState("D1");
   const [driverSequenceDragId, setDriverSequenceDragId] = useState("");
+  const [driverSequenceOrder, setDriverSequenceOrder] = useState([]);
   const [driverNoteDrafts, setDriverNoteDrafts] = useState({});
   const [driverDeliveryCompleteness, setDriverDeliveryCompleteness] = useState({});
   const [loginForm, setLoginForm] = useState({ role: "sales", name: "", phone: "", username: "", password: "" });
@@ -1582,6 +1583,21 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
+  useEffect(() => {
+    if (state.auth?.role !== "driver" || displayTab !== "driver") return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authenticatedApiFetch(`/api/orders/resequence?serviceDate=${encodeURIComponent(todayServiceDate)}`);
+        const json = await res.json();
+        if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        if (!cancelled) setDriverSequenceOrder(Array.isArray(json.data?.orderIds) ? json.data.orderIds : []);
+      } catch {
+        if (!cancelled) setDriverSequenceOrder([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authenticatedApiFetch, displayTab, state.auth?.role, todayServiceDate]);
   const hasInitialCustomers = (state.customers || []).length > 0;
 
   useEffect(() => {
@@ -2237,8 +2253,8 @@ export default function App() {
     }
   };
   const fetchStoreReportIssues = useCallback(async () => {
-    if (auth.role !== "store") return;
-    if (document.visibilityState !== "visible") return;
+    const isStoreReportView = isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab);
+    if (auth.role !== "store" || !isStoreReportView || document.visibilityState !== "visible") return;
     try {
       const res = await authenticatedApiFetch("/api/store/reports?alerts=true");
       const json = await res.json();
@@ -2250,13 +2266,14 @@ export default function App() {
     } catch (error) {
       setSyncStatus(`⚠️ โหลดรายการของไม่ครบไม่สำเร็จ: ${error?.message || error}`);
     }
-  }, [auth.role, authenticatedApiFetch]);
+  }, [auth.role, authenticatedApiFetch, displayTab, isStoreBookingEntryView]);
   useEffect(() => {
-    if (auth.role !== "store") return;
+    const isStoreReportView = isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab);
+    if (auth.role !== "store" || !isStoreReportView) return;
     fetchStoreReportIssues();
     const timer = window.setInterval(fetchStoreReportIssues, REPORT_REFRESH_INTERVALS.issues);
     return () => window.clearInterval(timer);
-  }, [auth.role, fetchStoreReportIssues]);
+  }, [auth.role, displayTab, fetchStoreReportIssues, isStoreBookingEntryView]);
   useEffect(() => {
     storeReportQueryRef.current = storeReportQuery;
   });
@@ -2566,9 +2583,15 @@ export default function App() {
     });
   const driverTodayCompletedOrders = driverTodayOrders.filter(order => order.status === "ส่งสำเร็จ");
   const driverCurrentDeliveryOrders = (orders || []).filter(order => isDriverDeliveryOrder(order, driverId) && order.status === "กำลังจัดส่ง");
+  const driverSequenceRank = new Map(driverSequenceOrder.map((orderId, index) => [String(orderId), index]));
   const driverReorderableOrders = (orders || []).filter(order => isDriverDeliveryOrder(order, driverId) && order.status === "กำลังส่ง")
     .slice()
     .sort((a, b) => {
+      const sequenceA = driverSequenceRank.get(String(a.id));
+      const sequenceB = driverSequenceRank.get(String(b.id));
+      if (sequenceA !== undefined && sequenceB !== undefined && sequenceA !== sequenceB) return sequenceA - sequenceB;
+      if (sequenceA !== undefined) return -1;
+      if (sequenceB !== undefined) return 1;
       const av = Number(a.driverSequence);
       const bv = Number(b.driverSequence);
       if (Number.isFinite(av) && Number.isFinite(bv) && av !== bv) return av - bv;
@@ -3196,19 +3219,9 @@ export default function App() {
   };
 
   const saveDriverSequence = async (nextOrders) => {
-    const previousOrders = state.orders || [];
-    const now = new Date().toISOString();
     const ids = nextOrders.map((order) => order.id);
-    setState((prev) => ({ ...prev, orders: prev.orders.map((order) => {
-      const index = ids.indexOf(order.id);
-      return index < 0 ? order : {
-        ...order,
-        driverSequence: index + 1,
-        driverSequenceServiceDate: todayServiceDate,
-        driverSequenceUpdatedAt: now,
-        driverSequenceUpdatedBy: state.auth?.name || driverId || "driver"
-      };
-    }) }));
+    const previousOrderIds = driverSequenceOrder;
+    setDriverSequenceOrder(ids);
     try {
       const res = await authenticatedApiFetch("/api/orders/resequence", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderIds: ids })
@@ -3217,7 +3230,7 @@ export default function App() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setSyncStatus("✅ บันทึกลำดับส่งของแล้ว");
     } catch (error) {
-      setState((prev) => ({ ...prev, orders: previousOrders }));
+      setDriverSequenceOrder(previousOrderIds);
       setSyncStatus(`❌ บันทึกลำดับส่งไม่สำเร็จ: ${error?.message || error}`);
     }
   };
@@ -3287,6 +3300,7 @@ export default function App() {
     try {
       const saved = await updatePreparationWorkflow(order, "driver_accept", { driverSequence: nextSequence });
       if (!saved.ok) throw new Error(saved.error);
+      setDriverSequenceOrder((ids) => [...ids.filter((id) => id !== order.id), order.id]);
       setSyncStatus(`✅ รับออเดอร์ "${order.id}" และเพิ่มท้ายลำดับส่งแล้ว`);
     } catch (error) {
       const rollback = Object.fromEntries(Object.keys(patch).map((key) => [key, order[key]]));
