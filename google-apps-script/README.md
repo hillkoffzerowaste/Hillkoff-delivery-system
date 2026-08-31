@@ -31,6 +31,14 @@ HILLKOFF_VEHICLE_USAGE_SPREADSHEET_ID
 
 The Next.js app posts JSON to the deployed Web App URL using `text/plain;charset=utf-8`.
 
+### `setupDeliveryWorkbook`
+
+Creates the daily delivery workbook once and stores its ID in Script Properties.
+
+### `upsertDailyDeliveryOrder`
+
+Creates or updates one delivery-order row in the date-specific delivery sheet.
+
 ### `upsertDailyMileage`
 
 Writes or updates one row in `Daily Usage`, keyed by:
@@ -90,6 +98,14 @@ Expected payload fields include:
 ### `appendUsageSegment`
 
 Reserved for syncing in-day usage segments if the app later sends them to Apps Script.
+
+### `replaceUsageSegments`
+
+Replaces a vehicle's usage segments only when the payload includes the explicit confirmation required by the script.
+
+### `createBackup`
+
+Creates the daily workbook backup through the authenticated POST path.
 
 ## Deployment
 

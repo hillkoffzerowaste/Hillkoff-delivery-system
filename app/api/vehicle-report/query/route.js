@@ -6,6 +6,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 export const runtime = "nodejs";
 const ROLES = ["sales", "admin", "accounting"];
 const MAX_RANGE_DAYS = 92;
+const MAX_QUERY_ROWS = 5000;
 const rows = (snap) => snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
 async function executeRead(db, spec) {
@@ -13,7 +14,11 @@ async function executeRead(db, spec) {
   query = spec.toExclusive
     ? query.where(spec.field, "<", spec.toExclusive)
     : query.where(spec.field, "<=", spec.to);
-  return rows(await query.limit(5000).get());
+  const snap = await query.limit(MAX_QUERY_ROWS + 1).get();
+  if (snap.size > MAX_QUERY_ROWS) {
+    throw Object.assign(new Error("Report query exceeded 5,000 rows; choose a shorter date range"), { status: 422 });
+  }
+  return rows(snap);
 }
 
 function uniqueRows(groups) {
@@ -25,7 +30,10 @@ function uniqueRows(groups) {
 export async function POST(request) {
   try {
     const { db } = await requireProfile(request, ROLES);
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    }
     const filters = {
       from: String(body.from || "").slice(0, 10),
       to: String(body.to || "").slice(0, 10)

@@ -795,7 +795,7 @@ store_reports: type ASC,                 createdAt DESC
 
 | ไฟล์ | สาระ |
 | --- | --- |
-| `package.json` | `type: module`, `engines.node: 22.x`; scripts `dev`/`build`/`start`, `lint` (`eslint . --max-warnings=0`), `test` (`vitest run tests/unit`), `test:rules` (emulator), `check` (lint→test→build), `customers:backfill-search`, `firebase:backfill-integrity`, `firebase:migrate-driver-logins`, `backup`/`backup:list`/`backup:restore`; deps `next 16.2.10`, `react 19.2.7`, `firebase 12.16.0`, `firebase-admin 13.6.0`, `nodemailer 9.0.3`, `qrcode`, `html5-qrcode`, `lucide-react`; `overrides` ตรึง `postcss 8.5.19` และ `uuid 11.1.1` ใน gaxios/google-gax/teeny-request |
+| `package.json` | `type: module`, `engines.node: 22.x`; scripts `dev`/`build`/`start`, `lint` (`eslint . --max-warnings=0`), `test` (`vitest run tests/unit`), `test:rules` (emulator), `check` (lint→test→build), `customers:backfill-search`, `firebase:backfill-integrity`, `firebase:migrate-driver-logins`, `backup`/`backup:list`/`backup:restore`; deps `next 16.3.3`, `react 19.2.7`, `firebase 12.16.0`, `firebase-admin 13.6.0`, `nodemailer 9.0.3`, `qrcode`, `html5-qrcode`, `lucide-react`; security overrides ตรึง `postcss 8.5.26`, `nanoid 3.3.18`, `websocket-driver 0.7.5` และ `uuid 11.1.1` ใน gaxios/google-gax/teeny-request |
 | `next.config.mjs` | `const nextConfig = {}` — ไม่มี config พิเศษ (React Compiler ไม่ได้เปิด) |
 | `jsconfig.json` | มีแค่ `baseUrl: "."` — **ไม่มี path alias** จึงใช้ relative import (`../../lib/...`) ทั้งโปรเจกต์ |
 | `eslint.config.mjs` | flat config spread `eslint-config-next/core-web-vitals`; สำหรับ `app/**/*.{js,jsx}` ปิด `@next/next/no-img-element` + `react-hooks/*` 5 ข้อ (`set-state-in-effect`, `immutability`, `preserve-manual-memoization`, `purity`, `refs`) — comment ระบุว่าโผล่มาหลังตัด hooks ใน `app/page.jsx`; `globalIgnores`: `.next`, `out`, `build`, `node_modules`, `repo`, `repo.worktrees`, `google-apps-script` |
@@ -829,7 +829,7 @@ store_reports: type ASC,                 createdAt DESC
 * `ClientScript.html` — ตรรกะฝั่ง browser เรียก `google.script.run`: `refreshDashboard` → `renderAll` → `renderKpis`, `renderOverviewCharts`/`createChart`/`chartOptions`/`horizontalBarConfig`, `buildPeriodAnalytics`/`buildVehicleAnalytics`/`buildDataQualityRows`, `renderAlerts(Table)`, `renderRankings`, `populateTableFilters`/`clearUsage|FuelFilters`, `renderUsage|FuelTable`, `renderReports`/`renderReportSummaryCards`, `renderSystemHealth`, `createBackupNow`, `exportCsv`/`exportSelectedCsv`/`buildCsvReport`, `copyLineSummary`
 * `Styles.html` — CSS ของ dashboard (แยกจาก `app/globals.css` ไม่เกี่ยวกัน)
 * `appsscript.json` — `timeZone Asia/Bangkok`, `runtimeVersion V8`, scopes `script.external_request`, `spreadsheets`, `drive`
-* `README.md` — runbook: paste `Code.gs` → รัน `doGet` เพื่อ authorize → Deploy > Web app (Execute as Me, Anyone with link) → ตั้ง `HILLKOFF_SYNC_SHARED_SECRET` → ตั้ง `GOOGLE_MILEAGE_WEB_APP_URL` + `GOOGLE_SHEETS_SHARED_SECRET` ใน Next.js; อธิบาย `upsertDailyMileage` (upsert key `serviceDate + vehicleId + driverId`), `appendFuelBill` (dedupe บน `id`), `appendUsageSegment`
+* `README.md` — runbook: paste `Code.gs` → รัน `doGet` เพื่อ authorize → deploy Web app → ตั้ง `HILLKOFF_SYNC_SHARED_SECRET` → ตั้ง `GOOGLE_MILEAGE_WEB_APP_URL` + `GOOGLE_SHEETS_SHARED_SECRET` ใน Next.js; อธิบาย action สำหรับ setup, delivery order, mileage, fuel, usage segments และ backup
 
 ---
 
@@ -842,7 +842,6 @@ store_reports: type ASC,                 createdAt DESC
 | 3 | `firestore.indexes.json` | 2 index ของ `orders` ใช้ `updated_at` (snake_case) ขณะที่อีก 2 ตัวใช้ `updatedAt` — สงสัยว่าเป็นของเหลือจากยุค Supabase, index ที่ผิดชื่อจะไม่ถูกใช้เลย |
 | 7 | `supabase-setup.sql` · `SUPABASE_SETUP.md` | เหลือจากยุค Supabase ไม่มีโค้ดอ้างถึงแล้ว |
 | 8 | `app/page.jsx` 7,469 บรรทัด | `useState` 158 ตัวในไฟล์เดียว และ `eslint.config.mjs` ต้องปิด `react-hooks/*` 5 ข้อเพื่อให้ lint ผ่าน — ตัวเลือกในการแตกไฟล์คือแยกตาม role workspace |
-| 10 | `google-apps-script/README.md` | ส่วน "Supported Actions" ตกหล่น action `setupDeliveryWorkbook`, `upsertDailyDeliveryOrder`, `replaceUsageSegments`, `createBackup` ที่ `Code.gs` รองรับอยู่ |
 
 ---
 
