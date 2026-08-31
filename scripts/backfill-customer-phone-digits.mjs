@@ -3,6 +3,7 @@ dotenv.config({ path: ".env.local" });
 import { getAdminDb } from "../lib/firebaseAdmin.js";
 import { customerSearchRecord } from "../lib/customerSearchIndex.js";
 
+const applyChanges = process.argv.includes("--apply");
 const db = getAdminDb();
 const [snap, customersSnap, indexSnap] = await Promise.all([db.collection("orders").get(), db.collection("customers").get(), db.collection("customer_search").get()]);
 let batch = db.batch();
@@ -10,8 +11,9 @@ let writes = 0;
 let phoneCount = 0;
 let indexCount = 0;
 async function enqueue(ref, data) {
-  batch.set(ref, data, { merge: true });
   writes += 1;
+  if (!applyChanges) return;
+  batch.set(ref, data, { merge: true });
   if (writes === 400) { await batch.commit(); batch = db.batch(); writes = 0; }
 }
 
@@ -65,5 +67,7 @@ for (const [customerId, customer] of currentIndex) {
   const next = customerSearchRecord(customer);
   if (!indexMatches(customer, next)) { await enqueue(db.collection("customer_search").doc(customerId), next); indexCount += 1; }
 }
-if (writes) await batch.commit();
-console.log(`Backfilled ${phoneCount} phone fields and ${indexCount} search records.`);
+if (applyChanges && writes) await batch.commit();
+console.log(`${applyChanges ? "Backfilled" : "Dry run found"} ${phoneCount} phone fields and ${indexCount} search records.`);
+if (!applyChanges) console.log("No data was written. Pass --apply after reviewing this result.");
+await db.terminate();

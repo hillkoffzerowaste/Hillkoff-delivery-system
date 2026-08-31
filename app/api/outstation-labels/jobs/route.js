@@ -1,4 +1,5 @@
 import { canReprintOutstationLabel, sanitizePrintJob, sanitizePrintStatusPatch } from "../../../../lib/outstationLabelStorage";
+import { OUTSTATION_LABELS_PER_PAGE } from "../../../../lib/outstationLabels";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
@@ -75,7 +76,7 @@ export async function POST(request) {
       const summary = {
         status: "creating",
         itemCount: job.items.length,
-        pageCount: Math.ceil(job.items.length / 5),
+        pageCount: Math.ceil(job.items.length / OUTSTATION_LABELS_PER_PAGE),
         orderCount: orderIds.length,
         orderIds,
         createdAt: now,

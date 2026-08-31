@@ -839,15 +839,9 @@ store_reports: type ASC,                 createdAt DESC
 
 | # | จุด | รายละเอียด |
 | --- | --- | --- |
-| 1 | `OutstationLabelPrintDialog.jsx` vs `OutstationLabelPreview.jsx` | dialog แสดง `pageCount: Math.ceil(items.length / 5)` แต่ preview แบ่งหน้าด้วย `OUTSTATION_LABELS_PER_PAGE = 4` → **จำนวนหน้าที่แสดงไม่ตรงกับที่พิมพ์จริง** |
-| 2 | `app/api/outstation-labels/jobs/route.js` | คำนวณ `pageCount = ceil(items/5)` เหมือนกัน — ควรใช้ค่าคงที่เดียวกับ `outstationLabels.js` |
 | 3 | `firestore.indexes.json` | 2 index ของ `orders` ใช้ `updated_at` (snake_case) ขณะที่อีก 2 ตัวใช้ `updatedAt` — สงสัยว่าเป็นของเหลือจากยุค Supabase, index ที่ผิดชื่อจะไม่ถูกใช้เลย |
-| 4 | `lib/utils/backupUtils.js` `generateReport()` | อ่าน `metadata.date`, `metadata.duration`, `metadata.tables` แต่ `createBackup` สร้าง `timestamp`, `durationMs`, `collections` → **ฟังก์ชันนี้ใช้งานไม่ได้จริง**; JSDoc ของ `verifyChecksum` ยังเขียนว่า MD5 (จริงคือ SHA-256) |
-| 5 | `deploy.bat` | `cd` ไปโฟลเดอร์ `repo` ที่ไม่มีอยู่ในโครงปัจจุบัน และ commit message hardcode ยังพูดถึง Supabase |
-| 6 | `app/api/auth/google/start/route.js` | `requireApprovedDriver()` เป็น dead path เพราะ driver ถูก block ก่อนถึงบรรทัดนั้นเสมอ |
 | 7 | `supabase-setup.sql` · `SUPABASE_SETUP.md` | เหลือจากยุค Supabase ไม่มีโค้ดอ้างถึงแล้ว |
 | 8 | `app/page.jsx` 7,469 บรรทัด | `useState` 158 ตัวในไฟล์เดียว และ `eslint.config.mjs` ต้องปิด `react-hooks/*` 5 ข้อเพื่อให้ lint ผ่าน — ตัวเลือกในการแตกไฟล์คือแยกตาม role workspace |
-| 9 | `scripts/backfill-customer-phone-digits.mjs` | ไม่มี dry-run mode — เขียนทันทีเมื่อรัน (ต่างจาก script อื่นที่ default เป็น dry-run) |
 | 10 | `google-apps-script/README.md` | ส่วน "Supported Actions" ตกหล่น action `setupDeliveryWorkbook`, `upsertDailyDeliveryOrder`, `replaceUsageSegments`, `createBackup` ที่ `Code.gs` รองรับอยู่ |
 
 ---
@@ -867,6 +861,3 @@ store_reports: type ASC,                 createdAt DESC
 | เปลี่ยนเพดานจำนวน read | `lib/firestoreReadPolicy.js` |
 | เพิ่ม action ของ Google Sheet | `google-apps-script/Code.gs` (`doPost`) + `lib/googleAppsScript.js` / `lib/deliverySheetSync.js` |
 | เปลี่ยนข้อความที่ลูกค้าเห็นตอน track | `app/api/public/track/route.js` (`serializeOrder`, `publicStatus`, `maskCustomerName`) |
-
-
-

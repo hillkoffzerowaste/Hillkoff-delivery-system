@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getDefaultTrackingCode, replaceOrderLabelItems, validateLabelDraft } from "../../lib/outstationLabels";
+import { getDefaultTrackingCode, OUTSTATION_LABELS_PER_PAGE, replaceOrderLabelItems, validateLabelDraft } from "../../lib/outstationLabels";
 import OutstationLabelPreview from "./OutstationLabelPreview";
 
 const CARRIERS = ["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"];
@@ -70,7 +70,7 @@ export default function OutstationLabelPrintDialog({ initialItems = [], initialJ
   const summary = useMemo(() => ({
     orderCount: new Set(items.map(item => item.orderId)).size,
     labelCount: items.length,
-    pageCount: Math.ceil(items.length / 5)
+    pageCount: Math.ceil(items.length / OUTSTATION_LABELS_PER_PAGE)
   }), [items]);
   const visibleRecipientHistory = recipientHistoryCustomerId === current?.customerId ? recipientHistory : [];
   const currentOrderBoxTotal = items.filter(item => item.orderId === current?.orderId).length;

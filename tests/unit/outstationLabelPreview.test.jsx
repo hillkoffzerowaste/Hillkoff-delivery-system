@@ -96,6 +96,14 @@ describe("outstation label preview", () => {
     expect(html).toContain("ดูตัวอย่างก่อนพิมพ์");
   });
 
+  it("uses the printable four-label page size in the dialog summary", () => {
+    const html = renderToStaticMarkup(
+      <OutstationLabelPrintDialog initialItems={Array.from({ length: 6 }, (_, index) => label(index + 1))} apiFetch={async () => new Response()} onClose={() => {}} />
+    );
+
+    expect(html).toContain("6 กล่อง · 2 หน้า A4");
+  });
+
   it("shows recipient names instead of order IDs in the label selector and omits sender line-count copy", () => {
     const item = { ...label(1, 1), orderId: "DO-260723-181353681-B91774B7", recipientName: "คุณฉันทนา แซ่หลี่" };
     const html = renderToStaticMarkup(

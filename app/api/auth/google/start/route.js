@@ -21,14 +21,6 @@ function isAllowed(role, email) {
   return false;
 }
 
-async function requireApprovedDriver(db, phoneDigits) {
-  const snap = await db.collection("users_by_phone").doc(phoneDigits).get();
-  const profile = snap.exists ? snap.data() || {} : null;
-  if (!profile || profile.role !== "driver" || profile.active === false || ["disabled", "rejected"].includes(profile.status)) {
-    throw httpError("DRIVER_NOT_APPROVED", 403);
-  }
-}
-
 async function reserveOtpRequest(db, uid) {
   const ref = db.collection("otp_rate_limits").doc(uid);
   const now = Date.now();
@@ -78,7 +70,6 @@ export async function POST(request) {
     if (!isAllowed(role, email)) return Response.json({ ok: false, error: "Email is not allowed for this role" }, { status: 403 });
 
     const db = getAdminDb();
-    if (role === "driver") await requireApprovedDriver(db, phoneDigits);
     await reserveOtpRequest(db, decoded.uid);
     const { code, session } = createOtpSessionPayload({
       uid: decoded.uid,
