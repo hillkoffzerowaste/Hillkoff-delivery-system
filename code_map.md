@@ -114,7 +114,7 @@
 ├── public/                           # PWA icons, manifest, FCM service worker
 ├── backups/snapshots/                # snapshot จาก CLI (git ignored)
 ├── firestore.rules                   # 183 บรรทัด
-├── firestore.indexes.json            # 6 composite indexes
+├── firestore.indexes.json            # 7 composite indexes
 └── firebase.json / .firebaserc       # config + emulator (port 8080)
 ```
 
@@ -705,15 +705,16 @@
 | `/users_by_phone/{phone}` | ปิด | ปิด |
 | `/{document=**}` | ปิด | ปิด (catch-all) |
 
-### 7.3 `firestore.indexes.json` — 6 composite indexes
+### 7.3 `firestore.indexes.json` — 7 composite indexes
 
 ```
 orders:        driverId ASC,             updatedAt DESC
-orders:        channel ASC,              updated_at DESC     ⚠️ snake_case
-orders:        status ASC,               updated_at DESC     ⚠️ snake_case
 orders:        customerPhoneDigits ASC,  updatedAt DESC
 route_tasks:   driverId ASC,             updatedAt DESC
+vehicle_usage_events: vehicleId ASC,     serviceDate DESC
 store_reports: type ASC,                 createdAt DESC
+store_reports: status ASC,               createdAt DESC
+store_reports: packStatus ASC,           createdAt DESC
 ```
 
 ---
@@ -733,9 +734,9 @@ store_reports: type ASC,                 createdAt DESC
 * **บทบาท:** ตรวจ/ย้ายบัญชีคนขับจาก PIN ไปเป็น username + password
 * **Flow:** อ่าน `drivers`, `users_by_phone`, `login_rate_limits` + collection ประวัติ (`orders`, `route_tasks`, `driver_assessments`, `vehicle_usage`, `fuel_bills`, `driver_locations`) เพื่อกู้ชื่อคนขับจริง (`historicalNames`); จัดกลุ่มเป็น `ready` / `missing_phone` / `missing_account` / `missing_password` แล้ว `console.table` (เบอร์แบบ mask); `--apply` → batch เขียน `users_by_phone/{phone}` + `drivers/{driverId}` + `users/{uid}` ตั้ง `loginMethod: "username_password"`, `authProvider: "password"`, copy `pinHash` → `passwordHash`, `FieldValue.delete()` ทิ้ง `pinHash`/`pinSalt`/`pinHashVersion`; `--clear-locks` ลบทุก doc ใน `login_rate_limits`
 
-#### 📄 `scripts/backfill-customer-phone-digits.mjs` — ⚠️ **เขียนทันที ไม่มี dry-run**
+#### 📄 `scripts/backfill-customer-phone-digits.mjs` — **dry-run เป็นค่าเริ่มต้น**
 * **บทบาท:** เติม `customerPhoneDigits` บนออเดอร์ และสร้าง index `customer_search` ใหม่
-* **Flow:** อ่าน `orders`, `customers`, `customer_search` ทั้งหมด; `enqueue()` สะสม merge-write และ auto-commit ทุก 400; ต่อออเดอร์: derive digits จาก `customerPhone` เขียนเมื่อยังไม่มี, เก็บลูกค้าเก่าเป็น `legacy-<docId>` ผ่าน `mergeLegacyCustomer`; index ลูกค้าจริง → ลูกค้า legacy → normalize doc index ที่ไร้เจ้าของ; `indexMatches`/`sameArray` ข้ามงานที่ไม่มีอะไรเปลี่ยน
+* **Flow:** อ่าน `orders`, `customers`, `customer_search` ทั้งหมด; ไม่มี `--apply` จะนับรายการและไม่เขียนข้อมูล, เมื่อยืนยัน `--apply` แล้ว `enqueue()` จึงสะสม merge-write และ auto-commit ทุก 400; ต่อออเดอร์: derive digits จาก `customerPhone` เขียนเมื่อยังไม่มี, เก็บลูกค้าเก่าเป็น `legacy-<docId>` ผ่าน `mergeLegacyCustomer`; index ลูกค้าจริง → ลูกค้า legacy → normalize doc index ที่ไร้เจ้าของ; `indexMatches`/`sameArray` ข้ามงานที่ไม่มีอะไรเปลี่ยน
 
 #### 📄 `scripts/audit-vehicle-report.mjs` — **read-only 100%**
 * **บทบาท:** dump ผลการรวมรายงานรถเพื่อตรวจคุณภาพข้อมูล
@@ -803,7 +804,7 @@ store_reports: type ASC,                 createdAt DESC
 | `.firebaserc` | default project `hillkoff-delivery` |
 | `.gitignore` | `.next`, `node_modules`, `.env.local`, `out`, `.vercel`, `next-dev*.log`, `firestore-debug.log`, `firebase-debug.log`, `ui-debug.log`, `backups/` |
 | `.env.example` | Firebase client 7 ตัว + `FIREBASE_SERVICE_ACCOUNT_JSON` · OTP/RBAC (`OTP_DEV_MODE`, `OTP_SECRET`, `ADMIN_EMAIL_ALLOWLIST`, `ACCOUNTING_EMAIL_ALLOWLIST`) · Apps Script (`GOOGLE_MILEAGE_WEB_APP_URL`, `GOOGLE_DAILY_DELIVERY_WEB_APP_URL`, `GOOGLE_SHEETS_WEB_APP_URL`, `GOOGLE_SHEETS_SHARED_SECRET`) · SMTP 6 ตัว · LINE 3 ตัว · Backup 3 ตัว |
-| `deploy.bat` | ⚠️ git push แบบ one-shot บน Windows — `cd` ไปโฟลเดอร์ `repo` (ไม่ใช่ root), commit message hardcode ที่ยังพูดถึง Supabase |
+| `deploy.bat` | git push แบบ one-shot บน Windows — ใช้โฟลเดอร์ของสคริปต์เป็น repo, บังคับรับ commit message และ push `HEAD:main` |
 | `git_status.js` | script ชั่วคราวใช้ `execSync` พิมพ์ `git log --oneline -10`, `git status --short`, `git diff --cached --stat` |
 
 ### 10.2 `public/`
@@ -839,7 +840,6 @@ store_reports: type ASC,                 createdAt DESC
 
 | # | จุด | รายละเอียด |
 | --- | --- | --- |
-| 3 | `firestore.indexes.json` | 2 index ของ `orders` ใช้ `updated_at` (snake_case) ขณะที่อีก 2 ตัวใช้ `updatedAt` — สงสัยว่าเป็นของเหลือจากยุค Supabase, index ที่ผิดชื่อจะไม่ถูกใช้เลย |
 | 7 | `supabase-setup.sql` · `SUPABASE_SETUP.md` | เหลือจากยุค Supabase ไม่มีโค้ดอ้างถึงแล้ว |
 | 8 | `app/page.jsx` 7,469 บรรทัด | `useState` 158 ตัวในไฟล์เดียว และ `eslint.config.mjs` ต้องปิด `react-hooks/*` 5 ข้อเพื่อให้ lint ผ่าน — ตัวเลือกในการแตกไฟล์คือแยกตาม role workspace |
 
