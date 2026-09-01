@@ -82,6 +82,16 @@ describe("driver new-order inbox stays out of the way", () => {
   });
 });
 
+describe("sales handoff for last night's checked orders", () => {
+  it("offers a controlled requeue only for checked, unassigned company-driver orders from yesterday", () => {
+    expect(pageSource).toContain("const previousDayCheckedDriverQueueOrders = (orders || [])");
+    expect(pageSource).toContain("&& order.packStatus === \"checked\"");
+    expect(pageSource).toContain("&& getOrderServiceDate(order) === previousServiceDate");
+    expect(pageSource).toContain("&& String(order.driverQueueDate || \"\") === previousServiceDate");
+    expect(pageSource).toContain("แพ็คครบเมื่อคืน—ส่งเข้าคิวคนขับวันนี้");
+  });
+});
+
 describe("driver delivery draft", () => {
   it("removes only the selected POD photo so the driver can retake a mistaken shot", () => {
     expect(removeDriverPodPhoto(
