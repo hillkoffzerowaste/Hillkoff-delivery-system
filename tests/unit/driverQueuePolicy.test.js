@@ -96,12 +96,16 @@ describe("isDriverQueueVisibleToDriver", () => {
     }, TODAY)).toBe(true);
   });
 
-  it("keeps legacy orders on their existing behavior", () => {
+  it("enforces the window for legacy queues with a known date and stays conservative without one", () => {
     expect(isDriverQueueVisibleToDriver(legacyYesterdayUnassigned, TODAY)).toBe(true);
     expect(isDriverQueueVisibleToDriver({
       ...version2ExpiredUnassigned,
       driverQueuePolicyVersion: undefined,
-    }, TODAY)).toBe(true);
+    }, TODAY)).toBe(false);
+    expect(isDriverQueueVisibleToDriver({
+      ...legacyYesterdayUnassigned,
+      serviceDate: THREE_DAYS_AGO,
+    }, TODAY)).toBe(false);
   });
 });
 
@@ -110,17 +114,22 @@ describe("driver queue window", () => {
     expect(DRIVER_QUEUE_ACTIVE_DAYS).toBe(3);
     expect(driverQueueVisibleUntil({ driverQueueDate: TODAY })).toBe("2026-07-31");
     expect(driverQueueVisibleUntil({ driverQueueDate: THREE_DAYS_AGO })).toBe("2026-07-28");
+    expect(driverQueueVisibleUntil({ serviceDate: THREE_DAYS_AGO })).toBe("2026-07-28");
     expect(driverQueueVisibleUntil({ driverQueueDate: "" })).toBe("");
   });
 });
 
 describe("isExpiredDriverQueueForSales", () => {
-  it("returns only version-2 unassigned queues older than the 3-day window", () => {
+  it("returns every dated unassigned queue older than the 3-day window", () => {
     expect(isExpiredDriverQueueForSales(version2ExpiredUnassigned, TODAY)).toBe(true);
     expect(isExpiredDriverQueueForSales(version2YesterdayUnassigned, TODAY)).toBe(false);
     expect(isExpiredDriverQueueForSales(version2TodayUnassigned, TODAY)).toBe(false);
     expect(isExpiredDriverQueueForSales({ ...version2YesterdayAssignedActive, driverQueueDate: THREE_DAYS_AGO }, TODAY)).toBe(false);
     expect(isExpiredDriverQueueForSales(legacyYesterdayUnassigned, TODAY)).toBe(false);
+    expect(isExpiredDriverQueueForSales({
+      ...legacyYesterdayUnassigned,
+      serviceDate: THREE_DAYS_AGO,
+    }, TODAY)).toBe(true);
   });
 });
 

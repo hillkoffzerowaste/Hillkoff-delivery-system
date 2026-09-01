@@ -2185,16 +2185,6 @@ export default function App() {
     .slice()
     .sort((a, b) => String(a.driverQueueDate || "").localeCompare(String(b.driverQueueDate || ""))
       || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-  const previousDayCheckedDriverQueueOrders = (orders || [])
-    .filter((order) => order.deliveryMethod === "company_driver"
-      && order.status === "รอคนขับรับ"
-      && order.queueStatus === "queued"
-      && !order.driverId
-      && order.packStatus === "checked"
-      && !order.reworkRequired
-      && getOrderServiceDate(order) === previousServiceDate
-      && String(order.driverQueueDate || "") === previousServiceDate)
-    .sort((a, b) => String(a.updatedAt || a.createdAt || "").localeCompare(String(b.updatedAt || b.createdAt || "")));
   const salesWaitingOrders = (orders || [])
     .filter(isSalesWaitingAlert)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
@@ -2626,7 +2616,6 @@ export default function App() {
   const driverInboxOrders = (orders || []).filter(order => order.status === "รอคนขับรับ"
     && order.queueStatus === "queued"
     && !order.driverId
-    && isTodayOrder(order)
     && isDriverQueueVisibleToDriver(order, todayServiceDate)
     && !isOrderUpdatePending(order.id));
   const driverInboxUrgentCount = driverInboxOrders.filter(order => order.workflowType === "direct_driver").length;
@@ -5571,12 +5560,6 @@ export default function App() {
                   <span className="status-chip"><b className="count-num">{expiredDriverQueueOrders.length}</b> งาน</span>
                 </button>
               )}
-              {previousDayCheckedDriverQueueOrders.length > 0 && (
-                <button type="button" className={activeSalesStatusPanel === "previous-day-queue" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "previous-day-queue" ? null : "previous-day-queue")}>
-                  <span>🔁 แพ็คครบเมื่อคืน</span>
-                  <span className="status-chip"><b className="count-num">{previousDayCheckedDriverQueueOrders.length}</b> งาน</span>
-                </button>
-              )}
               <button type="button" className={activeSalesStatusPanel === "waiting" ? "active" : ""} onClick={() => setActiveSalesStatusPanel(p => p === "waiting" ? null : "waiting")}>
                 <span>⏳ งานรอของ / ของไม่ครบ</span>
                 <span className="status-chip"><b className="count-num">{salesWaitingOrders.length}</b> งาน</span>
@@ -5643,40 +5626,6 @@ export default function App() {
                             ลบ
                           </button>
                         </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            )}
-            {activeSalesStatusPanel === "previous-day-queue" && previousDayCheckedDriverQueueOrders.length > 0 && (
-              <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-info)", background: "var(--c-info-bg)" }}>
-                <div className="panel-head"><h2>🔁 แพ็คครบเมื่อคืน—ส่งเข้าคิวคนขับวันนี้</h2><span>{previousDayCheckedDriverQueueOrders.length} งาน</span></div>
-                <p className="muted" style={{ marginTop: 0 }}>แสดงเฉพาะออเดอร์รถบริษัทที่ห้องแพ็คยืนยันครบเมื่อวาน ยังไม่มีคนขับรับงาน และไม่มีงานแก้ไขค้างอยู่</p>
-                <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>
-                  {previousDayCheckedDriverQueueOrders.map((order) => (
-                    <article key={order.id} style={{ background: "var(--c-surface)", border: "1px solid var(--c-info-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-5)", flexWrap: "wrap" }}>
-                        <div>
-                          <b>{order.id} · {order.customerName || "-"}</b>
-                          <div className="muted">วันที่งาน {getOrderServiceDate(order) || "-"} · ห้องแพ็คยืนยันแล้ว · คิวล่าสุด {order.driverQueueDate || "-"}</div>
-                        </div>
-                        <button
-                          className="primary"
-                          disabled={isOrderUpdatePending(order.id)}
-                          onClick={async () => {
-                            if (pendingOrderUpdatesRef.current.has(order.id)) return;
-                            markOrderUpdatePending(order.id);
-                            try {
-                              const result = await updatePreparationWorkflow(order, "queue");
-                              if (result.ok) setSyncStatus(`✅ ส่งออเดอร์ ${order.id} กลับเข้าคิวคนขับวันนี้แล้ว`);
-                            } finally {
-                              clearOrderUpdatePending(order.id);
-                            }
-                          }}
-                        >
-                          ส่งเข้าคิววันนี้
-                        </button>
                       </div>
                     </article>
                   ))}

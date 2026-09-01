@@ -62,8 +62,9 @@ describe("pending-order buttons reflect the in-flight save", () => {
 });
 
 describe("driver new-order inbox stays out of the way", () => {
-  it("shows only orders queued by sales for the current service date", () => {
-    expect(pageSource).toContain("&& isTodayOrder(order)\n    && isDriverQueueVisibleToDriver(order, todayServiceDate)");
+  it("keeps queued orders visible through the shared 3-day queue policy", () => {
+    expect(pageSource).toContain("&& isDriverQueueVisibleToDriver(order, todayServiceDate)");
+    expect(pageSource).not.toContain("&& isTodayOrder(order)\n    && isDriverQueueVisibleToDriver(order, todayServiceDate)");
   });
 
   it("collapses the inbox by default only when the driver already has jobs in hand", () => {
@@ -79,16 +80,6 @@ describe("driver new-order inbox stays out of the way", () => {
     expect(pageSource).toContain("มีออเดอร์ใหม่รอรับ ${driverInboxOrders.length} งาน");
     expect(pageSource).toContain("มีออเดอร์ใหม่รอรับ ${pending.length} งาน");
     expect(pageSource).toContain("ในนั้นเป็นงานเร่งด่วนส่งตรงคนขับ ${driverInboxUrgentCount} งาน");
-  });
-});
-
-describe("sales handoff for last night's checked orders", () => {
-  it("offers a controlled requeue only for checked, unassigned company-driver orders from yesterday", () => {
-    expect(pageSource).toContain("const previousDayCheckedDriverQueueOrders = (orders || [])");
-    expect(pageSource).toContain("&& order.packStatus === \"checked\"");
-    expect(pageSource).toContain("&& getOrderServiceDate(order) === previousServiceDate");
-    expect(pageSource).toContain("&& String(order.driverQueueDate || \"\") === previousServiceDate");
-    expect(pageSource).toContain("แพ็คครบเมื่อคืน—ส่งเข้าคิวคนขับวันนี้");
   });
 });
 
