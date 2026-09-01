@@ -62,6 +62,10 @@ describe("pending-order buttons reflect the in-flight save", () => {
 });
 
 describe("driver new-order inbox stays out of the way", () => {
+  it("shows only orders queued by sales for the current service date", () => {
+    expect(pageSource).toContain("&& isTodayOrder(order)\n    && isDriverQueueVisibleToDriver(order, todayServiceDate)");
+  });
+
   it("collapses the inbox by default only when the driver already has jobs in hand", () => {
     expect(pageSource).toContain("const driverInboxExpanded = driverInboxOpen ?? driverDeliveryOrders.length === 0;");
   });

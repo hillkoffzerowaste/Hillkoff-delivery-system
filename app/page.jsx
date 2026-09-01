@@ -2616,6 +2616,7 @@ export default function App() {
   const driverInboxOrders = (orders || []).filter(order => order.status === "รอคนขับรับ"
     && order.queueStatus === "queued"
     && !order.driverId
+    && isTodayOrder(order)
     && isDriverQueueVisibleToDriver(order, todayServiceDate)
     && !isOrderUpdatePending(order.id));
   const driverInboxUrgentCount = driverInboxOrders.filter(order => order.workflowType === "direct_driver").length;
