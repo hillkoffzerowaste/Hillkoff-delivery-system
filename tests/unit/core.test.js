@@ -15,6 +15,7 @@ import { BOOKING_NUMBER_PATTERN, bookingRegistryId, normalizeBookingNumber } fro
 import {
   MAX_RECENT_ORDERS_LIMIT,
   REPORT_REFRESH_INTERVALS,
+  needsRouteTasksRealtime,
   nextOrdersLimit,
   recentOrdersLimit
 } from "../../lib/firestoreReadPolicy.js";
@@ -325,6 +326,12 @@ describe("Firestore read policy", () => {
     expect(REPORT_REFRESH_INTERVALS.issues).toBe(900_000);
     expect(REPORT_REFRESH_INTERVALS.kpi).toBe(900_000);
     expect(REPORT_REFRESH_INTERVALS.reports).toBe(900_000);
+  });
+
+  it("keeps route task realtime active on the dedicated driver route tab", () => {
+    expect(needsRouteTasksRealtime("driver")).toBe(true);
+    expect(needsRouteTasksRealtime("driver-route")).toBe(true);
+    expect(needsRouteTasksRealtime("driver-sop")).toBe(false);
   });
 });
 

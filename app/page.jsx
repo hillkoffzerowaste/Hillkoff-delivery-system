@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
@@ -1178,7 +1178,7 @@ export default function App() {
 	  // เดียวกันไม่ต้องถอดแล้วต่อใหม่ (การต่อใหม่แต่ละครั้งคือการอ่านเอกสารทั้งชุดซ้ำ)
 	  const ordersSyncMode = getOrdersSyncMode(displayTab);
 	  const needsActiveOrders = needsActiveOrdersQuery(displayTab);
-	  const needsRouteTasksRealtime = ["sales", "dispatch", "driver", "reports"].includes(String(displayTab || ""));
+	  const shouldSyncRouteTasks = needsRouteTasksRealtime(displayTab);
 	  const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
 	  const needsDriverAssessments = ["settings", "sales"].includes(String(displayTab || ""));
 
@@ -1287,7 +1287,7 @@ export default function App() {
 	      }
 	    }
 
-	    if (needsRouteTasksRealtime) {
+	    if (shouldSyncRouteTasks) {
 	      try {
 	        const routeDriverId = state.auth?.driverId || driverId || "";
 	        if (state.auth?.role === "driver" && !routeDriverId) throw new Error("Missing driver identity");
@@ -1372,7 +1372,7 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, needsRouteTasksRealtime, needsDriverLocations, needsDriverAssessments, ordersLimit, todayServiceDate, isPageVisible]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, shouldSyncRouteTasks, needsDriverLocations, needsDriverAssessments, ordersLimit, todayServiceDate, isPageVisible]);
 
   // Chat has its own lifecycle so opening/closing it cannot restart the larger
   // orders and route listeners above.
