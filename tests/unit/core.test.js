@@ -322,9 +322,9 @@ describe("Firestore read policy", () => {
   });
 
   it("uses conservative visibility-aware report refresh intervals", () => {
-    expect(REPORT_REFRESH_INTERVALS.issues).toBe(300_000);
+    expect(REPORT_REFRESH_INTERVALS.issues).toBe(900_000);
     expect(REPORT_REFRESH_INTERVALS.kpi).toBe(900_000);
-    expect(REPORT_REFRESH_INTERVALS.reports).toBe(600_000);
+    expect(REPORT_REFRESH_INTERVALS.reports).toBe(900_000);
   });
 });
 

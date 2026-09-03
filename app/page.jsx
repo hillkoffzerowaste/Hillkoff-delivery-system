@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, INITIAL_CUSTOMER_RESULTS_LIMIT, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
@@ -926,7 +926,6 @@ export default function App() {
   const [reportRangeError, setReportRangeError] = useState("");
   const [resolvingComplaintId, setResolvingComplaintId] = useState("");
   const [ordersLimit, setOrdersLimit] = useState(100);
-  const customersLimit = INITIAL_CUSTOMER_RESULTS_LIMIT;
   const [driverLocationsLimit, setDriverLocationsLimit] = useState(20);
   const [chatLimit, setChatLimit] = useState(20);
   const [driverDailyChecks, setDriverDailyChecks] = useState({});
@@ -1210,25 +1209,6 @@ export default function App() {
 
     const needsOrdersRealtime = ordersSyncMode !== "none";
     const effectiveOrdersLimit = recentOrdersLimit(ordersLimit, state.auth?.role);
-	    const needsChat = Boolean(chatOpen);
-
-      if (needsChat) {
-        try {
-          unsubs.push(
-            fb.onSnapshot(
-              fb.doc(db, "chat_meta", "team"),
-              (snap) => {
-                setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null);
-                markConnected();
-              },
-              (err) => {
-                console.warn("Firestore chat status error", err);
-                setChatMeta(null);
-              }
-            )
-          );
-        } catch {}
-      }
 
 	    // Orders: keep realtime (core UX), but limit results.
 	    if (needsOrdersRealtime) {
@@ -1385,22 +1365,6 @@ export default function App() {
 	      })();
 	    }
 
-	    // Chat: realtime only while chat UI is open.
-	    if (needsChat) {
-	      try {
-	        const chatQ = fb.query(fb.collection(db, "chat_messages"), fb.orderBy("createdAt", "desc"), fb.limit(chatLimit));
-	        unsubs.push(
-	          fb.onSnapshot(chatQ, (snap) => {
-	            const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-	            setChatMessages(rows.reverse());
-	            markConnected();
-	          })
-	        );
-	      } catch {}
-
-	      setTypingUsers([]);
-	    }
-
 	    return () => {
 	      cancelled = true;
 	      unsubs.forEach((u) => {
@@ -1408,7 +1372,30 @@ export default function App() {
 	      });
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
-	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, needsRouteTasksRealtime, needsDriverLocations, needsDriverAssessments, chatOpen, ordersLimit, customersLimit, driverLocationsLimit, chatLimit, todayServiceDate, isPageVisible]);
+	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, needsRouteTasksRealtime, needsDriverLocations, needsDriverAssessments, ordersLimit, todayServiceDate, isPageVisible]);
+
+  // Chat has its own lifecycle so opening/closing it cannot restart the larger
+  // orders and route listeners above.
+  useEffect(() => {
+    if (typeof window === "undefined" || !chatOpen || !fbAuthReady || !state.auth?.token) return undefined;
+    if (shouldPauseFirestoreSync({ isVisible: isPageVisible, role: state.auth?.role })) return undefined;
+    const db = getFirestoreDb();
+    const unsubs = [];
+    try {
+      unsubs.push(fb.onSnapshot(
+        fb.doc(db, "chat_meta", "team"),
+        (snap) => setChatMeta(snap.exists() ? { id: snap.id, ...(snap.data() || {}) } : null),
+        (err) => { console.warn("Firestore chat status error", err); setChatMeta(null); }
+      ));
+      const chatQ = fb.query(fb.collection(db, "chat_messages"), fb.orderBy("createdAt", "desc"), fb.limit(chatLimit));
+      unsubs.push(fb.onSnapshot(chatQ, (snap) => {
+        const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+        setChatMessages(rows.reverse());
+      }));
+      setTypingUsers([]);
+    } catch {}
+    return () => unsubs.forEach((unsubscribe) => { try { unsubscribe(); } catch {} });
+  }, [chatOpen, chatLimit, fbAuthReady, state.auth?.token, state.auth?.role, isPageVisible]);
 
   // Driver location: record only on "check-in" events (no continuous tracking)
 
@@ -1598,27 +1585,6 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, [authenticatedApiFetch, displayTab, state.auth?.role, todayServiceDate]);
-  const hasInitialCustomers = (state.customers || []).length > 0;
-
-  useEffect(() => {
-    if (!isPageVisible || displayTab !== "sales" || !["sales", "admin"].includes(state.auth?.role)) return undefined;
-    if (hasInitialCustomers) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await authenticatedApiFetch(`/api/customers/search?all=true&limit=${customersLimit}`);
-        const json = await res.json();
-        if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-        if (cancelled) return;
-        const rows = Array.isArray(json.data) ? json.data : [];
-        setState((prev) => ({ ...prev, customers: rows }));
-      } catch (error) {
-        if (!cancelled) setSyncStatus(`⚠️ โหลดรายชื่อลูกค้าเริ่มต้นไม่สำเร็จ: ${error?.message || error}`);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [authenticatedApiFetch, customersLimit, displayTab, hasInitialCustomers, isPageVisible, state.auth?.role]);
-
   const fetchReportRangeOrders = useCallback(async () => {
     if (!["sales", "admin"].includes(state.auth?.role)) return;
     const today = toServiceDateKey(new Date());
