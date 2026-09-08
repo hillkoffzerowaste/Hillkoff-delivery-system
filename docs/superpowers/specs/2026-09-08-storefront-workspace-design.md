@@ -23,7 +23,7 @@ Provide a restricted storefront account for tracking Grab and customer-pickup or
 
 The existing Firebase-email staff account convention remains the credential store: `username@staff.hillkoff.local`. Admin account creation accepts `storefront` in the same role selector and writes the same active/status profile fields as the current store and pack accounts. Firebase Authentication continues to hash and manage passwords; password values are never returned from the API.
 
-`/api/auth/validate` and `requireProfile` recognize `storefront` as an active role. Firestore rules allow it to read only orders where `deliveryMethod` is `grab_pickup` or `customer_pickup`; all order updates remain denied to the client. The workspace subscribes with the same delivery-method restriction, so it does not request unrelated orders.
+`/api/auth/validate` and `requireProfile` recognize `storefront` as an active role. To avoid widening Firestore Rules for this new role, the workspace receives its data from a dedicated server route which verifies the role and returns only `grab_pickup` and `customer_pickup` records. All order updates remain denied to the client.
 
 ## Storefront workspace
 

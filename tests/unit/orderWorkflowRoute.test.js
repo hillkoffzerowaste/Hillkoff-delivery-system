@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ db: null }));
+const state = vi.hoisted(() => ({ db: null, role: "pack", name: "ผู้แพ็คหนึ่ง" }));
 
 vi.mock("../../lib/workflowAuth.js", () => ({
-  requireProfile: async () => ({ profile: { uid: "pack-1", role: "pack", name: "ผู้แพ็คหนึ่ง", email: "pack@hillkoff.com" }, db: state.db }),
+  requireProfile: async (_request, roles) => {
+    if (!roles.includes(state.role)) throw Object.assign(new Error("Forbidden"), { status: 403 });
+    return { profile: { uid: "staff-1", role: state.role, name: state.name, email: "staff@hillkoff.com" }, db: state.db };
+  },
   errorResponse: (error) => Response.json({ ok: false, error: error.message }, { status: error.status || 500 })
 }));
 vi.mock("../../lib/deliverySheetSync.js", () => ({ syncDeliveryOrderToSheet: vi.fn(async () => {}) }));
@@ -49,11 +52,25 @@ async function patchOrder(orderId, body) {
   }));
 }
 
+async function handOver(orderId) {
+  const { PATCH } = await import("../../app/api/orders/workflow/route.js");
+  return PATCH(new Request("http://localhost/api/orders/workflow", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer test" },
+    body: JSON.stringify({ orderId, action: "grab_pickup" })
+  }));
+}
+
 describe("pack confirmation driver queue workflow", () => {
   beforeEach(() => {
+    state.role = "pack";
+    state.name = "ผู้แพ็คหนึ่ง";
     state.db = createDb({
       DRIVER: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", status: "รอจัดเตรียมสินค้า", workflowHistory: [] },
-      ROUND: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", chiangmaiRoundCode: "tuesday", workflowHistory: [] }
+      ROUND: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", chiangmaiRoundCode: "tuesday", workflowHistory: [] },
+      READY_PICKUP: { deliveryMethod: "grab_pickup", packStatus: "checked", queueStatus: "grab_ready", status: "แพ็คเสร็จ · รอ Grab รับสินค้า", workflowHistory: [] },
+      PACK_WORKING: { deliveryMethod: "grab_pickup", packStatus: "working", queueStatus: "grab_ready", status: "กำลังแพ็ค", workflowHistory: [] },
+      DRIVER_PICKUP: { deliveryMethod: "company_driver", packStatus: "checked", queueStatus: "grab_ready", status: "ห้ามมอบ", workflowHistory: [] }
     });
   });
 
@@ -81,5 +98,29 @@ describe("pack confirmation driver queue workflow", () => {
       status: "รอคนขับรับ",
       driverQueuePolicyVersion: 2
     });
+  });
+
+  it("lets storefront staff hand over only a pack-ready pickup order", async () => {
+    state.role = "storefront";
+    state.name = "หน้าร้านหนึ่ง";
+
+    const response = await handOver("READY_PICKUP");
+
+    expect(response.status).toBe(200);
+    expect(state.db.orders.get("READY_PICKUP")).toMatchObject({
+      queueStatus: "grab_picked_up",
+      status: "Grab รับสินค้าแล้ว",
+      grabPickedUpBy: "หน้าร้านหนึ่ง"
+    });
+    expect(state.db.activity).toContainEqual(expect.objectContaining({ action: "grab_pickup", role: "storefront" }));
+  });
+
+  it.each(["PACK_WORKING", "DRIVER_PICKUP"])("rejects storefront handover when %s is not eligible", async (orderId) => {
+    state.role = "storefront";
+
+    const response = await handOver(orderId);
+
+    expect(response.status).toBe(409);
+    expect(state.db.orders.get(orderId).queueStatus).toBe("grab_ready");
   });
 });

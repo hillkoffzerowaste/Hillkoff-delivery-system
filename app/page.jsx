@@ -5,6 +5,7 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
+import { isStorefrontPickupReady, storefrontPickupTimeline } from "../lib/storefrontPickup";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
@@ -218,6 +219,7 @@ const TAB_TITLES = {
   "pack-booking": "ใบสั่งจอง · ห้องแพ็ค",
   "pack-online": "ออเดอร์ออนไลน์ · ห้องแพ็ค",
   "pack-dashboard": "รายงาน KPI ห้องแพ็ค",
+  "storefront-pickup": "ติดตาม Grab/รับหน้าร้าน",
   "driver-prep": "เช็คออเดอร์เชียงใหม่",
   driver: "แอปคนขับ",
   "driver-dashboard": "รายงาน KPI คนขับ",
@@ -981,6 +983,7 @@ export default function App() {
     ? (["driver-sop", "driver-vehicle", "driver-prep", "driver-dashboard", "driver-route"].includes(tab) ? tab : "driver")
     : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
     : state.auth?.role === "pack" ? (["pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
+    : state.auth?.role === "storefront" ? "storefront-pickup"
     : state.auth?.role === "accounting" ? "driver-sop-report"
     : (tab === "driver" ? "sales" : tab);
   const isStoreBookingEntryView = displayTab === "store-work" && storeWorkSubtab === "booking-entry";
@@ -1176,7 +1179,7 @@ export default function App() {
 
 	  // แท็บถูกแปลงเป็นความต้องการซิงก์ก่อนเข้า effect เพื่อให้การสลับแท็บที่ต้องการชุด listener
 	  // เดียวกันไม่ต้องถอดแล้วต่อใหม่ (การต่อใหม่แต่ละครั้งคือการอ่านเอกสารทั้งชุดซ้ำ)
-	  const ordersSyncMode = getOrdersSyncMode(displayTab);
+	  const ordersSyncMode = state.auth?.role === "storefront" ? "none" : getOrdersSyncMode(displayTab);
 	  const needsActiveOrders = needsActiveOrdersQuery(displayTab);
 	  const shouldSyncRouteTasks = needsRouteTasksRealtime(displayTab);
 	  const needsDriverLocations = ["sales", "dispatch"].includes(String(displayTab || ""));
@@ -1197,6 +1200,7 @@ export default function App() {
 	      setSyncStatus("⏸️ พักการซิงก์ชั่วคราวขณะไม่ได้เปิดหน้านี้");
 	      return;
 	    }
+	    if (state.auth?.role === "storefront") return;
 	    const db = getFirestoreDb();
 	    const unsubs = [];
 	    let cancelled = false;
@@ -1373,6 +1377,28 @@ export default function App() {
 	    };
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
 	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, shouldSyncRouteTasks, needsDriverLocations, needsDriverAssessments, ordersLimit, todayServiceDate, isPageVisible]);
+
+  useEffect(() => {
+    if (state.auth?.role !== "storefront" || !state.auth?.token) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const token = await refreshAuthToken(true);
+        const response = await fetch("/api/orders/storefront", { headers: { Authorization: `Bearer ${token}` } });
+        const json = await response.json();
+        if (!response.ok || !json?.ok) throw new Error(json?.error || `HTTP ${response.status}`);
+        if (!cancelled) {
+          setState((previous) => ({ ...previous, orders: Array.isArray(json.data) ? json.data : [] }));
+          setSyncStatus("🟢 อัปเดตสถานะหน้าร้านแล้ว");
+        }
+      } catch (error) {
+        if (!cancelled) setSyncStatus(`⚠️ โหลดสถานะหน้าร้านไม่สำเร็จ: ${error?.message || error}`);
+      }
+    };
+    load();
+    const timer = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [state.auth?.role, state.auth?.token]);
 
   // Chat has its own lifecycle so opening/closing it cannot restart the larger
   // orders and route listeners above.
@@ -2929,9 +2955,9 @@ export default function App() {
       const idToken = await cred.user.getIdToken(true);
       const res = await fetch("/api/auth/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
       const json = await res.json();
-      if (!json?.valid || !["store", "pack"].includes(json?.data?.role)) throw new Error(json?.error || "บัญชีไม่มีสิทธิ์สโตร์/ห้องแพ็ค");
+      if (!json?.valid || !["store", "pack", "storefront"].includes(json?.data?.role)) throw new Error(json?.error || "บัญชีไม่มีสิทธิ์พนักงานที่กำหนด");
       await applyLoginSession(json.data, idToken);
-      setTab(json.data.role === "store" ? "store-work" : "pack-work");
+      setTab(json.data.role === "store" ? "store-work" : json.data.role === "pack" ? "pack-work" : "storefront-pickup");
       setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
     } catch (e) { setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`); }
   };
@@ -5314,13 +5340,13 @@ export default function App() {
                 <button className={loginForm.role === "sales" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "sales" }))}>ฝ่ายขาย</button>
                 <button className={loginForm.role === "accounting" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "accounting" }))}>บัญชี</button>
                 <button className={loginForm.role === "driver" ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "driver" }))}>คนขับ</button>
-                <button className={["store", "pack"].includes(loginForm.role) ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "store" }))}>สโตร์/ห้องแพ็ค</button>
+                <button className={["store", "pack", "storefront"].includes(loginForm.role) ? "active" : ""} onClick={() => setLoginForm(p => ({ ...p, role: "store" }))}>พนักงานปฏิบัติการ</button>
               </div>
-              {["store", "pack"].includes(loginForm.role) ? (
+              {["store", "pack", "storefront"].includes(loginForm.role) ? (
                 <>
                   <input value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} placeholder="ชื่อผู้ใช้" autoComplete="username" />
                   <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="รหัสผ่าน" autoComplete="current-password" />
-                  <button className="primary wide" onClick={loginStaff}>เข้าสู่ระบบสโตร์/ห้องแพ็ค</button>
+                  <button className="primary wide" onClick={loginStaff}>เข้าสู่ระบบพนักงาน</button>
                   <p className="login-note">บัญชีและแผนกกำหนดโดย Admin เท่านั้น</p>
                 </>
               ) : (
@@ -5438,6 +5464,9 @@ export default function App() {
               <button type="button" className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => selectAppTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
             </>
           )}
+          {auth.role === "storefront" && (
+            <button type="button" className="active" onClick={() => selectAppTab("storefront-pickup")}><Store size={18} /> ติดตาม Grab/รับหน้าร้าน</button>
+          )}
            {["sales", "admin"].includes(auth.role) && (
              <>
                <button type="button" className={displayTab === "reports" ? "active" : ""} onClick={() => selectAppTab("reports")}><ClipboardList size={18} /> รายงานประจำวัน</button>
@@ -5454,7 +5483,7 @@ export default function App() {
             <h1>{TAB_TITLES[displayTab] || "ระบบจัดการงาน"}</h1>
           </div>
           <div className="top-actions">
-            <span className="google-status">{{ driver: "คนขับ", sales: "ฝ่ายขาย", admin: "Admin", store: "สโตร์", pack: "ห้องแพ็ค" }[auth.role] || auth.role}: {auth.name || auth.phone || auth.email}</span>
+            <span className="google-status">{{ driver: "คนขับ", sales: "ฝ่ายขาย", admin: "Admin", store: "สโตร์", pack: "ห้องแพ็ค", storefront: "หน้าร้าน" }[auth.role] || auth.role}: {auth.name || auth.phone || auth.email}</span>
             {["store-dashboard", "pack-dashboard"].includes(displayTab) && <span className="ops-realtime-status">{syncStatus}</span>}
             <button className="secondary" onClick={logout}>ออก</button>
           </div>
@@ -6400,6 +6429,31 @@ export default function App() {
           </section>
           </div>
         ); })()}
+
+        {displayTab === "storefront-pickup" && (
+          <section className="panel role-workspace ops-workspace">
+            <div className="panel-head"><h2><Store size={17} className="i-inline" aria-hidden="true" /> Grab / รับหน้าร้าน</h2><span>{orders.length} งาน</span></div>
+            <p className="muted" style={{ marginTop: 0 }}>ติดตามการตรวจจากสโตร์และห้องแพ็ค แล้วบันทึกการมอบสินค้าเมื่อพร้อมเท่านั้น</p>
+            <div style={{ display: "grid", gap: "var(--sp-5)" }}>
+              {orders.length === 0 ? <p className="muted">ไม่มีงาน Grab หรือรับหน้าร้านในขณะนี้</p> : orders.map((order) => {
+                const ready = isStorefrontPickupReady(order);
+                const pending = isOrderUpdatePending(order.id);
+                const handedOver = order.queueStatus === "grab_picked_up";
+                return <article key={order.id} className="role-order-card" style={{ display: "grid", gap: "var(--sp-4)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}>
+                    <div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div>
+                    <span className="status-chip">{handedOver ? "มอบสินค้าแล้ว" : ready ? "พร้อมมอบสินค้า" : "กำลังเตรียมสินค้า"}</span>
+                  </div>
+                  <div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div>
+                  <div style={{ display: "grid", gap: "var(--sp-2)", borderLeft: "3px solid var(--c-line-strong)", paddingLeft: "var(--sp-4)" }}>
+                    {storefrontPickupTimeline(order).map((step) => <div key={step.id} style={{ color: step.complete ? "var(--c-brand-dark)" : "var(--c-text-muted)", fontSize: "13px", fontWeight: step.complete ? 700 : 500 }}>{step.complete ? "✓" : "○"} {step.label}</div>)}
+                  </div>
+                  {handedOver ? <small className="muted">ยืนยันเมื่อ {formatThaiDateTime(order.grabPickedUpAt)} โดย {order.grabPickedUpBy || "-"}</small> : <button type="button" className="primary" disabled={!ready || pending} onClick={() => updatePreparationWorkflow(order, "grab_pickup")}>{pending ? "กำลังบันทึก..." : ready ? "ยืนยันมอบสินค้าแล้ว" : "รอห้องแพ็คตรวจเสร็จ"}</button>}
+                </article>;
+              })}
+            </div>
+          </section>
+        )}
 
         {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
@@ -7853,12 +7907,12 @@ export default function App() {
             {auth.role === "admin" && (
               <>
                 <section className="panel">
-                  <div className="panel-head"><h2><Users size={15} className="i-inline" aria-hidden="true" /> บัญชีสโตร์และห้องแพ็ค</h2><span>{staffAccounts.length} บัญชี</span></div>
+                  <div className="panel-head"><h2><Users size={15} className="i-inline" aria-hidden="true" /> บัญชีสโตร์ ห้องแพ็ค และหน้าร้าน</h2><span>{staffAccounts.length} บัญชี</span></div>
                   <div className="form-grid two">
                     <input value={staffAccountForm.username} onChange={e => setStaffAccountForm(p => ({ ...p, username: e.target.value }))} placeholder="Username เช่น store01" />
                     <input value={staffAccountForm.name} onChange={e => setStaffAccountForm(p => ({ ...p, name: e.target.value }))} placeholder="ชื่อพนักงาน" />
                     <input type="password" value={staffAccountForm.password} onChange={e => setStaffAccountForm(p => ({ ...p, password: e.target.value }))} placeholder="Password อย่างน้อย 8 ตัว" />
-                    <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option></select>
+                    <select value={staffAccountForm.role} onChange={e => setStaffAccountForm(p => ({ ...p, role: e.target.value }))}><option value="store">สโตร์</option><option value="pack">ห้องแพ็ค</option><option value="storefront">หน้าร้าน</option></select>
                   </div>
                   <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginTop: "var(--sp-5)" }}>
                     <button className="primary" onClick={createStaffAccount}>สร้างบัญชี</button>
@@ -7871,7 +7925,7 @@ export default function App() {
                       <div key={account.uid} className="score-row">
                         <div>
                           <b>{account.name || account.username}</b>
-                          <span> {account.role === "store" ? "สโตร์" : "ห้องแพ็ค"} · {account.active === false ? "ปิดใช้งาน" : "ใช้งานอยู่"}</span>
+                          <span> {account.role === "store" ? "สโตร์" : account.role === "pack" ? "ห้องแพ็ค" : "หน้าร้าน"} · {account.active === false ? "ปิดใช้งาน" : "ใช้งานอยู่"}</span>
                         </div>
                         <button type="button" className="secondary compact-btn" onClick={() => toggleStaffAccountActive(account)}>
                           {account.active === false ? "เปิดใช้งาน" : "ปิดใช้งาน"}
@@ -8053,7 +8107,7 @@ export default function App() {
       </section>
     </main>
 
-    <button
+    {auth.role !== "storefront" && <button
       className="primary"
       onClick={() => setChatOpen(true)}
       style={{
@@ -8098,9 +8152,9 @@ export default function App() {
           </span>
         )}
       </span>
-    </button>
+    </button>}
 
-    {chatOpen && (
+    {auth.role !== "storefront" && chatOpen && (
       <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay-soft)", zIndex: 1300, display: "grid", placeItems: "end center", padding: "var(--sp-7)" }}>
         <div style={{ width: "min(520px, 100%)", background: "white", borderRadius: "12px", boxShadow: "0 12px 30px var(--c-overlay-soft)", overflow: "hidden" }}>
           <div style={{ padding: "var(--sp-6) var(--sp-6)", borderBottom: "1px solid var(--c-line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--sp-5)" }}>

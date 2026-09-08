@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["admin"]);
-    const snap = await db.collection("users").where("role", "in", ["store", "pack"]).limit(200).get();
+    const snap = await db.collection("users").where("role", "in", ["store", "pack", "storefront"]).limit(200).get();
     return Response.json({ ok: true, data: snap.docs.map((doc) => ({ uid: doc.id, ...doc.data(), password: undefined })) });
   } catch (error) { return errorResponse(error); }
 }
@@ -21,7 +21,7 @@ export async function POST(request) {
     const name = String(body?.name || "").trim();
     if (!/^[a-z0-9._-]{3,32}$/.test(username)) return Response.json({ ok: false, error: "Invalid username" }, { status: 400 });
     if (password.length < 8) return Response.json({ ok: false, error: "Password must be at least 8 characters" }, { status: 400 });
-    if (!["store", "pack"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
+    if (!["store", "pack", "storefront"].includes(role)) return Response.json({ ok: false, error: "Invalid role" }, { status: 400 });
     const email = `${username}@staff.hillkoff.local`;
     const auth = getAdminAuth();
     let user;

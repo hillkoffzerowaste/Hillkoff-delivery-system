@@ -14,7 +14,7 @@ const PACK_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
 
 export async function PATCH(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["sales", "store", "pack", "driver", "admin"]);
+    const { profile, db } = await requireProfile(request, ["sales", "store", "pack", "storefront", "driver", "admin"]);
     const body = await request.json();
     const orderId = String(body?.orderId || "");
     const action = String(body?.action || "");
@@ -316,8 +316,8 @@ export async function PATCH(request) {
         patch.returnReason = String(body.returnReason || body.packWorkDetails?.note || "").trim().slice(0, 1000);
         Object.assign(history, { result: "returned", reason: patch.returnReason, storePackerName: order.storePackerName || "", storeCheckerName: order.storeCheckerName || "" });
       }
-    } else if (["sales", "admin"].includes(profile.role) && action === "grab_pickup") {
-      if (!["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) || order.queueStatus !== "grab_ready") {
+    } else if (["sales", "admin", "storefront"].includes(profile.role) && action === "grab_pickup") {
+      if (!["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) || order.queueStatus !== "grab_ready" || !["checked", "partial"].includes(order.packStatus)) {
         throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
       }
       patch.queueStatus = "grab_picked_up"; patch.status = order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับสินค้าแล้ว" : "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
