@@ -4405,7 +4405,7 @@ export default function App() {
     const results = await Promise.all(orderIds.map(async (orderId) => {
       const order = (state.orders || []).find((item) => String(item.id) === orderId);
       if (!order) return { orderId, ok: false, error: "ไม่พบออเดอร์" };
-      if (action !== "grab_pickup_legacy_close" && !isStorefrontPickupReady(order)) {
+      if (!["grab_pickup_legacy_close", "storefront_legacy_close"].includes(action) && !isStorefrontPickupReady(order)) {
         return { orderId, ok: false, error: "ยังไม่พร้อมมอบสินค้า" };
       }
       try {
