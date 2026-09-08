@@ -5,7 +5,7 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
-import { filterStorefrontOrders, isStorefrontPickupReady, storefrontPickupTimeline, storefrontSelectableOrderIds } from "../lib/storefrontPickup";
+import { filterStorefrontOrders, isStorefrontPickupReady, storefrontOrderDate, storefrontPickupTimeline, storefrontSelectableOrderIds } from "../lib/storefrontPickup";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
 import OutstationLabelPrintDialog from "./components/OutstationLabelPrintDialog";
@@ -4404,7 +4404,10 @@ export default function App() {
     setStorefrontBatchPending(true);
     const results = await Promise.all(orderIds.map(async (orderId) => {
       const order = (state.orders || []).find((item) => String(item.id) === orderId);
-      if (!order || !isStorefrontPickupReady(order)) return { orderId, ok: false, error: "ยังไม่พร้อมมอบสินค้า" };
+      if (!order) return { orderId, ok: false, error: "ไม่พบออเดอร์" };
+      if (action !== "grab_pickup_legacy_close" && !isStorefrontPickupReady(order)) {
+        return { orderId, ok: false, error: "ยังไม่พร้อมมอบสินค้า" };
+      }
       try {
         const result = await updatePreparationWorkflow(order, action);
         return { orderId, ok: result?.ok === true, error: result?.error };
@@ -6475,9 +6478,9 @@ export default function App() {
               <select aria-label="กรองสถานะหน้าร้าน" value={storefrontStatusFilter} onChange={(event) => setStorefrontStatusFilter(event.target.value)}><option value="all">ทุกสถานะ</option><option value="preparing">กำลังเตรียม</option><option value="ready">พร้อมมอบสินค้า</option><option value="handed_over">มอบสินค้าแล้ว</option></select>
               <div className="store-report-search"><Search size={17} /><input aria-label="ค้นหาออเดอร์หน้าร้าน" value={storefrontSearchDraft} onChange={(event) => setStorefrontSearchDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") setStorefrontSearch(storefrontSearchDraft); }} placeholder="เลขออเดอร์ / ใบสั่งจอง / ชื่อลูกค้า" /></div>
               <button className="secondary" onClick={() => setStorefrontSearch(storefrontSearchDraft)}>ค้นหา</button>
-              <button className={storefrontShowHistory ? "primary" : "secondary"} onClick={() => { setStorefrontShowHistory((current) => !current); setStorefrontSelectedIds([]); setStorefrontDateFilter(""); }}>{storefrontShowHistory ? "กลับออเดอร์วันนี้" : "ดูประวัติออเดอร์"}</button>
+              <button className={storefrontShowHistory ? "primary" : "secondary"} onClick={() => { setStorefrontShowHistory((current) => !current); setStorefrontSelectedIds([]); setStorefrontDateFilter(storefrontShowHistory ? "" : todayServiceDate); }}>{storefrontShowHistory ? "กลับออเดอร์วันนี้" : "ดูประวัติออเดอร์"}</button>
             </div>
-            <div className="store-report-actions" style={{ marginBottom: "var(--sp-5)" }}><span className="muted">เลือกได้เฉพาะรายการที่พร้อมมอบสินค้า</span><div>{!storefrontShowHistory && <button className="secondary" disabled={!selectableIds.length} onClick={() => setStorefrontSelectedIds(allSelected ? [] : selectableIds)}>{allSelected ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableIds.length})`}</button>}{storefrontShowHistory && <button className="secondary" disabled={!visibleOrders.some((order) => order.deliveryMethod === "grab_pickup" && order.queueStatus !== "grab_picked_up") || storefrontBatchPending} onClick={() => completeStorefrontSelected(visibleOrders.filter((order) => order.deliveryMethod === "grab_pickup" && order.queueStatus !== "grab_picked_up").map((order) => order.id), "grab_pickup_legacy_close")}>ปิด Grab ย้อนหลังทั้งหมด</button>}<button className="primary" disabled={!selectedVisibleIds.length || storefrontBatchPending || storefrontShowHistory} onClick={() => completeStorefrontSelected(selectedVisibleIds)}>{storefrontBatchPending ? "กำลังปิดงาน..." : `ปิดงานที่เลือก (${selectedVisibleIds.length})`}</button></div></div>
+            <div className="store-report-actions" style={{ marginBottom: "var(--sp-5)" }}><span className="muted">เลือกได้เฉพาะรายการที่พร้อมมอบสินค้า</span><div>{!storefrontShowHistory && <button className="secondary" disabled={!selectableIds.length} onClick={() => setStorefrontSelectedIds(allSelected ? [] : selectableIds)}>{allSelected ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableIds.length})`}</button>}{storefrontShowHistory && <button className="secondary" disabled={!orders.some((order) => order.deliveryMethod === "grab_pickup" && order.queueStatus !== "grab_picked_up" && storefrontOrderDate(order) < todayServiceDate) || storefrontBatchPending} onClick={() => completeStorefrontSelected(orders.filter((order) => order.deliveryMethod === "grab_pickup" && order.queueStatus !== "grab_picked_up" && storefrontOrderDate(order) < todayServiceDate).map((order) => order.id), "grab_pickup_legacy_close")}>ปิด Grab ย้อนหลังทั้งหมด</button>}<button className="primary" disabled={!selectedVisibleIds.length || storefrontBatchPending || storefrontShowHistory} onClick={() => completeStorefrontSelected(selectedVisibleIds)}>{storefrontBatchPending ? "กำลังปิดงาน..." : `ปิดงานที่เลือก (${selectedVisibleIds.length})`}</button></div></div>
             <div style={{ display: "grid", gap: "var(--sp-5)" }}>
               {visibleOrders.length === 0 ? <p className="muted">{storefrontShowHistory ? "ยังไม่พบออเดอร์ในประวัติที่ตรงกับตัวกรอง" : "ไม่มีออเดอร์วันนี้ในขณะนี้"}</p> : visibleOrders.map((order) => {
                 const ready = isStorefrontPickupReady(order);
