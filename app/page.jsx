@@ -4397,7 +4397,7 @@ export default function App() {
     await updatePreparationWorkflow(order, "sales_assign", { driverId: nextDriverId, driverName: driver?.name || "" });
   };
 
-  const completeStorefrontSelected = async (ids) => {
+  const completeStorefrontSelected = async (ids, action = "grab_pickup") => {
     const orderIds = [...new Set((ids || []).map(String).filter(Boolean))];
     if (!orderIds.length || storefrontBatchPending) return;
     if (!window.confirm(`ยืนยันปิดงาน ${orderIds.length} รายการที่เลือกหรือไม่`)) return;
@@ -4406,7 +4406,7 @@ export default function App() {
       const order = (state.orders || []).find((item) => String(item.id) === orderId);
       if (!order || !isStorefrontPickupReady(order)) return { orderId, ok: false, error: "ยังไม่พร้อมมอบสินค้า" };
       try {
-        const result = await updatePreparationWorkflow(order, "grab_pickup");
+        const result = await updatePreparationWorkflow(order, action);
         return { orderId, ok: result?.ok === true, error: result?.error };
       } catch (error) {
         return { orderId, ok: false, error: error?.message || "บันทึกไม่สำเร็จ" };
@@ -6477,7 +6477,7 @@ export default function App() {
               <button className="secondary" onClick={() => setStorefrontSearch(storefrontSearchDraft)}>ค้นหา</button>
               <button className={storefrontShowHistory ? "primary" : "secondary"} onClick={() => { setStorefrontShowHistory((current) => !current); setStorefrontSelectedIds([]); setStorefrontDateFilter(""); }}>{storefrontShowHistory ? "กลับออเดอร์วันนี้" : "ดูประวัติออเดอร์"}</button>
             </div>
-            {!storefrontShowHistory && <div className="store-report-actions" style={{ marginBottom: "var(--sp-5)" }}><span className="muted">เลือกได้เฉพาะรายการที่พร้อมมอบสินค้า</span><div><button className="secondary" disabled={!selectableIds.length} onClick={() => setStorefrontSelectedIds(allSelected ? [] : selectableIds)}>{allSelected ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableIds.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length || storefrontBatchPending} onClick={() => completeStorefrontSelected(selectedVisibleIds)}>{storefrontBatchPending ? "กำลังปิดงาน..." : `ปิดงานที่เลือก (${selectedVisibleIds.length})`}</button></div></div>}
+            <div className="store-report-actions" style={{ marginBottom: "var(--sp-5)" }}><span className="muted">เลือกได้เฉพาะรายการที่พร้อมมอบสินค้า</span><div>{!storefrontShowHistory && <button className="secondary" disabled={!selectableIds.length} onClick={() => setStorefrontSelectedIds(allSelected ? [] : selectableIds)}>{allSelected ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableIds.length})`}</button>}{storefrontShowHistory && <button className="secondary" disabled={!visibleOrders.some((order) => order.deliveryMethod === "grab_pickup" && order.queueStatus !== "grab_picked_up") || storefrontBatchPending} onClick={() => completeStorefrontSelected(visibleOrders.filter((order) => order.deliveryMethod === "grab_pickup" && order.queueStatus !== "grab_picked_up").map((order) => order.id), "grab_pickup_legacy_close")}>ปิด Grab ย้อนหลังทั้งหมด</button>}<button className="primary" disabled={!selectedVisibleIds.length || storefrontBatchPending || storefrontShowHistory} onClick={() => completeStorefrontSelected(selectedVisibleIds)}>{storefrontBatchPending ? "กำลังปิดงาน..." : `ปิดงานที่เลือก (${selectedVisibleIds.length})`}</button></div></div>
             <div style={{ display: "grid", gap: "var(--sp-5)" }}>
               {visibleOrders.length === 0 ? <p className="muted">{storefrontShowHistory ? "ยังไม่พบออเดอร์ในประวัติที่ตรงกับตัวกรอง" : "ไม่มีออเดอร์วันนี้ในขณะนี้"}</p> : visibleOrders.map((order) => {
                 const ready = isStorefrontPickupReady(order);
