@@ -316,13 +316,13 @@ export async function PATCH(request) {
         patch.returnReason = String(body.returnReason || body.packWorkDetails?.note || "").trim().slice(0, 1000);
         Object.assign(history, { result: "returned", reason: patch.returnReason, storePackerName: order.storePackerName || "", storeCheckerName: order.storeCheckerName || "" });
       }
-    } else if (["sales", "admin", "storefront"].includes(profile.role) && action === "grab_pickup_legacy_close") {
+    } else if (["sales", "admin", "storefront"].includes(profile.role) && ["grab_pickup_legacy_close", "storefront_legacy_close"].includes(action)) {
       const serviceDate = String(order.serviceDate || order.createdAt || "").slice(0, 10);
-      if (profile.role === "storefront" && (!serviceDate || serviceDate >= bangkokDateKey(now) || order.deliveryMethod !== "grab_pickup")) {
-        throw Object.assign(new Error("Legacy close is limited to historical Grab orders"), { status: 409 });
+      if (profile.role === "storefront" && (!serviceDate || serviceDate >= bangkokDateKey(now) || !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod))) {
+        throw Object.assign(new Error("Legacy close is limited to historical storefront pickup orders"), { status: 409 });
       }
       if (order.queueStatus === "grab_picked_up") throw Object.assign(new Error("Order already closed"), { status: 409 });
-      patch.queueStatus = "grab_picked_up"; patch.status = "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
+      patch.queueStatus = "grab_picked_up"; patch.status = order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับสินค้าแล้ว" : "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
       Object.assign(history, { result: "legacy_handover_closed", note: "ปิดงานย้อนหลังตามการยืนยันว่าจัดส่งสินค้าแล้ว" });
     } else if (["sales", "admin", "storefront"].includes(profile.role) && action === "grab_pickup") {
       if (!["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) || order.queueStatus !== "grab_ready" || !["checked", "partial"].includes(order.packStatus)) {
