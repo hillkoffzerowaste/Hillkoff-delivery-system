@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStorefrontPickupOrder, isStorefrontPickupReady, storefrontPickupTimeline, toStorefrontPickupOrder } from "../../lib/storefrontPickup.js";
+import { filterStorefrontOrders, isStorefrontPickupOrder, isStorefrontPickupReady, storefrontOrderStatus, storefrontPickupTimeline, storefrontSelectableOrderIds, toStorefrontPickupOrder } from "../../lib/storefrontPickup.js";
 
 describe("storefront pickup policy", () => {
   const readyGrab = {
@@ -43,5 +43,18 @@ describe("storefront pickup policy", () => {
       { id: "ready", label: "พร้อมให้ Grab รับสินค้า", complete: true },
       { id: "handover", label: "มอบสินค้าแล้ว · หน้าร้านหนึ่ง", complete: true }
     ]);
+  });
+
+  it("filters by day, status, search text, and keeps today out of history", () => {
+    const orders = [
+      { ...readyGrab, id: "TODAY", serviceDate: "2026-09-08" },
+      { ...readyGrab, id: "OLD", serviceDate: "2026-09-07", queueStatus: "grab_picked_up", grabPickedUpAt: "2026-09-07T10:00:00Z", customerName: "ร้านเก่า" }
+    ];
+    expect(storefrontOrderStatus(orders[0])).toBe("ready");
+    expect(storefrontOrderStatus(orders[1])).toBe("handed_over");
+    expect(filterStorefrontOrders(orders, { date: "2026-09-08", status: "ready" }).map((o) => o.id)).toEqual(["TODAY"]);
+    expect(filterStorefrontOrders(orders, { history: true, today: "2026-09-08" }).map((o) => o.id)).toEqual(["OLD"]);
+    expect(filterStorefrontOrders(orders, { query: "ร้านเก่า" }).map((o) => o.id)).toEqual(["OLD"]);
+    expect(storefrontSelectableOrderIds(orders)).toEqual(["TODAY"]);
   });
 });
