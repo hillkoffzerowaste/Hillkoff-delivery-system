@@ -2179,7 +2179,7 @@ export default function App() {
   const todayOrdersOnly = (orders || []).filter(isTodayOrder);
   const salesDispatchOrdersToday = (orders || []).filter((order) => isSalesDispatchActivityOnDate(order, todayServiceDate));
   const manualDeliveryOrders = salesDispatchOrdersToday.filter((order) => ["กำลังส่ง", "กำลังจัดส่ง"].includes(String(order.status || "")));
-  const salesPendingDriverQueueOrders = getDriverQueueOrdersForNotice(salesDispatchOrdersToday, todayServiceDate);
+  const salesPendingDriverQueueOrders = getDriverQueueOrdersForNotice(orders || [], todayServiceDate);
   const expiredDriverQueueOrders = (orders || [])
     .filter((order) => isExpiredDriverQueueForSales(order, todayServiceDate))
     .slice()
@@ -6171,9 +6171,10 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ใหม่ (วันนี้)</h2><div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}><span>รอคนขับรับ {salesPendingDriverQueueOrders.length}</span>{salesPendingDriverQueueOrders.length > 0 && <button type="button" className="primary" style={{ padding: "var(--sp-2) var(--sp-4)", fontSize: "12px" }} onClick={copyPendingDriverQueueToLine}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> คัดลอกแจ้งคนขับทั้งหมด</button>}</div></div>
+              <div className="panel-head"><h2><FileText size={15} className="i-inline" aria-hidden="true" /> ออเดอร์รอคนขับรับ (รวมคิวข้ามวัน)</h2><div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}><span>รอคนขับรับ {salesPendingDriverQueueOrders.length}</span>{salesPendingDriverQueueOrders.length > 0 && <button type="button" className="primary" style={{ padding: "var(--sp-2) var(--sp-4)", fontSize: "12px" }} onClick={copyPendingDriverQueueToLine}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> คัดลอกแจ้งคนขับทั้งหมด</button>}</div></div>
+              <p className="muted">รวมงานที่ยังไม่มีคนขับรับภายใน {DRIVER_QUEUE_ACTIVE_DAYS} วันนับรวมวันเข้าคิว งานข้ามวันที่ยังไม่หมดอายุไม่ต้องกดเข้าคิวใหม่</p>
               {salesPendingDriverQueueOrders.length === 0 ? (
-                <p className="muted">ไม่มีออเดอร์ใหม่</p>
+                <p className="muted">ไม่มีออเดอร์รอคนขับรับในคิวที่ยังไม่หมดอายุ</p>
               ) : (
                 <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>
                   {salesPendingDriverQueueOrders.map(order => (
