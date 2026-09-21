@@ -5400,7 +5400,7 @@ export default function App() {
                 </button>
               ))}
               {loginForm.role === "sales" && <p className="login-note">ฝ่ายขายเข้าสู่ระบบด้วย Google อีเมล @hillkoff.com เท่านั้น</p>}
-              {loginForm.role === "accounting" && <p className="login-note">ฝ่ายบัญชีใช้ Google อีเมล @hillkoff.com ที่ได้รับอนุมัติ และเข้าได้เฉพาะหน้ารายงานตรวจรถ</p>}
+              {loginForm.role === "accounting" && <p className="login-note">ฝ่ายบัญชีใช้ Google อีเมล @hillkoff.com และเข้าใช้หน้ารายงานตรวจรถ</p>}
               {loginForm.role === "driver" && <>
                 <input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" autoComplete="current-password" />
                 <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", cursor: "pointer", fontSize: "14px" }}>

@@ -2,12 +2,13 @@ import { listVehicles } from "../../../lib/vehicleRepository";
 import { errorResponse, requireProfile } from "../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
-const MANAGER_ROLES = ["sales", "admin", "accounting"];
+const MANAGER_ROLES = ["sales", "admin"];
+const READ_ROLES = ["driver", ...MANAGER_ROLES, "accounting"];
 const clean = (value, max = 200) => String(value || "").trim().slice(0, max);
 
 export async function GET(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["driver", ...MANAGER_ROLES]);
+    const { profile, db } = await requireProfile(request, READ_ROLES);
     const includeInactive = new URL(request.url).searchParams.get("includeInactive") === "true";
     if (includeInactive && !MANAGER_ROLES.includes(profile.role)) {
       return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });

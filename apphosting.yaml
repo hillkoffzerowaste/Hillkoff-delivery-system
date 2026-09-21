@@ -1,0 +1,98 @@
+# Firebase web configuration is public; server Firebase Admin uses the App Hosting runtime identity.
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyAVhzyoez3jTVt-4d9JatKjGv3bghP2Vyk"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "hillkoff-delivery.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "hillkoff-delivery"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "hillkoff-delivery.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "396283391154"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:396283391154:web:84b21fb80be6a21931adab"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    value: "G-BT0C9KX6PD"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    value: "BBuNtbpAi3yN2yPbqM-3E_cGWk9FzqNUruJyf_XkvHAhLnDdVbI4AHpAmrlmPKAGyYZruc0_WpNnasowuTClt2Q"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: OTP_DEV_MODE
+    value: "false"
+    availability:
+      - RUNTIME
+  - variable: OTP_SECRET
+    secret: OTP_SECRET
+    availability:
+      - RUNTIME
+  - variable: SMTP_HOST
+    secret: SMTP_HOST
+    availability:
+      - RUNTIME
+  - variable: SMTP_PORT
+    secret: SMTP_PORT
+    availability:
+      - RUNTIME
+  - variable: SMTP_SECURE
+    secret: SMTP_SECURE
+    availability:
+      - RUNTIME
+  - variable: SMTP_USER
+    secret: SMTP_USER
+    availability:
+      - RUNTIME
+  - variable: SMTP_PASS
+    secret: SMTP_PASS
+    availability:
+      - RUNTIME
+  - variable: SMTP_FROM
+    secret: SMTP_FROM
+    availability:
+      - RUNTIME
+  - variable: LINE_CHANNEL_SECRET
+    secret: LINE_CHANNEL_SECRET
+    availability:
+      - RUNTIME
+  - variable: LINE_CHANNEL_ACCESS_TOKEN
+    secret: LINE_CHANNEL_ACCESS_TOKEN
+    availability:
+      - RUNTIME
+  - variable: LINE_DEFAULT_TO
+    secret: LINE_DEFAULT_TO
+    availability:
+      - RUNTIME
+  - variable: GOOGLE_MILEAGE_WEB_APP_URL
+    secret: GOOGLE_MILEAGE_WEB_APP_URL
+    availability:
+      - RUNTIME
+  - variable: GOOGLE_DAILY_DELIVERY_WEB_APP_URL
+    secret: GOOGLE_DAILY_DELIVERY_WEB_APP_URL
+    availability:
+      - RUNTIME
+  - variable: GOOGLE_SHEETS_WEB_APP_URL
+    secret: GOOGLE_SHEETS_WEB_APP_URL
+    availability:
+      - RUNTIME

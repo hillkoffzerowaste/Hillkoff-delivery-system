@@ -1,7 +1,7 @@
 import { getAdminAuth, getAdminDb } from "../../../../../lib/firebaseAdmin";
 import { createOtpSessionPayload, normalizeEmail, normalizePhoneDigits } from "../../../../../lib/otp";
 import { sendOtpEmail } from "../../../../../lib/otpEmail";
-import { isAdminEmail, isApprovedAccountingEmail, isHillkoffEmail } from "../../../../../lib/workflowAuth";
+import { isAdminEmail, isAllowedAccountingEmail, isHillkoffEmail } from "../../../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ function httpError(message, status) {
 
 function isAllowed(role, email) {
   if (role === "sales") return isHillkoffEmail(email);
-  if (role === "accounting") return isApprovedAccountingEmail(email);
+  if (role === "accounting") return isAllowedAccountingEmail(email);
   if (role === "driver") return true;
   if (role === "admin") return isAdminEmail(email);
   return false;

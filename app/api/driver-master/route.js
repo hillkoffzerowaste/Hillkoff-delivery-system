@@ -1,7 +1,8 @@
 import { errorResponse, requireProfile } from "../../../lib/workflowAuth";
 
 export const runtime = "nodejs";
-const ROLES = ["sales", "admin", "accounting"];
+const READ_ROLES = ["sales", "admin", "accounting"];
+const WRITE_ROLES = ["sales", "admin"];
 const clean = (value, max = 200) => String(value || "").trim().slice(0, max);
 const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 15);
 
@@ -27,7 +28,7 @@ function publicDriverRecord(id, data = {}) {
 
 export async function GET(request) {
   try {
-    const { db } = await requireProfile(request, ROLES);
+    const { db } = await requireProfile(request, READ_ROLES);
     const snap = await db.collection("users_by_phone").where("role", "==", "driver").limit(500).get();
     return Response.json({ ok: true, data: snap.docs.map((doc) => publicDriverRecord(doc.id, doc.data() || {})) });
   } catch (error) { return errorResponse(error); }
@@ -35,7 +36,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { profile, db } = await requireProfile(request, ROLES);
+    const { profile, db } = await requireProfile(request, WRITE_ROLES);
     const body = await request.json();
     const phoneDigits = digits(body.phoneDigits || body.phone);
     if (phoneDigits.length < 9) return Response.json({ ok: false, error: "Invalid driver phone" }, { status: 400 });
@@ -68,7 +69,7 @@ export const PATCH = POST;
 
 export async function DELETE(request) {
   try {
-    const { profile, db } = await requireProfile(request, ROLES);
+    const { profile, db } = await requireProfile(request, WRITE_ROLES);
     const body = await request.json();
     const phoneDigits = digits(body.phoneDigits || body.id);
     if (phoneDigits.length < 9) return Response.json({ ok: false, error: "Invalid driver phone" }, { status: 400 });
