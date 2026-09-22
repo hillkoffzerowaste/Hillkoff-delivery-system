@@ -48,3 +48,28 @@ env:
     secret: OTP_SECRET
     availability:
       - RUNTIME
+
+  - variable: SMTP_HOST
+    value: "smtp.gmail.com"
+    availability:
+      - RUNTIME
+  - variable: SMTP_PORT
+    value: "465"
+    availability:
+      - RUNTIME
+  - variable: SMTP_SECURE
+    value: "true"
+    availability:
+      - RUNTIME
+  - variable: SMTP_USER
+    value: "online_marketing@hillkoff.com"
+    availability:
+      - RUNTIME
+  - variable: SMTP_FROM
+    value: "online_marketing@hillkoff.com"
+    availability:
+      - RUNTIME
+  - variable: SMTP_PASS
+    secret: SMTP_PASS
+    availability:
+      - RUNTIME
