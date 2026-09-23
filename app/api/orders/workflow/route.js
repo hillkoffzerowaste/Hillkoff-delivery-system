@@ -2,7 +2,7 @@ import { requireProfile, errorResponse } from "../../../../lib/workflowAuth";
 import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { ORDER_REGISTRY_SOURCE, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumberList, parseBookingNumberList } from "../../../../lib/bookingRegistry";
-import { buildReroutePatch, driverReworkPatch } from "../../../../lib/preparationWorkflow";
+import { buildReroutePatch, driverReworkPatch, isOutstationOrder } from "../../../../lib/preparationWorkflow";
 import { bangkokDateKey, resolveDeliveryVehicleSnapshot } from "../../../../lib/operationsReporting";
 import { buildDriverQueuePolicyPatch, refreshVersionedDriverQueuePatch } from "../../../../lib/driverQueuePolicy";
 import { isStoreBookingEntryOrder, normalizeStoreBookingEntryStatus, prepareBookingNumberUpdate } from "../../../../lib/storeBookingEntry";
@@ -256,7 +256,15 @@ export async function PATCH(request) {
       }
     } else if ((profile.role === "pack" || (["sales", "admin"].includes(profile.role) && order.deliveryMethod === "outstation")) && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
-      const storeReady = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
+      const packTookOverStoreCheck = profile.role === "pack"
+        && body.packFromStore === true
+        && order.workflowType === "store_route"
+        && order.deliveryMethod === "company_driver"
+        && !isOutstationOrder(order)
+        && ["pending", "working", "waiting", "returned"].includes(String(order.storeStatus || "pending"))
+        && !["queued", "completed", "pack_archived", "driver_archived"].includes(String(order.queueStatus || ""))
+        && !order.driverId;
+      const storeReady = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus) || packTookOverStoreCheck;
       if (!storeReady) throw Object.assign(new Error("ออเดอร์ยังไม่ได้รับการยืนยันจากสโตร์"), { status: 409 });
       if (["checked", "partial", "waiting"].includes(body.packStatus) && !String(body.packCheckerName || "").trim()) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบห้องแพ็ค"), { status: 400 });
@@ -273,6 +281,14 @@ export async function PATCH(request) {
         updatedAt: now
       };
       if (["checked", "partial"].includes(body.packStatus)) {
+        if (packTookOverStoreCheck) {
+          patch.storeStatus = body.packStatus === "partial" ? "partial" : "checked";
+          patch.storePackerName = patch.packPackerName;
+          patch.storeCheckerName = patch.packCheckerName;
+          patch.storeCheckTakenOverAt = now;
+          patch.storeCheckTakenOverBy = patch.packCheckerName;
+          Object.assign(history, { storeCheck: "taken_over_by_pack" });
+        }
         const autoQueueForDriver = body.packStatus === "checked"
           && order.deliveryMethod === "company_driver";
         if (autoQueueForDriver) {

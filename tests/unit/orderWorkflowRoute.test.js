@@ -68,6 +68,7 @@ describe("pack confirmation driver queue workflow", () => {
     state.db = createDb({
       DRIVER: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", status: "รอจัดเตรียมสินค้า", workflowHistory: [] },
       ROUND: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", chiangmaiRoundCode: "tuesday", workflowHistory: [] },
+      STORE_PENDING: { deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "working", packStatus: "blocked", queueStatus: "preparing", status: "กำลังตรวจสินค้า", workflowHistory: [] },
       READY_PICKUP: { deliveryMethod: "grab_pickup", packStatus: "checked", queueStatus: "grab_ready", status: "แพ็คเสร็จ · รอ Grab รับสินค้า", workflowHistory: [] },
       PACK_WORKING: { deliveryMethod: "grab_pickup", packStatus: "working", queueStatus: "grab_ready", status: "กำลังแพ็ค", workflowHistory: [] },
       DRIVER_PICKUP: { deliveryMethod: "company_driver", packStatus: "checked", queueStatus: "grab_ready", status: "ห้ามมอบ", workflowHistory: [] }
@@ -98,6 +99,28 @@ describe("pack confirmation driver queue workflow", () => {
       status: "รอคนขับรับ",
       driverQueuePolicyVersion: 2
     });
+  });
+
+  it("lets Pack take over an unfinished Store check and queue the order after confirming it", async () => {
+    const response = await patchOrder("STORE_PENDING", { packStatus: "checked", packCheckerName: "ผู้แพ็คหนึ่ง", packFromStore: true });
+
+    expect(response.status).toBe(200);
+    expect(state.db.orders.get("STORE_PENDING")).toMatchObject({
+      storeStatus: "checked",
+      storeCheckerName: "ผู้แพ็คหนึ่ง",
+      storeCheckTakenOverBy: "ผู้แพ็คหนึ่ง",
+      packStatus: "checked",
+      queueStatus: "queued",
+      status: "รอคนขับรับ"
+    });
+    expect(state.db.activity).toContainEqual(expect.objectContaining({ action: "pack_update", storeCheck: "taken_over_by_pack" }));
+  });
+
+  it("keeps the Store gate when Pack does not explicitly take over the check", async () => {
+    const response = await patchOrder("STORE_PENDING", { packStatus: "checked", packCheckerName: "ผู้แพ็คหนึ่ง" });
+
+    expect(response.status).toBe(409);
+    expect(state.db.orders.get("STORE_PENDING").packStatus).toBe("blocked");
   });
 
   it("lets storefront staff hand over only a pack-ready pickup order", async () => {

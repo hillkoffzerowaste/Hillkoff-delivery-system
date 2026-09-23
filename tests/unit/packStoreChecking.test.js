@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPackStoreCheckingOrders, isStoreCheckingForPack } from "../../lib/packStoreChecking";
+import { canPackTakeOverStoreCheck, getPackStoreCheckingOrders, isStoreCheckingForPack } from "../../lib/packStoreChecking";
 
 const storeOrder = (overrides = {}) => ({
   deliveryMethod: "company_driver",
@@ -19,6 +19,12 @@ describe("Pack Store-checking strip", () => {
     expect(isStoreCheckingForPack(storeOrder({ workflowType: "direct_pack" }))).toBe(false);
     expect(isStoreCheckingForPack(storeOrder({ deliveryMethod: "outstation" }))).toBe(false);
     expect(isStoreCheckingForPack(storeOrder({ queueStatus: "queued" }))).toBe(false);
+  });
+
+  it("allows Pack to take over an unfinished Store check without a driver assignment", () => {
+    expect(canPackTakeOverStoreCheck(storeOrder())).toBe(true);
+    expect(canPackTakeOverStoreCheck(storeOrder({ driverId: "driver-1" }))).toBe(false);
+    expect(canPackTakeOverStoreCheck(storeOrder({ packStatus: "checked" }))).toBe(false);
   });
 
   it("puts active Store work ahead of jobs waiting to start", () => {
