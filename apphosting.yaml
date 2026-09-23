@@ -1,0 +1,75 @@
+# Firebase web configuration is public; server Firebase Admin uses the App Hosting runtime identity.
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyAVhzyoez3jTVt-4d9JatKjGv3bghP2Vyk"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "hillkoff-delivery.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "hillkoff-delivery"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "hillkoff-delivery.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "396283391154"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:396283391154:web:84b21fb80be6a21931adab"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    value: "G-BT0C9KX6PD"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    value: "BBuNtbpAi3yN2yPbqM-3E_cGWk9FzqNUruJyf_XkvHAhLnDdVbI4AHpAmrlmPKAGyYZruc0_WpNnasowuTClt2Q"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: OTP_DEV_MODE
+    value: "false"
+    availability:
+      - RUNTIME
+  - variable: OTP_SECRET
+    secret: OTP_SECRET
+    availability:
+      - RUNTIME
+
+  - variable: SMTP_HOST
+    value: "smtp.gmail.com"
+    availability:
+      - RUNTIME
+  - variable: SMTP_PORT
+    value: "465"
+    availability:
+      - RUNTIME
+  - variable: SMTP_SECURE
+    value: "true"
+    availability:
+      - RUNTIME
+  - variable: SMTP_USER
+    value: "online_marketing@hillkoff.com"
+    availability:
+      - RUNTIME
+  - variable: SMTP_FROM
+    value: "online_marketing@hillkoff.com"
+    availability:
+      - RUNTIME
+  - variable: SMTP_PASS
+    secret: SMTP_PASS
+    availability:
+      - RUNTIME

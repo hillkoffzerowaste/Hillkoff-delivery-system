@@ -11,5 +11,22 @@
       "enabled": false
     },
     "singleProjectMode": true
-  }
+  },
+  "apphosting": [
+    {
+      "backendId": "delivery-system",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        ".vercel",
+        "outputs",
+        "functions",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        ".env*"
+      ]
+    }
+  ]
 }
