@@ -2032,7 +2032,7 @@ export default function App() {
   const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const packStoreCheckingOrders = getPackStoreCheckingOrders(orders || []);
-  const packDriverQueueOrders = getPackDriverQueueOrders(orders || []);
+  const packDriverQueueOrders = getPackDriverQueueOrders(orders || [], todayServiceDate);
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
   const packReworkOrders = (orders || []).filter(order => order.reworkRequired === true && !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod));
   const packBlockedReworkOrders = packReworkOrders.filter(order => order.packStatus === "blocked");
