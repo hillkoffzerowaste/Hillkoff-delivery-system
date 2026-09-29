@@ -3704,14 +3704,14 @@ export default function App() {
   const reportHistoryLabel = (event) => ({ created: "สโตร์สร้างรายการ", created_draft: "สโตร์บันทึกร่าง", confirmed: "สโตร์ยืนยันรายการ", updated: "สโตร์แก้ไขรายการ", pack_checked: "ห้องแพ็คตรวจครบ", pack_partial: "ห้องแพ็คตรวจพบของไม่ครบ", pack_returned: "ห้องแพ็คส่งกลับสโตร์", store_resubmitted: "สโตร์แก้ไขและส่งตรวจใหม่", deleted: "ลบรายการ" }[event] || event || "อัปเดตรายการ");
 
   const loadCheckerLists = useCallback(async () => {
-    if (!["store", "pack", "admin"].includes(auth.role)) return;
+    if (!fbAuthReady || !["store", "pack", "admin"].includes(auth.role)) return;
     try {
       const idToken = await refreshAuthToken();
       const res = await fetch("/api/preparation/checkers", { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
       if (res.ok && json?.ok) setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
     } catch {}
-  }, [auth.role, refreshAuthToken]);
+  }, [auth.role, fbAuthReady, refreshAuthToken]);
 
   const saveCheckerList = async (role, names) => {
     const clean = [...new Set(names.map(name => String(name || "").trim()).filter(Boolean))];
