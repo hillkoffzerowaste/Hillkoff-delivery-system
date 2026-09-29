@@ -10,6 +10,7 @@ import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingMonthKey, bookin
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
 import { canPackAssistShareBooking, isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
+import { isValidServiceDate } from "../../../../lib/serviceDate";
 
 export const runtime = "nodejs";
 
@@ -19,12 +20,6 @@ function normalizePhoneDigits(raw) {
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
-}
-
-function validDateKey(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function safeHttpUrl(value) {
@@ -114,7 +109,7 @@ export async function POST(request) {
     const now = new Date().toISOString();
     const requestedServiceDate = clean(order.serviceDate, 10);
     const serviceDate = requestedServiceDate || toServiceDateKey(now);
-    if (!validDateKey(serviceDate)) return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
+    if (!isValidServiceDate(serviceDate)) return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
     const requestedBookingMonth = clean(order.bookingMonthKey, 7);
     const bookingMonth = requestedBookingMonth || bookingMonthKey(serviceDate);
     if (!bookingMonthKey(bookingMonth)) return Response.json({ ok: false, error: "Invalid booking month" }, { status: 400 });

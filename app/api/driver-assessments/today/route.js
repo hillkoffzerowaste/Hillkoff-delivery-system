@@ -1,5 +1,6 @@
 import { HILLKOFF_VEHICLES } from "../../../../lib/vehicleMaster";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
+import { isValidServiceDate } from "../../../../lib/serviceDate";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ export async function POST(request) {
   }
 
   const serviceDate = String(payload?.serviceDate || toServiceDateKey(new Date()));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
+  if (!isValidServiceDate(serviceDate)) {
     return Response.json({ ok: false, error: "Invalid serviceDate" }, { status: 400 });
   }
 
