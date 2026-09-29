@@ -79,6 +79,7 @@ describe("Chiang Mai sales rounds", () => {
     expect(resolveNextRoundDate("2026-07-26", "tuesday")).toBe("2026-07-28");
     expect(resolveNextRoundDate("2026-07-26", "wednesday")).toBe("2026-07-29");
     expect(resolveNextRoundDate("2026-07-26", "friday")).toBe("2026-07-31");
+    expect(() => resolveNextRoundDate("2026-02-29", "tuesday")).toThrow("Invalid created date");
   });
 
   it("accepts only one valid round for an active Chiang Mai company-driver order", () => {

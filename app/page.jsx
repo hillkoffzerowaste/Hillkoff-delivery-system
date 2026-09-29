@@ -891,6 +891,7 @@ export default function App() {
   const [workSubmitError, setWorkSubmitError] = useState("");
   const [storeWorkSubtab, setStoreWorkSubtab] = useState("orders");
   const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
+  const checkerListsLoadedTokenRef = useRef("");
   const [newCheckerName, setNewCheckerName] = useState("");
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
@@ -1153,9 +1154,16 @@ export default function App() {
       let unsubAuth = null;
       let unsubToken = null;
       try {
-	      unsubAuth = onFirebaseAuthStateChanged(() => {
+	      unsubAuth = onFirebaseAuthStateChanged((user) => {
 	        clearTimeout(t);
 	        setFbAuthReady(true);
+	        if (!user) {
+	          try { localStorage.removeItem("hillkoff_auth"); } catch {}
+	          setState((prev) => ({
+	            ...prev,
+            auth: { role: "", name: "", phone: "", driverId: "", email: "", token: "" }
+	          }));
+	        }
 	      });
 	      unsubToken = onFirebaseIdTokenChanged(async (user) => {
 	        clearTimeout(t);
@@ -3705,13 +3713,18 @@ export default function App() {
 
   const loadCheckerLists = useCallback(async () => {
     if (!fbAuthReady || !["store", "pack", "admin"].includes(auth.role)) return;
+    if (!auth.token) return;
     try {
-      const idToken = await refreshAuthToken();
+      const idToken = await refreshAuthToken(false);
       const res = await fetch("/api/preparation/checkers", { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
-      if (res.ok && json?.ok) setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
-    } catch {}
-  }, [auth.role, fbAuthReady, refreshAuthToken]);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      checkerListsLoadedTokenRef.current = idToken;
+      setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
+    } catch (error) {
+      setSyncStatus(`⚠️ โหลดรายชื่อผู้ตรวจไม่สำเร็จ: ${error?.message || error}`);
+    }
+  }, [auth.role, auth.token, fbAuthReady, refreshAuthToken]);
 
   const saveCheckerList = async (role, names) => {
     const clean = [...new Set(names.map(name => String(name || "").trim()).filter(Boolean))];
@@ -3729,7 +3742,10 @@ export default function App() {
     }
   };
 
-  useEffect(() => { loadCheckerLists(); }, [loadCheckerLists]);
+  useEffect(() => {
+    if (!auth.token || checkerListsLoadedTokenRef.current === auth.token) return;
+    loadCheckerLists();
+  }, [auth.role, auth.token, fbAuthReady, loadCheckerLists]);
 
   useEffect(() => {
     if (displayTab !== "settings" || auth.role !== "admin") return;

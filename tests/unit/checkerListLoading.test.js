@@ -9,6 +9,12 @@ const loaderSource = pageSource.slice(loaderStart, loaderEnd);
 describe("preparation checker list loading", () => {
   it("waits for Firebase Auth before loading Firestore-backed names and retries when auth becomes ready", () => {
     expect(loaderSource).toContain("if (!fbAuthReady || ![\"store\", \"pack\", \"admin\"].includes(auth.role)) return;");
-    expect(loaderSource).toContain("[auth.role, fbAuthReady, refreshAuthToken]");
+    expect(loaderSource).toContain("[auth.role, auth.token, fbAuthReady, refreshAuthToken]");
+  });
+
+  it("reloads after a restored Firebase token becomes available instead of keeping the default list", () => {
+    expect(loaderSource).toContain("auth.token");
+    expect(loaderSource).toContain("refreshAuthToken(false)");
+    expect(loaderSource).toContain("setSyncStatus");
   });
 });

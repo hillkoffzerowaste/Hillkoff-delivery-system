@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const routeSource = (await readFile(new URL("../../app/api/vehicle-usage/submit/route.js", import.meta.url), "utf8")).replaceAll("\r\n", "\n");
+const odometerRouteSource = (await readFile(new URL("../../app/api/vehicle-report/odometer/route.js", import.meta.url), "utf8")).replaceAll("\r\n", "\n");
 const indexes = JSON.parse(await readFile(new URL("../../firestore.indexes.json", import.meta.url), "utf8"));
 
 function hasIndex(collectionGroup, fields) {
@@ -31,5 +32,9 @@ describe("vehicle usage previous-event lookup", () => {
   it("keeps the in-memory tiebreak that the server ordering cannot express", () => {
     // งานหลายรายการในวันเดียวกันยังต้องเลือกอันที่ createdAt ใหม่สุด
     expect(routeSource).toContain("timestampMillis(b.data.createdAt || b.data.updatedAt) - timestampMillis(a.data.createdAt || a.data.updatedAt)");
+  });
+
+  it("does not truncate exact-day vehicle evidence before validating odometer data", () => {
+    expect(odometerRouteSource).not.toContain(".limit(50)");
   });
 });

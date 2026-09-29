@@ -74,5 +74,7 @@ describe("operations reporting policies", () => {
     ]);
     expect(() => dailyOrdersReadPlan({ from: "2026-07-31", to: "2026-07-01" })).toThrow("Invalid report date range");
     expect(() => dailyOrdersReadPlan({ from: "bad", to: "2026-07-31" })).toThrow("Invalid report date range");
+    expect(() => dailyOrdersReadPlan({ from: "2026-02-29", to: "2026-02-29" })).toThrow("Invalid report date range");
+    expect(() => vehicleReportReadPlan({ from: "2026-02-29", to: "2026-02-29" })).toThrow("Invalid report date range");
   });
 });

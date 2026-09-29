@@ -66,6 +66,10 @@ describe("buildDriverQueuePolicyPatch", () => {
     });
   });
 
+  it("rejects impossible calendar dates", () => {
+    expect(() => isDriverQueueVisibleToDriver({ ...version2TodayUnassigned, driverQueueDate: "2026-02-29" }, TODAY)).toThrow(/date/i);
+  });
+
   it("converts a late UTC timestamp to the next Bangkok calendar date", () => {
     const patch = buildDriverQueuePolicyPatch("2026-07-25T18:30:00.000Z");
     expect(patch.driverQueueDate).toBe("2026-07-26");

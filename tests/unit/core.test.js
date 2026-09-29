@@ -429,6 +429,32 @@ describe("driver identity", () => {
     };
     expect((await resolveVerifiedDriver(db, { uid: "old" }))?.user?.uidLast).toBe("new");
   });
+
+  it("resolves a migrated UID from legacyUids when the UID lookup is unavailable", async () => {
+    const legacyDoc = { id: "0812345678", exists: true, data: () => ({ role: "driver", active: true, uidLast: "new", legacyUids: ["old", "new"] }) };
+    const db = {
+      collection: (name) => ({
+        doc: () => ({ get: vi.fn().mockResolvedValue({ exists: false }) }),
+        where: (_field, _op, value) => ({
+          limit: () => ({ get: vi.fn().mockResolvedValue(value === "old" ? { docs: [legacyDoc] } : { docs: [] }) })
+        })
+      })
+    };
+
+    expect((await resolveVerifiedDriver(db, { uid: "old" }))?.user?.uidLast).toBe("new");
+  });
+
+  it("rejects an inactive legacy driver record", async () => {
+    const inactiveDoc = { id: "0812345678", exists: true, data: () => ({ role: "driver", active: false, uidLast: "old" }) };
+    const db = {
+      collection: () => ({
+        doc: () => ({ get: vi.fn().mockResolvedValue({ exists: false }) }),
+        where: () => ({ limit: () => ({ get: vi.fn().mockResolvedValue({ docs: [inactiveDoc] }) }) })
+      })
+    };
+
+    expect(await resolveVerifiedDriver(db, { uid: "old" })).toBeNull();
+  });
 });
 
 describe("external adapters", () => {

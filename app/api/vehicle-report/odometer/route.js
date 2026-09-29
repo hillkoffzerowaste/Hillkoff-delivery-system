@@ -36,8 +36,7 @@ export async function PATCH(request) {
       const relatedQuery = db.collection("vehicle_usage_events")
         .where("vehicleId", "==", String(event.vehicleId || ""))
         .where("serviceDate", "==", String(event.serviceDate || ""))
-        .where("driverId", "==", String(event.driverId || ""))
-        .limit(50);
+        .where("driverId", "==", String(event.driverId || ""));
       const relatedSnap = await transaction.get(relatedQuery);
       const relatedEvents = relatedSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }));

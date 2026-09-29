@@ -14,13 +14,14 @@ function createDb(orders) {
   return {
     collection(name) {
       if (name !== "orders") throw new Error(`unexpected collection ${name}`);
-      return {
-        where: () => ({
-          limit: () => ({
-            get: async () => ({ docs: orders.map((data) => ({ id: data.id, data: () => data })) })
-          })
+      const makeQuery = (rows) => ({
+        where: (field, op, value) => makeQuery(op === "==" ? rows.filter((row) => row[field] === value) : rows),
+        orderBy: () => makeQuery(rows),
+        limit: (count) => ({
+          get: async () => ({ docs: rows.slice(0, count).map((data) => ({ id: data.id, data: () => data })) })
         })
-      };
+      });
+      return makeQuery(orders);
     }
   };
 }
@@ -52,5 +53,23 @@ describe("storefront order read route", () => {
     const response = await GET(new Request("http://localhost/api/orders/storefront", { headers: { Authorization: "Bearer test" } }));
 
     expect(response.status).toBe(403);
+  });
+
+  it("filters by service date and keeps more than the legacy 250-row ceiling visible", async () => {
+    state.orders = Array.from({ length: 300 }, (_, index) => ({
+      id: `TODAY-${index}`,
+      deliveryMethod: "customer_pickup",
+      serviceDate: "2026-09-29",
+      queueStatus: "preparing"
+    })).concat({ id: "OTHER-DAY", deliveryMethod: "customer_pickup", serviceDate: "2026-09-28", queueStatus: "preparing" });
+
+    const { GET } = await import("../../app/api/orders/storefront/route.js");
+    const response = await GET(new Request("http://localhost/api/orders/storefront?date=2026-09-29", { headers: { Authorization: "Bearer test" } }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data).toHaveLength(300);
+    expect(json.data.every((order) => order.serviceDate === "2026-09-29")).toBe(true);
+    expect(json.hasMore).toBe(false);
   });
 });
