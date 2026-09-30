@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, selectedReportDateRange, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { filterStorefrontOrders, isStorefrontPickupReady, storefrontOrderDate, storefrontPickupTimeline, storefrontSelectableOrderIds } from "../lib/storefrontPickup";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
@@ -1630,13 +1630,12 @@ export default function App() {
   }, [authenticatedApiFetch, displayTab, state.auth?.role, todayServiceDate]);
   const fetchReportRangeOrders = useCallback(async () => {
     if (!["sales", "admin"].includes(state.auth?.role)) return;
-    const today = toServiceDateKey(new Date());
-    const monthStart = `${today.slice(0, 7)}-01`;
-    const weekStart = toServiceDateKey(new Date(Date.parse(`${today}T12:00:00+07:00`) - 6 * 86400000));
-    const viewFrom = reportExportMode === "range" ? reportExportStartDate : reportExportDate;
-    const viewTo = reportExportMode === "range" ? reportExportEndDate : reportExportDate;
-    const from = [monthStart, weekStart, viewFrom].filter(Boolean).sort()[0] || monthStart;
-    const to = [today, viewTo].filter(Boolean).sort().slice(-1)[0] || today;
+    const { from, to } = selectedReportDateRange({
+      mode: reportExportMode,
+      date: reportExportDate,
+      startDate: reportExportStartDate,
+      endDate: reportExportEndDate,
+    });
     setReportRangeLoading(true);
     setReportRangeError("");
     try {
