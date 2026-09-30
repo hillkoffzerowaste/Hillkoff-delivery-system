@@ -1057,6 +1057,10 @@ export default function App() {
   };
   const isOrderUpdatePending = (orderId) => pendingOrderUpdateIds.includes(orderId);
   const routeTasksToSyncRef = useRef(new Set());
+  const routeTaskSyncInFlightRef = useRef(new Set());
+  const routeTaskSyncRetryTimerRef = useRef(new Map());
+  const routeTaskSyncRevisionRef = useRef(new Map());
+  const [routeTaskSyncTick, setRouteTaskSyncTick] = useState(0);
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
 
@@ -1899,15 +1903,42 @@ export default function App() {
 		  }, []);
 
   useEffect(() => {
-    const ids = [...routeTasksToSyncRef.current];
-    if (!ids.length) return;
-    ids.forEach((id) => routeTasksToSyncRef.current.delete(id));
-    const tasks = ids.map((id) => (state.routeTasks || []).find((task) => task.id === id)).filter(Boolean);
-    void Promise.all(tasks.map(async (task) => {
+    const entries = [...routeTasksToSyncRef.current]
+      .map((id) => ({
+        id,
+        task: (state.routeTasks || []).find((item) => item.id === id),
+        revision: routeTaskSyncRevisionRef.current.get(id),
+      }))
+      .filter(({ id, task }) => task && !routeTaskSyncInFlightRef.current.has(id));
+    if (!entries.length) return;
+    entries.forEach(({ id }) => routeTaskSyncInFlightRef.current.add(id));
+    void Promise.all(entries.map(async ({ id, task, revision }) => {
       const saved = await upsertRouteTaskToFirestore(task);
-      if (!saved.ok) console.error(`Failed to sync route task ${task.id}:`, saved.error);
+      if (saved.ok) {
+        const retryTimer = routeTaskSyncRetryTimerRef.current.get(id);
+        if (retryTimer) {
+          window.clearTimeout(retryTimer);
+          routeTaskSyncRetryTimerRef.current.delete(id);
+        }
+        if (routeTaskSyncRevisionRef.current.get(id) === revision) {
+          routeTasksToSyncRef.current.delete(id);
+          routeTaskSyncRevisionRef.current.delete(id);
+        } else {
+          setRouteTaskSyncTick((value) => value + 1);
+        }
+      } else {
+        console.error(`Failed to sync route task ${id}:`, saved.error);
+        if (!routeTaskSyncRetryTimerRef.current.has(id)) {
+          const timer = window.setTimeout(() => {
+            routeTaskSyncRetryTimerRef.current.delete(id);
+            setRouteTaskSyncTick((value) => value + 1);
+          }, 5000);
+          routeTaskSyncRetryTimerRef.current.set(id, timer);
+        }
+      }
+      routeTaskSyncInFlightRef.current.delete(id);
     }));
-  }, [state.routeTasks, upsertRouteTaskToFirestore]);
+  }, [routeTaskSyncTick, state.routeTasks, upsertRouteTaskToFirestore]);
 
 		  const getCurrentLocationOnce = () => new Promise((resolve, reject) => {
 		    if (typeof window === "undefined") return reject(new Error("no window"));
@@ -4563,6 +4594,7 @@ export default function App() {
 
   const updateRouteTask = (id, patch) => {
     routeTasksToSyncRef.current.add(id);
+    routeTaskSyncRevisionRef.current.set(id, (routeTaskSyncRevisionRef.current.get(id) || 0) + 1);
     setState(prev => ({ ...prev, routeTasks: (prev.routeTasks || []).map(task => task.id === id ? { ...task, ...patch } : task) }));
   };
 
@@ -4626,10 +4658,8 @@ export default function App() {
           ...stop,
           status: "เช็คอินแล้ว",
           checkedInAt: stop.checkedInAt || new Date().toLocaleString("th-TH"),
-          sharedToLine: true
+          sharedToLine: Boolean(stop.sharedToLine)
         };
-        const stops = (task.stops || []).map(item => item.id === stop.id ? nextStop : item);
-        updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
         const text = buildLineMessageForRouteTask(task, nextStop);
         const file = routeTaskFilesRef.current?.[routeTaskStopKey(task.id, stop.id)];
         let copied = false;
@@ -4643,9 +4673,12 @@ export default function App() {
         } else {
           await navigator.share({ text });
         }
+        const sharedStop = { ...nextStop, sharedToLine: true };
+        const stops = (task.stops || []).map(item => item.id === stop.id ? sharedStop : item);
+        updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
         setSyncStatus(`✅ แชร์ LINE งานวิ่ง ${task.id} แล้ว`);
       } catch (error) {
-        setSyncStatus(`✅ บันทึกเช็คอินแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${task.id})`);
+        setSyncStatus(`⚠️ แชร์ LINE งานวิ่ง ${task.id} ไม่สำเร็จ จึงยังไม่ยืนยันการแชร์`);
       }
     })();
   };
