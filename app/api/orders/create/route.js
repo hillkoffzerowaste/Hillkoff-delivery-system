@@ -275,7 +275,12 @@ export async function POST(request) {
           transaction.set(existingRef.collection("activity").doc(), { ...history, action: "pack_assist_update", updatedExisting: true, driverQueue: "requeued" });
           for (const shared of sharedStoreBookings) transaction.update(shared.ref, { sharedWithOrderIds: FieldValue.arrayUnion(existing.id) });
           for (const reservation of reservationsToCreate) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate: bookingMonth, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: existing.id, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
-          return { updatedExisting: true, data: { id: existing.id, updatedExisting: true, ...patch }, searchIndexChanged };
+          return {
+            updatedExisting: true,
+            queueTransition: existing.queueStatus !== "queued",
+            data: { id: existing.id, updatedExisting: true, ...patch },
+            searchIndexChanged
+          };
         }
         const reservationsToCreate = [];
         const sharedStoreBookings = [];
@@ -307,6 +312,22 @@ export async function POST(request) {
       if (transactionResult?.updatedExisting) {
         if (transactionResult?.searchIndexChanged) await bumpCustomerSearchIndexVersion(db);
         scheduleDeliveryOrderSheetSync(db, transactionResult.data.id, transactionResult.data);
+        if (transactionResult.data.queueStatus === "queued" && transactionResult.queueTransition) try {
+          const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
+          const tokens = snap.docs.map((doc) => doc.id).filter(Boolean);
+          if (tokens.length) {
+            await getAdminMessaging().sendEachForMulticast({
+              tokens,
+              data: {
+                type: "new_order",
+                title: "มีออเดอร์พร้อมส่ง",
+                body: `${transactionResult.data.customerName || transactionResult.data.id} พร้อมเข้าคิวคนขับ`,
+                orderId: transactionResult.data.id
+              },
+              webpush: { headers: { Urgency: "high" }, fcmOptions: { link: "/" } }
+            });
+          }
+        } catch (error) { console.warn("Queue push notification failed", error?.message || error); }
         return Response.json({ ok: true, data: transactionResult.data });
       }
       if (transactionResult?.searchIndexChanged) await bumpCustomerSearchIndexVersion(db);
