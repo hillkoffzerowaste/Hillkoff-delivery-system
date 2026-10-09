@@ -3,13 +3,13 @@ import crypto from "node:crypto";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { getAdminMessaging } from "../../../../lib/firebaseAdmin";
 import { pushLineText } from "../../../../lib/lineOa";
-import { syncDeliveryOrderToSheet } from "../../../../lib/deliverySheetSync";
+import { scheduleDeliveryOrderSheetSync } from "../../../../lib/deliverySheetSync";
 import { customerSearchRecord, resolveCustomerRecord } from "../../../../lib/customerSearchIndex";
 import { bumpCustomerSearchIndexVersion } from "../../../../lib/customerSearchCache";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingMonthKey, bookingRegistryId, bookingRegistryRecord, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { initialPreparationStatuses, resolveNextRoundDate, resolveOptionalChiangmaiRound } from "../../../../lib/preparationWorkflow";
 import { buildDriverQueuePolicyPatch } from "../../../../lib/driverQueuePolicy";
-import { canPackAssistShareBooking, isBlockingPackAssistOrder, packAssistDuplicateMessage, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
+import { buildPackAssistExistingOrderPatch, canPackAssistShareBooking, classifyPackAssistDuplicate, validatePackAssistOrder } from "../../../../lib/packAssistOrder";
 import { isValidServiceDate } from "../../../../lib/serviceDate";
 
 export const runtime = "nodejs";
@@ -203,11 +203,12 @@ export async function POST(request) {
         const existingCustomerOrders = packAssistEntry
           ? await transaction.get(db.collection("orders").where("customerId", "==", next.customerId))
           : null;
-        const blockingOrder = existingCustomerOrders?.docs
-          .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
-          .find((existing) => isBlockingPackAssistOrder(existing, next.customerId));
-        if (blockingOrder) {
-          throw Object.assign(new Error(packAssistDuplicateMessage(blockingOrder)), { status: 409, blockingOrderId: blockingOrder.id });
+        const customerOrders = existingCustomerOrders?.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })) || [];
+        const duplicate = packAssistEntry
+          ? classifyPackAssistDuplicate(customerOrders, { customerId: next.customerId, todayServiceDate: toServiceDateKey(now) })
+          : { type: "none", order: null };
+        if (duplicate.type === "driver_accepted") {
+          throw Object.assign(new Error("ออเดอร์ซ้ำ: คนขับรับออเดอร์เดิมแล้ว ไม่อนุญาตให้คีย์ซ้ำ"), { status: 409, blockingOrderId: duplicate.order?.id });
         }
         // ทุกออเดอร์เขียนทับดัชนีลูกค้าเสมอ แต่ส่วนใหญ่ค่าไม่เปลี่ยน จึงเดินเลขเวอร์ชันแคช
         // เฉพาะตอนที่ค้นหาแล้วจะได้ผลต่างจากเดิมจริง ไม่งั้นแคชจะถูกล้างทิ้งทุกครั้งที่ขายของ
@@ -224,6 +225,57 @@ export async function POST(request) {
             && normalizeBookingNumber(existing.bookingNumber || "") === bookingNumber;
           if (sameRequest) return { alreadyExists: true };
           throw Object.assign(new Error("Order id already exists"), { status: 409 });
+        }
+
+        if (duplicate.type === "updatable") {
+          const existing = duplicate.order;
+          const existingRef = db.collection("orders").doc(existing.id);
+          const { patch, history } = buildPackAssistExistingOrderPatch(existing, next, {
+            uid: decoded.uid,
+            role: profile.role,
+            name: createdByName,
+            email: profile.email
+          }, now);
+          const existingBookingNumbers = [...new Set((Array.isArray(existing.bookingNumbers) ? existing.bookingNumbers : [existing.bookingNumber]).map(normalizeBookingNumber).filter(Boolean))];
+          const existingBookingMonth = bookingMonthKey(existing.bookingMonthKey || existing.serviceDate) || bookingMonth;
+          const existingBookingRefs = existingBookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(existingBookingMonth, value)) }));
+          const desiredBookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(bookingMonth, value)) }));
+          const desiredRegistryIds = new Set(desiredBookingRefs.map(({ ref }) => ref.id));
+          const reservationsToCreate = [];
+          const sharedStoreBookings = [];
+          for (const reservation of desiredBookingRefs) {
+            const bookingSnap = await transaction.get(reservation.ref);
+            if (!bookingSnap.exists) {
+              reservationsToCreate.push(reservation);
+              continue;
+            }
+            const registry = bookingSnap.data() || {};
+            const ownedByExisting = String(registry.sourceId || "") === String(existing.id)
+              && ["orders", "order"].includes(String(registry.source || ""));
+            if (ownedByExisting) continue;
+            if (canPackAssistShareBooking(registry)) {
+              sharedStoreBookings.push({ bookingNumber: reservation.bookingNumber, reportId: String(registry.sourceId || ""), createdBy: String(registry.createdBy || ""), ref: reservation.ref });
+              continue;
+            }
+            throw Object.assign(new Error(bookingConflictMessage(registry)), { status: 409 });
+          }
+          for (const reservation of existingBookingRefs) {
+            if (desiredRegistryIds.has(reservation.ref.id)) continue;
+            const bookingSnap = await transaction.get(reservation.ref);
+            if (!bookingSnap.exists) continue;
+            const registry = bookingSnap.data() || {};
+            if (String(registry.sourceId || "") === String(existing.id) && ["orders", "order"].includes(String(registry.source || ""))) {
+              transaction.delete(reservation.ref);
+            }
+          }
+          const sharedLinks = sharedStoreBookings.map(({ ref, ...link }) => link);
+          if (sharedLinks.length) patch.storeBookingRegistryLinks = sharedLinks;
+          patch.workflowHistory = [...(Array.isArray(existing.workflowHistory) ? existing.workflowHistory : []).slice(-99), history];
+          transaction.update(existingRef, patch);
+          transaction.set(existingRef.collection("activity").doc(), { ...history, action: "pack_assist_update", updatedExisting: true, driverQueue: "requeued" });
+          for (const shared of sharedStoreBookings) transaction.update(shared.ref, { sharedWithOrderIds: FieldValue.arrayUnion(existing.id) });
+          for (const reservation of reservationsToCreate) transaction.create(reservation.ref, bookingRegistryRecord({ serviceDate: bookingMonth, bookingNumber: reservation.bookingNumber, source: "orders", sourceId: existing.id, customerName: next.customerName, createdAt: now, createdBy: next.salesName }));
+          return { updatedExisting: true, data: { id: existing.id, updatedExisting: true, ...patch }, searchIndexChanged };
         }
         const reservationsToCreate = [];
         const sharedStoreBookings = [];
@@ -252,6 +304,11 @@ export async function POST(request) {
         return { alreadyExists: false, searchIndexChanged };
       });
       if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });
+      if (transactionResult?.updatedExisting) {
+        if (transactionResult?.searchIndexChanged) await bumpCustomerSearchIndexVersion(db);
+        scheduleDeliveryOrderSheetSync(db, transactionResult.data.id, transactionResult.data);
+        return Response.json({ ok: true, data: transactionResult.data });
+      }
       if (transactionResult?.searchIndexChanged) await bumpCustomerSearchIndexVersion(db);
     } catch (error) {
       if (error?.code === 6 || error?.code === "already-exists") {
@@ -259,7 +316,7 @@ export async function POST(request) {
       }
       throw error;
     }
-    await syncDeliveryOrderToSheet(db, orderId, next);
+    scheduleDeliveryOrderSheetSync(db, orderId, next);
 
     // New orders stay out of the driver queue until sales explicitly queues them.
     if (next.queueStatus === "queued") try {
