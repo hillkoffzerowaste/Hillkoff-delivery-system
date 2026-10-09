@@ -205,7 +205,7 @@ export async function POST(request) {
           : null;
         const customerOrders = existingCustomerOrders?.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })) || [];
         const duplicate = packAssistEntry
-          ? classifyPackAssistDuplicate(customerOrders, { customerId: next.customerId, todayServiceDate: toServiceDateKey(now) })
+          ? classifyPackAssistDuplicate(customerOrders, { customerId: next.customerId, todayServiceDate: toServiceDateKey(now), bookingNumbers })
           : { type: "none", order: null };
         if (duplicate.type === "driver_accepted") {
           throw Object.assign(new Error("ออเดอร์ซ้ำ: คนขับรับออเดอร์เดิมแล้ว ไม่อนุญาตให้คีย์ซ้ำ"), { status: 409, blockingOrderId: duplicate.order?.id });

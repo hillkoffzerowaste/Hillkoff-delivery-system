@@ -160,14 +160,13 @@ describe("pack duplicate handling in order creation", () => {
       orders: { "OLD-1": existingOrder },
       registries: { "2026-10__CSP-1111": { source: "orders", sourceId: "OLD-1", bookingNumber: "CSP-1111" } }
     });
-    const response = await postOrder(orderInput({ boxes: 7, bookingNumbers: ["CSP-2222"], salesNote: "แก้ไขล่าสุด" }));
+    const response = await postOrder(orderInput({ boxes: 7, bookingNumbers: ["CSP-1111"], salesNote: "แก้ไขล่าสุด" }));
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json).toMatchObject({ ok: true, data: { id: "OLD-1", updatedExisting: true, boxes: 7, packStatus: "checked", queueStatus: "queued", status: "รอคนขับรับ", driverQueueDate: "2026-10-09" } });
-    expect(state.db.orders.get("OLD-1")).toMatchObject({ id: "OLD-1", createdAt: existingOrder.createdAt, boxes: 7, salesNote: "แก้ไขล่าสุด", bookingNumber: "CSP-2222", packStatus: "checked", queueStatus: "queued", status: "รอคนขับรับ" });
-    expect(state.db.registries.has("2026-10__CSP-1111")).toBe(false);
-    expect(state.db.registries.get("2026-10__CSP-2222")).toMatchObject({ source: "orders", sourceId: "OLD-1" });
+    expect(state.db.orders.get("OLD-1")).toMatchObject({ id: "OLD-1", createdAt: existingOrder.createdAt, boxes: 7, salesNote: "แก้ไขล่าสุด", bookingNumber: "CSP-1111", packStatus: "checked", queueStatus: "queued", status: "รอคนขับรับ" });
+    expect(state.db.registries.get("2026-10__CSP-1111")).toMatchObject({ source: "orders", sourceId: "OLD-1" });
     expect(state.db.activities).toContainEqual(expect.objectContaining({ orderId: "OLD-1", action: "pack_assist_update", updatedExisting: true }));
     expect(state.sheetSyncOrders[0]).toMatchObject({ id: "OLD-1", order: { id: "OLD-1", createdAt: existingOrder.createdAt, customerName: customer.name, boxes: 7 } });
   });
@@ -181,14 +180,30 @@ describe("pack duplicate handling in order creation", () => {
     });
     const before = structuredClone(accepted);
     const beforeRegistry = structuredClone(state.db.registries.get("2026-10__CSP-1111"));
-    const response = await postOrder(orderInput({ bookingNumbers: ["CSP-9999"] }));
+    const response = await postOrder(orderInput({ bookingNumbers: ["CSP-1111"] }));
     const json = await response.json();
 
     expect(response.status).toBe(409);
     expect(json.error).toMatch(/ออเดอร์ซ้ำ.*คนขับรับ/);
     expect(state.db.orders.get("OLD-1")).toEqual(before);
     expect(state.db.registries.get("2026-10__CSP-1111")).toEqual(beforeRegistry);
-    expect(state.db.registries.has("2026-10__CSP-9999")).toBe(false);
+    expect(state.db.registries.has("2026-10__CSP-2222")).toBe(false);
+  });
+
+  it("creates a separate same-day order when the booking number differs", async () => {
+    state.db = createDb({
+      customers: { "customer-1": customer },
+      orders: { "OLD-1": existingOrder },
+      registries: { "2026-10__CSP-1111": { source: "orders", sourceId: "OLD-1", bookingNumber: "CSP-1111" } }
+    });
+    const response = await postOrder(orderInput({ id: "NEW-2", bookingNumbers: ["CSP-2222"] }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({ ok: true, data: { id: "NEW-2" } });
+    expect(state.db.orders.get("OLD-1")).toEqual(existingOrder);
+    expect(state.db.orders.get("NEW-2")).toMatchObject({ bookingNumber: "CSP-2222", customerId: "customer-1", serviceDate: "2026-10-09" });
+    expect(state.db.registries.get("2026-10__CSP-2222")).toMatchObject({ source: "orders", sourceId: "NEW-2" });
   });
 
   it("creates a new order when the existing order is from another service date", async () => {

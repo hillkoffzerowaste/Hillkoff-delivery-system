@@ -49,6 +49,22 @@ describe("Pack urgent order policy", () => {
     expect(result).toEqual({ type: "driver_accepted", order: expect.objectContaining({ id: "accepted" }) });
   });
 
+  it("allows a same customer to have another same-day order when the booking number differs", () => {
+    const result = classifyPackAssistDuplicate([
+      { id: "accepted", customerId: "customer-1", serviceDate: "2026-10-09", bookingNumber: "CSP-1111", bookingNumbers: ["CSP-1111"], queueStatus: "queued", status: "กำลังส่ง", driverId: "driver-1" }
+    ], { customerId: "customer-1", todayServiceDate: "2026-10-09", bookingNumbers: ["CSP-2222"] });
+
+    expect(result).toEqual({ type: "none", order: null });
+  });
+
+  it("still updates the same-day order when the booking number is the same", () => {
+    const result = classifyPackAssistDuplicate([
+      { id: "eligible", customerId: "customer-1", serviceDate: "2026-10-09", bookingNumber: "CSP-1111", bookingNumbers: ["CSP-1111"], queueStatus: "queued", status: "รอคนขับรับ" }
+    ], { customerId: "customer-1", todayServiceDate: "2026-10-09", bookingNumbers: ["CSP-1111"] });
+
+    expect(result).toEqual({ type: "updatable", order: expect.objectContaining({ id: "eligible" }) });
+  });
+
   it("does not treat another service date as a duplicate", () => {
     const result = classifyPackAssistDuplicate([
       { id: "yesterday", customerId: "customer-1", serviceDate: "2026-10-08", queueStatus: "queued", status: "รอคนขับรับ" }
