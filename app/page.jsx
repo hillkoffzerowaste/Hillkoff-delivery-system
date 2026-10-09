@@ -3181,6 +3181,7 @@ export default function App() {
       if (!res.ok || !json?.ok) {
         const rawReason = String(json?.error || `HTTP ${res.status}`).trim();
         if (res.status === 409) {
+          if (/ออเดอร์ซ้ำ|คนขับรับ/.test(rawReason)) throw new Error("ออเดอร์ซ้ำ: คนขับรับออเดอร์เดิมแล้ว จึงไม่อนุญาตให้คีย์ซ้ำ กรุณาตรวจสอบออเดอร์เดิม");
           if (/พบออเดอร์ของลูกค้านี้/.test(rawReason)) throw new Error(rawReason);
           const reason = /order id already exists/i.test(rawReason)
             ? "ออเดอร์นี้ถูกบันทึกไปแล้ว อาจเกิดจากกดยืนยันซ้ำหรือกดใหม่หลังสัญญาณขัดข้อง"
@@ -3193,9 +3194,16 @@ export default function App() {
         throw new Error(rawReason);
       }
 
+      const updatedExisting = Boolean(json?.data?.updatedExisting);
+      const savedOrder = updatedExisting
+        ? { ...orderToCreate, ...(json.data || {}), id: json.data.id }
+        : orderToCreate;
       setState(prev => {
-        const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
-        return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
+        if (updatedExisting) {
+          return { ...prev, orders: (prev.orders || []).map(order => order.id === savedOrder.id ? { ...order, ...savedOrder } : order) };
+        }
+        const existing = (prev.orders || []).some(order => order.id === savedOrder.id);
+        return existing ? prev : { ...prev, orders: [savedOrder, ...(prev.orders || [])] };
       });
       setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7) });
       setSelectedCustomerId("");
@@ -3207,11 +3215,13 @@ export default function App() {
       setShareNewOrderToLine(false);
 
       if (!shouldShareLine) {
-        setSyncStatus(`✅ บันทึกออเดอร์ "${orderToCreate.id}" สำเร็จ`);
+        setSyncStatus(updatedExisting
+          ? `✅ อัปเดตออเดอร์เดิม "${savedOrder.id}" และส่งกลับเข้าคิวคนขับแล้ว`
+          : `✅ บันทึกออเดอร์ "${savedOrder.id}" สำเร็จ`);
         return;
       }
 
-      const text = buildLineMessageForNewOrder(orderToCreate);
+      const text = buildLineMessageForNewOrder(savedOrder);
       let copied = false;
       try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
       if (!navigator?.share) {
@@ -6504,7 +6514,7 @@ export default function App() {
               {(() => { const query = orderCustomerSearch.trim(); const matches = customers.filter(customer => customerMatchesQuery(customer, query)).slice(0, 10); if (!query) return <small className="muted">พิมพ์อย่างน้อย 3 ตัวอักษร ระบบจะแสดงข้อมูลลูกค้าทันที</small>; if (query.length < 3) return <small className="muted">พิมพ์เพิ่มอีก {3 - query.length} ตัวอักษรเพื่อค้นหาฐานลูกค้ากลาง</small>; if (!matches.length) return <small className="muted">กำลังค้นหา หรือยังไม่พบลูกค้าที่ตรงกัน</small>; return <div style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "260px", overflowY: "auto" }}>{matches.map(customer => <button key={customer.id} type="button" onClick={() => { setSelectedCustomerId(customer.id); setOrderCustomerSearch(""); }} style={{ textAlign: "left", border: "1px solid var(--c-line-strong)", background: "var(--c-surface)", borderRadius: "8px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{customer.name}</b><span style={{ display: "block", fontSize: "12px", color: "var(--c-text-soft)", marginTop: "var(--sp-1)" }}>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ") || "-"}</span>{customer.address && <small className="muted" style={{ display: "block", marginTop: "var(--sp-1)" }}>{customer.address}</small>}</button>)}</div>; })()}
               {selectedCustomerId && (() => { const customer = customers.find(item => item.id === selectedCustomerId); return customer ? <div className="customer-detail"><div><b>{customer.name}</b><p>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ")}</p><p>{customer.address || "-"}</p></div></div> : null; })()}
             </div>
-            {auth.role !== "pack" && <><div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select><select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button></>}
+            <div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select><select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" /><textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={2} /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button>
             <div className="form-grid two">{auth.role === "pack" ? <div className="status-chip" style={{ alignSelf: "center", width: "fit-content" }}>คนขับบริษัท · ส่งตรงห้องแพ็ค</div> : <select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "store_route" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select>}<select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
             <div style={{ display: "grid", gap: "var(--sp-3)" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">{auth.role === "pack" ? "งานด่วนเว้นว่างได้ · ถ้าสโตร์คีย์เลขใบสั่งจองนี้ไว้แล้ว ใช้เลขเดิมได้เลย ระบบจะผูกให้อัตโนมัติ" : "เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง"}</small></div>
             <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />

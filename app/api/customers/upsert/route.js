@@ -47,7 +47,7 @@ export async function POST(request) {
   if (!/^[A-Za-z0-9._-]{1,120}$/.test(customerId)) return Response.json({ ok: false, error: "Invalid customer id" }, { status: 400 });
 
   try {
-    const { profile, db } = await requireProfile(request, ["sales", "admin", "store"]);
+    const { profile, db } = await requireProfile(request, ["sales", "admin", "store", "pack"]);
     const next = cleanCustomer(customer);
     if (!next.name) return Response.json({ ok: false, error: "Customer name is required" }, { status: 400 });
     if (!isSafeHttpUrl(next.mapUrl)) return Response.json({ ok: false, error: "Map URL must use http or https" }, { status: 400 });
