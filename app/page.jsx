@@ -2501,7 +2501,6 @@ export default function App() {
     driverVehiclePickedRef.current = false;
     setDailyVehicleStartSaved(false);
   }, [dailyVehicleStartKey]);
-  const needsDailyVehicleStart = auth.role === "driver" && (!dailyVehicleStartSaved || !driverOdometerStart || !selectedDriverVehicle?.id);
   useEffect(() => {
     if (!latestDriverVehicleKey || typeof window === "undefined") {
       setLatestDriverVehicleId("");
@@ -3368,11 +3367,6 @@ export default function App() {
     const did = state.auth?.driverId || driverId || "";
     if (!did) {
       setDriverAssessmentStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกเข้าใหม่");
-      return;
-    }
-    if (needsDailyVehicleStart) {
-      setDriverAssessmentStatus("⚠️ กรุณาบันทึกเริ่มใช้รถวันนี้ก่อนส่งแบบประเมิน");
-      setTab("driver-vehicle");
       return;
     }
     const missing = DRIVER_DAILY_CHECK_ITEMS.filter(item => !driverDailyChecks[item.id]);
@@ -5582,58 +5576,6 @@ export default function App() {
           </div>
         </header>
         {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && <div className="sync-banner" role="status" aria-live="polite">{syncStatus}</div>}
-        {auth.role === "driver" && needsDailyVehicleStart && (
-          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1400, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
-            <section className="panel" style={{ width: "min(520px, 100%)", borderLeft: "4px solid var(--c-info)", boxShadow: "0 16px 40px var(--c-overlay-soft)" }}>
-              <div className="panel-head">
-                <h2>เริ่มใช้รถวันนี้</h2>
-                <span>{todayServiceDate}</span>
-              </div>
-              <p className="muted" style={{ marginTop: 0 }}>กรุณายืนยันรถและกรอกเลขไมล์เริ่มต้นก่อนใช้งานแอพประจำวัน</p>
-              <div style={{ display: "grid", gap: "var(--sp-5)" }}>
-                <div>
-                  <label className="field-label">รถที่ใช้วันนี้</label>
-                  <select
-                    value={selectedDriverVehicleId}
-                    onChange={e => {
-                      driverVehiclePickedRef.current = true;
-                      setDriverVehicleId(e.target.value);
-                      setDriverVehicleChangedToday(true);
-                    }}
-                  >
-                    {availableVehicles.map(vehicle => (
-                      <option key={vehicle.id} value={vehicle.id}>
-                        {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label">เลขไมล์เริ่มต้นวันนี้</label>
-                  <input
-                    value={driverOdometerStart}
-                    onChange={e => setDriverOdometerStart(formatWithCommas(e.target.value))}
-                    inputMode="numeric"
-                    placeholder="เช่น 120,500"
-                    autoFocus
-                  />
-                </div>
-                <button type="button" className="primary wide" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
-                  <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
-                </button>
-                <button type="button" className="secondary wide" onClick={logout}>
-                  ออกจากระบบเพื่อล็อกอินใหม่
-                </button>
-                {vehicleUsageStatus && (
-                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "var(--c-brand-dark)" : vehicleUsageStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
-                    {vehicleUsageStatus}
-                  </span>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
         {displayTab === "sales" && (
           <>
             <div className="sales-grid">
@@ -7633,7 +7575,7 @@ export default function App() {
                 <span>SOP ประจำวัน</span>
               </div>
               <p style={{ margin: 0, color: "var(--c-accent-deep)", fontWeight: 800 }}>
-                ก่อนออกงานทุกเช้า คนขับต้องตรวจสภาพรถและบันทึกแบบประเมินให้ครบ หากพบความผิดปกติให้หยุดใช้รถและแจ้งทันที ห้ามฝืนใช้งานรถที่ไม่พร้อมหรือไม่ปลอดภัย
+                ข้อมูลรถ เลขไมล์ และแบบประเมินเป็นรายการเสริม ไม่บังคับตอนเข้าแอพ คนขับกรอกภายหลังได้ แต่ก่อนนำรถออกงานควรตรวจสภาพและแจ้งทันทีหากพบความผิดปกติ ห้ามฝืนใช้งานรถที่ไม่พร้อมหรือไม่ปลอดภัย
               </p>
               <div style={{ display: "grid", gap: "var(--sp-3)", marginTop: "var(--sp-5)" }}>
                 {DRIVER_MORNING_NOTICE.map(item => (
