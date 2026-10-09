@@ -57,6 +57,14 @@ describe("Pack urgent order policy", () => {
     expect(result).toEqual({ type: "none", order: null });
   });
 
+  it("does not reopen a terminal order that has no driver acceptance metadata", () => {
+    const result = classifyPackAssistDuplicate([
+      { id: "closed", customerId: "customer-1", serviceDate: "2026-10-09", queueStatus: "completed", status: "ส่งสำเร็จ" }
+    ], { customerId: "customer-1", todayServiceDate: "2026-10-09" });
+
+    expect(result).toEqual({ type: "none", order: null });
+  });
+
   it("lets an accepted order win over an eligible duplicate", () => {
     const result = classifyPackAssistDuplicate([
       { id: "eligible", customerId: "customer-1", serviceDate: "2026-10-09", queueStatus: "queued", status: "รอคนขับรับ", updatedAt: "2026-10-09T04:00:00.000Z" },

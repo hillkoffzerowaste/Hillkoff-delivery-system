@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ db: null, role: "pack", now: "2026-10-09T03:00:00.000Z" }));
+const state = vi.hoisted(() => ({ db: null, role: "pack", now: "2026-10-09T03:00:00.000Z", sheetSyncOrders: [] }));
 
 vi.mock("../../lib/workflowAuth.js", () => ({
   requireProfile: async () => ({
@@ -12,7 +12,7 @@ vi.mock("../../lib/workflowAuth.js", () => ({
 }));
 vi.mock("../../lib/firebaseAdmin.js", () => ({ getAdminMessaging: () => ({ sendEachForMulticast: vi.fn(async () => ({ responses: [] })) }) }));
 vi.mock("../../lib/lineOa.js", () => ({ pushLineText: vi.fn(async () => ({ ok: true })) }));
-vi.mock("../../lib/deliverySheetSync.js", () => ({ scheduleDeliveryOrderSheetSync: vi.fn(() => Promise.resolve()) }));
+vi.mock("../../lib/deliverySheetSync.js", () => ({ scheduleDeliveryOrderSheetSync: vi.fn((_db, id, order) => { state.sheetSyncOrders.push({ id, order }); return Promise.resolve(); }) }));
 vi.mock("../../lib/customerSearchCache.js", () => ({ bumpCustomerSearchIndexVersion: vi.fn(async () => {}) }));
 vi.mock("../../lib/customerSearchIndex.js", () => ({
   customerSearchRecord: (customer) => ({ ...customer }),
@@ -150,6 +150,7 @@ async function postOrder(order) {
 describe("pack duplicate handling in order creation", () => {
   beforeEach(() => {
     state.role = "pack";
+    state.sheetSyncOrders = [];
     state.db = createDb({ customers: { "customer-1": customer } });
   });
 
@@ -168,6 +169,7 @@ describe("pack duplicate handling in order creation", () => {
     expect(state.db.registries.has("2026-10__CSP-1111")).toBe(false);
     expect(state.db.registries.get("2026-10__CSP-2222")).toMatchObject({ source: "orders", sourceId: "OLD-1" });
     expect(state.db.activities).toContainEqual(expect.objectContaining({ orderId: "OLD-1", action: "pack_assist_update", updatedExisting: true }));
+    expect(state.sheetSyncOrders[0]).toMatchObject({ id: "OLD-1", order: { id: "OLD-1", createdAt: existingOrder.createdAt, customerName: customer.name, boxes: 7 } });
   });
 
   it("rejects an accepted duplicate without changing the order or booking registry", async () => {

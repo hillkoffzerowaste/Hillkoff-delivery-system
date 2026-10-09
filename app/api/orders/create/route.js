@@ -279,6 +279,7 @@ export async function POST(request) {
             updatedExisting: true,
             queueTransition: existing.queueStatus !== "queued",
             data: { id: existing.id, updatedExisting: true, ...patch },
+            sheetOrder: { id: existing.id, ...existing, ...patch },
             searchIndexChanged
           };
         }
@@ -311,7 +312,7 @@ export async function POST(request) {
       if (transactionResult?.alreadyExists) return Response.json({ ok: true, data: { id: orderId, alreadyExists: true } });
       if (transactionResult?.updatedExisting) {
         if (transactionResult?.searchIndexChanged) await bumpCustomerSearchIndexVersion(db);
-        scheduleDeliveryOrderSheetSync(db, transactionResult.data.id, transactionResult.data);
+        scheduleDeliveryOrderSheetSync(db, transactionResult.data.id, transactionResult.sheetOrder);
         if (transactionResult.data.queueStatus === "queued" && transactionResult.queueTransition) try {
           const snap = await db.collection("push_tokens").where("role", "==", "driver").limit(500).get();
           const tokens = snap.docs.map((doc) => doc.id).filter(Boolean);
