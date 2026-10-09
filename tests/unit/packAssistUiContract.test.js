@@ -16,4 +16,12 @@ describe("Pack native urgent-order UI contract", () => {
     expect(pageSource).toContain("อัปเดตออเดอร์เดิม");
     expect(pageSource).toContain("ส่งกลับเข้าคิวคนขับ");
   });
+
+  it("renders split Pack work as one group and confirms the group in one action", () => {
+    expect(pageSource).toContain('import { groupPackOrders } from "../lib/packOrderGroups";');
+    expect(pageSource).toContain("const packWorkOrderGroups = groupPackOrders(packWorkOrders);");
+    expect(pageSource).toContain("const updatePreparationWorkflowBatch = async");
+    expect(pageSource).toContain("orders: group.orders");
+    expect(pageSource).toContain("อัปเดตชุด");
+  });
 });

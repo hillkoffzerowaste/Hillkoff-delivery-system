@@ -34,6 +34,7 @@ import { isSalesDispatchActivityOnDate } from "../lib/salesDispatchActivity";
 import { removeDriverPodPhoto, shouldShowDriverOrderReviewQr } from "../lib/driverDeliveryDraft";
 import { canPackTakeOverStoreCheck, getPackStoreCheckingOrders } from "../lib/packStoreChecking";
 import { getPackDriverQueueOrders } from "../lib/packDriverQueue";
+import { groupPackOrders } from "../lib/packOrderGroups";
 import { buildDriverQueueNotice, getDriverQueueOrdersForNotice } from "../lib/driverQueueMessage";
 import { applyCustomerDeliveryDefault, customerDefaultAppliesToTab, customerDefaultDeliveryMethod } from "../lib/customerDeliveryPreference";
 import {
@@ -2081,6 +2082,13 @@ export default function App() {
   const salesOutstationPackOrders = preparationOrders.filter(order => order.deliveryMethod === "outstation" && ["pending", "working", "waiting", "partial"].includes(order.packStatus));
   const salesOutstationOrders = (orders || []).filter(order => isOutstationOrder(order) && !["outstation_ready", "completed", "pack_archived"].includes(order.queueStatus));
   const salesOutstationHistory = (orders || []).filter(order => isOutstationOrder(order) && ["outstation_ready", "completed"].includes(order.queueStatus));
+  const packStoreCheckingGroups = groupPackOrders(packStoreCheckingOrders);
+  const packWorkOrderGroups = groupPackOrders(packWorkOrders);
+  const packReworkOrderGroups = groupPackOrders(packReworkOrders);
+  const packBlockedReworkOrderGroups = groupPackOrders(packBlockedReworkOrders);
+  const packPickupOrderGroups = groupPackOrders(packPickupOrders);
+  const packDriverQueueGroups = groupPackOrders(packDriverQueueOrders);
+  const salesOutstationPackOrderGroups = groupPackOrders(salesOutstationPackOrders);
   const todayOutstationLabelJobs = (outstationLabelJobs || []).filter(job => job.createdAt && toServiceDateKey(job.createdAt) === todayServiceDate);
   const outstationLabelSelectedSet = new Set(outstationLabelSelectedIds);
   const selectedOutstationLabelOrders = salesOutstationOrders.filter(order => outstationLabelSelectedSet.has(order.id));
@@ -3459,7 +3467,7 @@ export default function App() {
     }
   };
 
-  const updatePreparationWorkflow = async (order, action, patch = {}) => {
+  const updatePreparationWorkflow = async (order, action, patch = {}, options = {}) => {
     try {
       const idToken = await refreshAuthToken(true);
       const res = await fetch("/api/orders/workflow", {
@@ -3474,13 +3482,32 @@ export default function App() {
       }
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setState(prev => ({ ...prev, orders: prev.orders.map(item => item.id === order.id ? { ...item, ...json.data } : item) }));
-      setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
+      if (!options.silent) setSyncStatus(`✅ อัปเดตออเดอร์ ${order.id} แล้ว`);
       return { ok: true };
     } catch (e) {
       const error = e?.message || String(e);
-      setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${error}`);
+      if (!options.silent) setSyncStatus(`❌ อัปเดตไม่สำเร็จ: ${error}`);
       return { ok: false, error };
     }
+  };
+
+  const updatePreparationWorkflowBatch = async (ordersToUpdate, action, patch = {}) => {
+    const uniqueOrders = [...new Map((Array.isArray(ordersToUpdate) ? ordersToUpdate : [])
+      .filter((order) => order?.id)
+      .map((order) => [order.id, order])).values()];
+    if (!uniqueOrders.length) return { ok: false, error: "ไม่พบรายการในชุดที่ต้องอัปเดต" };
+    const results = [];
+    for (const order of uniqueOrders) {
+      results.push(await updatePreparationWorkflow(order, action, patch, { silent: true }));
+    }
+    const failures = results.filter((result) => !result?.ok);
+    if (failures.length) {
+      const message = `อัปเดตชุดไม่ครบ ${failures.length}/${uniqueOrders.length} รายการ`;
+      setSyncStatus(`❌ ${message}`);
+      return { ok: false, error: message, results, failedOrders: uniqueOrders.filter((_order, index) => !results[index]?.ok) };
+    }
+    setSyncStatus(`✅ อัปเดตชุด ${uniqueOrders.length} รายการแล้ว`);
+    return { ok: true, results };
   };
 
   const toggleSalesCompletionOrder = (orderId) => {
@@ -3675,6 +3702,16 @@ export default function App() {
     await updatePreparationWorkflow(order, "pack_archive", { reason: reason.trim() });
   };
 
+  const archivePackOrderGroup = async (group) => {
+    const targets = Array.isArray(group?.orders) ? group.orders : [];
+    if (targets.length <= 1) return archivePackOrder(targets[0] || group?.representative);
+    if (!window.confirm(`นำชุดออเดอร์ของ "${targets[0].customerName || targets[0].id}" ออกจากคิวห้องแพ็ค ${targets.length} รายการใช่ไหม?\n\nข้อมูลและ Log จะยังคงถูกเก็บไว้`)) return;
+    const reason = window.prompt("ระบุเหตุผล เช่น ส่งไปแล้ว / ออเดอร์ค้าง / รายการซ้ำ:", "");
+    if (reason === null) return;
+    if (!reason.trim()) return setSyncStatus("⚠️ กรุณาระบุเหตุผลก่อนนำชุดออกจากคิว");
+    await updatePreparationWorkflowBatch(targets, "pack_archive", { reason: reason.trim() });
+  };
+
   const searchChiangmaiHistory = async () => {
     const query = chiangmaiHistoryQuery.trim();
     if (query.length < 2) return setSyncStatus("⚠️ กรุณากรอกคำค้นหาอย่างน้อย 2 ตัวอักษร");
@@ -3796,10 +3833,11 @@ export default function App() {
   }, [displayTab]);
 
   const openWorkModal = (order, role, options = {}) => {
+    const modalOrders = Array.isArray(options.orders) && options.orders.length ? options.orders : [order];
     clearWorkPhotos();
-    delete workPhotoFilesRef.current[`${role}:${order.id}`];
-    const details = role === "store" ? order.storeWorkDetails : order.packWorkDetails;
-    setWorkModal({ order, role, ...options });
+    delete workPhotoFilesRef.current[`${role}:${modalOrders[0].id}`];
+    const details = role === "store" ? modalOrders[0].storeWorkDetails : modalOrders[0].packWorkDetails;
+    setWorkModal({ order: modalOrders[0], orders: modalOrders, role, ...options });
     setWorkForm({
       bookingNumber: "",
       bookingNumbers: role === "store" ? getOrderBookingNumbers(order) : [],
@@ -3856,9 +3894,13 @@ export default function App() {
     if (!workModal) return;
     if (!validateWorkModal()) return;
     const { order, role } = workModal;
+    const modalOrders = Array.isArray(workModal.orders) && workModal.orders.length ? workModal.orders : [order];
+    const orderSummary = modalOrders.length > 1
+      ? `ชุด ${modalOrders.length} รายการ: ${modalOrders.map((item) => item.id).join(", ")}`
+      : `งาน: ${order.id}`;
     const text = [
       role === "store" ? "📦 สโตร์ยืนยันออเดอร์" : "📦 ห้องแพ็คยืนยันออเดอร์",
-      `งาน: ${order.id}`,
+      orderSummary,
       `เลขที่ใบสั่งจอง: ${formatOrderBookingNumbers(order) || "-"}`,
       order.customerName ? `ลูกค้า: ${order.customerName}` : "",
       workForm.detail ? `รายละเอียด: ${workForm.detail}` : "",
@@ -3888,15 +3930,20 @@ export default function App() {
     if (!workModal || workSubmitting) return false;
     setWorkSubmitError("");
     const { order, role } = workModal;
+    const modalOrders = Array.isArray(workModal.orders) && workModal.orders.length ? workModal.orders : [order];
     if (!validateWorkModal()) return;
     const modalSnapshot = workModal;
     const missingItems = workForm.missingNote.trim() ? [workForm.missingNote.trim()] : [];
     const photoCount = (workPhotoFilesRef.current[`${role}:${order.id}`] || []).length;
     const details = { detail: workForm.detail, note: workForm.note, photoLocal: photoCount > 0, localPhotoCount: photoCount, sharedToLine, checklist: workForm.checklist, checkResult: workForm.checkResult };
     setWorkSubmitting(true);
-    const result = await updatePreparationWorkflow(order, role === "store" ? "store_update" : "pack_update", role === "store"
+    const action = role === "store" ? "store_update" : "pack_update";
+    const workflowPatch = role === "store"
       ? { storeStatus: workForm.checkResult === "partial" ? "partial" : "checked", storePackerName: auth.name, storeCheckerName: workForm.checkerName.trim(), missingItems, storeWorkDetails: details }
-      : { packStatus: workForm.checkResult === "returned" ? "returned" : workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, returnReason: workForm.checkResult === "returned" ? workForm.missingNote.trim() : "", packWorkDetails: details, packFromStore: Boolean(workModal.takeOverStoreCheck) });
+      : { packStatus: workForm.checkResult === "returned" ? "returned" : workForm.checkResult === "partial" ? "partial" : "checked", packPackerName: auth.name, packCheckerName: workForm.checkerName.trim(), missingItems, returnReason: workForm.checkResult === "returned" ? workForm.missingNote.trim() : "", packWorkDetails: details, packFromStore: Boolean(workModal.takeOverStoreCheck) };
+    const result = role === "pack" && modalOrders.length > 1
+      ? await updatePreparationWorkflowBatch(modalOrders, action, workflowPatch)
+      : await updatePreparationWorkflow(order, action, workflowPatch);
     setWorkSubmitting(false);
     if (result?.ok) {
       const checkerName = String(workForm.checkerName || "").trim();
@@ -3913,6 +3960,9 @@ export default function App() {
       clearWorkPhotos(modalSnapshot);
       setWorkModal(null);
       return true;
+    }
+    if (Array.isArray(result?.failedOrders) && result.failedOrders.length > 0) {
+      setWorkModal((current) => current ? { ...current, order: result.failedOrders[0], orders: result.failedOrders } : current);
     }
     setWorkSubmitError(result?.error || "ไม่สามารถบันทึกออเดอร์ได้ กรุณาลองใหม่");
     return false;
@@ -5542,9 +5592,9 @@ export default function App() {
           )}
           {auth.role === "pack" && (
             <>
-              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{packWorkOrders.length + packBlockedReworkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอห้องแพ็ค ${packWorkOrders.length + packBlockedReworkOrders.length} งาน`}>{packWorkOrders.length + packBlockedReworkOrders.length}</span>}</button>
-              <button type="button" className={displayTab === "pack-pickup" ? "active" : ""} onClick={() => selectAppTab("pack-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{packPickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอห้องแพ็ค ${packPickupOrders.length} งาน`}>{packPickupOrders.length}</span>}</button>
-              <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> <span>ออเดอร์ต่างจังหวัด</span>{salesOutstationPackOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์ต่างจังหวัดที่รอห้องแพ็ค ${salesOutstationPackOrders.length} งาน`}>{salesOutstationPackOrders.length}</span>}</button>
+              <button type="button" className={displayTab === "pack-work" ? "active" : ""} onClick={() => selectAppTab("pack-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{packWorkOrderGroups.length + packBlockedReworkOrderGroups.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอห้องแพ็ค ${packWorkOrderGroups.length + packBlockedReworkOrderGroups.length} ชุด`}>{packWorkOrderGroups.length + packBlockedReworkOrderGroups.length}</span>}</button>
+              <button type="button" className={displayTab === "pack-pickup" ? "active" : ""} onClick={() => selectAppTab("pack-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{packPickupOrderGroups.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอห้องแพ็ค ${packPickupOrderGroups.length} ชุด`}>{packPickupOrderGroups.length}</span>}</button>
+              <button type="button" className={displayTab === "pack-outstation" ? "active" : ""} onClick={() => selectAppTab("pack-outstation")}><FileText size={18} /> <span>ออเดอร์ต่างจังหวัด</span>{salesOutstationPackOrderGroups.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์ต่างจังหวัดที่รอห้องแพ็ค ${salesOutstationPackOrderGroups.length} ชุด`}>{salesOutstationPackOrderGroups.length}</span>}</button>
               <button type="button" className={displayTab === "pack-booking" ? "active" : ""} onClick={() => selectAppTab("pack-booking")}><FileText size={18} /> ใบสั่งจอง</button>
               <button type="button" className={displayTab === "pack-online" ? "active" : ""} onClick={() => selectAppTab("pack-online")}><Store size={18} /> ใบขายออนไลน์</button>
               <button type="button" className={displayTab === "pack-dashboard" ? "active" : ""} onClick={() => selectAppTab("pack-dashboard")}><ClipboardList size={18} /> รายงาน KPI ห้องแพ็ค</button>
@@ -6595,14 +6645,15 @@ export default function App() {
 
         {["pack-work", "pack-pickup", "pack-outstation"].includes(displayTab) && (
           <section className="panel role-workspace ops-workspace">
-            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length + (displayTab === "pack-work" ? packBlockedReworkOrders.length : 0)} งาน</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
+            <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrderGroups : displayTab === "pack-pickup" ? packPickupOrderGroups : packWorkOrderGroups).length + (displayTab === "pack-work" ? packBlockedReworkOrderGroups.length : 0)} ชุด</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
             {displayTab === "pack-work" && <button type="button" className="primary" style={{ width: "fit-content", marginBottom: "var(--sp-5)" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setShowOrderConfirm(false); setPendingOrder(null); setOrderConfirmError(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "direct_pack", chiangmaiRoundCode: "" })); setStoreUrgentOpen(true); }}><PackagePlus size={17} /> เปิดออเดอร์ด่วน · ส่งตรงห้องแพ็ค</button>}
-            {displayTab === "pack-work" && <section aria-label="สโตร์กำลังตรวจ" style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderLeft: "5px solid var(--c-info)", borderRadius: "10px", padding: "var(--sp-5)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-info-dark)" }}><Store size={16} className="i-inline" aria-hidden="true" /> สโตร์กำลังตรวจ</h3><span>{packStoreCheckingOrders.length} งาน · ยังไม่ส่งเข้าห้องแพ็ค</span></div>{packStoreCheckingOrders.length > 0 ? <div style={{ display: "grid", gap: "var(--sp-3)" }}>{packStoreCheckingOrders.map(order => <article key={order.id} style={{ background: "var(--c-surface)", border: "1px solid var(--c-info-border)", borderRadius: "7px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-2)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{[order.zone, order.address].filter(Boolean).join(" · ") || "-"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><small className="muted">เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"} · อัปเดต {formatThaiDateTime(order.updatedAt || order.createdAt)}</small>{order.storeCheckerName && <small className="muted">ผู้ตรวจสโตร์: {order.storeCheckerName}</small>}{order.missingItems?.length > 0 && <small style={{ color: "var(--c-danger-deep)" }}>ติดตาม: {order.missingItems.join(", ")}</small>}<button type="button" className="primary" disabled={!canPackTakeOverStoreCheck(order)} onClick={() => openWorkModal(order, "pack", { takeOverStoreCheck: true })}>ดึงมาเช็คที่ห้องแพ็ค</button></article>)}</div> : <p className="muted" style={{ margin: 0 }}>ไม่มีออเดอร์ที่ค้างกับสโตร์ · งานที่สโตร์ยืนยันแล้วจะขึ้นในคิวห้องแพ็คอัตโนมัติ</p>}</section>}
-            {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-accent-bg)", border: "2px solid var(--c-accent)", borderLeftWidth: "6px", borderRadius: "10px", padding: "var(--sp-6)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-accent-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrders.length} งาน</span></div>{packReworkOrders.map(order => <ReworkNotice key={`pack-rework-${order.id}`} order={order} />)}</div>}
+            {displayTab === "pack-work" && <section aria-label="สโตร์กำลังตรวจ" style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderLeft: "5px solid var(--c-info)", borderRadius: "10px", padding: "var(--sp-5)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-info-dark)" }}><Store size={16} className="i-inline" aria-hidden="true" /> สโตร์กำลังตรวจ</h3><span>{packStoreCheckingGroups.length} ชุด · ยังไม่ส่งเข้าห้องแพ็ค</span></div>{packStoreCheckingGroups.length > 0 ? <div style={{ display: "grid", gap: "var(--sp-3)" }}>{packStoreCheckingGroups.map(group => { const order = group.representative; const canTakeOver = group.orders.every(canPackTakeOverStoreCheck); return <article key={group.key} style={{ background: "var(--c-surface)", border: "1px solid var(--c-info-border)", borderRadius: "7px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-2)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{group.isBatch ? `ชุด ${order.customerName || "-"}` : `${order.id} · ${order.customerName || "-"}`}</b><div className="muted">{[order.zone, order.address].filter(Boolean).join(" · ") || "-"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>{group.isBatch && <small className="muted">รวม {group.totalBoxes} {group.packageUnit === "bag" ? "ถุง" : "กล่อง"} · {group.orderIds.length} รายการ</small>}<small className="muted">เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"} · อัปเดต {formatThaiDateTime(order.updatedAt || order.createdAt)}</small>{order.storeCheckerName && <small className="muted">ผู้ตรวจสโตร์: {order.storeCheckerName}</small>}{order.missingItems?.length > 0 && <small style={{ color: "var(--c-danger-deep)" }}>ติดตาม: {order.missingItems.join(", ")}</small>}<button type="button" className="primary" disabled={!canTakeOver} onClick={() => openWorkModal(order, "pack", { orders: group.orders, takeOverStoreCheck: true })}>{group.isBatch ? "ดึงทั้งชุดมาเช็คที่ห้องแพ็ค" : "ดึงมาเช็คที่ห้องแพ็ค"}</button></article>; })}</div> : <p className="muted" style={{ margin: 0 }}>ไม่มีออเดอร์ที่ค้างกับสโตร์ · งานที่สโตร์ยืนยันแล้วจะขึ้นในคิวห้องแพ็คอัตโนมัติ</p>}</section>}
+            {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-accent-bg)", border: "2px solid var(--c-accent)", borderLeftWidth: "6px", borderRadius: "10px", padding: "var(--sp-6)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-accent-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrderGroups.length} ชุด</span></div>{packReworkOrderGroups.map(group => <div key={`pack-rework-${group.key}`}><ReworkNotice order={group.representative} />{group.isBatch && <small className="muted">ชุดเดียวกัน {group.orderIds.length} รายการ · รวม {group.totalBoxes} {group.packageUnit === "bag" ? "ถุง" : "กล่อง"}</small>}</div>)}</div>}
             <div className="ops-pack-work">
-              {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
+              {(displayTab === "pack-outstation" ? salesOutstationPackOrderGroups : displayTab === "pack-pickup" ? packPickupOrderGroups : packWorkOrderGroups).map(group => { const order = group.representative; return <article key={group.key} className="role-order-card">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{group.isBatch ? `ชุด · ${order.customerName || "-"}` : `${order.id} · ${order.customerName || "-"}`}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 <OrderCreatedAt order={order} />
+                {group.isBatch && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" }}>รับงานครั้งเดียวทั้งชุด · {group.orderIds.length} รายการ · รวม {group.totalBoxes} {group.packageUnit === "bag" ? "ถุง" : "กล่อง"}</span>}
                 {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
                 {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
                 <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
@@ -6610,11 +6661,11 @@ export default function App() {
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted"><Camera size={15} className="i-inline" aria-hidden="true" /> แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
                 <ReworkNotice order={order} compact />
                 <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack")}>รับงาน / ยืนยันการแพ็ค</button><button className="secondary danger" onClick={() => archivePackOrder(order)}>นำออกจากคิว</button></div>
-              </article>)}
-              {!(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
+                <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><button className="primary" style={{ flex: "1 1 220px" }} onClick={() => openWorkModal(order, "pack", { orders: group.orders })}>{group.isBatch ? "รับงาน / ยืนยันทั้งชุด" : "รับงาน / ยืนยันการแพ็ค"}</button><button className="secondary danger" onClick={() => archivePackOrderGroup(group)}>{group.isBatch ? "นำชุดออกจากคิว" : "นำออกจากคิว"}</button></div>
+              </article>; })}
+              {!(displayTab === "pack-outstation" ? salesOutstationPackOrderGroups : displayTab === "pack-pickup" ? packPickupOrderGroups : packWorkOrderGroups).length && <p className="muted">ยังไม่มีออเดอร์ในขั้นตอนนี้</p>}
             </div>
-            {displayTab === "pack-work" && <section aria-label="คิวคนขับ" style={{ marginTop: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-brand-bg)", border: "1px solid var(--c-brand-border)", borderLeft: "5px solid var(--c-brand)", borderRadius: "10px", padding: "var(--sp-5)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-brand-dark)" }}><Car size={16} className="i-inline" aria-hidden="true" /> คิวคนขับแล้ว</h3><span>{packDriverQueueOrders.length} งาน</span></div>{packDriverQueueOrders.length > 0 ? <div style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "360px", overflowY: "auto", paddingRight: "var(--sp-2)" }}>{packDriverQueueOrders.map(order => <article key={order.id} style={{ background: "var(--c-surface)", border: "1px solid var(--c-brand-border)", borderRadius: "7px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-2)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{[order.zone, order.address].filter(Boolean).join(" · ") || "-"}</div></div><span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" }}>รอคนขับรับ</span></div><small className="muted">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "-"} · สถานะส่ง: {order.status || "-"} · เข้าคิว {formatThaiDateTime(order.queuedAt || order.updatedAt || order.createdAt)}</small></article>)}</div> : <p className="muted" style={{ margin: 0 }}>ยังไม่มีออเดอร์ที่เข้าคิวคนขับ</p>}</section>}
+            {displayTab === "pack-work" && <section aria-label="คิวคนขับ" style={{ marginTop: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-brand-bg)", border: "1px solid var(--c-brand-border)", borderLeft: "5px solid var(--c-brand)", borderRadius: "10px", padding: "var(--sp-5)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-brand-dark)" }}><Car size={16} className="i-inline" aria-hidden="true" /> คิวคนขับแล้ว</h3><span>{packDriverQueueGroups.length} ชุด</span></div>{packDriverQueueGroups.length > 0 ? <div style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "360px", overflowY: "auto", paddingRight: "var(--sp-2)" }}>{packDriverQueueGroups.map(group => { const order = group.representative; return <article key={group.key} style={{ background: "var(--c-surface)", border: "1px solid var(--c-brand-border)", borderRadius: "7px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-2)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{group.isBatch ? `ชุด · ${order.customerName || "-"}` : `${order.id} · ${order.customerName || "-"}`}</b><div className="muted">{[order.zone, order.address].filter(Boolean).join(" · ") || "-"}</div></div><span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" }}>รอคนขับรับ</span></div>{group.isBatch && <small className="muted">รวม {group.totalBoxes} {group.packageUnit === "bag" ? "ถุง" : "กล่อง"} · {group.orderIds.length} รายการ</small>}<small className="muted">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "-"} · สถานะส่ง: {order.status || "-"} · เข้าคิว {formatThaiDateTime(order.queuedAt || order.updatedAt || order.createdAt)}</small></article>; })}</div> : <p className="muted" style={{ margin: 0 }}>ยังไม่มีออเดอร์ที่เข้าคิวคนขับ</p>}</section>}
             {displayTab === "pack-outstation" && (
               <details className="prep-order-details" style={{ marginTop: "var(--sp-6)" }}>
                 <summary>สถานะส่งมอบขนส่ง ({salesOutstationHistory.length})</summary>
