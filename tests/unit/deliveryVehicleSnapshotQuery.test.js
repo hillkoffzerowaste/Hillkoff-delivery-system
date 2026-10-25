@@ -12,7 +12,8 @@ function createDb(events) {
     limit(n) {
       const limited = rows.slice(0, n);
       return { get: async () => ({ docs: limited.map((row) => ({ id: row.id, data: () => row })) }) };
-    }
+    },
+    get: async () => ({ docs: rows.map((row) => ({ id: row.id, data: () => row })) })
   });
   return { calls, collection: () => makeQuery(events) };
 }
@@ -73,5 +74,13 @@ describe("resolveDeliveryVehicleSnapshot", () => {
     const snapshot = await resolveDeliveryVehicleSnapshot(db, { driverId, deliveryServiceDate: TODAY });
 
     expect(snapshot).toMatchObject({ deliveryServiceDate: TODAY, deliveryVehicleSource: "unresolved" });
+  });
+
+  it("does not omit an exact-day vehicle event after 200 events", async () => {
+    const driverId = "driver_1";
+    const events = Array.from({ length: 250 }, (_, index) => ({ id: `event-${index}`, driverId, serviceDate: TODAY, vehicleId: "veh-1", plate: "A" }));
+    const snapshot = await resolveDeliveryVehicleSnapshot(createDb(events), { driverId, deliveryServiceDate: TODAY });
+
+    expect(snapshot).toMatchObject({ deliveryVehicleId: "veh-1", deliveryVehicleSource: "driver-usage-exact" });
   });
 });

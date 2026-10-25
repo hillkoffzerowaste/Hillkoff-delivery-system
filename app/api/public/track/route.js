@@ -1,29 +1,10 @@
 import { getAdminDb } from "../../../../lib/firebaseAdmin";
+import { isRateLimited } from "../../../../lib/publicTrackRateLimit";
 
 export const runtime = "nodejs";
 
-const TRACK_WINDOW_MS = 10 * 60 * 1000;
-const TRACK_MAX_REQUESTS = 20;
 const trackAttempts = globalThis.__hillkoffTrackAttempts || new Map();
 globalThis.__hillkoffTrackAttempts = trackAttempts;
-
-function requestClientKey(request) {
-  return String(request.headers.get("x-real-ip") || "unknown").trim();
-}
-
-function isRateLimited(request) {
-  const key = requestClientKey(request);
-  const now = Date.now();
-  const recent = (trackAttempts.get(key) || []).filter((at) => now - at < TRACK_WINDOW_MS);
-  recent.push(now);
-  trackAttempts.set(key, recent);
-  if (trackAttempts.size > 2000) {
-    for (const [entryKey, attempts] of trackAttempts) {
-      if (!attempts.some((at) => now - at < TRACK_WINDOW_MS)) trackAttempts.delete(entryKey);
-    }
-  }
-  return recent.length > TRACK_MAX_REQUESTS;
-}
 
 function normalizePhoneDigits(raw) {
   return String(raw || "").replace(/\D/g, "");
@@ -83,7 +64,7 @@ function serializeOrder(order, driver) {
 }
 
 export async function GET(request) {
-  if (isRateLimited(request)) {
+  if (isRateLimited(request, trackAttempts)) {
     return Response.json(
       { ok: false, error: "ค้นหาถี่เกินไป กรุณารอสักครู่แล้วลองใหม่" },
       { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "600" } }

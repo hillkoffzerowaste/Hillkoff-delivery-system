@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeIdempotencyKey,
+  shouldResumePrintJob,
   sanitizePrintJob,
   sanitizePrintStatusPatch,
   sanitizeRecipientRecord,
@@ -92,5 +93,20 @@ describe("outstation label persistence validation", () => {
   it("normalizes idempotency keys into deterministic safe document ids", () => {
     expect(normalizeIdempotencyKey(" Print Request / 001 ")).toBe("print-request-001");
     expect(() => normalizeIdempotencyKey("x")).toThrow(/idempotency/i);
+  });
+
+  it("allows a partially-written job to resume only when its shape matches", () => {
+    expect(shouldResumePrintJob(
+      { status: "creating", itemCount: 2, orderCount: 1 },
+      { items: [{ orderId: "A" }, { orderId: "A" }] }
+    )).toBe(true);
+    expect(shouldResumePrintJob(
+      { status: "creating", itemCount: 1, orderCount: 1 },
+      { items: [{ orderId: "A" }, { orderId: "A" }] }
+    )).toBe(false);
+    expect(shouldResumePrintJob(
+      { status: "ready", itemCount: 2, orderCount: 1 },
+      { items: [{ orderId: "A" }, { orderId: "A" }] }
+    )).toBe(false);
   });
 });

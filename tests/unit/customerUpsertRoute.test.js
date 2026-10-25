@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ db: null }));
+const state = vi.hoisted(() => ({ db: null, role: "sales" }));
 
 vi.mock("../../lib/workflowAuth.js", () => ({
   requireProfile: async (_request, roles) => {
-    if (!roles.includes("sales")) throw new Error("role contract missing");
-    return { profile: { uid: "sales-1", role: "sales", name: "ฝ่ายขายหนึ่ง", email: "sales@hillkoff.com" }, db: state.db };
+    if (!roles.includes(state.role)) throw new Error("role contract missing");
+    return { profile: { uid: `${state.role}-1`, role: state.role, name: state.role === "pack" ? "ห้องแพ็คหนึ่ง" : "ฝ่ายขายหนึ่ง", email: `${state.role}@hillkoff.com` }, db: state.db };
   },
   errorResponse: (error) => Response.json({ ok: false, error: error.message }, { status: error.status || 500 })
 }));
@@ -62,6 +62,7 @@ async function post(customer, allowDuplicatePhone = false) {
 
 describe("customer upsert route", () => {
   beforeEach(() => {
+    state.role = "sales";
     state.db = createDb({
       "cus-1": { name: "ร้านกาแฟดอย", phone: "0812345678", address: "เดิม" },
       "cus-legacy": { name: "ร้านกาแฟดอย", phone: "0812345678", address: "ซ้ำค้างระบบ" },
@@ -126,5 +127,13 @@ describe("customer upsert route", () => {
     expect(response.status).toBe(200);
     expect(state.db.customers.get("cus-1")).toMatchObject({ defaultDeliveryMethod: "outstation" });
     expect(state.db.search.get("cus-1")).toMatchObject({ defaultDeliveryMethod: "outstation" });
+  });
+
+  it("lets Pack create a new customer from the urgent-order flow", async () => {
+    state.role = "pack";
+    const response = await post({ id: "pack-customer", name: "ลูกค้าใหม่ห้องแพ็ค", phone: "0811111111", zone: "เมืองเชียงใหม่", address: "ที่อยู่ใหม่" });
+
+    expect(response.status).toBe(200);
+    expect(state.db.customers.get("pack-customer")).toMatchObject({ name: "ลูกค้าใหม่ห้องแพ็ค", updatedByRole: "pack" });
   });
 });

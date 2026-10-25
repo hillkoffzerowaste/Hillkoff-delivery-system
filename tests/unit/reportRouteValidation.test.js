@@ -58,4 +58,13 @@ describe("report route input and result bounds", () => {
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({ ok: false, error: expect.stringContaining("5,000") });
   });
+
+  it("rejects a silently truncated dispatch dashboard result", async () => {
+    state.db = { collection: () => queryWithRows(501) };
+    const { POST } = await import("../../app/api/orders/dispatch-dashboard/route.js");
+    const response = await POST(request("/api/orders/dispatch-dashboard", JSON.stringify({ selectedDate: "2026-08-01" })));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ ok: false, error: expect.stringContaining("ขีดจำกัด") });
+  });
 });

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, selectedReportDateRange, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
 import { filterStorefrontOrders, isStorefrontPickupReady, storefrontOrderDate, storefrontPickupTimeline, storefrontSelectableOrderIds } from "../lib/storefrontPickup";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
@@ -893,6 +893,7 @@ export default function App() {
   const [workSubmitError, setWorkSubmitError] = useState("");
   const [storeWorkSubtab, setStoreWorkSubtab] = useState("orders");
   const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
+  const checkerListsLoadedTokenRef = useRef("");
   const [newCheckerName, setNewCheckerName] = useState("");
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
@@ -1071,6 +1072,10 @@ export default function App() {
   };
   const isOrderUpdatePending = (orderId) => pendingOrderUpdateIds.includes(orderId);
   const routeTasksToSyncRef = useRef(new Set());
+  const routeTaskSyncInFlightRef = useRef(new Set());
+  const routeTaskSyncRetryTimerRef = useRef(new Map());
+  const routeTaskSyncRevisionRef = useRef(new Map());
+  const [routeTaskSyncTick, setRouteTaskSyncTick] = useState(0);
   const previousOrderCountRef = useRef(0); // Track previous order count for new order notification
   const audioRef = useRef(null); // Reference to audio element for notification sound
 
@@ -1168,9 +1173,16 @@ export default function App() {
       let unsubAuth = null;
       let unsubToken = null;
       try {
-	      unsubAuth = onFirebaseAuthStateChanged(() => {
+	      unsubAuth = onFirebaseAuthStateChanged((user) => {
 	        clearTimeout(t);
 	        setFbAuthReady(true);
+	        if (!user) {
+	          try { localStorage.removeItem("hillkoff_auth"); } catch {}
+	          setState((prev) => ({
+	            ...prev,
+            auth: { role: "", name: "", phone: "", driverId: "", email: "", token: "" }
+	          }));
+	        }
 	      });
 	      unsubToken = onFirebaseIdTokenChanged(async (user) => {
 	        clearTimeout(t);
@@ -1667,13 +1679,12 @@ export default function App() {
   }, [authenticatedApiFetch, displayTab, state.auth?.role, todayServiceDate]);
   const fetchReportRangeOrders = useCallback(async () => {
     if (!["sales", "admin"].includes(state.auth?.role)) return;
-    const today = toServiceDateKey(new Date());
-    const monthStart = `${today.slice(0, 7)}-01`;
-    const weekStart = toServiceDateKey(new Date(Date.parse(`${today}T12:00:00+07:00`) - 6 * 86400000));
-    const viewFrom = reportExportMode === "range" ? reportExportStartDate : reportExportDate;
-    const viewTo = reportExportMode === "range" ? reportExportEndDate : reportExportDate;
-    const from = [monthStart, weekStart, viewFrom].filter(Boolean).sort()[0] || monthStart;
-    const to = [today, viewTo].filter(Boolean).sort().slice(-1)[0] || today;
+    const { from, to } = selectedReportDateRange({
+      mode: reportExportMode,
+      date: reportExportDate,
+      startDate: reportExportStartDate,
+      endDate: reportExportEndDate,
+    });
     setReportRangeLoading(true);
     setReportRangeError("");
     try {
@@ -1936,15 +1947,42 @@ export default function App() {
 		  }, []);
 
   useEffect(() => {
-    const ids = [...routeTasksToSyncRef.current];
-    if (!ids.length) return;
-    ids.forEach((id) => routeTasksToSyncRef.current.delete(id));
-    const tasks = ids.map((id) => (state.routeTasks || []).find((task) => task.id === id)).filter(Boolean);
-    void Promise.all(tasks.map(async (task) => {
+    const entries = [...routeTasksToSyncRef.current]
+      .map((id) => ({
+        id,
+        task: (state.routeTasks || []).find((item) => item.id === id),
+        revision: routeTaskSyncRevisionRef.current.get(id),
+      }))
+      .filter(({ id, task }) => task && !routeTaskSyncInFlightRef.current.has(id));
+    if (!entries.length) return;
+    entries.forEach(({ id }) => routeTaskSyncInFlightRef.current.add(id));
+    void Promise.all(entries.map(async ({ id, task, revision }) => {
       const saved = await upsertRouteTaskToFirestore(task);
-      if (!saved.ok) console.error(`Failed to sync route task ${task.id}:`, saved.error);
+      if (saved.ok) {
+        const retryTimer = routeTaskSyncRetryTimerRef.current.get(id);
+        if (retryTimer) {
+          window.clearTimeout(retryTimer);
+          routeTaskSyncRetryTimerRef.current.delete(id);
+        }
+        if (routeTaskSyncRevisionRef.current.get(id) === revision) {
+          routeTasksToSyncRef.current.delete(id);
+          routeTaskSyncRevisionRef.current.delete(id);
+        } else {
+          setRouteTaskSyncTick((value) => value + 1);
+        }
+      } else {
+        console.error(`Failed to sync route task ${id}:`, saved.error);
+        if (!routeTaskSyncRetryTimerRef.current.has(id)) {
+          const timer = window.setTimeout(() => {
+            routeTaskSyncRetryTimerRef.current.delete(id);
+            setRouteTaskSyncTick((value) => value + 1);
+          }, 5000);
+          routeTaskSyncRetryTimerRef.current.set(id, timer);
+        }
+      }
+      routeTaskSyncInFlightRef.current.delete(id);
     }));
-  }, [state.routeTasks, upsertRouteTaskToFirestore]);
+  }, [routeTaskSyncTick, state.routeTasks, upsertRouteTaskToFirestore]);
 
 		  const getCurrentLocationOnce = () => new Promise((resolve, reject) => {
 		    if (typeof window === "undefined") return reject(new Error("no window"));
@@ -2510,7 +2548,6 @@ export default function App() {
     driverVehiclePickedRef.current = false;
     setDailyVehicleStartSaved(false);
   }, [dailyVehicleStartKey]);
-  const needsDailyVehicleStart = auth.role === "driver" && (!dailyVehicleStartSaved || !driverOdometerStart || !selectedDriverVehicle?.id);
   useEffect(() => {
     if (!latestDriverVehicleKey || typeof window === "undefined") {
       setLatestDriverVehicleId("");
@@ -3190,6 +3227,7 @@ export default function App() {
       if (!res.ok || !json?.ok) {
         const rawReason = String(json?.error || `HTTP ${res.status}`).trim();
         if (res.status === 409) {
+          if (/ออเดอร์ซ้ำ|คนขับรับ/.test(rawReason)) throw new Error("ออเดอร์ซ้ำ: คนขับรับออเดอร์เดิมแล้ว จึงไม่อนุญาตให้คีย์ซ้ำ กรุณาตรวจสอบออเดอร์เดิม");
           if (/พบออเดอร์ของลูกค้านี้/.test(rawReason)) throw new Error(rawReason);
           const reason = /order id already exists/i.test(rawReason)
             ? "ออเดอร์นี้ถูกบันทึกไปแล้ว อาจเกิดจากกดยืนยันซ้ำหรือกดใหม่หลังสัญญาณขัดข้อง"
@@ -3202,9 +3240,16 @@ export default function App() {
         throw new Error(rawReason);
       }
 
+      const updatedExisting = Boolean(json?.data?.updatedExisting);
+      const savedOrder = updatedExisting
+        ? { ...orderToCreate, ...(json.data || {}), id: json.data.id }
+        : orderToCreate;
       setState(prev => {
-        const existing = (prev.orders || []).some(order => order.id === orderToCreate.id);
-        return existing ? prev : { ...prev, orders: [orderToCreate, ...(prev.orders || [])] };
+        if (updatedExisting) {
+          return { ...prev, orders: (prev.orders || []).map(order => order.id === savedOrder.id ? { ...order, ...savedOrder } : order) };
+        }
+        const existing = (prev.orders || []).some(order => order.id === savedOrder.id);
+        return existing ? prev : { ...prev, orders: [savedOrder, ...(prev.orders || [])] };
       });
       setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7) });
       setSelectedCustomerId("");
@@ -3216,11 +3261,13 @@ export default function App() {
       setShareNewOrderToLine(false);
 
       if (!shouldShareLine) {
-        setSyncStatus(`✅ บันทึกออเดอร์ "${orderToCreate.id}" สำเร็จ`);
+        setSyncStatus(updatedExisting
+          ? `✅ อัปเดตออเดอร์เดิม "${savedOrder.id}" และส่งกลับเข้าคิวคนขับแล้ว`
+          : `✅ บันทึกออเดอร์ "${savedOrder.id}" สำเร็จ`);
         return;
       }
 
-      const text = buildLineMessageForNewOrder(orderToCreate);
+      const text = buildLineMessageForNewOrder(savedOrder);
       let copied = false;
       try { await navigator.clipboard?.writeText?.(text); copied = true; } catch {}
       if (!navigator?.share) {
@@ -3367,11 +3414,6 @@ export default function App() {
     const did = state.auth?.driverId || driverId || "";
     if (!did) {
       setDriverAssessmentStatus("⚠️ ไม่พบรหัสคนขับ กรุณาออกเข้าใหม่");
-      return;
-    }
-    if (needsDailyVehicleStart) {
-      setDriverAssessmentStatus("⚠️ กรุณาบันทึกเริ่มใช้รถวันนี้ก่อนส่งแบบประเมิน");
-      setTab("driver-vehicle");
       return;
     }
     const missing = DRIVER_DAILY_CHECK_ITEMS.filter(item => !driverDailyChecks[item.id]);
@@ -3752,14 +3794,19 @@ export default function App() {
   const reportHistoryLabel = (event) => ({ created: "สโตร์สร้างรายการ", created_draft: "สโตร์บันทึกร่าง", confirmed: "สโตร์ยืนยันรายการ", updated: "สโตร์แก้ไขรายการ", pack_checked: "ห้องแพ็คตรวจครบ", pack_partial: "ห้องแพ็คตรวจพบของไม่ครบ", pack_returned: "ห้องแพ็คส่งกลับสโตร์", store_resubmitted: "สโตร์แก้ไขและส่งตรวจใหม่", deleted: "ลบรายการ" }[event] || event || "อัปเดตรายการ");
 
   const loadCheckerLists = useCallback(async () => {
-    if (!["store", "pack", "admin"].includes(auth.role)) return;
+    if (!fbAuthReady || !["store", "pack", "admin"].includes(auth.role)) return;
+    if (!auth.token) return;
     try {
-      const idToken = await refreshAuthToken();
+      const idToken = await refreshAuthToken(false);
       const res = await fetch("/api/preparation/checkers", { headers: { Authorization: `Bearer ${idToken}` } });
       const json = await res.json();
-      if (res.ok && json?.ok) setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
-    } catch {}
-  }, [auth.role, refreshAuthToken]);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      checkerListsLoadedTokenRef.current = idToken;
+      setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
+    } catch (error) {
+      setSyncStatus(`⚠️ โหลดรายชื่อผู้ตรวจไม่สำเร็จ: ${error?.message || error}`);
+    }
+  }, [auth.role, auth.token, fbAuthReady, refreshAuthToken]);
 
   const saveCheckerList = async (role, names) => {
     const clean = [...new Set(names.map(name => String(name || "").trim()).filter(Boolean))];
@@ -3777,7 +3824,10 @@ export default function App() {
     }
   };
 
-  useEffect(() => { loadCheckerLists(); }, [loadCheckerLists]);
+  useEffect(() => {
+    if (!auth.token || checkerListsLoadedTokenRef.current === auth.token) return;
+    loadCheckerLists();
+  }, [auth.role, auth.token, fbAuthReady, loadCheckerLists]);
 
   useEffect(() => {
     if (displayTab !== "settings" || auth.role !== "admin") return;
@@ -4574,6 +4624,7 @@ export default function App() {
 
   const updateRouteTask = (id, patch) => {
     routeTasksToSyncRef.current.add(id);
+    routeTaskSyncRevisionRef.current.set(id, (routeTaskSyncRevisionRef.current.get(id) || 0) + 1);
     setState(prev => ({ ...prev, routeTasks: (prev.routeTasks || []).map(task => task.id === id ? { ...task, ...patch } : task) }));
   };
 
@@ -4637,10 +4688,8 @@ export default function App() {
           ...stop,
           status: "เช็คอินแล้ว",
           checkedInAt: stop.checkedInAt || new Date().toLocaleString("th-TH"),
-          sharedToLine: true
+          sharedToLine: Boolean(stop.sharedToLine)
         };
-        const stops = (task.stops || []).map(item => item.id === stop.id ? nextStop : item);
-        updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
         const text = buildLineMessageForRouteTask(task, nextStop);
         const file = routeTaskFilesRef.current?.[routeTaskStopKey(task.id, stop.id)];
         let copied = false;
@@ -4654,9 +4703,12 @@ export default function App() {
         } else {
           await navigator.share({ text });
         }
+        const sharedStop = { ...nextStop, sharedToLine: true };
+        const stops = (task.stops || []).map(item => item.id === stop.id ? sharedStop : item);
+        updateRouteTask(task.id, { stops, status: "เช็คอินแล้ว" });
         setSyncStatus(`✅ แชร์ LINE งานวิ่ง ${task.id} แล้ว`);
       } catch (error) {
-        setSyncStatus(`✅ บันทึกเช็คอินแล้ว หากแชร์ LINE ไม่ขึ้น ให้เปิด LINE แล้ววางข้อความที่คัดลอกไว้ (${task.id})`);
+        setSyncStatus(`⚠️ แชร์ LINE งานวิ่ง ${task.id} ไม่สำเร็จ จึงยังไม่ยืนยันการแชร์`);
       }
     })();
   };
@@ -5550,58 +5602,6 @@ export default function App() {
           </div>
         </header>
         {!['store-dashboard', 'pack-dashboard'].includes(displayTab) && <div className="sync-banner" role="status" aria-live="polite">{syncStatus}</div>}
-        {auth.role === "driver" && needsDailyVehicleStart && (
-          <div style={{ position: "fixed", inset: 0, background: "var(--c-overlay)", zIndex: 1400, display: "grid", placeItems: "center", padding: "var(--sp-7)" }}>
-            <section className="panel" style={{ width: "min(520px, 100%)", borderLeft: "4px solid var(--c-info)", boxShadow: "0 16px 40px var(--c-overlay-soft)" }}>
-              <div className="panel-head">
-                <h2>เริ่มใช้รถวันนี้</h2>
-                <span>{todayServiceDate}</span>
-              </div>
-              <p className="muted" style={{ marginTop: 0 }}>กรุณายืนยันรถและกรอกเลขไมล์เริ่มต้นก่อนใช้งานแอพประจำวัน</p>
-              <div style={{ display: "grid", gap: "var(--sp-5)" }}>
-                <div>
-                  <label className="field-label">รถที่ใช้วันนี้</label>
-                  <select
-                    value={selectedDriverVehicleId}
-                    onChange={e => {
-                      driverVehiclePickedRef.current = true;
-                      setDriverVehicleId(e.target.value);
-                      setDriverVehicleChangedToday(true);
-                    }}
-                  >
-                    {availableVehicles.map(vehicle => (
-                      <option key={vehicle.id} value={vehicle.id}>
-                        {vehicle.plate} · {vehicle.brand} {vehicle.model} · {vehicle.responsiblePerson}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label">เลขไมล์เริ่มต้นวันนี้</label>
-                  <input
-                    value={driverOdometerStart}
-                    onChange={e => setDriverOdometerStart(formatWithCommas(e.target.value))}
-                    inputMode="numeric"
-                    placeholder="เช่น 120,500"
-                    autoFocus
-                  />
-                </div>
-                <button type="button" className="primary wide" onClick={submitDailyVehicleStart} disabled={dailyVehicleStartSubmitting}>
-                  <CheckCircle2 size={16} /> {dailyVehicleStartSubmitting ? "กำลังบันทึก..." : "เริ่มใช้รถวันนี้"}
-                </button>
-                <button type="button" className="secondary wide" onClick={logout}>
-                  ออกจากระบบเพื่อล็อกอินใหม่
-                </button>
-                {vehicleUsageStatus && (
-                  <span style={{ color: vehicleUsageStatus.startsWith("✅") ? "var(--c-brand-dark)" : vehicleUsageStatus.startsWith("⏳") ? "var(--c-info-dark)" : "var(--c-danger-dark)", fontWeight: 800, fontSize: "12px" }}>
-                    {vehicleUsageStatus}
-                  </span>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
         {displayTab === "sales" && (
           <>
             <div className="sales-grid">
@@ -6482,7 +6482,7 @@ export default function App() {
               {(() => { const query = orderCustomerSearch.trim(); const matches = customers.filter(customer => customerMatchesQuery(customer, query)).slice(0, 10); if (!query) return <small className="muted">พิมพ์อย่างน้อย 3 ตัวอักษร ระบบจะแสดงข้อมูลลูกค้าทันที</small>; if (query.length < 3) return <small className="muted">พิมพ์เพิ่มอีก {3 - query.length} ตัวอักษรเพื่อค้นหาฐานลูกค้ากลาง</small>; if (!matches.length) return <small className="muted">กำลังค้นหา หรือยังไม่พบลูกค้าที่ตรงกัน</small>; return <div style={{ display: "grid", gap: "var(--sp-3)", maxHeight: "260px", overflowY: "auto" }}>{matches.map(customer => <button key={customer.id} type="button" onClick={() => { setSelectedCustomerId(customer.id); setOrderCustomerSearch(""); }} style={{ textAlign: "left", border: "1px solid var(--c-line-strong)", background: "var(--c-surface)", borderRadius: "8px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{customer.name}</b><span style={{ display: "block", fontSize: "12px", color: "var(--c-text-soft)", marginTop: "var(--sp-1)" }}>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ") || "-"}</span>{customer.address && <small className="muted" style={{ display: "block", marginTop: "var(--sp-1)" }}>{customer.address}</small>}</button>)}</div>; })()}
               {selectedCustomerId && (() => { const customer = customers.find(item => item.id === selectedCustomerId); return customer ? <div className="customer-detail"><div><b>{customer.name}</b><p>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ")}</p><p>{customer.address || "-"}</p></div></div> : null; })()}
             </div>
-            {auth.role !== "pack" && <><div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select><select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button></>}
+            <div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select><select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" /><textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={2} /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button>
             <div className="form-grid two">{auth.role === "pack" ? <div className="status-chip" style={{ alignSelf: "center", width: "fit-content" }}>คนขับบริษัท · ส่งตรงห้องแพ็ค</div> : <select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "store_route" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select>}<select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
             <div style={{ display: "grid", gap: "var(--sp-3)" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">{auth.role === "pack" ? "งานด่วนเว้นว่างได้ · ถ้าสโตร์คีย์เลขใบสั่งจองนี้ไว้แล้ว ใช้เลขเดิมได้เลย ระบบจะผูกให้อัตโนมัติ" : "เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง"}</small></div>
             <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />
@@ -7601,7 +7601,7 @@ export default function App() {
                 <span>SOP ประจำวัน</span>
               </div>
               <p style={{ margin: 0, color: "var(--c-accent-deep)", fontWeight: 800 }}>
-                ก่อนออกงานทุกเช้า คนขับต้องตรวจสภาพรถและบันทึกแบบประเมินให้ครบ หากพบความผิดปกติให้หยุดใช้รถและแจ้งทันที ห้ามฝืนใช้งานรถที่ไม่พร้อมหรือไม่ปลอดภัย
+                ข้อมูลรถ เลขไมล์ และแบบประเมินเป็นรายการเสริม ไม่บังคับตอนเข้าแอพ คนขับกรอกภายหลังได้ แต่ก่อนนำรถออกงานควรตรวจสภาพและแจ้งทันทีหากพบความผิดปกติ ห้ามฝืนใช้งานรถที่ไม่พร้อมหรือไม่ปลอดภัย
               </p>
               <div style={{ display: "grid", gap: "var(--sp-3)", marginTop: "var(--sp-5)" }}>
                 {DRIVER_MORNING_NOTICE.map(item => (

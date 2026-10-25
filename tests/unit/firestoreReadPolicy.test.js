@@ -3,6 +3,7 @@ import {
   INITIAL_CUSTOMER_RESULTS_LIMIT,
   getOrdersSyncMode,
   needsActiveOrdersQuery,
+  needsRouteTasksRealtime,
   shouldPauseFirestoreSync
 } from "../../lib/firestoreReadPolicy.js";
 
@@ -12,6 +13,7 @@ describe("Firestore read policy", () => {
     expect(getOrdersSyncMode("sales-outstation")).toBe("realtime");
     expect(getOrdersSyncMode("store-dashboard")).toBe("snapshot");
     expect(getOrdersSyncMode("pack-dashboard")).toBe("snapshot");
+    expect(getOrdersSyncMode("reports")).toBe("none");
     expect(getOrdersSyncMode("settings")).toBe("none");
   });
 
@@ -30,10 +32,19 @@ describe("Firestore read policy", () => {
     expect(needsActiveOrdersQuery("store-dashboard")).toBe(false);
     expect(needsActiveOrdersQuery("pack-dashboard")).toBe(false);
     expect(needsActiveOrdersQuery("reports")).toBe(false);
+    expect(needsRouteTasksRealtime("reports")).toBe(false);
     // operational tabs must still attach active-orders
     expect(needsActiveOrdersQuery("sales")).toBe(true);
     expect(needsActiveOrdersQuery("dispatch")).toBe(true);
     expect(needsActiveOrdersQuery("store-work")).toBe(true);
     expect(needsActiveOrdersQuery("driver")).toBe(true);
+  });
+
+  it("keeps daily reports scoped to the selected date instead of an implicit month", async () => {
+    const { selectedReportDateRange } = await import("../../lib/firestoreReadPolicy.js");
+    expect(selectedReportDateRange({ mode: "single", date: "2026-09-30", startDate: "2026-09-01", endDate: "2026-09-30" }))
+      .toEqual({ from: "2026-09-30", to: "2026-09-30" });
+    expect(selectedReportDateRange({ mode: "range", date: "2026-09-30", startDate: "2026-09-01", endDate: "2026-09-30" }))
+      .toEqual({ from: "2026-09-01", to: "2026-09-30" });
   });
 });
