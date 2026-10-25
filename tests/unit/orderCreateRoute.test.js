@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ db: null, role: "pack", now: "2026-10-09T03:00:00.000Z", sheetSyncOrders: [] }));
 
@@ -149,10 +149,14 @@ async function postOrder(order) {
 
 describe("pack duplicate handling in order creation", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(state.now));
     state.role = "pack";
     state.sheetSyncOrders = [];
     state.db = createDb({ customers: { "customer-1": customer } });
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("updates the eligible same-day order, requeues it, and returns the patch", async () => {
     state.db = createDb({
