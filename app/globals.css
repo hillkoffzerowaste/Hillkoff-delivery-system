@@ -2016,6 +2016,13 @@ input:focus,select:focus,textarea:focus { border-color:#63aaa8; box-shadow:0 0 0
 .ops-dashboard-panel { padding-top: 18px; }
 .ops-realtime-status { display: inline-flex; align-items: center; min-height: 34px; padding: 0 10px; border: 1px solid #bfe3e2; border-radius: 999px; background: #effbfb; color: #25716e; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .ops-kpi-dashboard { display: grid; gap: 16px; }
+.ops-kpi-filters { display: grid; gap: 12px; margin-bottom: 18px; padding: 16px; border: 1px solid var(--c-line-strong); border-radius: 12px; background: var(--c-surface-subtle); }
+.ops-kpi-period-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.ops-kpi-period-fields label { display: grid; flex: 1 1 160px; gap: 6px; min-width: 0; font-size: 13px; font-weight: 700; }
+.ops-kpi-period-fields input, .ops-kpi-period-fields select { width: 100%; min-width: 0; min-height: 42px; box-sizing: border-box; }
+.ops-kpi-period-fields button { min-height: 42px; }
+.ops-kpi-filters p { margin: 0; font-size: 12px; }
+.ops-kpi-filters [role="alert"] { color: var(--c-danger); }
 .ops-progress-card,.ops-follow-up-card,.ops-month-summary,.ops-report-group,.ops-information-note { border: 1px solid #cae2e1; border-radius: 16px; background: #fff; box-shadow: 0 7px 18px rgba(29, 82, 80, .06); }
 .ops-progress-card { padding: 17px; }
 .ops-section-heading { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }

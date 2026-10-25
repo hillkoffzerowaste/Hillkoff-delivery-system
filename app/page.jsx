@@ -14,6 +14,8 @@ import OrderReviewQrCode from "./components/OrderReviewQrCode";
 import VehicleInspectionReport from "./components/VehicleInspectionReport";
 import DispatchDashboard from "./components/DispatchDashboard";
 import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
+import OperationsKpiFilters from "./components/OperationsKpiFilters";
+import { resolveKpiPeriod, isInKpiPeriod } from "../lib/operationsKpiPeriod";
 import {
   buildChiangmaiRoundGroups,
   canSalesCompleteChiangmaiOrder,
@@ -553,15 +555,15 @@ function StoreMetricCard({ icon: Icon, title, value, suffix = "", description, t
   );
 }
 
-function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, recentOrders, activities, reportActions, information, progressTitle = "ความคืบหน้าการตรวจสินค้า", progressLabel = "ตรวจเสร็จ" }) {
+function OperationsKpiDashboard({ cards, completed, total, followUps, monthly, recentOrders, activities, reportActions, information, periodLabel, progressTitle = "ความคืบหน้าการตรวจสินค้า", progressLabel = "ตรวจเสร็จ" }) {
   const progress = total ? Math.round((completed / total) * 100) : 0;
   const remaining = Math.max(0, total - completed);
   const cardIcons = { "is-primary": Package, "is-amber": Clock3, "is-blue": SearchCheck, "is-green": CheckCircle2, "is-red": PackageX };
   return <div className="ops-kpi-dashboard ops-kpi-dashboard-v2">
-    <div className="stats role-stats" aria-label="สรุปงานวันนี้">{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const tone = { "is-primary": "var(--c-info)", "is-amber": "var(--c-warn-dark)", "is-blue": "var(--c-info-dark)", "is-green": "var(--c-brand-dark)", "is-red": "var(--c-danger)" }[card.tone] || "var(--c-info)"; return <StoreMetricCard key={card.label} icon={Icon} title={card.label} value={card.value} suffix=" งาน" description={card.detail} tone={tone} />; })}</div>
+    <div className="stats role-stats" aria-label={periodLabel ? `สรุปงาน ${periodLabel}` : "สรุปงานวันนี้"}>{cards.map((card) => { const Icon = cardIcons[card.tone] || Package; const tone = { "is-primary": "var(--c-info)", "is-amber": "var(--c-warn-dark)", "is-blue": "var(--c-info-dark)", "is-green": "var(--c-brand-dark)", "is-red": "var(--c-danger)" }[card.tone] || "var(--c-info)"; return <StoreMetricCard key={card.label} icon={Icon} title={card.label} value={card.value} suffix=" งาน" description={card.detail} tone={tone} />; })}</div>
     <div className="ops-dashboard-main"><section className="ops-progress-card"><div className="ops-section-heading"><div><h3>{progressTitle}</h3><p>{progressLabel} {completed} จาก {total} งาน</p></div><b>{progress}%</b></div><div className="ops-progress-track" role="progressbar" aria-label={progressTitle} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div><div className="ops-progress-foot"><span>{progressLabel} {completed} จาก {total} งาน</span><b>เหลืออีก {remaining} งาน</b></div></section><section className="ops-follow-up-card"><div className="ops-section-heading"><div><h3>งานที่ต้องติดตาม</h3><p>สถานะที่ควรดำเนินการต่อ</p></div></div><div className="ops-follow-up-grid">{followUps.map((item) => <div key={item.label} className={item.value ? "is-alert" : "is-clear"}>{item.value ? <><span>{item.label}</span><b>{item.value} งาน</b></> : <><i aria-hidden="true"><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> </i><span>{item.emptyLabel}</span></>}</div>)}</div></section></div>
-    <section className="ops-recent-orders"><div className="ops-section-heading"><div><h3>ออเดอร์ล่าสุดวันนี้</h3><p>รายการล่าสุดจากข้อมูลที่มีอยู่ในระบบ</p></div></div><div className="ops-recent-list">{recentOrders.map((order) => <article key={order.id}><div><b>{order.bookingNumber || order.id}</b><span>{order.customerName || "ไม่ระบุลูกค้า"}</span></div><span className={`ops-order-status ${order.statusTone || "is-primary"}`}>{order.statusLabel}</span><small>{order.updatedAt ? formatThaiDateTime(order.updatedAt) : "ยังไม่มีเวลาอัปเดต"}</small></article>)}{!recentOrders.length && <p className="muted">ยังไม่มีออเดอร์ของวันนี้</p>}</div></section>
-    <div className="ops-dashboard-footer"><section className="ops-month-summary"><h3>สรุปเดือนนี้</h3><div className="ops-month-summary-grid">{monthly.map((item) => <div key={item.label}><span>{item.label}</span><b>{item.value}{item.suffix || ""}</b></div>)}</div></section><section className="ops-activity-card"><div className="ops-section-heading"><div><h3>Activity วันนี้</h3><p>อ้างอิงจากประวัติการทำงานที่บันทึกไว้</p></div></div><div className="ops-activity-list">{activities.map((activity) => <article key={activity.id}><time>{activity.at ? new Date(activity.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</time><div><b>{activity.title}</b>{activity.note && <span>{activity.note}</span>}</div></article>)}{!activities.length && <p className="muted">ยังไม่มีรายการเคลื่อนไหวของวันนี้</p>}</div></section>{reportActions && <section className="ops-report-actions"><h3>รายงาน</h3><div><button className="secondary" onClick={reportActions.copyDaily}><ClipboardList size={15} className="i-inline" aria-hidden="true" /> คัดลอกวันนี้</button><button className="primary" onClick={reportActions.shareDaily}><Upload size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE วันนี้</button><button className="secondary" onClick={reportActions.copyMonthly}><ClipboardList size={15} className="i-inline" aria-hidden="true" /> คัดลอกเดือนนี้</button><button className="primary" onClick={reportActions.shareMonthly}><Upload size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE เดือนนี้</button></div></section>}</div>
+    <section className="ops-recent-orders"><div className="ops-section-heading"><div><h3>{periodLabel ? "ออเดอร์ล่าสุดในช่วงที่เลือก" : "ออเดอร์ล่าสุดวันนี้"}</h3><p>รายการล่าสุดจากข้อมูลที่มีอยู่ในระบบ</p></div></div><div className="ops-recent-list">{recentOrders.map((order) => <article key={order.id}><div><b>{order.bookingNumber || order.id}</b><span>{order.customerName || "ไม่ระบุลูกค้า"}</span></div><span className={`ops-order-status ${order.statusTone || "is-primary"}`}>{order.statusLabel}</span><small>{order.updatedAt ? formatThaiDateTime(order.updatedAt) : "ยังไม่มีเวลาอัปเดต"}</small></article>)}{!recentOrders.length && <p className="muted">{periodLabel ? "ไม่มีออเดอร์ในช่วงที่เลือก" : "ยังไม่มีออเดอร์ของวันนี้"}</p>}</div></section>
+    <div className="ops-dashboard-footer"><section className="ops-month-summary"><h3>{periodLabel ? `สรุป ${periodLabel}` : "สรุปเดือนนี้"}</h3><div className="ops-month-summary-grid">{monthly.map((item) => <div key={item.label}><span>{item.label}</span><b>{item.value}{item.suffix || ""}</b></div>)}</div></section><section className="ops-activity-card"><div className="ops-section-heading"><div><h3>{periodLabel ? "Activity ในช่วงที่เลือก" : "Activity วันนี้"}</h3><p>{periodLabel ? "แสดงกิจกรรมล่าสุดไม่เกิน 50 รายการในช่วงที่เลือก" : "อ้างอิงจากประวัติการทำงานที่บันทึกไว้"}</p></div></div><div className="ops-activity-list">{activities.map((activity) => <article key={activity.id}><time>{activity.at ? new Date(activity.at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", ...(periodLabel ? { day: "2-digit", month: "2-digit", year: "numeric" } : {}), hour: "2-digit", minute: "2-digit" }) : "-"}</time><div><b>{activity.title}</b>{activity.note && <span>{activity.note}</span>}</div></article>)}{!activities.length && <p className="muted">{periodLabel ? "ไม่มีกิจกรรมในช่วงที่เลือก" : "ยังไม่มีรายการเคลื่อนไหวของวันนี้"}</p>}</div></section>{reportActions && periodLabel && <section className="ops-report-actions"><h3>รายงาน {periodLabel}</h3><div><button className="secondary" onClick={reportActions.copyDaily}>คัดลอกรายงาน</button><button className="primary" onClick={reportActions.shareDaily}>แชร์รายงาน</button></div></section>}{reportActions && !periodLabel && <section className="ops-report-actions"><h3>รายงาน</h3><div><button className="secondary" onClick={reportActions.copyDaily}><ClipboardList size={15} className="i-inline" aria-hidden="true" /> คัดลอกวันนี้</button><button className="primary" onClick={reportActions.shareDaily}><Upload size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE วันนี้</button><button className="secondary" onClick={reportActions.copyMonthly}><ClipboardList size={15} className="i-inline" aria-hidden="true" /> คัดลอกเดือนนี้</button><button className="primary" onClick={reportActions.shareMonthly}><Upload size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE เดือนนี้</button></div></section>}</div>
     {information && <aside className="ops-information-note"><b>ℹ️ ข้อมูลระบบ</b><p>{information}</p></aside>}
   </div>;
 }
@@ -901,6 +903,14 @@ export default function App() {
   const [storeReportStatusFilter, setStoreReportStatusFilter] = useState("all");
   const [storeReportsUpdatedAt, setStoreReportsUpdatedAt] = useState(null);
   const [kpiAutoRefresh, setKpiAutoRefresh] = useState(false);
+  const [kpiSelection, setKpiSelection] = useState(() => {
+    const date = toServiceDateKey(new Date());
+    return { mode: "daily", date, month: date.slice(0, 7), year: date.slice(0, 4), from: `${date.slice(0, 7)}-01`, to: date };
+  });
+  const [kpiData, setKpiData] = useState({ orders: [], reports: [], key: "", updatedAt: null });
+  const [kpiLoading, setKpiLoading] = useState(false);
+  const [kpiError, setKpiError] = useState("");
+  const kpiGenerationRef = useRef(0);
   const [storeReportIssues, setStoreReportIssues] = useState({ booking: { count: 0, items: [] }, online: { count: 0, items: [] } });
   const storeReportsFetchInFlightRef = useRef(false);
   // นับรุ่นของคำขอ เพื่อให้ผลที่มาถึงสลับลำดับไม่ทับผลของคำขอล่าสุด
@@ -1005,7 +1015,12 @@ export default function App() {
   }, []);
 
   const todayServiceDate = toServiceDateKey(appClock);
-  const previousServiceDate = toServiceDateKey(new Date(Date.parse(`${todayServiceDate}T12:00:00+07:00`) - 86400000));
+  const kpiPeriod = resolveKpiPeriod(kpiSelection, todayServiceDate);
+  const kpiPeriodFrom = kpiPeriod?.from || "";
+  const kpiPeriodTo = kpiPeriod?.to || "";
+  const isOperationsKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
+  const kpiRequestKey = `${state.auth?.role}:${state.auth?.email || state.auth?.phone || ""}:${kpiPeriodFrom}:${kpiPeriodTo}`;
+  const kpiReady = Boolean(kpiPeriod && kpiData.key === kpiRequestKey && !kpiLoading && !kpiError);
   const getOrderServiceDate = (o) => {
     if (o?.serviceDate) return String(o.serviceDate).slice(0, 10);
     const sourceDate = o?.createdAt || o?.updatedAt || "";
@@ -1605,6 +1620,36 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
+  const fetchOperationsKpi = useCallback(async () => {
+    if (!fbAuthReady || !isOperationsKpi || !["store", "pack"].includes(state.auth?.role) || !kpiPeriodFrom || !kpiPeriodTo) return;
+    const generation = ++kpiGenerationRef.current;
+    setKpiLoading(true);
+    setKpiError("");
+    try {
+      const params = new URLSearchParams({ from: kpiPeriodFrom, to: kpiPeriodTo });
+      const response = await authenticatedApiFetch(`/api/operations-kpi?${params}`);
+      const json = await response.json();
+      if (!response.ok || !json?.ok) throw new Error(json?.error || `HTTP ${response.status}`);
+      if (generation !== kpiGenerationRef.current) return;
+      setKpiData({ orders: json.orders, reports: json.reports, key: kpiRequestKey, updatedAt: new Date().toISOString() });
+    } catch (error) {
+      if (generation === kpiGenerationRef.current) setKpiError(error?.message || String(error));
+    } finally {
+      if (generation === kpiGenerationRef.current) setKpiLoading(false);
+    }
+  }, [authenticatedApiFetch, fbAuthReady, isOperationsKpi, state.auth?.role, kpiPeriodFrom, kpiPeriodTo, kpiRequestKey]);
+  useEffect(() => {
+    const generationRef = kpiGenerationRef;
+    if (!kpiPeriodFrom || !kpiPeriodTo) {
+      setKpiLoading(false);
+      setKpiError("");
+    }
+    fetchOperationsKpi();
+    const timer = isOperationsKpi && kpiAutoRefresh ? window.setInterval(() => {
+      if (document.visibilityState === "visible") fetchOperationsKpi();
+    }, REPORT_REFRESH_INTERVALS.kpi) : null;
+    return () => { ++generationRef.current; if (timer) window.clearInterval(timer); };
+  }, [fetchOperationsKpi, isOperationsKpi, kpiAutoRefresh, kpiPeriodFrom, kpiPeriodTo]);
   useEffect(() => {
     if (state.auth?.role !== "driver" || displayTab !== "driver") return undefined;
     let cancelled = false;
@@ -2119,10 +2164,12 @@ export default function App() {
     queueStatus: report.deletedAt ? "report_archived" : "report_active",
     sourceType: report.type === "online" ? "ใบขายออนไลน์" : "ใบสั่งจอง"
   });
-  const storeKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "store"));
-  const packKpiReportOrders = (storeReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "pack"));
-  const storeKpiOrders = [...(orders || []).filter(order => order.workflowType === "store_route"), ...storeKpiReportOrders];
-  const packKpiOrders = [...(orders || []).filter(order => order.workflowType && order.workflowType !== "direct_driver" && order.packStatus !== "blocked"), ...packKpiReportOrders];
+  const kpiSourceOrders = isOperationsKpi ? kpiData.orders : orders;
+  const kpiSourceReports = isOperationsKpi ? kpiData.reports : storeReports;
+  const storeKpiReportOrders = (kpiSourceReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "store"));
+  const packKpiReportOrders = (kpiSourceReports || []).filter(report => ["booking", "online"].includes(report.type)).map(report => reportToKpiOrder(report, "pack"));
+  const storeKpiOrders = [...(kpiSourceOrders || []).filter(order => order.workflowType === "store_route"), ...storeKpiReportOrders];
+  const packKpiOrders = [...(kpiSourceOrders || []).filter(order => order.workflowType && order.workflowType !== "direct_driver" && order.packStatus !== "blocked"), ...packKpiReportOrders];
   const activeStoreKpiOrders = storeKpiOrders.filter(order => !["archived"].includes(order.storeStatus));
   const activePackKpiOrders = packKpiOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
   const storeKpiReturned = storeKpiOrders.filter(order => order.storeStatus === "returned");
@@ -2145,8 +2192,8 @@ export default function App() {
   };
   const buildKpiActivityRows = (sourceOrders, department) => sourceOrders.flatMap(order => {
     const returnedAtMs = Date.parse(order.returnedToStoreAt || 0);
-    const events = getWorkflowEvents(order).filter(item => toServiceDateKey(item.at) === todayServiceDate);
-    if (order.returnedToStoreAt && toServiceDateKey(order.returnedToStoreAt) === todayServiceDate && !events.some(item => item?.result === "returned" || item?.toStatus === "returned" || Date.parse(item.at || 0) === returnedAtMs)) {
+    const events = getWorkflowEvents(order).filter(item => isInKpiPeriod(item.at, kpiPeriod));
+    if (order.returnedToStoreAt && isInKpiPeriod(order.returnedToStoreAt, kpiPeriod) && !events.some(item => item?.result === "returned" || item?.toStatus === "returned" || Date.parse(item.at || 0) === returnedAtMs)) {
       events.push(getReturnEvents(order)[0]);
     }
     return events.filter(Boolean).map((item, index) => {
@@ -2194,8 +2241,8 @@ export default function App() {
   const chiangmaiRoundGroups = useMemo(() => buildChiangmaiRoundGroups(orders || []), [orders]);
   const chiangmaiRoundTotalOrders = chiangmaiRoundGroups.reduce((sum, group) => sum + group.total, 0);
   const chiangmaiRoundTotalReady = chiangmaiRoundGroups.reduce((sum, group) => sum + group.ready, 0);
-  const storeTodayOrders = storeKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
-  const packTodayOrders = packKpiOrders.filter(order => getOrderServiceDate(order) === todayServiceDate);
+  const storeTodayOrders = storeKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod));
+  const packTodayOrders = packKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod));
   const activeStoreTodayOrders = storeTodayOrders.filter(order => order.storeStatus !== "archived");
   const activePackTodayOrders = packTodayOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
   const storeTodayCompleted = activeStoreTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
@@ -2281,6 +2328,7 @@ export default function App() {
   });
   useEffect(() => {
     const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
+    if (isKpi) return undefined;
     const reportType = isStoreBookingEntryView || ["store-booking", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
     const shouldFetchReports = (auth.role === "store" && (isStoreBookingEntryView || ["store-booking", "store-online", "store-dashboard"].includes(displayTab)))
       || (auth.role === "pack" && ["pack-booking", "pack-online", "pack-dashboard"].includes(displayTab));
@@ -3986,20 +4034,8 @@ export default function App() {
     } catch (error) { setSyncStatus(`❌ ลบรายการไม่สำเร็จ: ${error?.message || error}`); }
   };
 
-  const comparisonLine = (todayValue, previousValue) => {
-    const difference = todayValue - previousValue;
-    const percent = previousValue ? Math.round((difference / previousValue) * 100) : todayValue ? 100 : 0;
-    return `เทียบเมื่อวาน (${previousServiceDate}): ${previousValue} รายการ · ${difference >= 0 ? "+" : ""}${difference} (${percent >= 0 ? "+" : ""}${percent}%)`;
-  };
-  const projectedEndOfDay = (currentValue) => {
-    const now = new Date();
-    const bangkokHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }).format(now));
-    const elapsed = Math.max(1, Math.min(10, bangkokHour - 8));
-    return Math.max(currentValue, Math.round((currentValue / elapsed) * 10));
-  };
   const kpiActivitySummary = (tasks, period, department) => {
-    const monthKey = todayServiceDate.slice(0, 7);
-    const inPeriod = (value) => period === "daily" ? toServiceDateKey(value) === todayServiceDate : String(value || "").slice(0, 7) === monthKey;
+    const inPeriod = (value) => isInKpiPeriod(value, kpiPeriod);
     const events = tasks.flatMap((task) => getWorkflowEvents(task).filter((event) => inPeriod(event.at)).map((event, index) => ({ ...event, task, key: `${task.id}-${event.id || event.at || index}` })));
     const count = (actions) => events.filter((event) => actions.includes(event.action)).length;
     const returned = tasks.flatMap((task) => getReturnEvents(task).filter((event) => inPeriod(event.at)).map((event) => ({ ...event, task })));
@@ -4022,11 +4058,7 @@ export default function App() {
   };
 
   const buildStoreSummary = (period) => {
-    const monthKey = todayServiceDate.slice(0, 7);
-    const isInPeriod = (value) => {
-      const dateKey = String(value || "").slice(0, 10);
-      return period === "daily" ? dateKey === todayServiceDate : dateKey.startsWith(monthKey);
-    };
+    const isInPeriod = (value) => isInKpiPeriod(value, kpiPeriod);
     const tasks = storeKpiOrders.filter((item) => isInPeriod(getOrderServiceDate(item)));
     const active = tasks.filter((item) => item.storeStatus !== "archived");
     const nearby = tasks.filter((item) => item.workflowType === "store_route").length;
@@ -4039,9 +4071,8 @@ export default function App() {
     const archived = tasks.length - active.length;
     const activityTasks = storeKpiOrders;
     const returned = activityTasks.flatMap(getReturnEvents).filter((event) => isInPeriod(event.at)).length;
-    const previousTasks = storeKpiOrders.filter((item) => getOrderServiceDate(item) === previousServiceDate);
-    const title = period === "daily" ? `รายงานสโตร์ประจำวัน ${todayServiceDate}` : `รายงานสโตร์ประจำเดือน ${monthKey}`;
-    const analysis = period === "daily" ? [comparisonLine(tasks.length, previousTasks.length), `คาดการณ์สิ้นวัน: ประมาณ ${projectedEndOfDay(tasks.length)} รายการ`, waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"] : [`ค่าเฉลี่ยต่อวัน: ${(tasks.length / Math.max(1, Number(todayServiceDate.slice(8, 10)))).toFixed(1)} รายการ`];
+    const title = `รายงานสโตร์ ${kpiPeriod?.label || ""}`;
+    const analysis = [`ค่าเฉลี่ยต่อวัน: ${(tasks.length / Math.max(1, kpiPeriod?.days || 1)).toFixed(1)} รายการ`, "ยอดงานอิงวันที่งาน · สถานะเป็นสถานะล่าสุด", waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"];
     return [title, "", "สรุปยอด", `งานทั้งหมด: ${tasks.length} รายการ`, `เชียงใหม่/ใกล้เคียง และ Grab/รับหน้าร้าน: ${nearby} รายการ`, `ใบสั่งจอง: ${booking} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอตรวจ: ${pending} รายการ`, `กำลังตรวจ: ${working} รายการ`, `ตรวจเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`, `ส่งกลับตรวจ: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`, "", "วิเคราะห์และคาดการณ์", ...analysis, "", "สรุป Activity", ...kpiActivitySummary(activityTasks, period, "store")].join("\n");
   };
 
@@ -4064,10 +4095,7 @@ export default function App() {
   };
 
   const buildPackSummary = (period) => {
-    const monthKey = todayServiceDate.slice(0, 7);
-    const isInPeriod = value => period === "daily"
-      ? String(value || "").slice(0, 10) === todayServiceDate
-      : String(value || "").slice(0, 7) === monthKey;
+    const isInPeriod = (value) => isInKpiPeriod(value, kpiPeriod);
     const packOrders = packKpiOrders.filter(order => isInPeriod(getOrderServiceDate(order)));
     const active = packOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
     const preparation = packOrders.filter(order => order.workflowType !== "store_report").length;
@@ -4079,9 +4107,8 @@ export default function App() {
     const activityTasks = packKpiOrders;
     const returned = activityTasks.flatMap(getReturnEvents).filter(event => isInPeriod(event.at)).length;
     const archived = packOrders.length - active.length;
-    const previousTasks = packKpiOrders.filter(order => getOrderServiceDate(order) === previousServiceDate);
-    const title = period === "daily" ? `รายงานห้องแพ็คประจำวัน ${todayServiceDate}` : `รายงานห้องแพ็คประจำเดือน ${monthKey}`;
-    const analysis = period === "daily" ? [comparisonLine(packOrders.length, previousTasks.length), `คาดการณ์สิ้นวัน: ประมาณ ${projectedEndOfDay(packOrders.length)} รายการ`, waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"] : [`ค่าเฉลี่ยต่อวัน: ${(packOrders.length / Math.max(1, Number(todayServiceDate.slice(8, 10)))).toFixed(1)} รายการ`];
+    const title = `รายงานห้องแพ็ค ${kpiPeriod?.label || ""}`;
+    const analysis = [`ค่าเฉลี่ยต่อวัน: ${(packOrders.length / Math.max(1, kpiPeriod?.days || 1)).toFixed(1)} รายการ`, "ยอดงานอิงวันที่งาน · สถานะเป็นสถานะล่าสุด", waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"];
     return [title, "", "สรุปยอด", `งานทั้งหมด: ${packOrders.length} รายการ`, `ออเดอร์เตรียมสินค้า: ${preparation} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอแพ็ค: ${pending} รายการ`, `กำลังแพ็ค: ${working} รายการ`, `แพ็คเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `รอของ/ของไม่ครบ: ${waiting} รายการ`, `ส่งกลับสโตร์: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`, "", "วิเคราะห์และคาดการณ์", ...analysis, "", "สรุป Activity", ...kpiActivitySummary(activityTasks, period, "pack")].join("\n");
   };
 
@@ -6510,7 +6537,7 @@ export default function App() {
 
         {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
           <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
-            {displayTab === "store-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
+        {displayTab === "store-dashboard" && <OperationsKpiFilters selection={kpiSelection} onChange={setKpiSelection} period={kpiPeriod} loading={kpiLoading} error={kpiError} autoRefresh={kpiAutoRefresh} onAutoRefresh={setKpiAutoRefresh} onRefresh={fetchOperationsKpi} updatedAt={kpiData.key === kpiRequestKey ? kpiData.updatedAt : null} />}
             {displayTab !== "store-dashboard" && <div className="panel-head"><h2>{displayTab === "store-work" ? "ออเดอร์เชียงใหม่/ใกล้เคียง" : "งานสโตร์"}</h2><span>เฉพาะบัญชีสโตร์</span></div>}
             {displayTab === "store-work" && <div role="tablist" aria-label="เมนูเชียงใหม่/ใกล้เคียง" style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginBottom: "var(--sp-6)", padding: "var(--sp-2)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)", borderRadius: "9px" }}><button type="button" role="tab" aria-selected={storeWorkSubtab === "orders"} className={storeWorkSubtab === "orders" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("orders")}>ออเดอร์เชียงใหม่/ใกล้เคียง</button><button type="button" role="tab" aria-selected={storeWorkSubtab === "booking-entry"} className={storeWorkSubtab === "booking-entry" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("booking-entry")}>เพิ่มเลขใบสั่งจอง</button></div>}
             {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "var(--sp-5)" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setShowOrderConfirm(false); setPendingOrder(null); setOrderConfirmError(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
@@ -6552,7 +6579,7 @@ export default function App() {
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
             </div>}
-            {displayTab === "store-dashboard" && (() => { const pending = storeTodayOrders.filter(order => order.storeStatus === "pending").length; const working = storeTodayOrders.filter(order => order.storeStatus === "working").length; const waiting = storeTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus)).length; const monthOrders = storeKpiOrders.filter(order => getOrderServiceDate(order).startsWith(currentMonthKey)); const monthCompleted = monthOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)); const monthReturned = storeKpiOrders.flatMap(getReturnEvents).filter(event => String(event.at || "").startsWith(currentMonthKey)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอตรวจ", working: "กำลังตรวจ", checked: "ตรวจเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับตรวจ" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = storeTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.storeStatus] || "รอตรวจ", statusTone: statusTones[order.storeStatus] })); let activityRows = buildKpiActivityRows(storeKpiOrders, "store"); if (!activityRows.length) activityRows = storeTodayOrders.map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "ฝ่ายขายสร้างหรืออัปเดตออเดอร์", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <OperationsKpiDashboard cards={[{ icon: "📦", value: storeTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่ฝ่ายขายส่งให้สโตร์", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอตรวจ", detail: "ยังไม่ได้เริ่มตรวจ", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังตรวจ", detail: "สโตร์กำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: storeTodayCompleted, label: "ตรวจเสร็จ", detail: "พร้อมส่งต่อห้องแพ็ค", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={storeTodayCompleted} total={storeTodayOrders.length} followUps={[{ label: "งานส่งกลับให้สโตร์ตรวจ", emptyLabel: "ไม่มีงานส่งกลับ", value: storeKpiReturned.length }, { label: "งานสโตร์ค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: storeKpiOverdue.length }, { label: "งานรอของ / ของไม่ครบ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "ตรวจเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับตรวจ", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราตรวจครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows} reportActions={{ copyDaily: () => copyStoreSummary("daily"), shareDaily: () => shareStoreSummary("daily"), copyMonthly: () => copyStoreSummary("monthly"), shareMonthly: () => shareStoreSummary("monthly") }} information="ออเดอร์ออนไลน์ส่งต่อให้ห้องแพ็คติดตาม ส่วนรายงานต่างจังหวัดแบบบันทึกใช้เก็บประวัติสโตร์ และทั้งสองส่วนไม่ขึ้น Google Sheets" />; })()}
+            {displayTab === "store-dashboard" && kpiReady && (() => { const pending = storeTodayOrders.filter(order => order.storeStatus === "pending").length; const working = storeTodayOrders.filter(order => order.storeStatus === "working").length; const waiting = storeTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus)).length; const monthOrders = storeKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod)); const monthCompleted = activeStoreTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)); const monthReturned = storeKpiOrders.flatMap(getReturnEvents).filter(event => isInKpiPeriod(event.at, kpiPeriod)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอตรวจ", working: "กำลังตรวจ", checked: "ตรวจเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับตรวจ" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = storeTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.storeStatus] || "รอตรวจ", statusTone: statusTones[order.storeStatus] })); let activityRows = buildKpiActivityRows(storeKpiOrders, "store"); if (!activityRows.length) activityRows = storeTodayOrders.filter(order => isInKpiPeriod(order.updatedAt || order.createdAt, kpiPeriod)).map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "ฝ่ายขายสร้างหรืออัปเดตออเดอร์", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <OperationsKpiDashboard periodLabel={kpiPeriod.label} cards={[{ icon: "📦", value: storeTodayOrders.length, label: "ออเดอร์ในช่วงที่เลือก", detail: "งานที่ฝ่ายขายส่งให้สโตร์", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอตรวจ", detail: "ยังไม่ได้เริ่มตรวจ", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังตรวจ", detail: "สโตร์กำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: storeTodayCompleted, label: "ตรวจเสร็จ", detail: "พร้อมส่งต่อห้องแพ็ค", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={storeTodayCompleted} total={storeTodayOrders.length} followUps={[{ label: "งานส่งกลับให้สโตร์ตรวจ", emptyLabel: "ไม่มีงานส่งกลับ", value: storeTodayOrders.filter(order => order.storeStatus === "returned").length }, { label: "งานสโตร์ค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: storeKpiOverdue.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod)).length }, { label: "งานรอของ / ของไม่ครบ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "ตรวจเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับตรวจ", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราตรวจครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows.slice(0, 50)} reportActions={{ copyDaily: () => copyStoreSummary("daily"), shareDaily: () => shareStoreSummary("daily"), copyMonthly: () => copyStoreSummary("monthly"), shareMonthly: () => shareStoreSummary("monthly") }} information="ออเดอร์ออนไลน์ส่งต่อให้ห้องแพ็คติดตาม ส่วนรายงานต่างจังหวัดแบบบันทึกใช้เก็บประวัติสโตร์ และทั้งสองส่วนไม่ขึ้น Google Sheets" />; })()}
           </section>
         )}
 
@@ -6571,9 +6598,9 @@ export default function App() {
           </section>
         )}
 
-        {displayTab === "pack-dashboard" && (() => { const pending = packTodayOrders.filter(order => order.packStatus === "pending").length; const working = packTodayOrders.filter(order => order.packStatus === "working").length; const waiting = packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length; const monthOrders = packKpiOrders.filter(order => getOrderServiceDate(order).startsWith(currentMonthKey)); const monthCompleted = monthOrders.filter(order => ["checked", "partial"].includes(order.packStatus)); const monthReturned = packKpiOrders.flatMap(getReturnEvents).filter(event => String(event.at || "").startsWith(currentMonthKey)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอแพ็ค", working: "กำลังแพ็ค", checked: "แพ็คเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับสโตร์" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = packTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.packStatus] || "รอแพ็ค", statusTone: statusTones[order.packStatus] })); let activityRows = buildKpiActivityRows(packKpiOrders, "pack"); if (!activityRows.length) activityRows = packTodayOrders.map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "อัปเดตออเดอร์ห้องแพ็ค", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard cards={[{ icon: "📦", value: packTodayOrders.length, label: "ออเดอร์วันนี้", detail: "งานที่เข้าสู่ห้องแพ็ค", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอแพ็ค", detail: "ยังไม่ได้เริ่มแพ็ค", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังแพ็ค", detail: "ห้องแพ็คกำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: packTodayCompleted, label: "แพ็คเสร็จ", detail: "ตรวจและยืนยันแล้ว", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={packTodayCompleted} total={packTodayOrders.length} followUps={[{ label: "งานส่งกลับสโตร์", emptyLabel: "ไม่มีงานส่งกลับ", value: packKpiReturned.length }, { label: "งานค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: packKpiOverdue.length }, { label: "งานรอดำเนินการ / รอของ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "แพ็คเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับสโตร์", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราแพ็คครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows} reportActions={{ copyDaily: () => copyPackSummary("daily"), shareDaily: () => sharePackSummary("daily"), copyMonthly: () => copyPackSummary("monthly"), shareMonthly: () => sharePackSummary("monthly") }} information="KPI ห้องแพ็คอ้างอิง Log การตรวจจริงแบบเรียลไทม์ เคสส่งกลับที่แก้เสร็จแล้วยังคงอยู่ในสถิติย้อนหลัง แต่ไม่แสดงเป็นงานค้าง" progressTitle="ความคืบหน้าการแพ็คสินค้า" progressLabel="แพ็คเสร็จ" />;</section>; })()}
+        {displayTab === "pack-dashboard" && <OperationsKpiFilters selection={kpiSelection} onChange={setKpiSelection} period={kpiPeriod} loading={kpiLoading} error={kpiError} autoRefresh={kpiAutoRefresh} onAutoRefresh={setKpiAutoRefresh} onRefresh={fetchOperationsKpi} updatedAt={kpiData.key === kpiRequestKey ? kpiData.updatedAt : null} />}
+        {displayTab === "pack-dashboard" && kpiReady && (() => { const pending = packTodayOrders.filter(order => order.packStatus === "pending").length; const working = packTodayOrders.filter(order => order.packStatus === "working").length; const waiting = packTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.packStatus)).length; const monthOrders = packKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod)); const monthCompleted = activePackTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)); const monthReturned = packKpiOrders.flatMap(getReturnEvents).filter(event => isInKpiPeriod(event.at, kpiPeriod)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.packStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอแพ็ค", working: "กำลังแพ็ค", checked: "แพ็คเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับสโตร์" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = packTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.packStatus] || "รอแพ็ค", statusTone: statusTones[order.packStatus] })); let activityRows = buildKpiActivityRows(packKpiOrders, "pack"); if (!activityRows.length) activityRows = packTodayOrders.filter(order => isInKpiPeriod(order.updatedAt || order.createdAt, kpiPeriod)).map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "อัปเดตออเดอร์ห้องแพ็ค", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <section className="panel role-workspace ops-workspace ops-dashboard-panel"><OperationsKpiDashboard periodLabel={kpiPeriod.label} cards={[{ icon: "📦", value: packTodayOrders.length, label: "ออเดอร์ในช่วงที่เลือก", detail: "งานที่เข้าสู่ห้องแพ็ค", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอแพ็ค", detail: "ยังไม่ได้เริ่มแพ็ค", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังแพ็ค", detail: "ห้องแพ็คกำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: packTodayCompleted, label: "แพ็คเสร็จ", detail: "ตรวจและยืนยันแล้ว", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={packTodayCompleted} total={packTodayOrders.length} followUps={[{ label: "งานส่งกลับสโตร์", emptyLabel: "ไม่มีงานส่งกลับ", value: packTodayOrders.filter(order => order.packStatus === "returned").length }, { label: "งานค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: packKpiOverdue.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod)).length }, { label: "งานรอดำเนินการ / รอของ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "แพ็คเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับสโตร์", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราแพ็คครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows.slice(0, 50)} reportActions={{ copyDaily: () => copyPackSummary("daily"), shareDaily: () => sharePackSummary("daily"), copyMonthly: () => copyPackSummary("monthly"), shareMonthly: () => sharePackSummary("monthly") }} information="KPI ห้องแพ็คอ้างอิง Log การตรวจจริงตามช่วงวันที่ที่เลือก เคสส่งกลับที่แก้เสร็จแล้วยังคงอยู่ในสถิติย้อนหลัง แต่ไม่แสดงเป็นงานค้าง" progressTitle="ความคืบหน้าการแพ็คสินค้า" progressLabel="แพ็คเสร็จ" />;</section>; })()}
 
-        {displayTab === "pack-dashboard" && <div className="store-report-filters"><label className="store-report-deleted-filter"><input type="checkbox" checked={kpiAutoRefresh} onChange={(event) => setKpiAutoRefresh(event.target.checked)} /> อัปเดต KPI อัตโนมัติทุก 15 นาที</label><button className="secondary" onClick={() => fetchStoreReports({ includeDeleted: true, kpi: true })}><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช KPI</button><span className="muted">{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${new Date(storeReportsUpdatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span></div>}
 
         {["pack-booking", "pack-online"].includes(displayTab) && (() => {
           const type = displayTab === "pack-booking" ? "booking" : "online";
