@@ -5,6 +5,7 @@ import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChang
 import { HILLKOFF_VEHICLES, findDefaultVehicleForDriver, findVehicleById, vehicleDisplayName } from "../lib/vehicleMaster";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, MAX_RECENT_ORDERS_LIMIT, REPORT_REFRESH_INTERVALS, getOrdersSyncMode, needsActiveOrdersQuery, needsRouteTasksRealtime, nextOrdersLimit, recentOrdersLimit, selectedReportDateRange, shouldPauseFirestoreSync } from "../lib/firestoreReadPolicy";
 import { authenticatedFetch } from "../lib/authenticatedFetch";
+import { filterPackReports, selectPackBatch } from "../lib/packReportHistory";
 import { filterStorefrontOrders, isStorefrontPickupReady, storefrontOrderDate, storefrontPickupTimeline, storefrontSelectableOrderIds } from "../lib/storefrontPickup";
 import { OUTSTATION_LABELS_PER_PAGE, expandOrderToLabelItems } from "../lib/outstationLabels";
 import { HILLKOFF_LINE_URL } from "../lib/outstationQr";
@@ -695,15 +696,16 @@ function BookingNumberInput({ value, onChange, required = false }) {
   </div>;
 }
 
-function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange, onSearch, onClear, selectedIds, onSelectedIdsChange, onConfirmSelected, onUpdateStatus, updatedAt, date, onDateChange, checkerName, onCheckerNameChange, checkerOptions }) {
+function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange, onSearch, onClear, selectedIds, onSelectedIdsChange, onConfirmSelected, onUpdateStatus, updatedAt, date, onDateChange, period, onPeriodChange, checkerName, onCheckerNameChange, checkerOptions }) {
   const [statusFilter, setStatusFilter] = useState("active");
-  const visibleRows = rows.filter((item) => statusFilter === "all" || (statusFilter === "active" && ["pending", "partial", "returned"].includes(item.packStatus)) || item.packStatus === statusFilter);
+  const visibleRows = filterPackReports(rows, { type, status: statusFilter });
   const selectableRows = visibleRows.filter((item) => item.packStatus === "pending");
   const selectedSet = new Set(selectedIds);
   const selectedVisibleIds = selectableRows.filter((item) => selectedSet.has(item.id)).map((item) => item.id);
-  const allSelectable = selectableRows.length > 0 && selectedVisibleIds.length === selectableRows.length;
-  const toggleAll = (checked) => onSelectedIdsChange(checked ? selectableRows.map((item) => item.id) : []);
-  const toggleOne = (id, checked) => onSelectedIdsChange(checked ? [...new Set([...selectedIds, id])] : selectedIds.filter((selectedId) => selectedId !== id));
+  const batchIds = selectPackBatch(selectableRows);
+  const allSelectable = batchIds.length > 0 && batchIds.every((id) => selectedSet.has(id));
+  const toggleAll = (checked) => onSelectedIdsChange(checked ? batchIds : []);
+  const toggleOne = (id, checked) => onSelectedIdsChange(checked ? [...new Set([...selectedIds, id])].slice(0, 50) : selectedIds.filter((selectedId) => selectedId !== id));
   const statusMeta = (item) => {
     if (item.packStatus === "returned") return { label: "ส่งกลับสโตร์", tone: "partial" };
     if (item.packStatus === "partial") return { label: "ของไม่ครบ / รอของ", tone: "partial" };
@@ -712,18 +714,19 @@ function PackReportWorkspace({ type, title, rows, loading, query, onQueryChange,
   };
   return <section className="panel role-workspace ops-workspace pack-report-workspace">
     <div className="panel-head"><h2>{title}</h2><span>{selectableRows.length} งานรอยืนยัน</span></div>
-    <div className="store-report-filters" style={{ marginBottom: "var(--sp-5)" }}>
-      <input aria-label="วันที่รายงานห้องแพ็ค" type="date" value={date} onChange={(event) => onDateChange(event.target.value)} />
-      <select aria-label="กรองสถานะห้องแพ็ค" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">งานที่ต้องดำเนินการ</option><option value="pending">รอยืนยัน</option><option value="partial">ของไม่ครบ / รอของ</option><option value="returned">ส่งกลับสโตร์</option><option value="checked">ยืนยันแล้ว</option><option value="all">ทุกสถานะ</option></select>
-      <div className="store-report-search"><Search size={17} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div>
+    <div className="store-report-filters" style={{ marginBottom: "var(--sp-5)", display: "flex", flexWrap: "wrap" }}>
+      <select style={{ width: "auto" }} aria-label="ช่วงรายงานห้องแพ็ค" value={period} onChange={(event) => { const next = event.target.value; setStatusFilter(next === "month" ? "all" : "active"); onPeriodChange(next); }}><option value="day">รายวัน</option><option value="month">ย้อนหลังทั้งเดือน</option></select>
+      <input style={{ width: "auto" }} aria-label="วันที่รายงานห้องแพ็ค" type="date" value={date} onChange={(event) => onDateChange(event.target.value)} />
+      <select style={{ width: "auto" }} aria-label="กรองสถานะห้องแพ็ค" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">งานที่ต้องดำเนินการ</option><option value="pending">รอยืนยัน</option><option value="partial">ของไม่ครบ / รอของ</option><option value="returned">ส่งกลับสโตร์</option><option value="checked">ยืนยันแล้ว</option><option value="all">ทุกสถานะ</option></select>
+      <div className="store-report-search" style={{ flex: "1 1 220px" }}><Search size={17} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div>
       <button className="secondary" onClick={onSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={onClear}>ล้าง</button>
     </div>
     <div className="store-report-actions" style={{ marginBottom: "var(--sp-5)" }}>
       <div><span className="muted">เลือกงานที่ตรวจครบ แล้วกดยืนยันครั้งเดียว หรือยืนยันทีละงานได้</span><select aria-label="ชื่อผู้ตรวจห้องแพ็ค" value={checkerName} onChange={(event) => onCheckerNameChange(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจห้องแพ็ค * --</option>{[...new Set([...(checkerOptions || []), checkerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
-      <div><button className="secondary" disabled={!selectableRows.length} onClick={() => toggleAll(!allSelectable)}>{allSelectable ? "ยกเลิกเลือกทั้งหมด" : `เลือกทั้งหมด (${selectableRows.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length || !checkerName.trim()} onClick={() => onConfirmSelected(selectedVisibleIds)}>ยืนยันที่เลือก ({selectedVisibleIds.length})</button></div>
+      <div><button className="secondary" disabled={!selectableRows.length} onClick={() => toggleAll(!allSelectable)}>{allSelectable ? "ยกเลิกเลือกทั้งหมด" : selectableRows.length > 50 ? "เลือก 50 รายการแรก" : `เลือกทั้งหมด (${selectableRows.length})`}</button><button className="primary" disabled={!selectedVisibleIds.length || !checkerName.trim()} onClick={() => onConfirmSelected(selectedVisibleIds)}>ยืนยันที่เลือก ({selectedVisibleIds.length})</button></div>
     </div>
     {updatedAt && <small className="muted">อัปเดตล่าสุด {new Date(updatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small>}
-    {loading ? <ListSkeleton rows={4} /> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{visibleRows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; const canInspect = selectable && Boolean(checkerName.trim()); return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "var(--c-danger-dark)" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span>{item.packCheckerName && <small>ผู้ตรวจล่าสุด: {item.packCheckerName}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!canInspect} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!canInspect} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!canInspect} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
+    {loading ? <ListSkeleton rows={4} /> : <div className="store-report-table-wrap"><table className="store-report-table"><thead><tr><th><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allSelectable} disabled={!selectableRows.length} onChange={(event) => toggleAll(event.target.checked)} /></th><th>เลขเอกสาร</th><th>รายละเอียด</th><th>เวลา / ผู้บันทึก</th><th>สถานะห้องแพ็ค</th><th>จัดการ</th></tr></thead><tbody>{visibleRows.map((item) => { const status = statusMeta(item); const selectable = item.packStatus === "pending"; const canInspect = selectable && Boolean(checkerName.trim()); return <tr key={item.id} className={`store-report-row is-${status.tone}`}><td data-label="เลือก"><input type="checkbox" aria-label={`เลือก ${item.bookingNumber || "รายการ"}`} checked={selectedSet.has(item.id)} disabled={!selectable || (!selectedSet.has(item.id) && selectedIds.length >= 50)} onChange={(event) => toggleOne(item.id, event.target.checked)} /></td><td data-label="เลขเอกสาร"><b>{item.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</b>{item.linkedOrder && <small className="muted">ฝ่ายขาย: {item.linkedOrder.id} · {item.linkedOrder.customerName || "ไม่ระบุลูกค้า"}</small>}</td><td data-label="รายละเอียด"><span>{item.detail || "-"}</span>{item.note && <small>{item.note}</small>}{item.returnReason && <small style={{ color: "var(--c-danger-dark)" }}>เหตุผลส่งกลับ: {item.returnReason}</small>}</td><td data-label="เวลา / ผู้บันทึก"><span>{item.createdAt ? new Date(item.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</span><small>{item.createdBy || "-"} · {item.serviceDate || "-"}</small></td><td data-label="สถานะห้องแพ็ค"><span className={`store-report-status is-${status.tone}`}>{status.label}</span>{item.packCheckerName && <small>ผู้ตรวจล่าสุด: {item.packCheckerName}</small>}</td><td data-label="จัดการ"><div className="store-report-row-actions"><button className="primary" disabled={!canInspect} onClick={() => onConfirmSelected([item.id])}>ยืนยันครบ</button><button className="secondary" disabled={!canInspect} onClick={() => onUpdateStatus(item, "partial")}>ของไม่ครบ</button><button className="secondary danger" disabled={!canInspect} onClick={() => onUpdateStatus(item, "returned")}>ส่งกลับสโตร์</button></div></td></tr>; })}</tbody></table></div>}
     {!loading && !visibleRows.length && <p className="muted">ยังไม่มี{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}ที่ตรงกับตัวกรอง</p>}
   </section>;
 }
@@ -917,6 +920,7 @@ export default function App() {
   const [storeReports, setStoreReports] = useState([]);
   const [storeReportsLoading, setStoreReportsLoading] = useState(false);
   const [storeReportDate, setStoreReportDate] = useState(() => toServiceDateKey(new Date()));
+  const [packReportPeriod, setPackReportPeriod] = useState("day");
   const [storeReportQuery, setStoreReportQuery] = useState("");
   const [storeReportSearchActive, setStoreReportSearchActive] = useState(false);
   const [storeReportIncludeDeleted, setStoreReportIncludeDeleted] = useState(false);
@@ -2341,7 +2345,7 @@ export default function App() {
   const activeDriverRouteTasks = driverRouteTasks.filter(task => task.status !== "เสร็จงาน" && task.status !== "ยกเลิก");
   const drivers = state.drivers?.length ? state.drivers : initialDrivers;
   const auth = state.auth || {};
-  const fetchStoreReports = async ({ date = "", query = "", type = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
+  const fetchStoreReports = async ({ date = "", month = "", query = "", type = "", includeDeleted = false, kpi = false, silent = false } = {}) => {
     if (!["store", "pack"].includes(auth.role)) return;
     // การ refresh เบื้องหลังข้ามได้ถ้ามีคำขอค้างอยู่ แต่คำขอที่ผู้ใช้กดเอง (ค้นหา/เปลี่ยนแท็บ)
     // ต้องไม่ถูกทิ้งเงียบๆ ไม่งั้นกดค้นหาตอน refresh อัตโนมัติทำงานอยู่จะไม่เกิดอะไรขึ้นเลย
@@ -2353,6 +2357,7 @@ export default function App() {
     try {
       const params = new URLSearchParams();
       if (date) params.set("date", date);
+      if (month) params.set("month", month);
       if (query.trim()) params.set("q", query.trim());
       if (includeDeleted) params.set("includeDeleted", "true");
       if (kpi) {
@@ -2428,18 +2433,19 @@ export default function App() {
     const reportType = ["store-booking", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
     const shouldFetchReports = (auth.role === "store" && (["store-booking", "store-online"].includes(displayTab)))
       || (auth.role === "pack" && ["pack-booking", "pack-online", "pack-dashboard"].includes(displayTab));
-    if (shouldFetchReports) fetchStoreReports({ date: (["store-booking", "store-online", "pack-booking", "pack-online"].includes(displayTab)) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
+    const monthlyPackHistory = auth.role === "pack" && ["pack-booking", "pack-online"].includes(displayTab) && packReportPeriod === "month";
+    if (shouldFetchReports) fetchStoreReports({ date: !monthlyPackHistory && !storeReportSearchActive ? storeReportDate : "", month: monthlyPackHistory && !storeReportSearchActive ? storeReportDate.slice(0, 7) : "", query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
     const isStoreReport = auth.role === "store" && (["store-booking", "store-online"].includes(displayTab));
     if (!isKpi && !isStoreReport) return undefined;
     if (isKpi && !kpiAutoRefresh) return undefined;
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (isKpi) fetchStoreReports({ includeDeleted: true, kpi: true, silent: true });
-      else fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQueryRef.current : "", type: reportType, includeDeleted: storeReportIncludeDeleted, silent: true });
+      else fetchStoreReports({ date: storeReportSearchActive || monthlyPackHistory ? "" : storeReportDate, month: monthlyPackHistory && !storeReportSearchActive ? storeReportDate.slice(0, 7) : "", query: storeReportSearchActive ? storeReportQueryRef.current : "", type: reportType, includeDeleted: storeReportIncludeDeleted, silent: true });
     }, isKpi ? REPORT_REFRESH_INTERVALS.kpi : REPORT_REFRESH_INTERVALS.reports);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted, kpiAutoRefresh]);
+  }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted, kpiAutoRefresh, packReportPeriod]);
 
   const updateReportPackStatus = async (item, packStatus, returnReason = "") => {
     const checkerName = reportPackCheckerName.trim();
@@ -6638,11 +6644,10 @@ export default function App() {
         {["pack-booking", "pack-online"].includes(displayTab) && (() => {
           const type = displayTab === "pack-booking" ? "booking" : "online";
           const title = type === "booking" ? "ใบสั่งจอง · ห้องแพ็ค" : "ใบขายออนไลน์ · ห้องแพ็ค";
-          const pendingRows = storeReports.filter((item) => item.type === type && item.confirmedAt && !item.deletedAt && ["pending", "partial", "returned"].includes(item.packStatus));
-          const rows = storeReportSearchActive ? storeReports.filter((item) => item.type === type && !item.deletedAt) : pendingRows;
+          const rows = filterPackReports(storeReports, { type, status: "all" });
           const search = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); fetchStoreReports({ type, query: storeReportQuery, includeDeleted: true }); };
-          const clear = () => { setStoreReportQuery(""); setStoreReportSearchActive(false); setPackReportSelectedIds([]); fetchStoreReports({ type, date: storeReportDate, includeDeleted: false }); };
-          return <PackReportWorkspace type={type} title={title} rows={rows} loading={storeReportsLoading} query={storeReportQuery} onQueryChange={setStoreReportQuery} onSearch={search} onClear={clear} selectedIds={packReportSelectedIds} onSelectedIdsChange={setPackReportSelectedIds} onConfirmSelected={(ids) => confirmSelectedPackReports(type, ids)} onUpdateStatus={updateReportPackStatus} updatedAt={storeReportsUpdatedAt} date={storeReportDate} onDateChange={(nextDate) => { setStoreReportDate(nextDate); setStoreReportSearchActive(false); setPackReportSelectedIds([]); }} checkerName={reportPackCheckerName} onCheckerNameChange={setReportPackCheckerName} checkerOptions={checkerLists.pack} />;
+          const clear = () => { setStoreReportQuery(""); setStoreReportSearchActive(false); setPackReportSelectedIds([]); fetchStoreReports({ type, date: packReportPeriod === "day" ? storeReportDate : "", month: packReportPeriod === "month" ? storeReportDate.slice(0, 7) : "", includeDeleted: false }); };
+          return <PackReportWorkspace type={type} title={title} rows={rows} loading={storeReportsLoading} query={storeReportQuery} onQueryChange={setStoreReportQuery} onSearch={search} onClear={clear} selectedIds={packReportSelectedIds} onSelectedIdsChange={setPackReportSelectedIds} onConfirmSelected={(ids) => confirmSelectedPackReports(type, ids)} onUpdateStatus={updateReportPackStatus} updatedAt={storeReportsUpdatedAt} date={storeReportDate} onDateChange={(nextDate) => { setStoreReportDate(nextDate); setStoreReportSearchActive(false); setPackReportSelectedIds([]); }} period={packReportPeriod} onPeriodChange={(nextPeriod) => { setPackReportPeriod(nextPeriod); setStoreReportSearchActive(false); setPackReportSelectedIds([]); }} checkerName={reportPackCheckerName} onCheckerNameChange={setReportPackCheckerName} checkerOptions={checkerLists.pack} />;
         })()}
 
         {false && ["pack-booking", "pack-online"].includes(displayTab) && (() => {

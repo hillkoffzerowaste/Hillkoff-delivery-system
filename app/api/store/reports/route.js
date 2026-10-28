@@ -1,6 +1,7 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, canReleaseStoreReportReservation, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
+import { getPackHistoryMonthBounds } from "../../../../lib/packReportHistory";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,7 @@ export async function GET(request) {
     const type = params.get("type");
     if (profile.role === "pack" && type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Pack can view preparation reports only" }, { status: 403 });
     const date = params.get("date");
+    const month = params.get("month");
     const fromDate = params.get("fromDate");
     const id = clean(params.get("id"), 200);
     const queryText = clean(params.get("q"), 200).toLowerCase();
@@ -136,6 +138,8 @@ export async function GET(request) {
       return Response.json({ ok: true, data: item });
     }
     if (type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Invalid report type" }, { status: 400 });
+    const monthRange = month ? getPackHistoryMonthBounds(month) : null;
+    if (month && (profile.role !== "pack" || !type || !monthRange || date || kpi)) return Response.json({ ok: false, error: "ช่วงเดือนหรือประเภทรายงานไม่ถูกต้อง" }, { status: 400 });
     const dateRange = date ? utcRangeForBangkokDate(date) : null;
     const fromDateRange = kpi && fromDate ? utcRangeForBangkokDate(fromDate) : null;
     if (date && !dateRange) return Response.json({ ok: false, error: "Invalid report date" }, { status: 400 });
@@ -144,9 +148,10 @@ export async function GET(request) {
     if (type) query = query.where("type", "==", type);
     if (fromDateRange) query = query.where("createdAt", ">=", fromDateRange.start);
     query = query.orderBy("createdAt", "desc");
-    if (dateRange) query = query.startAt(dateRange.end).endAt(dateRange.start);
-    const pageLimit = kpi ? KPI_REPORT_LIMIT : dateRange ? REPORT_PAGE_LIMIT : REPORT_SEARCH_LIMIT;
-    const snap = await query.limit(pageLimit).get();
+    if (dateRange || monthRange) { const range = dateRange || monthRange; query = query.startAt(range.end).endAt(range.start); }
+    const pageLimit = kpi || monthRange ? KPI_REPORT_LIMIT : dateRange ? REPORT_PAGE_LIMIT : REPORT_SEARCH_LIMIT;
+    const snap = await query.limit(pageLimit + (monthRange ? 1 : 0)).get();
+    if (monthRange && snap.docs.length > pageLimit) return Response.json({ ok: false, error: "ข้อมูลเดือนนี้มากเกินขีดจำกัด กรุณาดูรายวัน" }, { status: 422 });
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((item) => {
       if (type && item.type !== type) return false;
       if (!isStoreReportVisibleToRole(item, profile.role, includeDeleted)) return false;
