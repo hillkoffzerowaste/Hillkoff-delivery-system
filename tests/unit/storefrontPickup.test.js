@@ -45,6 +45,13 @@ describe("storefront pickup policy", () => {
     ]);
   });
 
+  it("marks the store step as skipped for orders that go straight to the packing room", () => {
+    const timeline = storefrontPickupTimeline({ ...readyGrab, storeStatus: "skipped", packStatus: "working", queueStatus: "preparing" });
+    expect(timeline[0]).toEqual({ id: "store", label: "ข้ามสโตร์ · ส่งตรงห้องแพ็ค", complete: true });
+    expect(timeline[1]).toEqual({ id: "pack", label: "ห้องแพ็คกำลังตรวจ", complete: false });
+    expect(storefrontPickupTimeline({ ...readyGrab, storeStatus: "working" })[0]).toEqual({ id: "store", label: "สโตร์กำลังตรวจ", complete: false });
+  });
+
   it("filters by day, status, search text, and keeps today out of history", () => {
     const orders = [
       { ...readyGrab, id: "TODAY", serviceDate: "2026-09-08" },

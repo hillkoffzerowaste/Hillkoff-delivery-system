@@ -1,0 +1,79 @@
+/* Daily store report. Colours come from the :root tokens in globals.css only. */
+.sd-workspace { display: grid; gap: var(--sp-7); min-width: 0; }
+.sd-header > div:first-child { min-width: 0; }
+.sd-header h2 { overflow-wrap: anywhere; }
+.sd-tools { display: flex; flex-wrap: wrap; gap: var(--sp-5); align-items: flex-end; justify-content: flex-end; }
+.sd-tools label { display: grid; gap: var(--sp-2); font-size: 12px; font-weight: 600; color: var(--c-text-strong); }
+.sd-tools select { min-height: 44px; padding: var(--sp-4) var(--sp-5); border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: var(--c-surface); color: var(--c-text); }
+.sd-tools button { min-height: 44px; display: inline-flex; align-items: center; gap: var(--sp-3); }
+
+.sd-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-2); border-bottom: 1px solid var(--c-line); }
+.sd-tabs button { min-height: 44px; padding: 0 18px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--c-text-strong); cursor: pointer; }
+.sd-tabs button.is-active { border-bottom-color: var(--c-brand); color: var(--c-brand-dark); font-weight: 600; }
+
+.sd-section { display: grid; gap: var(--sp-7); min-width: 0; }
+.sd-holiday { margin: 0; padding: 14px var(--sp-7); border-radius: var(--r-lg); background: var(--c-surface-muted); color: var(--c-text-strong); }
+.sd-error { margin: 0; padding: var(--sp-5) var(--sp-6); border-radius: var(--r-lg); background: var(--c-danger-bg-strong); color: var(--c-danger-deep); }
+
+.sd-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.store-report-kpis .sd-card.is-ok { border-top-color: var(--c-brand); }
+.store-report-kpis .sd-card.is-problem { border-top-color: var(--c-danger); }
+.store-report-kpis .sd-card.is-info { border-top-color: var(--c-info); }
+.store-report-kpis .sd-card.is-info strong { color: var(--c-info-deep); }
+
+.sd-table-wrap { max-height: none; }
+.sd-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sd-table-team { min-width: 900px; }
+.sd-table-history { min-width: 760px; }
+.sd-table-month { min-width: 900px; }
+.sd-table th, .sd-table td { padding: var(--sp-6); border-bottom: 1px solid var(--c-line); text-align: left; vertical-align: middle; }
+.sd-table thead th { background: var(--c-brand-bg); color: var(--c-text-strong); font-size: 12px; font-weight: 600; }
+.sd-table tbody th { color: var(--c-text-heading); font-weight: 600; }
+.sd-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sd-table button { min-height: 40px; white-space: nowrap; }
+.sd-table tr.is-selected { background: var(--c-brand-bg); }
+.sd-table tr.is-selected th { font-weight: 700; }
+.sd-strong { font-weight: 700; }
+.sd-issue { color: var(--c-text-muted); }
+.sd-issue-open { color: var(--c-danger-deep); }
+.sd-resolved-ok { color: var(--c-brand-dark); }
+
+.sd-avg { display: flex; align-items: center; gap: var(--sp-4); min-width: 200px; }
+.sd-bar { flex: 1; height: 12px; border-radius: var(--r-full); background: var(--c-surface-muted); overflow: hidden; }
+.sd-bar > div { height: 100%; background: var(--c-brand-cyan); }
+.sd-avg span { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.sd-note { margin: 0; padding: var(--sp-5) var(--sp-6); border-radius: var(--r-lg); background: var(--c-info-bg); color: var(--c-info-deep); font-size: 12px; }
+
+.sd-people { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.sd-person { min-height: 44px; padding: 0 var(--sp-7); border: 1px solid var(--c-brand-border); border-radius: var(--r-full); background: var(--c-surface); color: var(--c-brand-dark); font-weight: 500; cursor: pointer; }
+.sd-person.is-active { border-color: var(--c-brand-dark); background: var(--c-brand-dark); color: var(--c-surface); }
+
+.sd-block { display: grid; gap: var(--sp-5); padding: var(--sp-7); border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-surface); min-width: 0; }
+.sd-block h3 { margin: 0; font-size: 17px; font-weight: 600; color: var(--c-text-heading); }
+.sd-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-4); }
+.sd-timeline li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-5); padding: var(--sp-4) 0; border-bottom: 1px solid var(--c-line); }
+.sd-time { min-width: 48px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--c-text-heading); }
+.sd-text { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.sd-tag { padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.sd-tag.is-neutral { background: var(--c-surface-muted); color: var(--c-text-strong); }
+.sd-tag.is-ok { background: var(--c-brand-bg-strong); color: var(--c-brand-deep); }
+.sd-tag.is-danger { background: var(--c-danger-bg-strong); color: var(--c-danger-deep); }
+.sd-tag.is-info { background: var(--c-info-bg); color: var(--c-info-deep); }
+.sd-tag.is-info-soft { background: var(--c-info-border); color: var(--c-info-deep); }
+
+.sd-line { display: grid; gap: var(--sp-5); }
+.sd-line .panel-head { flex-wrap: wrap; gap: var(--sp-5); }
+.sd-line h3 { margin: 0; font-size: 17px; font-weight: 600; color: var(--c-text-heading); overflow-wrap: anywhere; }
+.sd-line p { margin: 0; font-size: 12px; }
+.sd-line button.primary { min-height: 44px; }
+.sd-line-box { display: grid; gap: var(--sp-2); font-size: 12px; font-weight: 500; color: var(--c-text-strong); }
+.sd-line-box textarea { box-sizing: border-box; width: 100%; padding: var(--sp-6); border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: var(--c-surface-subtle); color: var(--c-text); font-size: 14px; line-height: 1.6; resize: vertical; }
+.sd-toast { margin: 0; padding: var(--sp-5) var(--sp-6); border-radius: var(--r-lg); font-size: 13px; font-weight: 500; }
+.sd-toast.is-ok { background: var(--c-brand-bg-strong); color: var(--c-brand-deep); }
+.sd-toast.is-warn { background: var(--c-warn-bg-strong); color: var(--c-warn-deep); }
+
+@media (max-width: 720px) {
+  .sd-tools { justify-content: stretch; width: 100%; }
+  .sd-tools label, .sd-tools select { width: 100%; }
+  .sd-tabs button { flex: 1 1 auto; padding: 0 var(--sp-6); }
+}

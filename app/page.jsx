@@ -16,6 +16,12 @@ import DispatchDashboard from "./components/DispatchDashboard";
 import SalesRoundQueuePanel from "./components/SalesRoundQueuePanel";
 import OperationsKpiFilters from "./components/OperationsKpiFilters";
 import { resolveKpiPeriod, isInKpiPeriod } from "../lib/operationsKpiPeriod";
+import StoreTransferPanel from "./components/store/StoreTransferPanel";
+import StoreAuditPanel from "./components/store/StoreAuditPanel";
+import StoreOverviewPanel from "./components/store/StoreOverviewPanel";
+import StoreDailyReport from "./components/store/StoreDailyReport";
+import StoreSettingsPanel from "./components/store/StoreSettingsPanel";
+import { STORE_SETTINGS_TAB_ID, getDefaultStoreSettings, getEnabledStoreModules, getFirstEnabledStoreTab, normalizeStoreSettings, resolveStoreDisplayTab } from "../lib/storeSettings";
 import {
   buildChiangmaiRoundGroups,
   canSalesCompleteChiangmaiOrder,
@@ -41,12 +47,14 @@ import { applyCustomerDeliveryDefault, customerDefaultAppliesToTab, customerDefa
 import {
   AlertTriangle,
   Archive,
+  ArrowLeftRight,
   BellRing,
   Camera,
   Car,
   ChartNoAxesCombined,
   CheckCircle2,
   ChevronDown,
+  ClipboardCheck,
   ClipboardList,
   Clock3,
   Download,
@@ -211,11 +219,13 @@ const TAB_TITLES = {
   "sales-outstation": "ออเดอร์ต่างจังหวัด · ฝ่ายขาย",
   dispatch: "แดชบอร์ดการจัดส่ง",
   chiangmai: "เตรียมออเดอร์เชียงใหม่",
-  "store-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · สโตร์",
-  "store-pickup": "Grab/รับหน้าร้าน · สโตร์",
   "store-booking": "ใบสั่งจอง · สโตร์",
   "store-online": "ใบขายออนไลน์ · สโตร์",
-  "store-dashboard": "รายงาน KPI สโตร์",
+  "store-dashboard": "รายงานประจำวัน · สโตร์",
+  "store-transfer": "ใบโอนสินค้า · สโตร์",
+  "store-audit": "Internal Audit · สโตร์",
+  "store-overview": "รายงานแดชบอร์ด · สโตร์",
+  "store-settings": "ตั้งค่าสโตร์",
   "pack-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค",
   "pack-pickup": "Grab/รับหน้าร้าน · ห้องแพ็ค",
   "pack-outstation": "ออเดอร์ต่างจังหวัด · ห้องแพ็ค",
@@ -232,6 +242,15 @@ const TAB_TITLES = {
   "driver-sop-report": "รายงานตรวจรถ",
   reports: "รายงานประจำวัน",
   settings: "การตั้งค่า"
+};
+
+const STORE_NAV_ICONS = {
+  "store-booking": FileText,
+  "store-online": FileSpreadsheet,
+  "store-dashboard": ClipboardList,
+  "store-transfer": ArrowLeftRight,
+  "store-audit": ClipboardCheck,
+  "store-overview": ChartNoAxesCombined
 };
 
 const DRIVER_DAILY_CHECK_ITEMS = [
@@ -758,6 +777,7 @@ export default function App() {
     return `hillkoff_chat_last_read_${role || "anon"}_${phone || "unknown"}`;
   }, [state.auth?.phone, state.auth?.role]);
   const [fbAuthReady, setFbAuthReady] = useState(false);
+  const [fbUid, setFbUid] = useState("");
   const [isPageVisible, setIsPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
   const [pushStatus, setPushStatus] = useState("");
   const [staffAccountForm, setStaffAccountForm] = useState({ username: "", password: "", name: "", role: "store" });
@@ -859,7 +879,7 @@ export default function App() {
     codAmount: "",
     salesNote: "",
     bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "",
-    workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7)
+    workflowType: "direct_pack", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7)
   });
   const [chiangmaiRoundFilter, setChiangmaiRoundFilter] = useState("normal");
   const [salesCompletionSelectedIds, setSalesCompletionSelectedIds] = useState([]);
@@ -891,7 +911,6 @@ export default function App() {
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
   const [workSubmitting, setWorkSubmitting] = useState(false);
   const [workSubmitError, setWorkSubmitError] = useState("");
-  const [storeWorkSubtab, setStoreWorkSubtab] = useState("orders");
   const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
   const checkerListsLoadedTokenRef = useRef("");
   const [newCheckerName, setNewCheckerName] = useState("");
@@ -913,6 +932,11 @@ export default function App() {
   const [kpiError, setKpiError] = useState("");
   const kpiGenerationRef = useRef(0);
   const [storeReportIssues, setStoreReportIssues] = useState({ booking: { count: 0, items: [] }, online: { count: 0, items: [] } });
+  const [storeSettings, setStoreSettings] = useState(() => getDefaultStoreSettings());
+  const [storeSettingsUpdatedAt, setStoreSettingsUpdatedAt] = useState("");
+  // PIN ตั้งค่าสโตร์เก็บในหน่วยความจำเท่านั้น (ห้ามลง localStorage/sessionStorage) และล้างเมื่อออกจากระบบ
+  const [storeSettingsPin, setStoreSettingsPin] = useState("");
+  const [storeTransferUnresolved, setStoreTransferUnresolved] = useState({ count: 0 });
   const storeReportsFetchInFlightRef = useRef(false);
   // นับรุ่นของคำขอ เพื่อให้ผลที่มาถึงสลับลำดับไม่ทับผลของคำขอล่าสุด
   const storeReportsFetchGenerationRef = useRef(0);
@@ -1000,12 +1024,11 @@ export default function App() {
   // Determine active screen early (used for data subscriptions)
   const displayTab = state.auth?.role === "driver"
     ? (["driver-sop", "driver-vehicle", "driver-prep", "driver-dashboard", "driver-route"].includes(tab) ? tab : "driver")
-    : state.auth?.role === "store" ? (["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(tab) ? tab : "store-work")
+    : state.auth?.role === "store" ? resolveStoreDisplayTab(tab, storeSettings)
     : state.auth?.role === "pack" ? (["pack-work", "pack-pickup", "pack-outstation", "pack-booking", "pack-online", "pack-dashboard"].includes(tab) ? tab : "pack-work")
     : state.auth?.role === "storefront" ? "storefront-pickup"
     : state.auth?.role === "accounting" ? "driver-sop-report"
     : (tab === "driver" ? "sales" : tab);
-  const isStoreBookingEntryView = displayTab === "store-work" && storeWorkSubtab === "booking-entry";
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -1019,7 +1042,7 @@ export default function App() {
   const kpiPeriod = resolveKpiPeriod(kpiSelection, todayServiceDate);
   const kpiPeriodFrom = kpiPeriod?.from || "";
   const kpiPeriodTo = kpiPeriod?.to || "";
-  const isOperationsKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
+  const isOperationsKpi = displayTab === "pack-dashboard";
   const kpiRequestKey = `${state.auth?.role}:${state.auth?.email || state.auth?.phone || ""}:${kpiPeriodFrom}:${kpiPeriodTo}`;
   const kpiReady = Boolean(kpiPeriod && kpiData.key === kpiRequestKey && !kpiLoading && !kpiError);
   const getOrderServiceDate = (o) => {
@@ -1176,6 +1199,7 @@ export default function App() {
 	      unsubAuth = onFirebaseAuthStateChanged((user) => {
 	        clearTimeout(t);
 	        setFbAuthReady(true);
+	        setFbUid(user?.uid || "");
 	        if (!user) {
 	          try { localStorage.removeItem("hillkoff_auth"); } catch {}
 	          setState((prev) => ({
@@ -1632,6 +1656,28 @@ export default function App() {
   const authenticatedApiFetch = useCallback((input, init = {}) => (
     authenticatedFetch(input, init, { getToken: refreshAuthToken })
   ), [refreshAuthToken]);
+  const hasAuthToken = Boolean(state.auth?.token);
+  useEffect(() => {
+    if (!fbAuthReady || !hasAuthToken || state.auth?.role !== "store") return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authenticatedApiFetch("/api/store/settings");
+        const json = await res.json();
+        if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        if (cancelled) return;
+        setStoreSettings(normalizeStoreSettings(json.data?.settings));
+        setStoreSettingsUpdatedAt(json.data?.updatedAt || "");
+      } catch (error) {
+        // โหลดค่าตั้งค่าไม่ได้ให้ใช้ค่าเริ่มต้นต่อ ห้ามบล็อกการใช้งานสโตร์
+        console.warn("Store settings load failed", error?.message || error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authenticatedApiFetch, fbAuthReady, hasAuthToken, state.auth?.role]);
+  useEffect(() => {
+    if (state.auth?.role !== "store") setStoreSettingsPin("");
+  }, [state.auth?.role]);
   const fetchOperationsKpi = useCallback(async () => {
     if (!fbAuthReady || !isOperationsKpi || !["store", "pack"].includes(state.auth?.role) || !kpiPeriodFrom || !kpiPeriodTo) return;
     const generation = ++kpiGenerationRef.current;
@@ -2110,10 +2156,7 @@ export default function App() {
   const salesDeleteSelectedSet = new Set(salesDeleteSelectedIds);
   const selectedEligibleSalesDeleteIds = salesDeleteEligibleIds.filter(id => salesDeleteSelectedSet.has(id));
   const allSalesDeleteEligibleSelected = salesDeleteEligibleIds.length > 0 && selectedEligibleSalesDeleteIds.length === salesDeleteEligibleIds.length;
-  const isOpenStoreQueueStatus = (status) => ["pending", "working", "waiting", "partial", "returned"].includes(status || "pending");
   const isOpenPackQueueStatus = (status) => ["pending", "working", "waiting"].includes(status || "pending");
-  const storeWorkOrders = (orders || []).filter(order => !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
-  const storePickupOrders = (orders || []).filter(order => ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.workflowType === "store_route" && isOpenStoreQueueStatus(order.storeStatus));
   const packStoreCheckingOrders = getPackStoreCheckingOrders(orders || []);
   const packDriverQueueOrders = getPackDriverQueueOrders(orders || [], todayServiceDate);
   const packWorkOrders = preparationOrders.filter(order => !["outstation", "grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && order.packStatus !== "blocked" && isOpenPackQueueStatus(order.packStatus));
@@ -2218,7 +2261,6 @@ export default function App() {
     const createdAt = Date.parse(order.createdAt || "");
     return Number.isFinite(createdAt) && Date.now() - createdAt >= 86400000;
   };
-  const storeKpiOverdue = storeKpiPending.filter(isOverdueWorkflowOrder);
   const packKpiOverdue = packKpiPending.filter(isOverdueWorkflowOrder);
   const storeKpiCompleted = activeStoreKpiOrders.filter(order => order.storeStatus === "checked");
   const packKpiCompleted = activePackKpiOrders.filter(order => order.packStatus === "checked");
@@ -2279,11 +2321,8 @@ export default function App() {
   const chiangmaiRoundGroups = useMemo(() => buildChiangmaiRoundGroups(orders || []), [orders]);
   const chiangmaiRoundTotalOrders = chiangmaiRoundGroups.reduce((sum, group) => sum + group.total, 0);
   const chiangmaiRoundTotalReady = chiangmaiRoundGroups.reduce((sum, group) => sum + group.ready, 0);
-  const storeTodayOrders = storeKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod));
   const packTodayOrders = packKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod));
-  const activeStoreTodayOrders = storeTodayOrders.filter(order => order.storeStatus !== "archived");
   const activePackTodayOrders = packTodayOrders.filter(order => !["pack_archived", "report_archived"].includes(order.queueStatus) && order.packStatus !== "archived");
-  const storeTodayCompleted = activeStoreTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)).length;
   const packTodayCompleted = activePackTodayOrders.filter(order => ["checked", "partial"].includes(order.packStatus)).length;
   const todayRouteTasks = (routeTasks || []).filter(task => String(task?.serviceDate || toServiceDateKey(task?.startedAt || new Date())) === todayServiceDate);
   const routeTaskSortValue = (task) => new Date(task?.updatedAt || task?.completedAt || task?.startedAt || 0).getTime() || 0;
@@ -2340,7 +2379,7 @@ export default function App() {
     }
   };
   const fetchStoreReportIssues = useCallback(async () => {
-    const isStoreReportView = isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab);
+    const isStoreReportView = ["store-booking", "store-online"].includes(displayTab);
     if (auth.role !== "store" || !isStoreReportView || document.visibilityState !== "visible") return;
     try {
       const res = await authenticatedApiFetch("/api/store/reports?alerts=true");
@@ -2353,25 +2392,44 @@ export default function App() {
     } catch (error) {
       setSyncStatus(`⚠️ โหลดรายการของไม่ครบไม่สำเร็จ: ${error?.message || error}`);
     }
-  }, [auth.role, authenticatedApiFetch, displayTab, isStoreBookingEntryView]);
+  }, [auth.role, authenticatedApiFetch, displayTab]);
   useEffect(() => {
-    const isStoreReportView = isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab);
+    const isStoreReportView = ["store-booking", "store-online"].includes(displayTab);
     if (auth.role !== "store" || !isStoreReportView) return;
     fetchStoreReportIssues();
     const timer = window.setInterval(fetchStoreReportIssues, REPORT_REFRESH_INTERVALS.issues);
     return () => window.clearInterval(timer);
-  }, [auth.role, displayTab, fetchStoreReportIssues, isStoreBookingEntryView]);
+  }, [auth.role, displayTab, fetchStoreReportIssues]);
+  const storeTransferEnabled = auth.role === "store" && getEnabledStoreModules(storeSettings).some((module) => module.id === "store-transfer");
+  const fetchStoreTransferAlerts = useCallback(async () => {
+    try {
+      const res = await authenticatedApiFetch("/api/store/transfers?alerts=true");
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setStoreTransferUnresolved({ count: Number(json.data?.count) || 0 });
+    } catch (error) {
+      setSyncStatus(`⚠️ โหลดรายการใบโอนไม่ครบไม่สำเร็จ: ${error?.message || error}`);
+    }
+  }, [authenticatedApiFetch]);
+  useEffect(() => {
+    if (!fbAuthReady || !hasAuthToken || !storeTransferEnabled || !isPageVisible) return undefined;
+    fetchStoreTransferAlerts();
+    const timer = window.setInterval(fetchStoreTransferAlerts, REPORT_REFRESH_INTERVALS.issues);
+    return () => window.clearInterval(timer);
+  }, [fbAuthReady, hasAuthToken, storeTransferEnabled, isPageVisible, fetchStoreTransferAlerts]);
+  const handleStoreTransferUnresolved = useCallback((count) => setStoreTransferUnresolved({ count: Number(count) || 0 }), []);
+  const storeProfile = useMemo(() => ({ uid: fbUid, name: auth.name || "" }), [fbUid, auth.name]);
   useEffect(() => {
     storeReportQueryRef.current = storeReportQuery;
   });
   useEffect(() => {
-    const isKpi = ["store-dashboard", "pack-dashboard"].includes(displayTab);
+    const isKpi = displayTab === "pack-dashboard";
     if (isKpi) return undefined;
-    const reportType = isStoreBookingEntryView || ["store-booking", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
-    const shouldFetchReports = (auth.role === "store" && (isStoreBookingEntryView || ["store-booking", "store-online", "store-dashboard"].includes(displayTab)))
+    const reportType = ["store-booking", "pack-booking"].includes(displayTab) ? "booking" : ["store-online", "pack-online"].includes(displayTab) ? "online" : "";
+    const shouldFetchReports = (auth.role === "store" && (["store-booking", "store-online"].includes(displayTab)))
       || (auth.role === "pack" && ["pack-booking", "pack-online", "pack-dashboard"].includes(displayTab));
-    if (shouldFetchReports) fetchStoreReports({ date: (isStoreBookingEntryView || ["store-booking", "store-online", "pack-booking", "pack-online"].includes(displayTab)) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
-    const isStoreReport = auth.role === "store" && (isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab));
+    if (shouldFetchReports) fetchStoreReports({ date: (["store-booking", "store-online", "pack-booking", "pack-online"].includes(displayTab)) && !storeReportSearchActive ? storeReportDate : "", query: storeReportSearchActive ? storeReportQuery : "", type: reportType, includeDeleted: isKpi || storeReportIncludeDeleted, kpi: isKpi });
+    const isStoreReport = auth.role === "store" && (["store-booking", "store-online"].includes(displayTab));
     if (!isKpi && !isStoreReport) return undefined;
     if (isKpi && !kpiAutoRefresh) return undefined;
     const timer = window.setInterval(() => {
@@ -2381,7 +2439,7 @@ export default function App() {
     }, isKpi ? REPORT_REFRESH_INTERVALS.kpi : REPORT_REFRESH_INTERVALS.reports);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.role, displayTab, storeWorkSubtab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted, kpiAutoRefresh]);
+  }, [auth.role, displayTab, storeReportDate, storeReportSearchActive, storeReportIncludeDeleted, kpiAutoRefresh]);
 
   const updateReportPackStatus = async (item, packStatus, returnReason = "") => {
     const checkerName = reportPackCheckerName.trim();
@@ -3052,7 +3110,7 @@ export default function App() {
       const json = await res.json();
       if (!json?.valid || !["store", "pack", "storefront"].includes(json?.data?.role)) throw new Error(json?.error || "บัญชีไม่มีสิทธิ์พนักงานที่กำหนด");
       await applyLoginSession(json.data, idToken);
-      setTab(json.data.role === "store" ? "store-work" : json.data.role === "pack" ? "pack-work" : "storefront-pickup");
+      setTab(json.data.role === "store" ? getFirstEnabledStoreTab(getDefaultStoreSettings()) : json.data.role === "pack" ? "pack-work" : "storefront-pickup");
       setSyncStatus("✅ เข้าสู่ระบบสำเร็จ");
     } catch (e) { setSyncStatus(`❌ เข้าสู่ระบบไม่สำเร็จ: ${e?.message || e}`); }
   };
@@ -3251,7 +3309,7 @@ export default function App() {
         const existing = (prev.orders || []).some(order => order.id === savedOrder.id);
         return existing ? prev : { ...prev, orders: [savedOrder, ...(prev.orders || [])] };
       });
-      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "store_route", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7) });
+      setOrderForm({ pickupWaitMinutes: "5", qty: "", packageUnit: "box", paymentType: "COD", codAmount: "", salesNote: "", bookingPrefix: "CSP", bookingCustomPrefix: "", bookingDigits: "", bookingNumbers: [], urgentBookingNumber: "", shippingCarrier: "", shippingCarrierOther: "", workflowType: "direct_pack", deliveryMethod: "company_driver", chiangmaiRoundCode: "", bookingMonthKey: toServiceDateKey(new Date()).slice(0, 7) });
       setSelectedCustomerId("");
       setOrderCustomerSearch("");
       setShowOrderConfirm(false);
@@ -3630,7 +3688,7 @@ export default function App() {
     setRerouteModal(order);
     setRerouteForm({
       deliveryMethod: targetDeliveryMethod,
-      workflowType: targetDeliveryMethod === "outstation" ? "direct_pack" : "store_route",
+      workflowType: "direct_pack",
       shippingCarrier: "",
       reason: ""
     });
@@ -4105,43 +4163,6 @@ export default function App() {
       latest.forEach((event) => lines.push(`- ${event.at ? new Date(event.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"} ${event.action || "updated"} · ${event.task.bookingNumber || event.task.customerName || event.task.id}`));
     }
     return lines;
-  };
-
-  const buildStoreSummary = (period) => {
-    const isInPeriod = (value) => isInKpiPeriod(value, kpiPeriod);
-    const tasks = storeKpiOrders.filter((item) => isInPeriod(getOrderServiceDate(item)));
-    const active = tasks.filter((item) => item.storeStatus !== "archived");
-    const nearby = tasks.filter((item) => item.workflowType === "store_route").length;
-    const booking = tasks.filter((item) => item.sourceType === "ใบสั่งจอง").length;
-    const online = tasks.filter((item) => item.sourceType === "ใบขายออนไลน์").length;
-    const pending = active.filter((item) => item.storeStatus === "pending").length;
-    const working = active.filter((item) => item.storeStatus === "working").length;
-    const completed = active.filter((item) => ["checked", "partial"].includes(item.storeStatus)).length;
-    const waiting = active.filter((item) => ["waiting", "partial", "returned"].includes(item.storeStatus)).length;
-    const archived = tasks.length - active.length;
-    const activityTasks = storeKpiOrders;
-    const returned = activityTasks.flatMap(getReturnEvents).filter((event) => isInPeriod(event.at)).length;
-    const title = `รายงานสโตร์ ${kpiPeriod?.label || ""}`;
-    const analysis = [`ค่าเฉลี่ยต่อวัน: ${(tasks.length / Math.max(1, kpiPeriod?.days || 1)).toFixed(1)} รายการ`, "ยอดงานอิงวันที่งาน · สถานะเป็นสถานะล่าสุด", waiting > 0 ? `ข้อควรติดตาม: มีงานรอของ/ของไม่ครบ ${waiting} รายการ` : "ข้อควรติดตาม: ไม่มีงานรอของ"];
-    return [title, "", "สรุปยอด", `งานทั้งหมด: ${tasks.length} รายการ`, `เชียงใหม่/ใกล้เคียง และ Grab/รับหน้าร้าน: ${nearby} รายการ`, `ใบสั่งจอง: ${booking} รายการ`, `ใบขายออนไลน์: ${online} รายการ`, `รอตรวจ: ${pending} รายการ`, `กำลังตรวจ: ${working} รายการ`, `ตรวจเสร็จ/ยืนยันแล้ว: ${completed} รายการ`, `ของไม่ครบ/รอของ: ${waiting} รายการ`, `ส่งกลับตรวจ: ${returned} เหตุการณ์`, `นำออกจากคิว: ${archived} รายการ`, "", "วิเคราะห์และคาดการณ์", ...analysis, "", "สรุป Activity", ...kpiActivitySummary(activityTasks, period, "store")].join("\n");
-  };
-
-  const copyStoreSummary = async (period) => {
-    const text = buildStoreSummary(period);
-    try {
-      await navigator.clipboard?.writeText?.(text);
-      setSyncStatus("✅ คัดลอกรายงานแล้ว");
-    } catch { setSyncStatus("⚠️ คัดลอกรายงานไม่สำเร็จ"); }
-  };
-
-  const shareStoreSummary = async (period) => {
-    const text = buildStoreSummary(period);
-    try {
-      try { await navigator.clipboard?.writeText?.(text); } catch {}
-      if (!navigator?.share) throw new Error("อุปกรณ์นี้ไม่รองรับการแชร์");
-      await navigator.share({ title: "รายงานสโตร์", text });
-      setSyncStatus("✅ เปิดแชร์รายงานแล้ว");
-    } catch (error) { setSyncStatus(`⚠️ ส่งรายงานไม่สำเร็จ: ${error?.message || error}`); }
   };
 
   const buildPackSummary = (period) => {
@@ -4935,8 +4956,8 @@ export default function App() {
           driverId: order.driverId || state.auth?.driverId || driverId || "",
           sharedToLine: true,
           reworkRequired: deliveryCompleteness === "incomplete",
-          reworkRoute: order.workflowType === "store_route" ? "store_route" : "direct_pack",
-          reworkStatus: deliveryCompleteness === "incomplete" ? (order.workflowType === "store_route" ? "waiting_store" : "waiting_pack") : "",
+          reworkRoute: "direct_pack",
+          reworkStatus: deliveryCompleteness === "incomplete" ? "waiting_pack" : "",
           reworkNote: deliveryCompleteness === "incomplete" ? driverNote : "",
           podPhotoCount: files.length
         };
@@ -5524,6 +5545,14 @@ export default function App() {
   const selectAppTab = (nextTab) => {
     setTab(nextTab);
   };
+  const storeBookingIssueCount = storeReportIssues.booking.count;
+  const storeOnlineIssueCount = storeReportIssues.online.count;
+  const storeNavBadges = {
+    "store-booking": { count: storeBookingIssueCount, label: `ใบสั่งจองของไม่ครบ ${storeBookingIssueCount} รายการ` },
+    "store-online": { count: storeOnlineIssueCount, label: `ใบขายออนไลน์ของไม่ครบ ${storeOnlineIssueCount} รายการ` },
+    "store-dashboard": { count: storeBookingIssueCount + storeOnlineIssueCount, label: `งานของไม่ครบรวม ${storeBookingIssueCount + storeOnlineIssueCount} รายการ` },
+    "store-transfer": { count: storeTransferUnresolved.count, label: `ใบโอนสินค้าไม่ครบที่ยังไม่แก้ไข ${storeTransferUnresolved.count} รายการ` }
+  };
 
   return (
     <>
@@ -5560,11 +5589,12 @@ export default function App() {
           )}
           {auth.role === "store" && (
             <>
-              <button type="button" className={displayTab === "store-work" ? "active" : ""} onClick={() => selectAppTab("store-work")}><PackagePlus size={18} /> <span>เชียงใหม่/ใกล้เคียง</span>{storeWorkOrders.length > 0 && <span className="nav-count-badge" aria-label={`ออเดอร์เชียงใหม่หรือจังหวัดใกล้เคียงที่รอสโตร์ ${storeWorkOrders.length} งาน`}>{storeWorkOrders.length}</span>}</button>
-              <button type="button" className={displayTab === "store-pickup" ? "active" : ""} onClick={() => selectAppTab("store-pickup")}><Store size={18} /> <span>Grab/รับหน้าร้าน</span>{storePickupOrders.length > 0 && <span className="nav-count-badge" aria-label={`งาน Grab หรือรับหน้าร้านที่รอสโตร์ ${storePickupOrders.length} งาน`}>{storePickupOrders.length}</span>}</button>
-              <button type="button" className={displayTab === "store-booking" ? "active" : ""} onClick={() => selectAppTab("store-booking")}><FileText size={18} /> ใบสั่งจอง{storeReportIssues.booking.count > 0 && <span className="nav-count-badge" aria-label={`ใบสั่งจองของไม่ครบ ${storeReportIssues.booking.count} รายการ`}>{storeReportIssues.booking.count}</span>}</button>
-              <button type="button" className={displayTab === "store-online" ? "active" : ""} onClick={() => selectAppTab("store-online")}><FileSpreadsheet size={18} /> ใบขายออนไลน์{storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`ใบขายออนไลน์ของไม่ครบ ${storeReportIssues.online.count} รายการ`}>{storeReportIssues.online.count}</span>}</button>
-              <button type="button" className={displayTab === "store-dashboard" ? "active" : ""} onClick={() => selectAppTab("store-dashboard")}><ClipboardList size={18} /> รายงาน KPI สโตร์{storeReportIssues.booking.count + storeReportIssues.online.count > 0 && <span className="nav-count-badge" aria-label={`งานของไม่ครบรวม ${storeReportIssues.booking.count + storeReportIssues.online.count} รายการ`}>{storeReportIssues.booking.count + storeReportIssues.online.count}</span>}</button>
+              {getEnabledStoreModules(storeSettings).map((module) => {
+                const NavIcon = STORE_NAV_ICONS[module.id] || FileText;
+                const badge = storeNavBadges[module.id];
+                return <button key={module.id} type="button" className={displayTab === module.id ? "active" : ""} onClick={() => selectAppTab(module.id)}><NavIcon size={18} /> {module.name}{badge?.count > 0 && <span className="nav-count-badge" aria-label={badge.label}>{badge.count}</span>}</button>;
+              })}
+              <button type="button" className={displayTab === STORE_SETTINGS_TAB_ID ? "active" : ""} onClick={() => selectAppTab(STORE_SETTINGS_TAB_ID)}><Settings size={18} /> ตั้งค่าสโตร์</button>
             </>
           )}
           {auth.role === "pack" && (
@@ -5697,7 +5727,7 @@ export default function App() {
             {activeSalesStatusPanel === "grab" && (
               <section className="panel" style={{ gridColumn: "1 / -1", borderLeft: "4px solid var(--c-highlight)", background: "var(--c-highlight-bg)" }}>
                 <div className="panel-head"><h2><ShoppingBag size={15} className="i-inline" aria-hidden="true" /> งาน Grab / รับหน้าร้านที่กำลังเตรียม</h2><span>{salesPickupOrders.length} งาน</span></div>
-              {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid var(--c-highlight-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน"}</div><div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
+              {salesPickupOrders.length === 0 ? <p className="muted" style={{ margin: 0 }}>ไม่มีงาน Grab หรือรับหน้าร้านที่กำลังเตรียม</p> : <div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)" }}>{salesPickupOrders.map(order => <article key={order.id} style={{ background: "white", border: "1px solid var(--c-highlight-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "grid", gap: "var(--sp-3)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ยังไม่ระบุเลขใบสั่งจอง"}</div></div><div className="status-pair"><WorkflowStatus role="store" status={order.storeStatus} /><WorkflowStatus role="pack" status={order.packStatus} /></div></div><div className="muted">คิว: {order.queueStatus || "preparing"} · เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : "ส่งตรงห้องแพ็ค"}</div><div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}><details className="prep-order-details"><summary>ดูรายละเอียด</summary><PackSalesOrderDetails order={order} /></details>{canRerouteOrder(order).ok && <button type="button" className="secondary" onClick={() => openRerouteModal(order)}>แก้เส้นทาง/ย้ายงาน</button>}</div></article>)}</div>}
               </section>
             )}
             <details className="daily-accordion" style={{ gridColumn: "1 / -1" }}>
@@ -6366,7 +6396,7 @@ export default function App() {
         {displayTab === "sales-outstation" && (
           <section className="panel role-workspace">
             <div className="panel-head"><h2>ออเดอร์ต่างจังหวัดจากฝ่ายขาย</h2><span>{salesOutstationOrders.length} งานที่กำลังเตรียม</span></div>
-            <p className="muted">งานต่างจังหวัดเลือกได้ทั้งส่งตรงห้องแพ็คหรือผ่านสโตร์ก่อน สถานะอัปเดตทันทีตามขั้นตอนตรวจสินค้า</p>
+            <p className="muted">งานต่างจังหวัดส่งตรงห้องแพ็ค สถานะอัปเดตทันทีตามขั้นตอนตรวจสินค้า</p>
             <OrderHistorySearch title="ค้นหาออเดอร์ต่างจังหวัดย้อนหลัง" query={outstationHistoryQuery} onQueryChange={setOutstationHistoryQuery} onSearch={searchOutstationHistory} onClear={() => { setOutstationHistoryQuery(""); setOutstationHistoryResults([]); setOutstationHistorySearched(false); }} loading={outstationHistoryLoading} searched={outstationHistorySearched} results={outstationHistoryResults} onOpen={openChiangmaiHistoryOrder} />
             <div className="outstation-label-toolbar">
               <label className="outstation-label-select-all">
@@ -6420,7 +6450,7 @@ export default function App() {
                     <div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div>
                     <span className="status-chip">{order.queueStatus === "outstation_ready" ? "พร้อมส่งขนส่ง" : "กำลังเตรียม"}</span>
                   </div>
-                  <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div>
+                  <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}><span className="status-chip">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : "ส่งตรงห้องแพ็ค"}</span><span className="status-chip">สโตร์: {storeStatusLabel(order)}</span><span className="status-chip">ห้องแพ็ค: {WORKFLOW_STATUS_META[order.packStatus]?.label || order.packStatus || "รอรับงาน"}</span>{order.packCheckerName && <span className="muted">ผู้ตรวจแพ็ค: {order.packCheckerName}</span>}</div>
                   <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details>
                   {order.packWorkDetails?.note && <div className="prep-work-notes"><div className="prep-note-pack"><b>หมายเหตุห้องแพ็ค</b><span>{order.packWorkDetails.note}</span></div></div>}
                   {["pending", "working", "waiting", "partial"].includes(order.packStatus || "pending") && (order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus)) && (
@@ -6430,7 +6460,7 @@ export default function App() {
               ))}
               {!salesOutstationOrders.length && <p className="muted">ยังไม่มีออเดอร์ต่างจังหวัดจากฝ่ายขาย</p>}
             </div>
-            <details className="prep-order-details" style={{ marginTop: "var(--sp-6)" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
+            <details className="prep-order-details" style={{ marginTop: "var(--sp-6)" }}><summary>ประวัติออเดอร์ต่างจังหวัดที่ห้องแพ็คยืนยันแล้ว ({salesOutstationHistory.length})</summary><div className="scroll-box" style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}>{salesOutstationHistory.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">ใบสั่งจอง: {order.bookingNumber || "ยังไม่ระบุ"} · ขนส่ง: {order.shippingCarrier || "-"}</div></div><span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)" }}>{order.queueStatus === "completed" ? "ส่งสำเร็จ · ส่งมอบขนส่งครบ" : "พร้อมส่งขนส่ง"}</span></div><div className="muted">เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : "ส่งตรงห้องแพ็ค"} · ห้องแพ็คยืนยันโดย: {order.packCheckerName || "-"} · {order.outstationDispatchedAt ? new Date(order.outstationDispatchedAt).toLocaleString("th-TH") : order.outstationCompletedAt ? new Date(order.outstationCompletedAt).toLocaleString("th-TH") : "-"}</div><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์</summary><PackSalesOrderDetails order={order} /></details></article>)}{!salesOutstationHistory.length && <p className="muted">ยังไม่มีประวัติออเดอร์ที่เสร็จแล้ว</p>}</div></details>
           </section>
         )}
 
@@ -6468,7 +6498,7 @@ export default function App() {
                   <div><b>จำนวนของที่ส่ง:</b> {pendingOrder.boxes} {pendingOrder.packageUnit === "bag" ? "ถุง" : "กล่อง"}</div>
                   <div><b>การชำระเงิน:</b> {pendingOrder.paymentType}{pendingOrder.paymentType === "COD" ? ` · ฿${money(pendingOrder.cod)}` : ""}</div>
                   <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(pendingOrder) || "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์"}</div>
-                  <div><b>เส้นทาง:</b> {pendingOrder.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค"} · {pendingOrder.deliveryMethod === "grab_pickup" ? "Grab" : pendingOrder.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "คนขับบริษัท"}</div>
+                  <div><b>เส้นทาง:</b> {pendingOrder.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : "ส่งตรงห้องแพ็ค"} · {pendingOrder.deliveryMethod === "grab_pickup" ? "Grab" : pendingOrder.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "คนขับบริษัท"}</div>
                   {pendingOrder.salesNote && <div><b>หมายเหตุ:</b> {pendingOrder.salesNote}</div>}
                 </div>
                 <label style={{ display: "flex", gap: "var(--sp-4)", alignItems: "flex-start", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "8px", padding: "var(--sp-5)", color: "var(--c-info-dark)", fontSize: "13px", fontWeight: 800 }}><input type="checkbox" checked={shareNewOrderToLine} onChange={e => setShareNewOrderToLine(e.target.checked)} style={{ marginTop: "var(--sp-1)" }} /><span>แชร์ข้อความคิวงานหลังส่งเข้าคิว</span></label>
@@ -6483,7 +6513,7 @@ export default function App() {
               {selectedCustomerId && (() => { const customer = customers.find(item => item.id === selectedCustomerId); return customer ? <div className="customer-detail"><div><b>{customer.name}</b><p>{[customer.contact, customer.phone, customer.zone].filter(Boolean).join(" · ")}</p><p>{customer.address || "-"}</p></div></div> : null; })()}
             </div>
             <div className="form-grid two"><input value={customerForm.name} onChange={e => setCustomerForm(p => ({ ...p, name: e.target.value }))} placeholder="เพิ่มลูกค้าใหม่: ชื่อร้าน/ลูกค้า" /><input value={customerForm.phone} onChange={e => setCustomerForm(p => ({ ...p, phone: e.target.value }))} placeholder="เบอร์โทร" /><input value={customerForm.contact} onChange={e => setCustomerForm(p => ({ ...p, contact: e.target.value }))} placeholder="ผู้ติดต่อ" /><select value={customerForm.zone} onChange={e => setCustomerForm(p => ({ ...p, zone: e.target.value }))}>{ZONES.map(zone => <option key={zone}>{zone}</option>)}</select><select value={customerForm.defaultDeliveryMethod} onChange={e => setCustomerForm(p => ({ ...p, defaultDeliveryMethod: e.target.value }))} aria-label="รูปแบบจัดส่งเริ่มต้น"><option value="company_driver">รถคิว/คนขับบริษัท</option><option value="outstation">ต่างจังหวัด</option></select></div><input value={customerForm.address} onChange={e => setCustomerForm(p => ({ ...p, address: e.target.value }))} placeholder="ที่อยู่/ย่าน" /><input value={customerForm.mapUrl} onChange={e => setCustomerForm(p => ({ ...p, mapUrl: e.target.value }))} placeholder="Location URL" /><textarea value={customerForm.note} onChange={e => setCustomerForm(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุประจำลูกค้า" rows={2} /><button className="secondary" onClick={saveCustomer}>+ บันทึกลูกค้าเข้าฐานกลาง</button>
-            <div className="form-grid two">{auth.role === "pack" ? <div className="status-chip" style={{ alignSelf: "center", width: "fit-content" }}>คนขับบริษัท · ส่งตรงห้องแพ็ค</div> : <select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "store_route" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select>}<select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
+            <div className="form-grid two">{auth.role === "pack" ? <div className="status-chip" style={{ alignSelf: "center", width: "fit-content" }}>คนขับบริษัท · ส่งตรงห้องแพ็ค</div> : <select value={orderForm.deliveryMethod} onChange={e => setOrderForm(p => ({ ...p, deliveryMethod: e.target.value, workflowType: "direct_pack" }))}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option></select>}<select value={orderForm.pickupWaitMinutes} onChange={e => setOrderForm(p => ({ ...p, pickupWaitMinutes: e.target.value }))}><option value="5">รอจัดเตรียม 5 นาที</option><option value="10">รอจัดเตรียม 10 นาที</option><option value="15">รอจัดเตรียม 15 นาที</option><option value="20">รอจัดเตรียม 20 นาที</option></select><input value={orderForm.qty} onChange={e => setOrderForm(p => ({ ...p, qty: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="จำนวนกล่อง/ถุง" /><select value={orderForm.packageUnit} onChange={e => setOrderForm(p => ({ ...p, packageUnit: e.target.value }))}><option value="box">กล่อง</option><option value="bag">ถุง</option></select></div>
             <div style={{ display: "grid", gap: "var(--sp-3)" }}><label className="field-label">เลขใบสั่งจอง (ถ้ามี)</label><BookingNumberInput value={orderForm.urgentBookingNumber} onChange={value => setOrderForm(p => ({ ...p, urgentBookingNumber: value }))} /><small className="muted">{auth.role === "pack" ? "งานด่วนเว้นว่างได้ · ถ้าสโตร์คีย์เลขใบสั่งจองนี้ไว้แล้ว ใช้เลขเดิมได้เลย ระบบจะผูกให้อัตโนมัติ" : "เว้นว่างได้สำหรับงานเร่งด่วน และฝ่ายขายสามารถเติมภายหลัง"}</small></div>
             <textarea value={orderForm.salesNote} onChange={e => setOrderForm(p => ({ ...p, salesNote: e.target.value }))} rows={3} placeholder="รายละเอียดสินค้า / หมายเหตุงานเร่งด่วน" />
             <button className="primary wide" onClick={createOrder}><PackagePlus size={18} /> ตรวจข้อมูลก่อนเปิดออเดอร์</button>
@@ -6535,41 +6565,15 @@ export default function App() {
           </section>
         )}
 
-        {["store-work", "store-pickup", "store-booking", "store-online", "store-dashboard"].includes(displayTab) && (
-          <section className={`panel role-workspace ops-workspace${displayTab === "store-dashboard" ? " ops-dashboard-panel" : ""}`}>
-        {displayTab === "store-dashboard" && <OperationsKpiFilters selection={kpiSelection} onChange={setKpiSelection} period={kpiPeriod} loading={kpiLoading} error={kpiError} autoRefresh={kpiAutoRefresh} onAutoRefresh={setKpiAutoRefresh} onRefresh={fetchOperationsKpi} updatedAt={kpiData.key === kpiRequestKey ? kpiData.updatedAt : null} />}
-            {displayTab !== "store-dashboard" && <div className="panel-head"><h2>{displayTab === "store-work" ? "ออเดอร์เชียงใหม่/ใกล้เคียง" : "งานสโตร์"}</h2><span>เฉพาะบัญชีสโตร์</span></div>}
-            {displayTab === "store-work" && <div role="tablist" aria-label="เมนูเชียงใหม่/ใกล้เคียง" style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginBottom: "var(--sp-6)", padding: "var(--sp-2)", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)", borderRadius: "9px" }}><button type="button" role="tab" aria-selected={storeWorkSubtab === "orders"} className={storeWorkSubtab === "orders" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("orders")}>ออเดอร์เชียงใหม่/ใกล้เคียง</button><button type="button" role="tab" aria-selected={storeWorkSubtab === "booking-entry"} className={storeWorkSubtab === "booking-entry" ? "primary" : "secondary"} onClick={() => setStoreWorkSubtab("booking-entry")}>เพิ่มเลขใบสั่งจอง</button></div>}
-            {displayTab === "store-pickup" && <button className="primary" style={{ width: "fit-content", marginBottom: "var(--sp-5)" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setShowOrderConfirm(false); setPendingOrder(null); setOrderConfirmError(""); setOrderForm(p => ({ ...p, deliveryMethod: "grab_pickup", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วน Grab/รับหน้าร้าน</button>}
-            {displayTab === "store-work" && storeWorkSubtab === "orders" && <div className="ops-store-work" style={{ display: "grid", gap: "var(--sp-5)" }}>
-              <button className="primary" style={{ width: "fit-content" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setShowOrderConfirm(false); setPendingOrder(null); setOrderConfirmError(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "store_route" })); setStoreUrgentOpen(true); }}>+ เปิดออเดอร์ด่วนเชียงใหม่/ใกล้เคียง</button>
-              <OrderHistorySearch title="ค้นหาประวัติออเดอร์เชียงใหม่/ใกล้เคียง" query={chiangmaiHistoryQuery} onQueryChange={setChiangmaiHistoryQuery} onSearch={searchChiangmaiHistory} onClear={() => { setChiangmaiHistoryQuery(""); setChiangmaiHistoryResults([]); setChiangmaiHistorySearched(false); }} loading={chiangmaiHistoryLoading} searched={chiangmaiHistorySearched} results={chiangmaiHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              {storeWorkOrders.map(order => { const storePending = ["partial", "waiting", "returned"].includes(order.storeStatus) || (order.missingItems || []).length > 0; return <article key={order.id} className="role-order-card" style={storePending ? { borderColor: order.storeStatus === "returned" ? "var(--c-danger)" : order.storeStatus === "partial" ? "var(--c-accent-light)" : "var(--c-warn-light)", borderLeft: `5px solid ${order.storeStatus === "returned" ? "var(--c-danger)" : order.storeStatus === "partial" ? "var(--c-accent)" : "var(--c-warn-light)"}`, background: order.storeStatus === "returned" ? "var(--c-danger-bg)" : order.storeStatus === "partial" ? "var(--c-accent-bg)" : "var(--c-warn-bg)" } : undefined}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div>
-                <OrderCreatedAt order={order} />
-                 <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.storeWorkDetails?.detail && <> · {order.storeWorkDetails.detail}</>}</div>
-                {storePending && <b style={{ color: order.storeStatus === "returned" ? "var(--c-danger-dark)" : order.storeStatus === "partial" ? "var(--c-accent-dark)" : "var(--c-warn-dark)", fontSize: "12px" }}>{order.storeStatus === "returned" ? `↩️ ห้องแพ็คส่งกลับตรวจสอบ: ${order.returnReason || "ของผิด"}` : "⚠️ รอของ / ของยังไม่ครบ — ติดตามและอัปเดทเมื่อของเข้า"}</b>}
-                {order.storeWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)", width: "fit-content" }}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE แล้ว</span>}
-                {order.storeWorkDetails?.localPhotoCount > 0 && <span className="muted"><Camera size={15} className="i-inline" aria-hidden="true" /> แนบรูป {order.storeWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
-                <ReworkNotice order={order} compact />
-                <SalesNoteAlert order={order} compact />
-                <details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details>
-                 <button className={storePending ? "secondary" : "primary"} onClick={() => openWorkModal(order, "store")}>{storePending ? "อัปเดทออเดอร์" : "รับงาน / บันทึกรายละเอียด"}</button>
-               </article>})}
-               {ordersLimit < MAX_RECENT_ORDERS_LIMIT && <button className="secondary" onClick={() => setOrdersLimit(nextOrdersLimit)}>ดูออเดอร์เก่าเพิ่ม</button>}
-               {!storeWorkOrders.length && <p className="muted">ยังไม่มีออเดอร์เชียงใหม่/จังหวัดใกล้เคียงที่รอสโตร์</p>}
-              </div>}
-              {displayTab === "store-pickup" && <div className="ops-store-work" style={{ display: "grid", gap: "var(--sp-5)" }}>
-              <OrderHistorySearch title="ค้นหาประวัติออเดอร์ Grab/รับหน้าร้าน" query={pickupHistoryQuery} onQueryChange={setPickupHistoryQuery} onSearch={searchPickupHistory} onClear={() => { setPickupHistoryQuery(""); setPickupHistoryResults([]); setPickupHistorySearched(false); }} loading={pickupHistoryLoading} searched={pickupHistorySearched} results={pickupHistoryResults} onOpen={openChiangmaiHistoryOrder} />
-              {storePickupOrders.map(order => <article key={order.id} className="role-order-card"><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · {order.bookingNumber || "ไม่มีเลขใบสั่งจอง"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><OrderCreatedAt order={order} /><SalesNoteAlert order={order} compact /><details className="prep-order-details"><summary>ดูรายละเอียดออเดอร์จากฝ่ายขาย</summary><PackSalesOrderDetails order={order} /></details><button className="primary" onClick={() => openWorkModal(order, "store")}>รับงาน / บันทึกรายละเอียด</button></article>)}
-              {!storePickupOrders.length && <p className="muted">ยังไม่มีงาน Grab หรือลูกค้ารับหน้าร้านที่รอสโตร์</p>}
-            </div>}
-            {(isStoreBookingEntryView || ["store-booking", "store-online"].includes(displayTab)) && <div className="store-report-workspace">
-              {(() => { const type = isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "7px", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "var(--c-danger-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "var(--c-danger-dark)", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "var(--c-danger)", color: "var(--c-danger-deep)" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "var(--sp-3)" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid var(--c-danger-border)", background: "var(--c-surface)", color: "var(--c-danger-deep)", borderRadius: "7px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "var(--c-danger-deep)" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
-              {storeReports.filter(item => item.type === (isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "var(--c-danger-bg)", border: "1px solid var(--c-danger-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "var(--c-danger-deep)" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
-              {(() => { const type = isStoreBookingEntryView || displayTab === "store-booking" ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type, includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, type, includeDeleted: storeReportIncludeDeleted }); }; return <>
+        {["store-booking", "store-online"].includes(displayTab) && (
+          <section className="panel role-workspace ops-workspace">
+            <div className="panel-head"><h2>งานสโตร์</h2><span>เฉพาะบัญชีสโตร์</span></div>
+            {(["store-booking", "store-online"].includes(displayTab)) && <div className="store-report-workspace">
+              {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const issueSummary = storeReportIssues[type] || { count: 0, items: [] }; const issueRows = Array.isArray(issueSummary.items) ? issueSummary.items : []; if (!issueSummary.count) return null; const openAllIssues = () => { setStoreReportQuery(""); setStoreReportSearchActive(true); fetchStoreReports({ type, includeDeleted: false }); }; const openIssue = (item) => { setStoreReportQuery(item.bookingNumber || ""); setStoreReportSearchActive(true); fetchStoreReports({ type, query: item.bookingNumber || "", includeDeleted: false }); }; return <section style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "7px", borderRadius: "10px", padding: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", boxShadow: "0 5px 14px rgba(153, 27, 27, .12)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap" }}><div><b style={{ color: "var(--c-danger-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> มีงานของไม่ครบ / รอของค้าง {issueSummary.count} รายการ</b><div style={{ color: "var(--c-danger-dark)", fontSize: "12px" }}>รวมงานข้ามวัน · แสดงงานเก่าก่อน เพื่อเร่งติดตาม</div></div><button className="secondary" style={{ borderColor: "var(--c-danger)", color: "var(--c-danger-deep)" }} onClick={openAllIssues}>ดูทั้งหมด</button></div><div style={{ display: "grid", gap: "var(--sp-3)" }}>{issueRows.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => openIssue(item)} style={{ textAlign: "left", border: "1px solid var(--c-danger-border)", background: "var(--c-surface)", color: "var(--c-danger-deep)", borderRadius: "7px", padding: "var(--sp-4)", cursor: "pointer" }}><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b><span style={{ display: "block", fontSize: "12px" }}>{[item.detail, item.note].filter(Boolean).join(" · ") || "ของไม่ครบ / รอของ"}</span><small>{item.createdAt ? formatThaiDateTime(item.createdAt) : ""}</small></button>)}</div>{issueSummary.count > issueRows.length && <small style={{ color: "var(--c-danger-deep)" }}>แสดง {issueRows.length} รายการแรกจาก {issueSummary.count} รายการ</small>}</section>; })()}
+              {storeReports.filter(item => item.type === (displayTab === "store-booking" ? "booking" : "online") && ["returned", "partial"].includes(item.packStatus) && !item.deletedAt).map(item => <div key={`resubmit-${item.id}`} style={{ background: "var(--c-danger-bg)", border: "1px solid var(--c-danger-border)", borderRadius: "8px", padding: "var(--sp-5)", display: "flex", justifyContent: "space-between", gap: "var(--sp-5)", alignItems: "center", flexWrap: "wrap" }}><div><b>{item.bookingNumber || "รายการ"} · ห้องแพ็คส่งกลับ</b><div style={{ color: "var(--c-danger-deep)" }}>{item.returnReason || "ของไม่ครบหรือข้อมูลไม่ถูกต้อง"}</div></div><button className="primary" onClick={() => resubmitStoreReport(item)}>แก้ไขแล้ว · ส่งตรวจใหม่</button></div>)}
+              {(() => { const type = displayTab === "store-booking" ? "booking" : "online"; const baseRows = storeReports.filter(item => item.type === type && (storeReportSearchActive || String(item.serviceDate || toServiceDateKey(item.createdAt)) === storeReportDate)); const activeRows = baseRows.filter(item => !item.deletedAt); const isProblem = item => ["waiting", "partial"].includes(item.status) || (type === "online" && ["partial", "returned"].includes(item.packStatus)); const needsAction = item => !item.deletedAt && !item.confirmedAt && ["draft", "waiting", "partial"].includes(item.status); const matchesStatus = item => storeReportStatusFilter === "all" || (storeReportStatusFilter === "action" && needsAction(item)) || (storeReportStatusFilter === "confirmed" && Boolean(item.confirmedAt) && !item.deletedAt) || (storeReportStatusFilter === "problem" && !item.deletedAt && isProblem(item)) || (storeReportStatusFilter === "deleted" && Boolean(item.deletedAt)); const selectedRows = baseRows.filter(matchesStatus).slice().sort((a, b) => { const priority = item => item.deletedAt ? 3 : isProblem(item) ? 0 : needsAction(item) ? 1 : 2; return priority(a) - priority(b) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0); }); const overdue = storeReports.filter(item => item.type === type && needsAction(item) && String(item.serviceDate || toServiceDateKey(item.createdAt)) < todayServiceDate); const deletedCount = baseRows.length - activeRows.length; const refreshReports = () => fetchStoreReports({ date: storeReportSearchActive ? "" : storeReportDate, query: storeReportSearchActive ? storeReportQuery : "", type, includeDeleted: storeReportIncludeDeleted }); const runSearch = () => { const active = Boolean(storeReportQuery.trim()); setStoreReportSearchActive(active); if (active) fetchStoreReports({ query: storeReportQuery, type, includeDeleted: storeReportIncludeDeleted }); }; return <>
                 {overdue.length > 0 && <div style={{ background: overdue.some(item => Math.floor((Date.parse(`${todayServiceDate}T00:00:00`) - Date.parse(`${String(item.serviceDate || toServiceDateKey(item.createdAt))}T00:00:00`)) / 86400000) > 1) ? "var(--c-danger-bg-strong)" : "var(--c-warn-bg-strong)", border: "1px solid var(--c-danger-light)", padding: "var(--sp-5)", borderRadius: "8px" }}><b><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> มี {overdue.length} รายการค้างยืนยันจากวันก่อน</b><div className="muted">สีเหลือง = ค้าง 1 วัน · สีแดง = ค้างเกิน 1 วัน</div></div>}
-                 <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? (isStoreBookingEntryView ? "เพิ่มเลขใบสั่งจอง" : "ใบสั่งจอง") : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? (isStoreBookingEntryView ? "เพิ่มเอกสารอิสระโดยไม่ต้องผูกกับออเดอร์" : "ติดตามเอกสารและงานที่รอยืนยัน") : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน"><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช</button></div></div></header>
+                 <header className="store-report-header"><div><span className="store-report-eyebrow">STORE OPERATIONS</span><h2>{type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}</h2><p>{type === "booking" ? "ติดตามเอกสารและงานที่รอยืนยัน" : "ติดตามงานออนไลน์ก่อนส่งต่อห้องแพ็ค"}</p></div><div className="store-report-header-tools"><div className="store-report-date"><input aria-label="วันที่รายงาน" type="date" value={storeReportDate} onChange={e => { setStoreReportDate(e.target.value); setStoreReportSearchActive(false); }} /><button className="secondary" onClick={() => { setStoreReportDate(todayServiceDate); setStoreReportSearchActive(false); }}>วันนี้</button></div><div className="store-report-sync"><Clock3 size={15} /><span>{storeReportsUpdatedAt ? `อัปเดตล่าสุด ${storeReportsUpdatedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "ยังไม่อัปเดต"}</span><button className="secondary" onClick={refreshReports} disabled={storeReportsLoading} aria-label="รีเฟรชรายงาน"><RefreshCw size={15} className="i-inline" aria-hidden="true" /> รีเฟรช</button></div></div></header>
                 <div className="store-report-kpis"><article><span>ทั้งหมด</span><strong>{activeRows.length}</strong><small>{deletedCount ? `ไม่รวมลบแล้ว ${deletedCount}` : "รายการที่ใช้งาน"}</small></article><article className="is-action"><span>ต้องดำเนินการ</span><strong>{activeRows.filter(needsAction).length}</strong><small>ร่างหรือยังไม่ยืนยัน</small></article><article className="is-confirmed"><span>ยืนยันแล้ว</span><strong>{activeRows.filter(item => item.confirmedAt).length}</strong><small>พร้อมดำเนินงานต่อ</small></article><article className="is-problem"><span>มีปัญหา</span><strong>{activeRows.filter(isProblem).length}</strong><small>รอของ / ของไม่ครบ</small></article></div>
                 <div className="store-report-filters"><div className="store-report-search"><Search size={17} /><input value={storeReportQuery} onChange={e => setStoreReportQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") runSearch(); }} placeholder="ค้นหาเลขใบสั่งจอง / รายละเอียด / หมายเหตุ" /></div><button className="secondary" onClick={runSearch}>ค้นหาประวัติ</button><button className="secondary" onClick={() => { setStoreReportQuery(""); setStoreReportSearchActive(false); fetchStoreReports({ date: storeReportDate, type, includeDeleted: storeReportIncludeDeleted }); }}>ล้าง</button><select aria-label="กรองตามสถานะ" value={storeReportStatusFilter} onChange={e => setStoreReportStatusFilter(e.target.value)}><option value="all">ทุกสถานะ</option><option value="action">ต้องดำเนินการ</option><option value="confirmed">ยืนยันแล้ว</option><option value="problem">มีปัญหา</option><option value="deleted">ลบแล้ว</option></select><label className="store-report-deleted-filter"><input type="checkbox" checked={storeReportIncludeDeleted} onChange={e => setStoreReportIncludeDeleted(e.target.checked)} /> รวมรายการลบแล้ว{deletedCount > 0 ? ` (${deletedCount})` : ""}</label></div>
                 {storeReportSearchActive && <div style={{ background: "var(--c-info-bg)", padding: "var(--sp-4)", borderRadius: "6px", fontSize: "12px" }}>ผลค้นหาย้อนหลัง: “{storeReportQuery}”</div>}
@@ -6579,7 +6583,36 @@ export default function App() {
                 {!storeReportsLoading && !selectedRows.length && <p className="muted">ยังไม่มีรายงานในวันที่เลือก</p>}
               </>; })()}
             </div>}
-            {displayTab === "store-dashboard" && kpiReady && (() => { const pending = storeTodayOrders.filter(order => order.storeStatus === "pending").length; const working = storeTodayOrders.filter(order => order.storeStatus === "working").length; const waiting = storeTodayOrders.filter(order => ["waiting", "partial", "returned"].includes(order.storeStatus)).length; const monthOrders = storeKpiOrders.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod)); const monthCompleted = activeStoreTodayOrders.filter(order => ["checked", "partial"].includes(order.storeStatus)); const monthReturned = storeKpiOrders.flatMap(getReturnEvents).filter(event => isInKpiPeriod(event.at, kpiPeriod)); const monthOverdue = monthOrders.filter(order => ["pending", "working", "waiting", "partial", "returned"].includes(order.storeStatus)).filter(isOverdueWorkflowOrder); const statusLabels = { pending: "รอตรวจ", working: "กำลังตรวจ", checked: "ตรวจเสร็จ", partial: "ของไม่ครบ", waiting: "รอของ", returned: "ส่งกลับตรวจ" }; const statusTones = { pending: "is-amber", working: "is-blue", checked: "is-green", partial: "is-red", waiting: "is-red", returned: "is-red" }; const recentOrders = storeTodayOrders.slice().sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)).slice(0, 6).map(order => ({ ...order, statusLabel: statusLabels[order.storeStatus] || "รอตรวจ", statusTone: statusTones[order.storeStatus] })); let activityRows = buildKpiActivityRows(storeKpiOrders, "store"); if (!activityRows.length) activityRows = storeTodayOrders.filter(order => isInKpiPeriod(order.updatedAt || order.createdAt, kpiPeriod)).map(order => ({ id: order.id, at: order.updatedAt || order.createdAt, title: "ฝ่ายขายสร้างหรืออัปเดตออเดอร์", note: order.customerName || order.id })); activityRows.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0)); return <OperationsKpiDashboard periodLabel={kpiPeriod.label} cards={[{ icon: "📦", value: storeTodayOrders.length, label: "ออเดอร์ในช่วงที่เลือก", detail: "งานที่ฝ่ายขายส่งให้สโตร์", tone: "is-primary" }, { icon: "🟡", value: pending, label: "รอตรวจ", detail: "ยังไม่ได้เริ่มตรวจ", tone: "is-amber" }, { icon: "🔵", value: working, label: "กำลังตรวจ", detail: "สโตร์กำลังดำเนินการ", tone: "is-blue" }, { icon: "🟢", value: storeTodayCompleted, label: "ตรวจเสร็จ", detail: "พร้อมส่งต่อห้องแพ็ค", tone: "is-green" }, { icon: "🔴", value: waiting, label: "รอของ", detail: "รอของหรือของไม่ครบ", tone: "is-red" }]} completed={storeTodayCompleted} total={storeTodayOrders.length} followUps={[{ label: "งานส่งกลับให้สโตร์ตรวจ", emptyLabel: "ไม่มีงานส่งกลับ", value: storeTodayOrders.filter(order => order.storeStatus === "returned").length }, { label: "งานสโตร์ค้างเกิน 1 วัน", emptyLabel: "ไม่มีงานค้างเกินวัน", value: storeKpiOverdue.filter(order => isInKpiPeriod(getOrderServiceDate(order), kpiPeriod)).length }, { label: "งานรอของ / ของไม่ครบ", emptyLabel: "ไม่มีงานรอสินค้า", value: waiting }]} monthly={[{ label: "งานทั้งหมด", value: monthOrders.length }, { label: "ตรวจเสร็จ", value: monthCompleted.length }, { label: "ส่งกลับตรวจ", value: monthReturned.length }, { label: "ค้างเกินวัน", value: monthOverdue.length }, { label: "อัตราตรวจครบ", value: monthOrders.length ? Math.round((monthCompleted.length / monthOrders.length) * 100) : 0, suffix: "%" }]} recentOrders={recentOrders} activities={activityRows.slice(0, 50)} reportActions={{ copyDaily: () => copyStoreSummary("daily"), shareDaily: () => shareStoreSummary("daily"), copyMonthly: () => copyStoreSummary("monthly"), shareMonthly: () => shareStoreSummary("monthly") }} information="ออเดอร์ออนไลน์ส่งต่อให้ห้องแพ็คติดตาม ส่วนรายงานต่างจังหวัดแบบบันทึกใช้เก็บประวัติสโตร์ และทั้งสองส่วนไม่ขึ้น Google Sheets" />; })()}
+          </section>
+        )}
+
+        {auth.role === "store" && displayTab === "store-dashboard" && (
+          <section className="panel role-workspace ops-workspace">
+            <StoreDailyReport apiFetch={authenticatedApiFetch} settings={storeSettings} />
+          </section>
+        )}
+
+        {auth.role === "store" && displayTab === "store-transfer" && (
+          <section className="panel role-workspace ops-workspace">
+            <StoreTransferPanel apiFetch={authenticatedApiFetch} settings={storeSettings} profile={storeProfile} onUnresolvedChange={handleStoreTransferUnresolved} onNavigate={selectAppTab} />
+          </section>
+        )}
+
+        {auth.role === "store" && displayTab === "store-audit" && (
+          <section className="panel role-workspace ops-workspace">
+            <StoreAuditPanel apiFetch={authenticatedApiFetch} settings={storeSettings} profile={storeProfile} />
+          </section>
+        )}
+
+        {auth.role === "store" && displayTab === "store-overview" && (
+          <section className="panel role-workspace ops-workspace">
+            <StoreOverviewPanel apiFetch={authenticatedApiFetch} settings={storeSettings} onNavigate={selectAppTab} />
+          </section>
+        )}
+
+        {auth.role === "store" && displayTab === STORE_SETTINGS_TAB_ID && (
+          <section className="panel role-workspace ops-workspace">
+            <StoreSettingsPanel apiFetch={authenticatedApiFetch} settings={storeSettings} updatedAt={storeSettingsUpdatedAt} pin={storeSettingsPin} onPinChange={setStoreSettingsPin} onSaved={(nextSettings, nextUpdatedAt) => { setStoreSettings(normalizeStoreSettings(nextSettings)); setStoreSettingsUpdatedAt(nextUpdatedAt || ""); }} />
           </section>
         )}
 
@@ -6624,14 +6657,14 @@ export default function App() {
           <section className="panel role-workspace ops-workspace">
             <div className="panel-head"><h2>{displayTab === "pack-outstation" ? "ออเดอร์ต่างจังหวัด · ห้องแพ็ค" : displayTab === "pack-pickup" ? "Grab/รับหน้าร้าน · ห้องแพ็ค" : "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค"}</h2><span>{(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).length + (displayTab === "pack-work" ? packBlockedReworkOrders.length : 0)} งาน</span>{displayTab === "pack-outstation" && <button type="button" className="secondary" onClick={() => setShowOutstationQrScanner(true)}><Camera size={17} /> เปิดกล้องสแกน QR</button>}</div>
             {displayTab === "pack-work" && <button type="button" className="primary" style={{ width: "fit-content", marginBottom: "var(--sp-5)" }} onClick={() => { setSelectedCustomerId(""); setOrderCustomerSearch(""); setShowOrderConfirm(false); setPendingOrder(null); setOrderConfirmError(""); setOrderForm(p => ({ ...p, deliveryMethod: "company_driver", workflowType: "direct_pack", chiangmaiRoundCode: "" })); setStoreUrgentOpen(true); }}><PackagePlus size={17} /> เปิดออเดอร์ด่วน · ส่งตรงห้องแพ็ค</button>}
-            {displayTab === "pack-work" && <section aria-label="สโตร์กำลังตรวจ" style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderLeft: "5px solid var(--c-info)", borderRadius: "10px", padding: "var(--sp-5)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-info-dark)" }}><Store size={16} className="i-inline" aria-hidden="true" /> สโตร์กำลังตรวจ</h3><span>{packStoreCheckingOrders.length} งาน · ยังไม่ส่งเข้าห้องแพ็ค</span></div>{packStoreCheckingOrders.length > 0 ? <div style={{ display: "grid", gap: "var(--sp-3)" }}>{packStoreCheckingOrders.map(order => <article key={order.id} style={{ background: "var(--c-surface)", border: "1px solid var(--c-info-border)", borderRadius: "7px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-2)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{[order.zone, order.address].filter(Boolean).join(" · ") || "-"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><small className="muted">เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"} · อัปเดต {formatThaiDateTime(order.updatedAt || order.createdAt)}</small>{order.storeCheckerName && <small className="muted">ผู้ตรวจสโตร์: {order.storeCheckerName}</small>}{order.missingItems?.length > 0 && <small style={{ color: "var(--c-danger-deep)" }}>ติดตาม: {order.missingItems.join(", ")}</small>}<button type="button" className="primary" disabled={!canPackTakeOverStoreCheck(order)} onClick={() => openWorkModal(order, "pack", { takeOverStoreCheck: true })}>ดึงมาเช็คที่ห้องแพ็ค</button></article>)}</div> : <p className="muted" style={{ margin: 0 }}>ไม่มีออเดอร์ที่ค้างกับสโตร์ · งานที่สโตร์ยืนยันแล้วจะขึ้นในคิวห้องแพ็คอัตโนมัติ</p>}</section>}
+            {displayTab === "pack-work" && packStoreCheckingOrders.length > 0 && <section aria-label="สโตร์กำลังตรวจ" style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderLeft: "5px solid var(--c-info)", borderRadius: "10px", padding: "var(--sp-5)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-info-dark)" }}><Store size={16} className="i-inline" aria-hidden="true" /> สโตร์กำลังตรวจ</h3><span>{packStoreCheckingOrders.length} งาน · ยังไม่ส่งเข้าห้องแพ็ค</span></div><div style={{ display: "grid", gap: "var(--sp-3)" }}>{packStoreCheckingOrders.map(order => <article key={order.id} style={{ background: "var(--c-surface)", border: "1px solid var(--c-info-border)", borderRadius: "7px", padding: "var(--sp-4)", display: "grid", gap: "var(--sp-2)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-4)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName || "-"}</b><div className="muted">{[order.zone, order.address].filter(Boolean).join(" · ") || "-"}</div></div><WorkflowStatus role="store" status={order.storeStatus} /></div><small className="muted">เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"} · อัปเดต {formatThaiDateTime(order.updatedAt || order.createdAt)}</small>{order.storeCheckerName && <small className="muted">ผู้ตรวจสโตร์: {order.storeCheckerName}</small>}{order.missingItems?.length > 0 && <small style={{ color: "var(--c-danger-deep)" }}>ติดตาม: {order.missingItems.join(", ")}</small>}<button type="button" className="primary" disabled={!canPackTakeOverStoreCheck(order)} onClick={() => openWorkModal(order, "pack", { takeOverStoreCheck: true })}>ดึงมาเช็คที่ห้องแพ็ค</button></article>)}</div></section>}
             {displayTab === "pack-work" && packReworkOrders.length > 0 && <div style={{ marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-4)", background: "var(--c-accent-bg)", border: "2px solid var(--c-accent)", borderLeftWidth: "6px", borderRadius: "10px", padding: "var(--sp-6)" }}><div className="panel-head" style={{ margin: 0 }}><h3 style={{ margin: 0, color: "var(--c-accent-deep)" }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์ต้องส่งแก้ไขจากคนขับ</h3><span>{packReworkOrders.length} งาน</span></div>{packReworkOrders.map(order => <ReworkNotice key={`pack-rework-${order.id}`} order={order} />)}</div>}
             <div className="ops-pack-work">
               {(displayTab === "pack-outstation" ? salesOutstationPackOrders : displayTab === "pack-pickup" ? packPickupOrders : packWorkOrders).map(order => <article key={order.id} className="role-order-card">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--sp-6)", flexWrap: "wrap" }}><div><b>{order.id} · {order.customerName}</b><div className="muted">{order.zone} · {order.address}</div></div><WorkflowStatus role="pack" status={order.packStatus} /></div>
                 <OrderCreatedAt order={order} />
-                {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค · ข้ามสโตร์"}</span>}
-                {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</span>}
+                {displayTab === "pack-outstation" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : "ส่งตรงห้องแพ็ค"}</span>}
+                {displayTab === "pack-pickup" && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-info-dark)", background: "var(--c-info-border)" }}>{order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "Grab รับสินค้า"} {order.storeStatus !== "skipped" && <> · สโตร์: {["checked", "partial"].includes(order.storeStatus) ? "ส่งตรวจแล้ว" : "รอสโตร์ตรวจ"}</>}</span>}
                 <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>เลขที่ใบสั่งจอง: {formatOrderBookingNumbers(order) || "ยังไม่ระบุ"}{order.shippingCarrier && <> · ขนส่ง: {order.shippingCarrier}</>}{order.storeWorkDetails?.detail && <> · สโตร์: {order.storeWorkDetails.detail}</>}{order.storeWorkDetails?.note && <> · หมายเหตุ: {order.storeWorkDetails.note}</>}</div>
                 {order.packWorkDetails?.sharedToLine && <span className="status-chip" style={{ color: "var(--c-brand-dark)", background: "var(--c-brand-bg-strong)", width: "fit-content" }}><MessageSquare size={15} className="i-inline" aria-hidden="true" /> แชร์ LINE แล้ว</span>}
                 {order.packWorkDetails?.localPhotoCount > 0 && <span className="muted"><Camera size={15} className="i-inline" aria-hidden="true" /> แนบรูป {order.packWorkDetails.localPhotoCount} รูป (เก็บในเครื่อง)</span>}
@@ -6693,7 +6726,7 @@ export default function App() {
                   {displayTab === "chiangmai" && canSalesDeleteChiangmaiOrder(order) && salesDeleteEligibleIds.includes(order.id) && <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", width: "fit-content", color: "var(--c-danger-deep)", fontWeight: 800 }}><input type="checkbox" checked={salesDeleteSelectedSet.has(order.id)} disabled={salesDeleteSubmitting} onChange={() => toggleSalesDeleteOrder(order.id)} /> เลือกลบออเดอร์นี้</label>}
                   {displayTab === "chiangmai" && isReadyDriverBacklog(order) && !isTodayOrder(order) && <span className="status-chip" style={{ width: "fit-content", color: "var(--c-warn-deep)", background: "var(--c-warn-bg-strong)", border: "1px solid var(--c-warn-border)", fontWeight: 800 }}>ค้างจากวันก่อน · รอส่งเข้าคิวคนขับ</span>}
                   <div style={{ fontSize: "12px", color: "var(--c-text-soft)" }}>
-                    เส้นทาง: {order.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : "ผ่านสโตร์"} · {order.boxes || 0} กล่อง
+                    เส้นทาง: {order.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : order.workflowType === "direct_driver" ? "ส่งตรงคนขับ" : "ส่งตรงห้องแพ็ค"} · {order.boxes || 0} กล่อง
                     {order.storePackerName && <> · ผู้จัด: {order.storePackerName}</>}
                     {order.storeCheckerName && <> · ผู้ตรวจสโตร์: {order.storeCheckerName}</>}
                     {order.packPackerName && <> · ผู้แพ็ค: {order.packPackerName}</>}
@@ -6806,7 +6839,6 @@ export default function App() {
               <PackSalesOrderDetails order={chiangmaiHistoryOrder} />
               <div style={{ display: "grid", gap: "var(--sp-3)", marginTop: "var(--sp-5)" }}><div><b>สถานะล่าสุด:</b> {chiangmaiHistoryOrder.status || "-"}</div><div><b>สโตร์:</b> {storeStatusLabel(chiangmaiHistoryOrder)} · <b>ห้องแพ็ค:</b> {WORKFLOW_STATUS_META[chiangmaiHistoryOrder.packStatus]?.label || chiangmaiHistoryOrder.packStatus || "-"}</div>{chiangmaiHistoryOrder.missingItems?.length > 0 && <div style={{ background: "var(--c-warn-bg-strong)", padding: "var(--sp-4)", borderRadius: "6px" }}><b>รอสินค้า/ของไม่ครบ:</b> {chiangmaiHistoryOrder.missingItems.join(", ")}</div>}</div>
               <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap", marginTop: "var(--sp-6)", padding: "var(--sp-5)", borderRadius: "8px", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)" }}>
-                {auth.role === "pack" && chiangmaiHistoryOrder.workflowType === "store_route" && chiangmaiHistoryOrder.packStatus !== "returned" && <button className="secondary danger" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "pack"); }}><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> พบปัญหา · ส่งกลับสโตร์ตรวจสอบ</button>}
                 {auth.role === "store" && chiangmaiHistoryOrder.storeStatus === "returned" && <button className="primary" onClick={() => { const order = chiangmaiHistoryOrder; setChiangmaiHistoryOrder(null); openWorkModal(order, "store"); }}><Wrench size={15} className="i-inline" aria-hidden="true" /> สโตร์แก้ไขและยืนยัน</button>}
                 {chiangmaiHistoryOrder.storeStatus === "returned" && <span className="muted" style={{ alignSelf: "center" }}>งานนี้ส่งกลับให้สโตร์ตรวจสอบแล้ว · แก้ไขเสร็จให้ยืนยันเพื่อส่งห้องแพ็คตรวจซ้ำ</span>}
               </div>
@@ -8302,12 +8334,12 @@ export default function App() {
           <div className="panel-head"><h2>แก้เส้นทาง/ย้ายงาน</h2><span>{rerouteModal.id}</span></div>
           <div style={{ background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "9px", padding: "var(--sp-5)", fontSize: "12px" }}>
             <b>เส้นทางปัจจุบัน:</b> {rerouteModal.deliveryMethod === "outstation" ? "ต่างจังหวัด" : rerouteModal.deliveryMethod === "grab_pickup" ? "Grab" : rerouteModal.deliveryMethod === "customer_pickup" ? "ลูกค้ารับหน้าร้าน" : "คนขับบริษัท"}
-            <span> · {rerouteModal.workflowType === "direct_pack" ? "ส่งตรงห้องแพ็ค" : rerouteModal.workflowType === "direct_driver" ? "ส่งตรงคนขับ" : "ผ่านสโตร์ก่อน"}</span>
+            <span> · {rerouteModal.workflowType === "direct_driver" ? "ส่งตรงคนขับ" : rerouteModal.workflowType === "store_route" ? "ผ่านสโตร์ (ออเดอร์เก่า)" : "ส่งตรงห้องแพ็ค"}</span>
             <div className="muted" style={{ marginTop: "var(--sp-2)" }}>สถานะคิว: {rerouteModal.queueStatus || "preparing"} · สโตร์: {rerouteModal.storeStatus || "-"} · ห้องแพ็ค: {rerouteModal.packStatus || "-"}</div>
           </div>
           {rerouteError && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", color: "var(--c-danger-deep)", borderRadius: "9px", padding: "var(--sp-5)", fontSize: "12px" }}>{rerouteError}</div>}
-          <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>ปลายทางใหม่ *</b><select value={rerouteForm.deliveryMethod} onChange={event => { const deliveryMethod = event.target.value; setRerouteForm(previous => ({ ...previous, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod === "company_driver" ? "store_route" : "store_route", shippingCarrier: deliveryMethod === "outstation" ? previous.shippingCarrier : "" })); }}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
-          {!["grab_pickup", "customer_pickup"].includes(rerouteForm.deliveryMethod) && <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>เส้นทางตรวจสินค้า *</b><select value={rerouteForm.workflowType} onChange={event => setRerouteForm(previous => ({ ...previous, workflowType: event.target.value }))}>{rerouteForm.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option><option value="direct_driver">ส่งตรงคนขับทันที</option></>}</select></label>}
+          <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>ปลายทางใหม่ *</b><select value={rerouteForm.deliveryMethod} onChange={event => { const deliveryMethod = event.target.value; setRerouteForm(previous => ({ ...previous, deliveryMethod, workflowType: "direct_pack", shippingCarrier: deliveryMethod === "outstation" ? previous.shippingCarrier : "" })); }}><option value="company_driver">เชียงใหม่/ใกล้เคียง · คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+          {!["grab_pickup", "customer_pickup"].includes(rerouteForm.deliveryMethod) && <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>เส้นทางตรวจสินค้า *</b><select value={rerouteForm.workflowType} onChange={event => setRerouteForm(previous => ({ ...previous, workflowType: event.target.value }))}>{rerouteForm.deliveryMethod === "outstation" ? <option value="direct_pack">ส่งตรงห้องแพ็ค</option> : <><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{rerouteForm.deliveryMethod === "company_driver" && <option value="direct_driver">ส่งตรงคนขับทันที</option>}</>}</select></label>}
           {rerouteForm.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>บริษัทขนส่ง *</b><input list="reroute-carriers" value={rerouteForm.shippingCarrier} onChange={event => setRerouteForm(previous => ({ ...previous, shippingCarrier: event.target.value }))} placeholder="เช่น Flash, Kerry, NTC" /><datalist id="reroute-carriers">{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier} />)}</datalist></label>}
           <label style={{ display: "grid", gap: "var(--sp-2)" }}><b>เหตุผลการย้าย *</b><textarea value={rerouteForm.reason} onChange={event => setRerouteForm(previous => ({ ...previous, reason: event.target.value }))} rows={3} placeholder="เช่น ฝ่ายขายเลือกปลายทางผิด / ลูกค้าเปลี่ยนวิธีรับสินค้า" /></label>
           <div style={{ background: "var(--c-accent-bg)", border: "1px solid var(--c-accent-border)", borderLeft: "5px solid var(--c-accent)", borderRadius: "8px", padding: "var(--sp-5)", fontSize: "12px", color: "var(--c-accent-deep)" }}>
@@ -8340,11 +8372,11 @@ export default function App() {
         }}>
           <h2 style={{ marginTop: 0, color: "var(--c-text-heading)" }}><Package size={15} className="i-inline" aria-hidden="true" /> ยืนยันส่งออเดอร์</h2>
           {orderConfirmError && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "6px", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-5)", marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-2)" }}><b><XCircle size={15} className="i-inline" aria-hidden="true" /> ยังบันทึกออเดอร์ไม่ได้</b><span style={{ fontSize: "13px" }}>{orderConfirmError}</span><small>ตรวจสอบข้อมูลด้านล่าง แล้วกดยืนยันอีกครั้งได้ทันที</small></div>}
-          {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "6px", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-5)", marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-2)" }}><b><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าสโตร์ ห้องแพ็ค หรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
+          {!getOrderBookingNumbers(pendingOrder).length && <div role="alert" style={{ background: "var(--c-danger-bg)", border: "2px solid var(--c-danger)", borderLeftWidth: "6px", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-5)", marginBottom: "var(--sp-6)", display: "grid", gap: "var(--sp-2)" }}><b><AlertTriangle size={15} className="i-inline" aria-hidden="true" /> ออเดอร์นี้ยังไม่มีเลขใบสั่งจอง</b><span style={{ fontSize: "13px" }}>ส่งเข้าห้องแพ็คหรือคิวคนขับได้ตามปกติ แต่ต้องติดตามด้วยเลขออเดอร์ และเพิ่มเลขใบสั่งจองภายหลังเมื่อได้รับเอกสาร</span></div>}
           <div style={{ display: "grid", gap: "var(--sp-5)", marginBottom: "var(--sp-6)" }}>
-            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid var(--c-danger)", background: "var(--c-danger-bg)", color: "var(--c-danger-deep)", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}>{pendingOrder.deliveryMethod === "outstation" ? <><option value="direct_pack">ส่งตรงห้องแพ็ค</option><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option></> : <><option value="store_route">ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค</option><option value="direct_pack">ส่งเข้าห้องแพ็คโดยตรง</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</>}</select>{pendingOrder.deliveryMethod === "outstation" && <small className="muted">เลือกได้ว่าจะส่งตรงห้องแพ็ค หรือให้สโตร์ตรวจสอบก่อน</small>}</label>
-            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "store_route" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "", chiangmaiRoundCode: deliveryMethod === "company_driver" ? order.chiangmaiRoundCode : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
-            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รอบจัดส่งเชียงใหม่ (ไม่บังคับ)</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">ไม่กำหนดรอบ · ออเดอร์ปกติ</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">หากไม่เลือกรอบ ออเดอร์จะทำงานแบบออเดอร์เชียงใหม่ปกติ ส่วนสโตร์และห้องแพ็คตรวจตาม flow เดิม</small></label>}
+            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>เส้นทางตรวจสอบสินค้า</b><select value={pendingOrder.workflowType} style={pendingOrder.workflowType === "direct_driver" ? { border: "2px solid var(--c-danger)", background: "var(--c-danger-bg)", color: "var(--c-danger-deep)", fontWeight: 800 } : undefined} onChange={e => setPendingOrder(order => ({ ...order, workflowType: e.target.value }))}><option value="direct_pack">{pendingOrder.deliveryMethod === "outstation" ? "ส่งตรงห้องแพ็ค" : "ส่งเข้าห้องแพ็คโดยตรง"}</option>{pendingOrder.deliveryMethod === "company_driver" && <option value="direct_driver">🚨 ส่งตรงคนขับทันที (เร่งด่วน)</option>}</select></label>
+            <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รูปแบบจัดส่ง</b><select value={pendingOrder.deliveryMethod} onChange={e => { const deliveryMethod = e.target.value; setPendingOrder(order => ({ ...order, deliveryMethod, workflowType: deliveryMethod === "outstation" ? "direct_pack" : deliveryMethod !== "company_driver" && order.workflowType === "direct_driver" ? "direct_pack" : order.workflowType, shippingCarrier: deliveryMethod === "outstation" ? order.shippingCarrier : "", shippingCarrierOther: deliveryMethod === "outstation" ? order.shippingCarrierOther : "", chiangmaiRoundCode: deliveryMethod === "company_driver" ? order.chiangmaiRoundCode : "" })); }}><option value="company_driver">คนขับบริษัท</option><option value="grab_pickup">Grab</option><option value="customer_pickup">ลูกค้ารับหน้าร้าน</option><option value="outstation">ต่างจังหวัด</option></select></label>
+            {pendingOrder.deliveryMethod === "company_driver" && pendingOrder.workflowType !== "direct_driver" && <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รอบจัดส่งเชียงใหม่ (ไม่บังคับ)</b><select value={pendingOrder.chiangmaiRoundCode || ""} onChange={e => setPendingOrder(order => ({ ...order, chiangmaiRoundCode: e.target.value }))}><option value="">ไม่กำหนดรอบ · ออเดอร์ปกติ</option><option value="tuesday">รอบวันอังคาร · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "tuesday")}</option><option value="wednesday">รอบวันพุธ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "wednesday")}</option><option value="friday">รอบวันศุกร์ · {resolveNextRoundDate(toServiceDateKey(pendingOrder.createdAt), "friday")}</option></select><small className="muted">หากไม่เลือกรอบ ออเดอร์จะทำงานแบบออเดอร์เชียงใหม่ปกติและส่งเข้าห้องแพ็ค</small></label>}
             {pendingOrder.workflowType === "direct_driver" && pendingOrder.deliveryMethod === "company_driver" && <div style={{ background: "var(--c-danger-bg-strong)", border: "2px solid var(--c-danger)", color: "var(--c-danger-deep)", borderRadius: "10px", padding: "var(--sp-6)", fontWeight: 800 }}><div style={{ fontSize: "15px" }}><Siren size={15} className="i-inline" aria-hidden="true" /> ออเดอร์เร่งด่วน · ส่งตรงเข้าคิวคนขับ</div><small style={{ display: "block", marginTop: "var(--sp-2)" }}>ออเดอร์นี้จะข้ามสโตร์และห้องแพ็ค และแจ้งเตือนคนขับทันทีหลังยืนยัน</small></div>}
             {pendingOrder.deliveryMethod === "outstation" && <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>บริษัทขนส่ง *</b><select value={pendingOrder.shippingCarrier || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrier: e.target.value, shippingCarrierOther: e.target.value === "อื่นๆ" ? order.shippingCarrierOther : "" }))}><option value="">-- เลือกบริษัทขนส่ง --</option>{["Kerry", "Flash", "Nim Express", "NTC", "เมล์เขียว", "นครชัยทัวร์", "นครชัยแอร์", "เปรมประชา", "ศรีขนส่ง", "ชนกานต์ขนส่ง", "พงษ์เดช", "Nim ปลายทาง", "อื่นๆ"].map(carrier => <option key={carrier} value={carrier}>{carrier}</option>)}</select>{pendingOrder.shippingCarrier === "อื่นๆ" && <input value={pendingOrder.shippingCarrierOther || ""} onChange={e => setPendingOrder(order => ({ ...order, shippingCarrierOther: e.target.value }))} placeholder="ระบุชื่อบริษัทขนส่ง" />}</label>}
             <label style={{ display: "grid", gap: "var(--sp-3)" }}><b>รายละเอียดสินค้า / หมายเหตุฝ่ายขาย</b><textarea rows={3} value={pendingOrder.salesNote || ""} onChange={e => setPendingOrder(order => ({ ...order, salesNote: e.target.value }))} placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)" /></label>
@@ -8357,7 +8389,7 @@ export default function App() {
             <p><b>COD:</b> ฿{money(pendingOrder.cod)}</p>
             <p><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(pendingOrder) || "ยังไม่ระบุ · ติดตามด้วยเลขออเดอร์"}</p>
             {pendingOrder.shippingCarrier && <p><b>ขนส่งต่างจังหวัด:</b> {pendingOrder.shippingCarrier}</p>}
-            {pendingOrder.deliveryMethod === "outstation" && <p><b>เส้นทางตรวจสินค้า:</b> {pendingOrder.workflowType === "store_route" ? "ผ่านสโตร์ก่อน แล้วส่งห้องแพ็ค" : "ส่งตรงห้องแพ็ค"}</p>}
+            {pendingOrder.deliveryMethod === "outstation" && <p><b>เส้นทางตรวจสินค้า:</b> ส่งตรงห้องแพ็ค</p>}
             {pendingOrder.salesNote && <p><b>หมายเหตุ:</b> {pendingOrder.salesNote}</p>}
           </div>
           <label style={{ display: "flex", gap: "var(--sp-4)", alignItems: "flex-start", background: "var(--c-info-bg)", border: "1px solid var(--c-info-border)", borderRadius: "8px", padding: "var(--sp-5)", color: "var(--c-info-dark)", fontSize: "13px", fontWeight: 800 }}>

@@ -55,6 +55,7 @@
 │   ├── order-review/page.jsx         # [PUBLIC] ลูกค้าให้ดาว 1-5 + คอมเมนต์
 │   ├── outstation-qr/route.js        # [PUBLIC] QR กล่อง → redirect LINE OA
 │   ├── components/                   # 8 client components
+│   │   └── store/                    # Store{Settings,Transfer,Audit,Overview}Panel, StoreDailyReport, StoreSettingsDocuments (+ .css)
 │   └── api/                          # [SERVER] 47 route handlers
 │       ├── admin/                    # delivery-sheet, driver-identities, reset-orders, users
 │       ├── auth/                     # login, validate, google/start, google/verify
@@ -72,7 +73,7 @@
 │       ├── preparation/checkers/
 │       ├── public/                   # track, order-review
 │       ├── push/register/
-│       ├── store/reports/
+│       ├── store/                    # reports, settings, transfers, audits, overview, daily-report, staff
 │       ├── vehicle-master/
 │       ├── vehicle-report/           # query, export, odometer
 │       └── vehicle-usage/submit/
@@ -85,6 +86,14 @@
 │   ├── preparationWorkflow.js        # ⭐ store/pack state machine + รอบเชียงใหม่
 │   ├── operationsReporting.js        # ⭐ date/status/area classification
 │   ├── dispatchDashboard.js          # 8 KPI cards + driver loads
+│   ├── storeSettings.js              # ตั้งค่าเมนู/สาขา/เลขเอกสารสโตร์ (client-safe)
+│   ├── storeSettingsPin.js           # ตรวจ PIN (server) + throttle
+│   ├── storeFormat.js                # format ตัวเลข/วันที่ไทย + ช่วงวัน Bangkok
+│   ├── storeTransfers.js             # validate/build ใบโอนสินค้า
+│   ├── storeAudit.js                 # validate/สรุป Internal Audit
+│   ├── storeOverview.js              # คำนวณรายงานแดชบอร์ดสโตร์
+│   ├── storeDailyReport.js           # รายงานประจำวัน/เดือน + ข้อความสรุป
+│   ├── storeRouteMigration.js        # classify/patch ย้าย store_route -> direct_pack
 │   ├── vehicleReport.js              # join usage+fuel+assessment+orders
 │   ├── vehicleReportCsv.js           # CSV + กัน formula injection
 │   ├── vehicleMaster.js              # static 21 คัน (fallback)
@@ -105,7 +114,7 @@
 │   ├── backup/                       # backupService, firestoreBackup,
 │   │                                 # storageBackup, cli
 │   └── utils/backupUtils.js
-├── scripts/                          # 6 migration/backfill/seed/audit
+├── scripts/                          # migration/backfill/seed/audit (รวม migrate-store-route-to-pack.mjs)
 ├── tests/
 │   ├── unit/                         # 20 ไฟล์ Vitest
 │   └── firestore.rules.test.js       # 11 scenario บน emulator
@@ -147,7 +156,7 @@
     * sales/admin → `sales`, `sales-outstation`, `dispatch`, `driver-ratings`, `chiangmai`, `driver-sop-report`, `reports`, `settings`
     * accounting → `driver-sop-report` (report-only)
     * driver → `driver`, `driver-prep`, `driver-vehicle`, `driver-sop`, `driver-dashboard`
-    * store → `store-work`, `store-pickup`, `store-booking`, `store-online`, `store-dashboard`, `store-chiangmai-track`
+    * store → `store-booking`, `store-online`, `store-dashboard` (รายงานประจำวัน), `store-transfer`, `store-audit`, `store-overview`, `store-settings` — เมนูเปิด/ปิดได้จาก `store_settings/default` (`store-booking`/`store-online` ปิดไม่ได้; tab ที่ปิดจะ fallback ไป `getFirstEnabledStoreTab`); สโตร์ไม่มีแท็บเชียงใหม่/Grab-pickup แล้ว
     * pack → `pack-work`, `pack-pickup`, `pack-outstation`, `pack-booking`, `pack-online`, `pack-dashboard`
   * `authenticatedApiFetch` (useCallback) ห่อ `lib/authenticatedFetch` → ส่งต่อเป็น prop `apiFetch` ให้ทุก component
 * **Realtime (`onSnapshot`, ใน effect ที่ล็อกด้วย auth):**
@@ -284,7 +293,8 @@
 * **Flow:**
   * โหลด `orders/{orderId}` → สร้าง `history` entry + `patch` ที่มี `updatedAt` และ `workflowHistory` (เก็บ 100 รายการล่าสุด)
   * **driver** — `driver_cancel` (ต้องเป็น `driverId` ตัวเอง, จาก `กำลังส่ง|กำลังจัดส่ง` เท่านั้น, ต้องมีเหตุผล → คืนเข้าคิว + `complaintStatus: "open"`), `driver_rework` (ต้อง `deliveryCompleteness === "incomplete"` + `driverNote`, ใช้ `driverReworkPatch`, จำกัด `podPhotoCount` 0–5), `driver_complete` (ตั้ง `ส่งสำเร็จ`/`completed`, `deliveredAt`, เพิ่ม `deliveryAttemptNumber`, บันทึก `lastDeliveryDriverId/Name/At`, `sharedToLine: true`, merge `resolveDeliveryVehicleSnapshot`)
-  * **store** — `store_update`: `storeStatus` ∈ `working|checked|partial|waiting|returned`, ต้องมีชื่อผู้ตรวจเมื่อ `checked|partial|waiting`; แก้เลขใบสั่งจองจะจอง/ปล่อย `booking_month_registry` (409 เมื่อชน); เขียน `storeWorkDetails`; ส่งต่อ `packStatus` และดัน rework เป็น `waiting_pack`
+  * **เส้นทางเข้าห้องแพ็ค:** ออเดอร์ใหม่ / reroute / `driver_rework` ตั้ง `workflowType: "direct_pack"` โดยตรง (สโตร์เลิกรับงานจัดเตรียม); `store_route` เหลือเป็นข้อมูลเก่าที่ยังอ่านได้ และ `driverReworkPatch` แปลงเป็น `direct_pack` — ย้ายของค้างด้วย `scripts/migrate-store-route-to-pack.mjs`; ห้องแพ็คยังยืนยันรายงาน `store_reports` (ใบสั่งจอง/ใบขายออนไลน์) ผ่าน `/api/store/reports`
+  * **store** — `store_update` (legacy สำหรับออเดอร์ `store_route` เก่า): `storeStatus` ∈ `working|checked|partial|waiting|returned`, ต้องมีชื่อผู้ตรวจเมื่อ `checked|partial|waiting`; แก้เลขใบสั่งจองจะจอง/ปล่อย `booking_month_registry` (409 เมื่อชน); เขียน `storeWorkDetails`; ส่งต่อ `packStatus` และดัน rework เป็น `waiting_pack`
   * **pack** — `pack_update`: ต้องผ่านสโตร์ก่อน (`direct_pack` หรือสโตร์ `checked|partial`) ไม่งั้น 409; เมื่อ `checked|partial` ตั้ง `queueStatus` เป็น `grab_ready` / `outstation_ready` / `ready` ตาม `deliveryMethod`; `returned` ส่งกลับสโตร์ (ห้ามใน `direct_pack` และ `outstation`); `pack_archive` ต้องมีเหตุผล และห้ามเมื่อเข้าคิว/มีคนขับแล้ว
   * **sales/admin** — `grab_pickup` (ต้อง `queueStatus === "grab_ready"`), `queue` (สโตร์+แพ็ค `checked|partial`, ไม่มี rework ค้าง, ไม่ใช่ pickup/outstation), `complaint_resolve`
   * **Commit แบบ optimistic concurrency:** `batch.update(ref, patch, { lastUpdateTime: snap.updateTime })` + `activity` doc + booking registry; Firestore error 9/10 → 409 `"Order changed concurrently"`; แล้ว `syncDeliveryOrderToSheet` (ไม่ fatal) และเมื่อ `action === "queue"` ส่ง FCM ไปคนขับ
@@ -347,6 +357,24 @@
   * `PUT` — เฉพาะผู้สร้าง (`createdByUid`); รายงานที่ยืนยันแล้วต้องมี `reason`; เลขเดิม+ผูกออเดอร์ → transaction แก้ supplement ในออเดอร์ด้วย; เปลี่ยนเลข → จอง registry ใหม่ (409 เมื่อชน)
   * `DELETE` — soft delete (`deletedAt`, `deletedBy`, `deleteReason`), เฉพาะผู้สร้าง, รายงานที่ยืนยันแล้วต้องมีเหตุผล; รายงานที่ผูกออเดอร์จะถอด supplement ออกด้วย
 * **Deps:** `lib/workflowAuth`, `lib/bookingRegistry`, `lib/preparationWorkflow`
+
+#### 📄 `app/api/store/settings/route.js`
+* **บทบาท:** อ่าน/บันทึกการตั้งค่าสโตร์ (`store_settings/default`) — `GET`: `store|pack|admin`, `POST` (ตรวจ PIN อย่างเดียว) และ `PUT` (บันทึก): `store|admin`
+* **Flow:** PIN ตรวจฝั่ง server ด้วย `verifyStoreSettingsPin` + `createPinThrottle` (ผิดซ้ำ → 429, in-memory ต่อ instance); `PUT` ใน transaction เทียบ `baseUpdatedAt` (ไม่ตรง → 409), `validateStoreSettings`, และห้ามลบสาขาที่ถูกใบโอน/audit อ้างอยู่
+* **Deps:** `lib/storeSettings`, `lib/storeSettingsPin`, `lib/workflowAuth`
+
+#### 📄 `app/api/store/transfers/route.js`
+* **บทบาท:** ใบโอนสินค้า (`store_transfers` + `history`) — `GET`: `store|admin`; `POST`/`PATCH`/`PUT`/`DELETE`: **store เท่านั้น**
+* **Flow:** `POST` หลายแถวใน transaction เดียว (เลขเอกสารจอง `store_document_registry`, ผิดแถวเดียวไม่เขียนเลย); `PATCH` action `resolve` / `reopen`; ทุกการเปลี่ยนแปลงเขียน `history`
+* **Deps:** `lib/storeTransfers`, `lib/storeSettings`
+
+#### 📄 `app/api/store/audits/route.js`
+* **บทบาท:** Internal Audit (`store_audits` + `history`) — `GET`: `store|admin`; `POST`/`DELETE`: **store เท่านั้น**
+* **Flow:** `POST` ใน transaction — อ่าน settings, `store_document_counters`, จองเลขใน `store_document_registry`; `DELETE` เป็น soft delete + `history`
+* **Deps:** `lib/storeAudit`, `lib/storeSettings`
+
+#### 📄 `app/api/store/overview/route.js` · `daily-report/route.js` · `staff/route.js`
+* **บทบาท:** read-only ทั้งหมด `GET`: `store|admin` — `overview` รายงานแดชบอร์ด (`lib/storeOverview`), `daily-report` รายงานประจำวัน/เดือน (`lib/storeDailyReport`), `staff` รายชื่อผู้ใช้ role store
 
 ### 4.6 Outstation (ต่างจังหวัด)
 
@@ -660,7 +688,7 @@
 
 ## 7. Firestore — Collections, Rules, Indexes
 
-### 7.1 Collections (31 ตัว ที่โค้ดอ้างถึงจริง)
+### 7.1 Collections (36 ตัว ที่โค้ดอ้างถึงจริง)
 
 | กลุ่ม | Collection | เขียนโดย |
 | --- | --- | --- |
@@ -680,6 +708,10 @@
 | ต่างจังหวัด | `outstation_label_settings`, `outstation_recipient_addresses` | `/api/outstation-labels/*` |
 | | `outstation_label_jobs` (+ `items`, `events`) | `/api/outstation-labels/jobs` |
 | รายงาน | `store_reports` (+ `history`) | `/api/store/reports` |
+| สโตร์ | `store_settings` (doc `default`) | `/api/store/settings` |
+| | `store_transfers` (+ `history`) | `/api/store/transfers` |
+| | `store_audits` (+ `history`) | `/api/store/audits` |
+| | `store_document_registry`, `store_document_counters` | `/api/store/transfers`, `/api/store/audits` (กันเลขเอกสารซ้ำ/นับเลขถัดไป) |
 | | `events`, `activity` | server เท่านั้น |
 | ระบบ | `app_settings` (doc `preparation_checkers`) | `/api/preparation/checkers` |
 | | `audit_logs` | server เท่านั้น (admin actions, driver/vehicle CRUD, order delete, OTP) |
@@ -687,6 +719,8 @@
 | | `push_tokens` | `/api/push/register` (อ่าน+ลบ token เสียโดย route ที่ส่ง FCM) |
 | | `line_webhook_events` | `/api/line/webhook` |
 | แชท | `chat_messages`, `chat_meta` | client (Rules ตรวจ sender ตรงกับโปรไฟล์) |
+
+> คอลเลกชัน `store_*` ใหม่ทั้ง 5 ตัวเข้าถึงผ่าน Admin SDK เท่านั้น (Rules deny client ทั้งหมดอยู่แล้ว) — ไม่มีการแก้ `firestore.rules` / `firestore.indexes.json`
 
 ### 7.2 `firestore.rules` — 183 บรรทัด
 
@@ -725,6 +759,11 @@ store_reports: packStatus ASC,           createdAt DESC
 * **บทบาท:** ซ่อมความสมบูรณ์ข้อมูลหลายคอลเลกชัน (customers, orders, user mirrors)
 * **Flow:** `--apply` คุมทุกอย่าง — `queueWrite()` สะสม, `flush()` return ทันทีถ้าไม่มี `applyChanges` ไม่งั้น commit ทีละ 400 doc; customers: ซ่อม `phoneDigits`/`nameKey` + doc `customer_search`; orders: derive `customerPhoneDigits` และ `serviceDate` จาก `createdAt`/`updatedAt` ด้วย `Intl.DateTimeFormat` Bangkok; users: mirror `users_by_phone` (driver/sales) ไป `users/{uid}` ผ่าน `publicProfile()` แล้ว normalize ค่า default (`uid`, `uidLast`, `phoneDigits`, `status`, `active`)
 * **Output:** `{mode: "applied" | "dry-run", counters}`
+
+#### 📄 `scripts/migrate-store-route-to-pack.mjs` — **dry-run เป็นค่าเริ่มต้น**
+* **บทบาท:** ย้ายออเดอร์ `workflowType === "store_route"` ที่ค้างคิวสโตร์เข้าห้องแพ็ค (`direct_pack`, `storeStatus: skipped`)
+* **Flow:** `--apply` เขียนจริง (ต้องให้ผู้ใช้ยืนยันผล dry-run ก่อน), `--verbose`, `--ids=A,B`; ข้ามออเดอร์ที่สโตร์ตรวจเสร็จ/เข้าคิวคนขับ/ห้องแพ็คตรวจเสร็จแล้ว (`classifyStoreRouteOrderForMigration`); เขียน `activity` ต่อออเดอร์; ไม่ sync Google Sheet
+* **Deps:** `lib/storeRouteMigration`, `lib/firebaseAdmin`
 
 #### 📄 `scripts/seed-vehicle-master.mjs` — **dry-run เป็นค่าเริ่มต้น**
 * **บทบาท:** seed `vehicle_master` จาก static list

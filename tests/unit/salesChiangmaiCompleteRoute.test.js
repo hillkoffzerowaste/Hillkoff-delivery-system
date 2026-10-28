@@ -57,7 +57,9 @@ describe("sales Chiang Mai bulk completion route", () => {
   beforeEach(() => {
     state.db = createDb({
       A: { deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "checked", packStatus: "checked", queueStatus: "ready", driverId: "" },
-      B: { deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "checked", packStatus: "checked", queueStatus: "preparing", driverId: "" }
+      B: { deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "checked", packStatus: "checked", queueStatus: "preparing", driverId: "" },
+      C: { deliveryMethod: "company_driver", workflowType: "direct_pack", storeStatus: "skipped", packStatus: "checked", queueStatus: "ready", driverId: "" },
+      D: { deliveryMethod: "company_driver", workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending", queueStatus: "preparing", driverId: "" }
     });
   });
 
@@ -68,6 +70,18 @@ describe("sales Chiang Mai bulk completion route", () => {
     expect(state.db.orders.get("A")).toMatchObject({ status: "ส่งสำเร็จ", queueStatus: "completed", salesCompletedBy: "ฝ่ายขายหนึ่ง" });
     expect(state.db.activity).toHaveLength(2);
     expect(state.db.audits).toHaveLength(1);
+  });
+
+  it("completes direct-pack orders checked by the packing room and blocks unchecked ones", async () => {
+    const ok = await post(["A", "C"]);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, data: { count: 2, completedIds: ["A", "C"] } });
+    expect(state.db.orders.get("C")).toMatchObject({ status: "ส่งสำเร็จ", queueStatus: "completed" });
+
+    const blocked = await post(["B", "D"]);
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({ ok: false, blockingOrderIds: ["D"] });
+    expect(state.db.orders.get("B").queueStatus).toBe("preparing");
   });
 
   it("rejects the whole selection when any order is no longer eligible", async () => {

@@ -1,0 +1,80 @@
+/* Store transfer panel. Colors come only from the design tokens in globals.css :root. */
+.st-workspace { min-width: 0; }
+
+.st-alert { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-6); padding: var(--sp-6) var(--sp-7); border: 1px solid var(--c-danger-light); border-radius: var(--r-lg); background: var(--c-danger-bg); color: var(--c-danger-deep); }
+.st-alert > svg { flex: none; }
+.st-alert > div { display: grid; flex: 1 1 240px; gap: var(--sp-1); }
+.st-alert small { color: var(--c-danger-dark); font-size: 12px; }
+
+.st-kpis .st-kpi-complete { border-top-color: var(--c-brand); }
+.st-kpis .st-kpi-complete strong { color: var(--c-brand-dark); }
+.st-kpis .st-kpi-open { border-top-color: var(--c-danger); }
+.st-kpis .st-kpi-open strong { color: var(--c-danger-deep); }
+.st-kpis .st-kpi-resolved { border-top-color: var(--c-info); }
+.st-kpis .st-kpi-resolved strong { color: var(--c-info-deep); }
+
+.st-form { display: grid; gap: var(--sp-6); }
+.st-form .panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--sp-4); margin-bottom: 0; }
+.st-form .panel-head span { color: var(--c-text-muted); font-size: 12px; }
+.st-draft-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-5); padding: var(--sp-6); border: 1px dashed var(--c-brand-border); border-radius: var(--r-lg); background: var(--c-brand-bg); }
+.st-fields { display: flex; flex: 1 1 0; flex-wrap: wrap; gap: var(--sp-5); min-width: 0; }
+.st-field { display: grid; flex: 1 1 140px; gap: var(--sp-2); color: var(--c-text-strong); font-size: 12px; font-weight: 600; }
+.st-field input,
+.st-field select,
+.st-field textarea { width: 100%; min-height: 44px; box-sizing: border-box; }
+.st-field-note { flex: 2 1 260px; }
+.st-field-note.is-required { color: var(--c-danger-deep); }
+.st-field input.is-invalid { border-color: var(--c-danger); }
+.st-icon-button { min-width: 44px; min-height: 44px; justify-content: center; padding: 0 var(--sp-6); }
+.st-form-actions { flex-wrap: wrap; }
+.st-form-actions > div { flex-wrap: wrap; }
+.st-empty-branches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); margin: 0; padding: var(--sp-6); border: 1px solid var(--c-warn-border); border-radius: var(--r-lg); background: var(--c-warn-bg); color: var(--c-warn-deep); }
+
+.st-toast { margin: 0; padding: var(--sp-5) var(--sp-6); border-radius: var(--r-lg); font-size: 13px; font-weight: 600; }
+.st-toast.is-ok { background: var(--c-brand-bg-strong); color: var(--c-brand-dark); }
+.st-toast.is-warn { background: var(--c-warn-bg-strong); color: var(--c-warn-deep); }
+.st-toast.is-error { background: var(--c-danger-bg-strong); color: var(--c-danger-deep); }
+
+.st-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); }
+.st-filters .store-report-search { flex: 1 1 280px; min-height: 44px; }
+.st-chips { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.st-chip { min-height: 44px; padding: 0 var(--sp-7); border: 1px solid var(--c-brand-border); border-radius: var(--r-full); background: var(--c-surface); color: var(--c-brand-dark); font-weight: 600; cursor: pointer; }
+.st-chip[aria-pressed="true"] { border-color: var(--c-brand-dark); background: var(--c-brand-dark); color: var(--c-surface); }
+.st-branch-filter { display: flex; align-items: center; gap: var(--sp-4); color: var(--c-text-strong); font-size: 12px; }
+.st-branch-filter select { min-height: 44px; }
+.st-view-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); margin: 0; color: var(--c-text-soft); font-size: 13px; }
+
+.st-panel { display: grid; gap: var(--sp-5); padding: var(--sp-7); border: 1px solid var(--c-info-border); border-radius: var(--r-lg); background: var(--c-info-bg); }
+.st-panel b { color: var(--c-info-deep); font-size: 16px; }
+.st-panel.is-edit { border-color: var(--c-brand-border); background: var(--c-brand-bg); }
+.st-panel.is-edit b { color: var(--c-brand-dark); }
+.st-panel.is-delete { border-color: var(--c-danger-border); background: var(--c-danger-bg); }
+.st-panel.is-delete b { color: var(--c-danger-deep); }
+.st-panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-5); }
+.st-danger { background: var(--c-danger); border-color: var(--c-danger); }
+
+.st-table-wrap { overflow-x: auto; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-surface); }
+.st-table { width: 100%; min-width: 960px; border-collapse: collapse; font-size: 14px; }
+.st-table th { padding: var(--sp-5) var(--sp-6); background: var(--c-surface-subtle); border-bottom: 1px solid var(--c-line); color: var(--c-text-strong); font-size: 12px; font-weight: 700; text-align: left; }
+.st-table td { padding: var(--sp-6); border-bottom: 1px solid var(--c-line); vertical-align: top; }
+.st-row.is-active { background: var(--c-info-bg); }
+.st-route { white-space: nowrap; }
+.st-detail { max-width: 340px; }
+.st-muted { color: var(--c-text-muted); font-size: 12px; }
+.st-problem { margin-top: var(--sp-2); color: var(--c-danger-deep); font-size: 12px; }
+.st-resolution { margin-top: var(--sp-1); color: var(--c-info-deep); font-size: 12px; }
+.st-status { display: inline-block; padding: var(--sp-2) var(--sp-5); border-radius: var(--r-full); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.st-status.is-complete { background: var(--c-brand-bg-strong); color: var(--c-brand-dark); }
+.st-status.is-open { background: var(--c-danger-bg-strong); color: var(--c-danger-deep); }
+.st-status.is-resolved { background: var(--c-info-bg); color: var(--c-info-deep); }
+.st-row-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.st-row-actions .secondary { min-height: 36px; padding: var(--sp-2) var(--sp-5); font-size: 12px; white-space: nowrap; }
+.st-no-rows { margin: 0; padding: var(--sp-8); color: var(--c-text-muted); text-align: center; }
+
+@media (max-width: 720px) {
+  .st-field { flex-basis: 100%; }
+  .st-draft-row { align-items: stretch; }
+  .st-form-actions { flex-direction: column; }
+  .st-form-actions > div { justify-content: stretch; }
+  .st-form-actions button { flex: 1 1 auto; justify-content: center; }
+}

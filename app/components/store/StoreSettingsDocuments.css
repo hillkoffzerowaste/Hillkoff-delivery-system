@@ -1,0 +1,267 @@
+.ss-docs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-7);
+  align-items: flex-start;
+}
+
+.ss-docs-form,
+.ss-docs-preview {
+  flex: 1 1 420px;
+  min-width: 0;
+  display: grid;
+  gap: var(--sp-6);
+}
+
+.ss-docs-card {
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.ss-docs-card h2 {
+  margin: 0;
+  color: var(--c-text-heading);
+  font-size: 16px;
+}
+
+.ss-docs-row,
+.ss-docs-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+}
+
+.ss-docs-checks {
+  gap: var(--sp-2) var(--sp-8);
+}
+
+.ss-docs-field {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--c-text-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ss-docs-grow-1 {
+  flex: 1 1 120px;
+}
+
+.ss-docs-grow-2 {
+  flex: 2 1 220px;
+}
+
+.ss-docs-field input,
+.ss-docs-field select,
+.ss-docs-field-name {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 14px;
+}
+
+.ss-docs-module-select {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ss-docs-upper {
+  text-transform: uppercase;
+}
+
+.ss-docs-note {
+  margin: 0;
+  padding: var(--sp-5) var(--sp-6);
+  border-radius: var(--r-lg);
+  background: var(--c-info-bg);
+  color: var(--c-info-deep);
+  font-size: 12px;
+}
+
+.ss-docs-example {
+  margin: 0;
+  color: var(--c-text-strong);
+  font-size: 13px;
+}
+
+.ss-docs-example b {
+  color: var(--c-brand-dark);
+  font-size: 15px;
+}
+
+.ss-docs-hint {
+  margin: 0;
+  color: var(--c-text-muted);
+  font-size: 12px;
+}
+
+.ss-docs-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 44px;
+  color: var(--c-text);
+  font-size: 13px;
+}
+
+.ss-docs-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--c-brand);
+}
+
+.ss-docs-check.is-locked {
+  color: var(--c-text-muted);
+}
+
+.ss-docs-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-7);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.ss-docs-field-name {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.ss-docs-locked {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--c-text-muted);
+  font-size: 12px;
+}
+
+.ss-docs-preview-title {
+  color: var(--c-text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.ss-docs-paper {
+  display: grid;
+  gap: var(--sp-7);
+  padding: var(--sp-9);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  box-shadow: var(--e-2);
+  color: var(--c-text);
+  font-size: 12px;
+}
+
+.ss-docs-paper-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-7);
+  padding-bottom: var(--sp-6);
+  border-bottom: 2px solid var(--c-brand-deep);
+}
+
+.ss-docs-paper-company {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: flex-start;
+  gap: var(--sp-6);
+  min-width: 0;
+}
+
+.ss-docs-paper-company > div,
+.ss-docs-paper-title {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.ss-docs-paper-company b {
+  color: var(--c-brand-deep);
+  font-size: 16px;
+}
+
+.ss-docs-paper-company span {
+  color: var(--c-text-strong);
+}
+
+.ss-docs-paper-title {
+  text-align: right;
+}
+
+.ss-docs-paper-title > b {
+  color: var(--c-brand-dark);
+  font-size: 18px;
+}
+
+.ss-docs-logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-lg);
+  background: var(--c-brand-dark);
+  color: var(--c-surface);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.ss-docs-table-wrap {
+  overflow-x: auto;
+}
+
+.ss-docs-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ss-docs-table-wrap th,
+.ss-docs-table-wrap td {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--c-line-strong);
+  text-align: left;
+}
+
+.ss-docs-table-wrap th {
+  background: var(--c-surface-muted);
+  white-space: nowrap;
+}
+
+.ss-docs-table-wrap td {
+  padding-block: var(--sp-5);
+}
+
+.ss-docs-dots {
+  color: var(--c-text-muted);
+}
+
+.ss-docs-signers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-7);
+  padding-top: var(--sp-8);
+}
+
+.ss-docs-signer {
+  flex: 1 1 120px;
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: center;
+  text-align: center;
+}
+
+.ss-docs-sign-line {
+  width: 100%;
+  height: 28px;
+  border-bottom: 1px dotted var(--c-text-soft);
+}

@@ -188,6 +188,9 @@ export async function PATCH(request) {
       patch.storeBookingEntryConfirmedBy = entryStatus === "confirmed" ? (profile.name || profile.email || profile.uid) : "";
       Object.assign(history, { result: entryStatus === "confirmed" ? "booking_numbers_confirmed" : "booking_numbers_drafted", entryStatus, bookingNumbersAdded: update.toAdd, bookingNumbersRemoved: update.toRemove });
     } else if (profile.role === "store" && action === "store_update") {
+      if (order.workflowType !== "store_route") {
+        throw Object.assign(new Error("ออเดอร์นี้ส่งตรงห้องแพ็ค สโตร์ไม่ต้องตรวจ"), { status: 409 });
+      }
       if (!STORE_STATUSES.includes(body.storeStatus)) throw Object.assign(new Error("Invalid store status"), { status: 400 });
       if (["checked", "partial", "waiting"].includes(body.storeStatus) && !String(body.storeCheckerName || "").trim()) {
         throw Object.assign(new Error("กรุณาระบุชื่อผู้ตรวจสอบสโตร์"), { status: 400 });
@@ -256,6 +259,10 @@ export async function PATCH(request) {
       }
     } else if ((profile.role === "pack" || (["sales", "admin"].includes(profile.role) && order.deliveryMethod === "outstation")) && action === "pack_update") {
       if (!PACK_STATUSES.includes(body.packStatus)) throw Object.assign(new Error("Invalid pack status"), { status: 400 });
+      if (body.packStatus === "returned") {
+        // สโตร์เลิกรับงานจัดเตรียมแล้ว ห้องแพ็คส่งกลับสโตร์ไม่ได้ทุกกรณี
+        throw Object.assign(new Error("ห้องแพ็คส่งกลับสโตร์ไม่ได้แล้ว เพราะสโตร์ไม่ได้รับงานจัดเตรียมอีกต่อไป"), { status: 409 });
+      }
       const packTookOverStoreCheck = profile.role === "pack"
         && body.packFromStore === true
         && order.workflowType === "store_route"
@@ -319,18 +326,6 @@ export async function PATCH(request) {
           patch.status = "ติดปัญหา";
           patch.reworkStatus = "waiting_pack";
         }
-      }
-      if (body.packStatus === "returned") {
-        if (order.workflowType === "direct_pack" || order.deliveryMethod === "outstation") {
-          throw Object.assign(new Error("ออเดอร์ส่งตรงห้องแพ็ค ไม่สามารถส่งกลับสโตร์ได้"), { status: 409 });
-        }
-        patch.storeStatus = "returned";
-        patch.queueStatus = "preparing";
-        patch.status = "ส่งกลับสโตร์ตรวจสอบ";
-        patch.returnedToStoreAt = now;
-        patch.returnedToStoreBy = profile.name || profile.email;
-        patch.returnReason = String(body.returnReason || body.packWorkDetails?.note || "").trim().slice(0, 1000);
-        Object.assign(history, { result: "returned", reason: patch.returnReason, storePackerName: order.storePackerName || "", storeCheckerName: order.storeCheckerName || "" });
       }
     } else if (["sales", "admin", "storefront"].includes(profile.role) && ["grab_pickup_legacy_close", "storefront_legacy_close"].includes(action)) {
       const serviceDate = String(order.serviceDate || order.createdAt || "").slice(0, 10);

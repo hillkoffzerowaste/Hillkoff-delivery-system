@@ -40,6 +40,13 @@ describe("Firestore read policy", () => {
     expect(needsActiveOrdersQuery("driver")).toBe(true);
   });
 
+  it("does not attach orders listeners on the store transfer, audit, overview and settings tabs", () => {
+    for (const tab of ["store-transfer", "store-audit", "store-overview", "store-settings"]) {
+      expect(needsActiveOrdersQuery(tab)).toBe(false);
+      expect(getOrdersSyncMode(tab)).toBe("none");
+    }
+  });
+
   it("keeps daily reports scoped to the selected date instead of an implicit month", async () => {
     const { selectedReportDateRange } = await import("../../lib/firestoreReadPolicy.js");
     expect(selectedReportDateRange({ mode: "single", date: "2026-09-30", startDate: "2026-09-01", endDate: "2026-09-30" }))

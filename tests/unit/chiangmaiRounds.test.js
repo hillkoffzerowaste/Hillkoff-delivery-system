@@ -31,6 +31,12 @@ describe("Chiang Mai sales rounds", () => {
     expect(canSalesCompleteChiangmaiOrder({ ...ready, reworkRequired: true })).toBe(false);
   });
 
+  it("lets sales complete a direct-pack order the packing room has checked, but not a pending one", () => {
+    const direct = { deliveryMethod: "company_driver", workflowType: "direct_pack", storeStatus: "skipped", packStatus: "checked", queueStatus: "ready", driverId: "" };
+    expect(canSalesCompleteChiangmaiOrder(direct)).toBe(true);
+    expect(canSalesCompleteChiangmaiOrder({ ...direct, packStatus: "pending" })).toBe(false);
+  });
+
   it("matches the existing per-order delete guard for bulk selection", () => {
     const deletable = {
       deliveryMethod: "company_driver",
@@ -111,6 +117,10 @@ describe("Chiang Mai sales rounds", () => {
       selectableIds: ["READY"]
     });
     expect(groups[0].orders.map((order) => order.id)).not.toContain("NORMAL");
+    const direct = buildChiangmaiRoundGroups([
+      { id: "DIRECT", deliveryMethod: "company_driver", workflowType: "direct_pack", storeStatus: "skipped", queueStatus: "ready", packStatus: "checked", chiangmaiRoundCode: "tuesday", chiangmaiRoundDate: "2026-07-28" }
+    ]);
+    expect(direct[0]).toMatchObject({ total: 1, ready: 1, selectableIds: ["DIRECT"] });
     expect(groups[0].orders.map((order) => order.id)).not.toContain("OUTSTATION");
   });
 });

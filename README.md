@@ -16,7 +16,7 @@ Internal use only — Hillkoff Local Delivery
 | Auth | Firebase Authentication (Google sign-in, anonymous + PIN, Email OTP) |
 | Notification | Firebase Cloud Messaging (Web Push) + LINE Official Account |
 | Integration | Google Apps Script / Google Sheets (optional) |
-| Deploy | Vercel (production) |
+| Deploy | Firebase App Hosting (production) |
 | Test | Vitest (unit) + Firebase Emulator (Firestore Rules) |
 
 > ระบบ **ไม่ได้ใช้ Supabase แล้ว** ไฟล์ `supabase-setup.sql` และ `SUPABASE_SETUP.md` เก็บไว้เป็นประวัติเท่านั้น
@@ -32,13 +32,29 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | Role | ขอบเขตงาน | Tab หลัก |
 | --- | --- | --- |
 | **sales** | เปิด/แก้ออเดอร์, จัดคิวคนขับ, งานต่างจังหวัด, รอบส่งเชียงใหม่, รายงาน | `sales`, `sales-outstation`, `dispatch`, `chiangmai`, `reports`, `driver-sop-report`, `driver-ratings` |
-| **store** | ตรวจของ, งานจอง, งานรับหน้าร้าน, ออนไลน์, ติดตามรอบเชียงใหม่ | `store-dashboard`, `store-work`, `store-booking`, `store-pickup`, `store-online`, `store-chiangmai-track` |
+| **store** | ใบสั่งจอง, ใบขายออนไลน์, รายงานประจำวัน, ใบโอนสินค้า, Internal Audit, รายงานแดชบอร์ด, ตั้งค่าสโตร์ (เมนูตั้งค่าได้ ดูด้านล่าง) | `store-booking`, `store-online`, `store-dashboard`, `store-transfer`, `store-audit`, `store-overview`, `store-settings` |
 | **pack** | แพ็คของ, งานจอง, รับหน้าร้าน, ออนไลน์, ต่างจังหวัด | `pack-dashboard`, `pack-work`, `pack-booking`, `pack-pickup`, `pack-online`, `pack-outstation` |
 | **driver** | รับงาน/เช็กอิน/ส่งสำเร็จ, SOP ตรวจรถรายวัน, บันทึกเลขไมล์+น้ำมัน, งานเตรียมของ | `driver-dashboard`, `driver`, `driver-prep`, `driver-sop`, `driver-vehicle` |
 | **admin** | ตั้งค่าระบบ, จัดการผู้ใช้, reset orders, backup/restore | `settings` + Admin APIs |
 | **accounting** | ดูรายงานรถ/น้ำมันเท่านั้น (report-only, ไม่มีสิทธิ์แตะ Firestore ตรง) | `reports` (vehicle report) |
 
 สิทธิ์ admin/accounting ควบคุมด้วย `ADMIN_EMAIL_ALLOWLIST` และ `ACCOUNTING_EMAIL_ALLOWLIST`
+
+### เมนูของ role store
+
+| Tab | เมนู | หมายเหตุ |
+| --- | --- | --- |
+| `store-booking` | ใบสั่งจอง | ปิดไม่ได้ (ผูกกับการยืนยันของห้องแพ็ค) |
+| `store-online` | ใบขายออนไลน์ | ปิดไม่ได้ (ผูกกับการยืนยันของห้องแพ็ค) |
+| `store-dashboard` | รายงานประจำวัน | แทนที่ "รายงาน KPI สโตร์" เดิม |
+| `store-transfer` | ใบโอนสินค้า | เลขเอกสารออกตามค่าที่ตั้งใน `store_settings` |
+| `store-audit` | Internal Audit | |
+| `store-overview` | รายงานแดชบอร์ด | สรุปใบโอน/audit/รายงานตามช่วงวัน |
+| `store-settings` | ตั้งค่าสโตร์ | ล็อกด้วย PIN — ตรวจที่ server (`/api/store/settings`) ไม่ใช่ที่ client |
+
+- เมนูตั้งค่าได้ใน Firestore doc `store_settings/default` (เปิด/ปิดโมดูล, สาขา, รูปแบบเลขเอกสาร) — ใบสั่งจองและใบขายออนไลน์ปิดไม่ได้ ถ้า tab ที่เลือกไม่เปิดอยู่ระบบจะย้ายไปโมดูลแรกที่เปิด (`getFirstEnabledStoreTab`)
+- สโตร์ไม่มีแท็บรอบเชียงใหม่ / Grab-pickup อีกแล้ว (เดิม `store-work`, `store-pickup`, `store-chiangmai-track`)
+- PIN ตั้งค่าสโตร์มีค่า default ในโค้ด (เก็บเป็น hash) — override ได้ด้วย env `STORE_SETTINGS_PIN` (ไม่ต้องใส่ถ้าใช้ค่า default)
 
 ### หน้าสาธารณะ (ไม่ต้องล็อกอิน)
 
@@ -56,10 +72,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 ฝ่ายขายเปิดออเดอร์
       │
       ▼
-[store]  รอตรวจ → กำลังตรวจ → ตรวจครบ / ของไม่ครบ / รอของ / ส่งกลับ
-      │
-      ▼
-[pack]   รอแพ็ค → กำลังแพ็ค → แพ็คเสร็จ / ของไม่ครบ / ส่งกลับสโตร์
+[pack]   รอแพ็ค → กำลังแพ็ค → แพ็คเสร็จ / ของไม่ครบ
       │
       ▼
 [dispatch] เข้าคิว → มอบหมายคนขับ
@@ -70,6 +83,8 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
       ▼
 รายงานรายวัน / รายเดือน + รีวิวจากลูกค้า
 ```
+
+**การส่งงานเข้าห้องแพ็ค:** ออเดอร์ใหม่, การ reroute และงานแก้ (rework) จากคนขับ เข้าห้องแพ็คโดยตรงด้วย `workflowType: "direct_pack"` (สโตร์เลิกรับงานจัดเตรียมแล้ว; งานบริษัทส่งเองยังใช้ `direct_driver` ได้) ส่วน `store_route` เป็นของเก่า — เอกสารเดิมยังอ่านได้ แต่ไม่สร้างใหม่ และมี script ย้ายเข้าห้องแพ็ค (ดูหัวข้อ 9) ห้องแพ็คยังยืนยันรายงานใบสั่งจอง/ใบขายออนไลน์ (`store_reports`) ที่สโตร์บันทึกตามเดิม
 
 สถานะกลางของ workflow (`WORKFLOW_STATUS_META`): `pending`, `blocked`, `working`, `waiting`, `partial`, `returned`, `checked`, `skipped`, `draft`, `saved`
 
@@ -89,6 +104,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 │   ├── order-review/            # หน้าลูกค้ารีวิวการจัดส่ง
 │   ├── outstation-qr/           # route handler สำหรับ QR ต่างจังหวัด
 │   ├── components/              # DispatchDashboard, Outstation label/QR, VehicleInspectionReport ฯลฯ
+│   │   └── store/               # panel ของเมนูสโตร์ (Settings, Transfer, Audit, Overview, DailyReport)
 │   └── api/                     # server route handlers (ดูหัวข้อ 5)
 ├── lib/                         # business logic ฝั่ง server/shared
 │   ├── firebaseAdmin.js         # Firebase Admin singleton
@@ -96,6 +112,9 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 │   ├── workflowAuth.js          # ตรวจ token + role ของทุก write API
 │   ├── firestoreReadPolicy.js   # คุมปริมาณ read ของ realtime listener
 │   ├── preparationWorkflow.js   # store/pack workflow
+│   ├── storeSettings.js / storeSettingsPin.js / storeFormat.js  # ตั้งค่าเมนู+เลขเอกสาร, ตรวจ PIN, format วันที่/ตัวเลข
+│   ├── storeTransfers.js / storeAudit.js / storeOverview.js / storeDailyReport.js  # logic ใบโอน, audit, แดชบอร์ด, รายงานประจำวัน
+│   ├── storeRouteMigration.js   # logic ย้ายออเดอร์ store_route -> direct_pack
 │   ├── dispatchDashboard.js     # ข้อมูล dashboard จัดคิว
 │   ├── outstationLabels.js / outstationQr.js / outstationDispatch.js
 │   ├── vehicleReport.js / vehicleMaster.js / vehicleRepository.js / vehicleReportCsv.js
@@ -162,7 +181,12 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 
 **Reports & Integration**
 
-- `/api/store/reports` — รายงานสโตร์ + history
+- `/api/store/reports` — รายงานสโตร์ (ใบสั่งจอง/ใบขายออนไลน์) + history
+- `/api/store/settings` — `GET` (store|pack|admin) อ่านการตั้งค่า · `POST` (store|admin) ตรวจ PIN · `PUT` (store|admin) บันทึกการตั้งค่า (ต้องส่ง PIN, optimistic concurrency ด้วย `baseUpdatedAt`)
+- `/api/store/transfers` — ใบโอนสินค้า: `GET` (store|admin) · `POST`/`PATCH` (resolve, reopen)/`PUT`/`DELETE` (store เท่านั้น)
+- `/api/store/audits` — Internal Audit: `GET` (store|admin) · `POST`/`DELETE` (store เท่านั้น)
+- `GET /api/store/overview` · `GET /api/store/daily-report` — รายงานแดชบอร์ด / รายงานประจำวัน (store|admin)
+- `GET /api/store/staff` — รายชื่อพนักงานสโตร์ (store|admin)
 - `POST /api/line/push` · `POST /api/line/webhook` (ตรวจ LINE signature)
 - `POST /api/push/register` — เก็บ FCM token
 - `/api/google` · `/api/sync` — proxy Apps Script (legacy)
@@ -189,7 +213,10 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | รถ/คนขับ | `vehicle_master`, `vehicle_usage_events`, `vehicle_odometer_audits`, `fuel_bills`, `driver_daily_assessments`, `driver_weekly_assessments`, `driver_locations`, `driver_delivery_sequences` |
 | ต่างจังหวัด | `outstation_label_settings`, `outstation_recipient_addresses` |
 | รายงาน | `store_reports` (+ `history`), `events`, `activity` |
+| สโตร์ | `store_settings` (doc `default`), `store_transfers` (+ `history`), `store_audits` (+ `history`), `store_document_registry`, `store_document_counters` |
 | ระบบ | `app_settings`, `audit_logs`, `notifications`, `push_tokens`, `line_webhook_events`, `chat_messages`, `chat_meta` |
+
+คอลเลกชัน `store_*` ใหม่ทั้งหมดเข้าถึงผ่าน Admin SDK ใน `app/api/store/**` เท่านั้น (Firestore Rules ปิด client read/write อยู่แล้ว จึงไม่ต้องแก้ `firestore.rules` / `firestore.indexes.json`)
 
 ---
 
@@ -209,6 +236,8 @@ npm run dev
 - `FIREBASE_SERVICE_ACCOUNT_JSON` — service account (JSON string บรรทัดเดียว)
 - `OTP_SECRET` — ยาวอย่างน้อย 32 ตัวอักษร
 - `ADMIN_EMAIL_ALLOWLIST`, `ACCOUNTING_EMAIL_ALLOWLIST`
+
+ตัวแปร optional: `STORE_SETTINGS_PIN` — override PIN ของหน้าตั้งค่าสโตร์ (ถ้าไม่ตั้ง ใช้ค่า default ในโค้ด)
 
 ⚠️ ห้าม commit `.env.local` หรือไฟล์ service-account key
 `OTP_DEV_MODE=true` คืนรหัส OTP กลับมาใน API response — ใช้เฉพาะเครื่อง dev เท่านั้น
@@ -251,6 +280,10 @@ node scripts/seed-vehicle-master.mjs --apply
 
 # ตรวจคุณภาพข้อมูลรายงานรถ
 node scripts/audit-vehicle-report.mjs
+
+# ย้ายออเดอร์ค้าง workflowType "store_route" เข้าห้องแพ็ค (direct_pack) — dry-run เป็นค่าเริ่มต้น
+node scripts/migrate-store-route-to-pack.mjs
+node scripts/migrate-store-route-to-pack.mjs --apply   # รันเมื่อผู้ใช้ยืนยันผล dry-run แล้วเท่านั้น
 ```
 
 รัน `--apply` เฉพาะหลังมี production backup แล้ว
@@ -302,7 +335,9 @@ npm run backup:restore -- --id 2026-07-15_00-00-00-000 --confirm YES_REPLACE_FIR
 
 ## 13. Deploy
 
-Production อยู่บน Vercel (`.vercel/project.json`) — push branch หลักแล้ว Vercel build อัตโนมัติ
+Production อยู่บน Firebase App Hosting: โปรเจกต์ `hillkoff-delivery`, backend `delivery-system`, region `asia-southeast1` (ดู `firebase.json` และ `apphosting.yaml`) เชื่อมกับ repository นี้
+
+หลัง push commit ขึ้น GitHub สามารถ deploy commit ที่ตรวจแล้วได้ด้วย `firebase apphosting:rollouts:create delivery-system --git-commit <commit> --project hillkoff-delivery` และตรวจสถานะ rollout ก่อนสรุปผล
 
 Deploy Firestore rules/indexes:
 

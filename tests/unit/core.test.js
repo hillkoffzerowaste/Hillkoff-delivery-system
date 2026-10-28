@@ -32,6 +32,8 @@ import {
   requiresDriverDeliveryNote,
   isSalesWaitingAlert,
   isStoreReportVisibleToRole,
+  canSalesCompleteChiangmaiOrder,
+  resolveDriverReworkRoute,
   resolvePreparationRoute
 } from "../../lib/preparationWorkflow.js";
 
@@ -78,7 +80,7 @@ describe("sales order preparation workflow", () => {
     });
   });
 
-  it("reroutes an outstation order back to a store-route Chiang Mai order and clears carrier data", () => {
+  it("reroutes an outstation order back to a direct-pack Chiang Mai order and clears carrier data", () => {
     const result = buildReroutePatch(
       {
         deliveryMethod: "outstation",
@@ -97,11 +99,11 @@ describe("sales order preparation workflow", () => {
 
     expect(result.patch).toMatchObject({
       deliveryMethod: "company_driver",
-      workflowType: "store_route",
+      workflowType: "direct_pack",
       shippingCarrier: "",
       outstationLabelRevision: "",
-      storeStatus: "pending",
-      packStatus: "blocked",
+      storeStatus: "skipped",
+      packStatus: "pending",
       queueStatus: "preparing",
       outstationDispatchScans: []
     });
@@ -145,7 +147,7 @@ describe("sales order preparation workflow", () => {
     )).toMatchObject({ ok: false });
   });
 
-  it("uses store-route preparation for Grab and customer pickup targets", () => {
+  it("sends Grab and customer pickup targets straight to the packing room", () => {
     expect(buildReroutePatch(
       { deliveryMethod: "company_driver", workflowType: "direct_pack", queueStatus: "preparing" },
       { deliveryMethod: "grab_pickup" },
@@ -154,12 +156,34 @@ describe("sales order preparation workflow", () => {
       "2026-07-29T02:00:00.000Z"
     ).patch).toMatchObject({
       deliveryMethod: "grab_pickup",
-      workflowType: "store_route",
-      storeStatus: "pending",
-      packStatus: "blocked",
+      workflowType: "direct_pack",
+      storeStatus: "skipped",
+      packStatus: "pending",
       queueStatus: "preparing",
       shippingCarrier: ""
     });
+  });
+
+  it("never reroutes to store_route and treats a legacy store_route order as changed", () => {
+    const legacy = { deliveryMethod: "company_driver", workflowType: "store_route", queueStatus: "preparing" };
+    const sales = { role: "sales", uid: "s1" };
+    const at = "2026-07-29T02:00:00.000Z";
+    const result = buildReroutePatch(legacy, { deliveryMethod: "company_driver", workflowType: "store_route" }, sales, "ย้ายเข้าห้องแพ็ค", at);
+    expect(result.patch).toMatchObject({ workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending" });
+    expect(canRerouteOrder(legacy, { deliveryMethod: "company_driver", workflowType: "direct_pack" })).toMatchObject({ ok: true });
+    for (const deliveryMethod of ["grab_pickup", "customer_pickup"]) {
+      expect(buildReroutePatch(legacy, { deliveryMethod, workflowType: "store_route" }, sales, "เปลี่ยน", at).patch.workflowType).toBe("direct_pack");
+    }
+    expect(buildReroutePatch(legacy, { deliveryMethod: "outstation", workflowType: "store_route", shippingCarrier: "Flash" }, sales, "ต่างจังหวัด", at).patch.workflowType).toBe("direct_pack");
+  });
+
+  it("keeps direct_driver reroute available only for company-driver targets", () => {
+    const base = { deliveryMethod: "company_driver", workflowType: "direct_pack", queueStatus: "preparing" };
+    const sales = { role: "sales", uid: "s1" };
+    const at = "2026-07-29T02:00:00.000Z";
+    expect(buildReroutePatch(base, { deliveryMethod: "company_driver", workflowType: "direct_driver" }, sales, "ด่วน", at).patch)
+      .toMatchObject({ workflowType: "direct_driver", storeStatus: "skipped", packStatus: "skipped", queueStatus: "queued" });
+    expect(buildReroutePatch(base, { deliveryMethod: "grab_pickup", workflowType: "direct_driver" }, sales, "grab", at).patch.workflowType).toBe("direct_pack");
   });
 
   it("keeps a completed sales order visible while it waits for dispatch across multiple days", () => {
@@ -187,14 +211,23 @@ describe("sales order preparation workflow", () => {
     expect(isSalesWaitingAlert({ workflowType: "store_route", storeStatus: "partial", queueStatus: "completed", status: "ส่งสำเร็จ" })).toBe(false);
   });
 
-  it("defaults outstation to direct pack but preserves an explicit store route", () => {
+  it("routes every delivery method to direct pack except an explicit company direct_driver", () => {
     expect(resolvePreparationRoute("outstation", "")).toBe("direct_pack");
-    expect(resolvePreparationRoute("outstation", "store_route")).toBe("store_route");
-    expect(initialPreparationStatuses("outstation", "store_route")).toMatchObject({ workflowType: "store_route", storeStatus: "pending", packStatus: "blocked", queueStatus: "preparing" });
-    expect(initialPreparationStatuses("outstation", "direct_pack")).toMatchObject({ workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending" });
+    expect(resolvePreparationRoute("outstation", "store_route")).toBe("direct_pack");
+    expect(resolvePreparationRoute("company_driver", "")).toBe("direct_pack");
+    expect(resolvePreparationRoute("company_driver", "store_route")).toBe("direct_pack");
+    expect(resolvePreparationRoute("grab_pickup", "")).toBe("direct_pack");
+    expect(resolvePreparationRoute("customer_pickup", "store_route")).toBe("direct_pack");
+    expect(resolvePreparationRoute("company_driver", "direct_driver")).toBe("direct_driver");
+    expect(resolvePreparationRoute("grab_pickup", "direct_driver")).toBe("direct_pack");
+    const directPack = { workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending", queueStatus: "preparing", status: "รอจัดเตรียมสินค้า", urgentDelivery: false };
+    for (const [method, type] of [["outstation", "store_route"], ["company_driver", ""], ["company_driver", "store_route"], ["grab_pickup", "store_route"], ["customer_pickup", ""]]) {
+      expect(initialPreparationStatuses(method, type)).toEqual(directPack);
+    }
+    expect(initialPreparationStatuses("company_driver", "direct_driver")).toEqual({ workflowType: "direct_driver", storeStatus: "skipped", packStatus: "skipped", queueStatus: "queued", status: "รอคนขับรับ", urgentDelivery: true });
   });
 
-  it("routes incomplete store-route deliveries back through store before pack", () => {
+  it("routes incomplete deliveries, including legacy store_route ones, back to the packing room", () => {
     expect(driverReworkPatch(
       { workflowType: "store_route", deliveryMethod: "company_driver" },
       { name: "คนขับหนึ่ง", driverId: "driver-1" },
@@ -202,14 +235,35 @@ describe("sales order preparation workflow", () => {
       "2026-07-26T01:00:00.000Z"
     )).toMatchObject({
       reworkRequired: true,
-      reworkRoute: "store_route",
-      reworkStatus: "waiting_store",
-      storeStatus: "returned",
-      packStatus: "blocked",
+      reworkRoute: "direct_pack",
+      reworkStatus: "waiting_pack",
+      workflowType: "direct_pack",
+      storeStatus: "skipped",
+      packStatus: "waiting",
       queueStatus: "preparing",
       driverId: "",
       reworkNote: "สินค้าไม่ครบ 1 รายการ"
     });
+    for (const workflowType of ["direct_pack", "direct_driver"]) {
+      const patch = driverReworkPatch({ workflowType, deliveryMethod: "company_driver" }, { name: "คนขับหนึ่ง" }, "ไม่ครบ");
+      expect(patch).toMatchObject({ reworkRoute: "direct_pack", reworkStatus: "waiting_pack", storeStatus: "skipped", packStatus: "waiting" });
+      expect(patch).not.toHaveProperty("workflowType");
+      expect(resolveDriverReworkRoute({ workflowType })).toBe("direct_pack");
+    }
+    expect(resolveDriverReworkRoute({ workflowType: "store_route" })).toBe("direct_pack");
+  });
+
+  it("lets sales complete a Chiang Mai order once the pack has checked it", () => {
+    const base = { deliveryMethod: "company_driver", workflowType: "direct_pack", storeStatus: "skipped", packStatus: "checked", queueStatus: "ready", driverId: "" };
+    expect(canSalesCompleteChiangmaiOrder(base)).toBe(true);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, queueStatus: "preparing" })).toBe(true);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, workflowType: "store_route", storeStatus: "checked" })).toBe(true);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, workflowType: "store_route", storeStatus: "pending" })).toBe(false);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, workflowType: "direct_driver", packStatus: "skipped" })).toBe(false);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, deliveryMethod: "grab_pickup" })).toBe(false);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, packStatus: "pending" })).toBe(false);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, driverId: "d1" })).toBe(false);
+    expect(canSalesCompleteChiangmaiOrder({ ...base, reworkRequired: true })).toBe(false);
   });
 
   it("preserves the latest delivery driver when opening incomplete rework", () => {

@@ -242,4 +242,12 @@ describe("pack duplicate handling in order creation", () => {
     expect((await response.json()).data).toMatchObject({ id: "PACK-NEW" });
     expect(state.db.orders.get("PACK-NEW")).toMatchObject({ orderEntrySource: "pack_assist", workflowType: "direct_pack" });
   });
+
+  it.each(["company_driver", "grab_pickup", "customer_pickup"])("coerces a stale client store_route request to direct_pack for %s", async (deliveryMethod) => {
+    state.role = "sales";
+    const response = await postOrder(orderInput({ id: "STALE-1", deliveryMethod, workflowType: "store_route" }));
+
+    expect(response.status).toBe(200);
+    expect(state.db.orders.get("STALE-1")).toMatchObject({ workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending", queueStatus: "preparing" });
+  });
 });
