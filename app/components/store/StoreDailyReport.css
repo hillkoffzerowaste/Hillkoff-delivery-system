@@ -77,3 +77,21 @@
   .sd-tools label, .sd-tools select { width: 100%; }
   .sd-tabs button { flex: 1 1 auto; padding: 0 var(--sp-6); }
 }
+
+/* Personal work log and calendar */
+.sd-person-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--sp-7); align-items: start; }
+.sd-log-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5); }
+.sd-log-form label { display: grid; gap: var(--sp-2); font-size: 12px; font-weight: 600; color: var(--c-text-strong); min-width: 0; }
+.sd-log-form input, .sd-log-form textarea { box-sizing: border-box; width: 100%; }
+.sd-log-form textarea { min-height: 72px; }
+.sd-log-wide, .sd-log-full, .sd-log-form .sd-log-actions { grid-column: 1 / -1; }
+.sd-log-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.sd-log-actions button { min-height: 40px; }
+.sd-log-list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-3); }
+.sd-log-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-surface-subtle); }
+.sd-log-list li > div:first-child { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.sd-log-list p { margin: var(--sp-2) 0 0; color: var(--c-text-strong); font-size: 13px; }
+.sd-table-logs { min-width: 720px; }
+.sd-log-detail { color: var(--c-text-strong); overflow-wrap: anywhere; }
+.sd-tag.is-log { background: var(--c-warn-bg-strong); color: var(--c-warn-deep); }
+@media (max-width: 520px) { .sd-log-form { grid-template-columns: 1fr; } }

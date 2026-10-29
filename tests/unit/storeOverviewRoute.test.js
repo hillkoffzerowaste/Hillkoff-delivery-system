@@ -15,6 +15,7 @@ function createDb(collections, calls = []) {
   return {
     calls,
     collection(name) {
+      if (name === "store_settings") return { doc: () => ({ get: async () => ({ exists: false }) }) };
       const filters = [];
       let order = null;
       const query = {
@@ -109,7 +110,7 @@ describe("GET /api/store/overview", () => {
 
   it("rejects a bad period and a bad date with 400", async () => {
     const { GET } = await import("../../app/api/store/overview/route.js");
-    const bad = await GET(request("?period=year"));
+    const bad = await GET(request("?period=decade"));
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ ok: false, error: "ช่วงเวลาไม่ถูกต้อง" });
     expect((await GET(request("?period=today&date=2026-02-31"))).status).toBe(400);

@@ -378,7 +378,7 @@ describe("buildMonthReport", () => {
 
   it("builds per-person month rows with working days and closed issues", () => {
     expect(result.rangeLabel).toBe("ต.ค. 2569 (1–28)");
-    expect(result.people[0]).toEqual({ uid: "u1", name: "สโตร์ 1", days: 3, booking: 1, online: 1, transfer: 3, issues: 2, resolved: 1, auditDocs: 2, auditItems: 100, mismatch: 4 });
+    expect(result.people[0]).toEqual({ uid: "u1", name: "สโตร์ 1", days: 3, booking: 1, online: 1, transfer: 3, issues: 2, resolved: 1, auditDocs: 2, auditItems: 100, mismatch: 4, logs: 0 });
   });
 
   it("keeps roster members without work at zero days", () => {

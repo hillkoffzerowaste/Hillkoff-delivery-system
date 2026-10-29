@@ -1,11 +1,11 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { addDaysToDateKey, bangkokDayRange, bangkokMonthRange, bangkokRangeIso } from "../../../../lib/storeFormat";
 import { DAILY_REPORT_LIMITS, bangkokDateOf, buildDailyReport, buildMonthReport } from "../../../../lib/storeDailyReport";
-import { normalizeStoreSettings } from "../../../../lib/storeSettings";
+import { readStoreRoster } from "../../../../lib/storeRoster";
 
 export const runtime = "nodejs";
 
-const ROSTER_LIMIT = 100;
+const WORK_LOG_LIMIT = 2000;
 const OVER_LIMIT_MESSAGE = "ข้อมูลมากเกินขีดจำกัด กรุณาเลือกช่วงให้สั้นลง";
 const ORDER_FIELDS = ["workflowHistory", "customerName", "storeStatus"];
 
@@ -37,33 +37,19 @@ async function readReports(db, from, to, bounds, cap) {
   return rows;
 }
 
-async function readRoster(db) {
-  const [snap, settingsSnap] = await Promise.all([
-    db.collection("users").where("role", "==", "store").limit(ROSTER_LIMIT + 1).get(),
-    db.collection("store_settings").doc("default").get()
-  ]);
-  if (snap.docs.length > ROSTER_LIMIT) throw Object.assign(new Error(OVER_LIMIT_MESSAGE), { status: 422 });
-  const label = (data) => String(data.name || data.username || String(data.email || "").split("@")[0] || "").trim();
-  return snap.docs
-    .map((doc) => ({ uid: doc.id, data: doc.data() }))
-    .filter(({ data }) => data.active !== false && !["disabled", "rejected"].includes(String(data.status || "")))
-    .map(({ uid, data }) => ({ uid, name: label(data) || uid }))
-    .concat(normalizeStoreSettings(settingsSnap.exists ? settingsSnap.data() : undefined).staff.filter((person) => person.active).map((person) => ({ uid: person.id, name: person.name })))
-    .sort((a, b) => a.name.localeCompare(b.name, "th"));
-}
-
 async function readDay(db, date) {
   const weekFrom = addDaysToDateKey(date, -6);
   const week = bangkokRangeIso(weekFrom, date);
   const day = bangkokDayRange(date);
-  const [roster, weekReports, weekTransfers, transfersResolved, openTransfers, weekAudits, orders] = await Promise.all([
-    readRoster(db),
+  const [roster, weekReports, weekTransfers, transfersResolved, openTransfers, weekAudits, orders, workLogs] = await Promise.all([
+    readStoreRoster(db),
     readReports(db, weekFrom, date, week, DAILY_REPORT_LIMITS.reports),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
     readCapped(rangeQuery(db, "store_transfers", "resolvedServiceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
     readOptional(db.collection("store_transfers").where("issueState", "==", "open"), DAILY_REPORT_LIMITS.openIssues),
     readCapped(rangeQuery(db, "store_audits", "serviceDate", weekFrom, date), DAILY_REPORT_LIMITS.audits),
-    readOptional(rangeQuery(db, "orders", "updatedAt", day.start, bangkokRangeIso(date, date).endExclusive, { exclusiveEnd: true }).select(...ORDER_FIELDS), DAILY_REPORT_LIMITS.orders)
+    readOptional(rangeQuery(db, "orders", "updatedAt", day.start, bangkokRangeIso(date, date).endExclusive, { exclusiveEnd: true }).select(...ORDER_FIELDS), DAILY_REPORT_LIMITS.orders),
+    readCapped(rangeQuery(db, "store_work_logs", "date", weekFrom, date), WORK_LOG_LIMIT)
   ]);
   const report = buildDailyReport({
     date,
@@ -77,7 +63,8 @@ async function readDay(db, date) {
     audits: weekAudits,
     weekReports,
     weekTransfers,
-    weekAudits
+    weekAudits,
+    workLogs
   });
   return { ...report, ordersCapped: orders.capped, openIssuesCapped: openTransfers.capped };
 }
@@ -87,13 +74,14 @@ async function readMonth(db, month) {
   const bounds = bangkokRangeIso(range.from, range.to);
   const today = bangkokDateOf(new Date().toISOString());
   const endDay = today.startsWith(`${month}-`) ? Number(today.slice(8, 10)) : Number(range.to.slice(8, 10));
-  const [roster, reports, transfers, audits] = await Promise.all([
-    readRoster(db),
+  const [roster, reports, transfers, audits, workLogs] = await Promise.all([
+    readStoreRoster(db),
     readReports(db, range.from, range.to, bounds, DAILY_REPORT_LIMITS.monthReports),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthTransfers),
-    readCapped(rangeQuery(db, "store_audits", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthAudits)
+    readCapped(rangeQuery(db, "store_audits", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthAudits),
+    readCapped(rangeQuery(db, "store_work_logs", "date", range.from, range.to), WORK_LOG_LIMIT)
   ]);
-  return buildMonthReport({ month, endDay, roster, reports, transfers, audits });
+  return buildMonthReport({ month, endDay, roster, reports, transfers, audits, workLogs });
 }
 
 export async function GET(request) {

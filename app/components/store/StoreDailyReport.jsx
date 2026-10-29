@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { bangkokMonthRange, fmt, lastNDates, pct, thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
 import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText, unattributedText } from "../../../lib/storeDailyReport.js";
+import { WORK_LOG_LIMITS, validateWorkLog, workLogHours } from "../../../lib/storeWorkLog.js";
+import StorePlanningPanel from "./StorePlanningPanel.jsx";
 import "./StoreDailyReport.css";
 
 const REFRESH_MS = 900_000;
@@ -18,10 +20,14 @@ const TAG_CLASS = {
   [TIMELINE_TAGS.transferIncomplete]: "is-danger",
   [TIMELINE_TAGS.audit]: "is-info",
   [TIMELINE_TAGS.resolved]: "is-info-soft",
-  [TIMELINE_TAGS.orderCheck]: "is-neutral"
+  [TIMELINE_TAGS.orderCheck]: "is-neutral",
+  [TIMELINE_TAGS.log]: "is-log"
 };
 
 const bangkokToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const bangkokNowHHmm = () => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
+// Only people from the store roster can own a work log; names seen only on old documents are shown but not editable.
+const canLogFor = (person) => Boolean(person?.uid) && !person.uid.startsWith("name:");
 
 function lastNMonths(todayKey, n) {
   const [year, month] = todayKey.split("-").map(Number);
@@ -76,7 +82,7 @@ function TeamView({ data, onPick }) {
     </div>
     <div className="store-report-table-wrap sd-table-wrap">
       <table className="sd-table sd-table-team" aria-label="สรุปรายบุคคลประจำวัน">
-        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน (ไม่ครบ)</th><th scope="col" className="num">แก้ไขปัญหา</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">ตรวจออเดอร์*</th><th scope="col" className="num">งานรวม</th><th scope="col">รายคน</th></tr></thead>
+        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน (ไม่ครบ)</th><th scope="col" className="num">แก้ไขปัญหา</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">ตรวจออเดอร์*</th><th scope="col" className="num">งานรวม</th><th scope="col" className="num">บันทึกงาน</th><th scope="col">รายคน</th></tr></thead>
         <tbody>{rows.map((p) => <tr key={p.uid}>
           <th scope="row">{p.name}</th>
           <td>{hoursOf(p)}</td>
@@ -87,21 +93,97 @@ function TeamView({ data, onPick }) {
           <td className="num">{fmt(p.auditItems)}</td>
           <td className="num">{p.orderChecks}</td>
           <td className="num sd-strong">{jobsOf(p)}</td>
+          <td className="num">{p.logCount || 0}</td>
           <td><button type="button" className="secondary" onClick={() => onPick(p.uid)}>ดูรายคน</button></td>
         </tr>)}</tbody>
       </table>
     </div>
+    <TeamLogs people={rows} />
     {unattributedText(data.unattributed) && <p className="sd-note">{unattributedText(data.unattributed)}</p>}
     <p className="sd-note">* ตรวจออเดอร์นับจากออเดอร์ที่อัปเดตในวันที่เลือก อาจไม่รวมประวัติของออเดอร์ที่ถูกอัปเดตอีกภายหลัง และไม่นับซ้ำในงานรวม</p>
   </section>;
 }
 
-function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate }) {
+function TeamLogs({ people }) {
+  const logs = people.flatMap((p) => (p.logs || []).map((log) => ({ ...log, staffName: p.name }))).sort((a, b) => a.start.localeCompare(b.start));
+  return <div className="sd-block">
+    <h3>บันทึกงานประจำวันของทีม · ใครทำอะไร ที่ไหน เมื่อไหร่ อย่างไร</h3>
+    {logs.length ? <div className="store-report-table-wrap sd-table-wrap">
+      <table className="sd-table sd-table-logs" aria-label="บันทึกงานประจำวันของทีม">
+        <thead><tr><th scope="col">เวลา</th><th scope="col">พนักงาน</th><th scope="col">ทำอะไร</th><th scope="col">ที่ไหน</th><th scope="col">อย่างไร / รายละเอียด</th></tr></thead>
+        <tbody>{logs.map((log) => <tr key={log.id}><td className="sd-strong">{workLogHours(log)}</td><th scope="row">{log.staffName}</th><td>{log.activity}</td><td>{log.location || "—"}</td><td className="sd-log-detail">{log.detail || "—"}</td></tr>)}</tbody>
+      </table>
+    </div> : <p className="muted">ยังไม่มีพนักงานลงบันทึกงานในวันนี้ · ให้พนักงานไปที่แท็บรายบุคคล คลิกชื่อตัวเอง แล้วลงงานที่ทำ</p>}
+  </div>;
+}
+
+const emptyLog = (date, today) => ({ start: date === today ? bangkokNowHHmm() : "", end: "", activity: "", location: "", detail: "" });
+
+function WorkLogPanel({ apiFetch, person, date, today, onChanged }) {
+  const [form, setForm] = useState(() => emptyLog(date, today));
+  const [editing, setEditing] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const future = date > today;
+  const reset = () => { setEditing(null); setForm(emptyLog(date, today)); };
+  const send = async (method, body) => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await apiFetch("/api/store/work-logs", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "บันทึกงานไม่สำเร็จ");
+      onChanged();
+      return true;
+    } catch (e) {
+      setError(e.message || "บันทึกงานไม่สำเร็จ");
+      return false;
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  };
+  const submit = async (event) => {
+    event.preventDefault();
+    const checked = validateWorkLog({ ...form, date, staffId: person.uid });
+    if (!checked.ok) return setError(checked.error);
+    const body = editing ? { ...checked.value, id: editing.id, baseUpdatedAt: editing.updatedAt } : checked.value;
+    if (await send(editing ? "PATCH" : "POST", body)) reset();
+  };
+  const edit = (log) => { setEditing(log); setForm({ start: log.start, end: log.end, activity: log.activity, location: log.location, detail: log.detail }); setError(""); };
+  const remove = (log) => { if (window.confirm(`ลบบันทึกงาน “${log.activity}” หรือไม่?`)) void send("DELETE", { id: log.id, baseUpdatedAt: log.updatedAt }); };
+  const field = (name) => ({ value: form[name], onChange: (e) => setForm({ ...form, [name]: e.target.value }) });
+  return <div className="sd-block">
+    <h3>บันทึกงานประจำวัน · {person.name}</h3>
+    <p className="muted">ลงสิ่งที่ทำเพิ่มจากเอกสารในระบบ: ทำอะไร ที่ไหน เวลาไหน และทำอย่างไร · ข้อมูลนี้รวมในรายงานทีม ข้อความ LINE และแดชบอร์ด</p>
+    {error && <p role="alert" className="sd-error">{error}</p>}
+    {future ? <p className="sd-holiday">ยังไม่ถึงวันนี้ · งานล่วงหน้าให้ใส่ในปฏิทินส่วนตัวด้านล่าง</p> : <form className="sd-log-form" onSubmit={submit}>
+      <label>เวลาเริ่ม<input type="time" required {...field("start")} /></label>
+      <label>เวลาสิ้นสุด<input type="time" {...field("end")} /></label>
+      <label className="sd-log-wide">ทำอะไร<input required maxLength={WORK_LOG_LIMITS.activity} placeholder="เช่น จัดเรียงสินค้าเข้าชั้น" {...field("activity")} /></label>
+      <label className="sd-log-wide">ที่ไหน<input maxLength={WORK_LOG_LIMITS.location} placeholder="เช่น คลัง WH ชั้น 2" {...field("location")} /></label>
+      <label className="sd-log-full">อย่างไร / รายละเอียด<textarea maxLength={WORK_LOG_LIMITS.detail} placeholder="วิธีทำ ผลลัพธ์ หรือปัญหาที่พบ" {...field("detail")} /></label>
+      <div className="sd-log-actions"><button type="submit" className="primary" disabled={busy}>{busy ? "กำลังบันทึก" : editing ? "บันทึกการแก้ไข" : "เพิ่มบันทึกงาน"}</button>{editing && <button type="button" className="secondary" disabled={busy} onClick={reset}>ยกเลิก</button>}</div>
+    </form>}
+    {person.logs?.length ? <ul className="sd-log-list">{person.logs.map((log) => <li key={log.id}>
+      <div><b>{workLogHours(log)} · {log.activity}</b>{log.location && <span> @ {log.location}</span>}{log.detail && <p>{log.detail}</p>}</div>
+      <div className="sd-log-actions"><button type="button" className="secondary" disabled={busy} onClick={() => edit(log)}>แก้ไข</button><button type="button" className="secondary danger" disabled={busy} onClick={() => remove(log)}>ลบ</button></div>
+    </li>)}</ul> : <p className="muted">ยังไม่มีบันทึกงานในวันนี้</p>}
+  </div>;
+}
+
+function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate, apiFetch, onLogsChanged, logVersion }) {
   if (!person) return <section aria-label="รายบุคคล" className="sd-section"><p className="sd-holiday">ยังไม่มีพนักงานสโตร์ในระบบ</p></section>;
   const week = data.week.map((day) => ({ day, entry: day.byUid[person.uid] || {} }));
   return <section aria-label="รายบุคคล" className="sd-section">
-    <div role="group" aria-label="เลือกพนักงานสโตร์" className="sd-people">
-      {data.people.map((p) => <button key={p.uid} type="button" className={p.uid === person.uid ? "sd-person is-active" : "sd-person"} aria-pressed={p.uid === person.uid} onClick={() => onPickPerson(p.uid)}>{p.name}</button>)}
+    <div className="sd-block">
+      <h3>คลิกชื่อตัวเอง เพื่อลงงานประจำวันและดูปฏิทินส่วนตัว</h3>
+      <div role="group" aria-label="เลือกพนักงานสโตร์" className="sd-people">
+        {data.people.map((p) => <button key={p.uid} type="button" className={p.uid === person.uid ? "sd-person is-active" : "sd-person"} aria-pressed={p.uid === person.uid} onClick={() => onPickPerson(p.uid)}>{p.name}</button>)}
+      </div>
     </div>
     <div className="store-report-kpis sd-kpis">
       <StatCard label={`งานรวม · ${person.name}`} value={jobsOf(person)} note={dateLabel} />
@@ -109,19 +191,23 @@ function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate }
       <StatCard label="ใบโอนที่จัด" value={person.transfer} note={`ไม่ครบ ${person.issues} · ค้าง ${person.openIssues} · แก้ไขปัญหา ${person.resolved}`} tone="problem" />
       <StatCard label="Internal Audit" value={fmt(person.auditItems)} note={`รายการ · ${person.auditDocs} เอกสาร · ตรง ${pct(person.auditItems - person.mismatch, person.auditItems)}`} tone="info" />
     </div>
+    <div className="sd-person-grid">
+    {canLogFor(person) && <WorkLogPanel key={`${person.uid}:${data.date}`} apiFetch={apiFetch} person={person} date={data.date} today={today} onChanged={onLogsChanged} />}
     <div className="sd-block">
-      <h3>ไทม์ไลน์จากประวัติงาน · {person.name}</h3>
+      <h3>ไทม์ไลน์จากประวัติงานและบันทึกงาน · {person.name}</h3>
       {person.timeline.length ? <ol className="sd-timeline">{person.timeline.map(([time, tag, body], index) => <li key={`${time}-${index}`}>
         <span className="sd-time">{time}</span>
         <span className={`sd-tag ${TAG_CLASS[tag] || "is-neutral"}`}>{tag}</span>
         <span className="sd-text">{body}</span>
       </li>)}</ol> : <p className="muted">ไม่มีการบันทึกงานในวันนี้</p>}
     </div>
+    </div>
+    {canLogFor(person) && <StorePlanningPanel key={person.uid} apiFetch={apiFetch} owner={{ id: person.uid, name: person.name }} date={data.date} onSelectDate={onPickDate} refreshKey={logVersion} />}
     <div className="sd-block">
       <h3>ย้อนหลัง 7 วัน · {person.name}</h3>
       <div className="store-report-table-wrap sd-table-wrap">
         <table className="sd-table sd-table-history" aria-label="ประวัติรายวันของพนักงาน">
-          <thead><tr><th scope="col">วันที่</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">งานรวม</th><th scope="col">ดู</th></tr></thead>
+          <thead><tr><th scope="col">วันที่</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">งานรวม</th><th scope="col" className="num">บันทึกงาน</th><th scope="col">ดู</th></tr></thead>
           <tbody>{week.map(({ day, entry }) => {
             const label = thaiDateLabel(day.date);
             const shown = day.date === data.date;
@@ -133,6 +219,7 @@ function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate }
               <td className="num">{entry.transfer || 0}</td>
               <td className="num">{fmt(entry.auditItems || 0)}</td>
               <td className="num sd-strong">{entry.jobs || 0}</td>
+              <td className="num">{entry.logs || 0}</td>
               <td><button type="button" className="secondary" aria-label={`ดูรายงาน ${label}`} onClick={() => onPickDate(day.date)}>ดูวันนี้</button></td>
             </tr>;
           })}</tbody>
@@ -148,7 +235,7 @@ function MonthView({ data }) {
   return <section aria-label="วัดผลรายเดือน" className="sd-section">
     <div className="store-report-table-wrap sd-table-wrap">
       <table className="sd-table sd-table-month" aria-label="วัดผลรายเดือนรายบุคคล">
-        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col" className="num">วันที่มีเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit</th><th scope="col" className="num">งานรวม</th><th scope="col">เฉลี่ยงาน/วัน</th><th scope="col" className="num">ใบโอนครบ</th><th scope="col" className="num">ปัญหาที่ปิดแล้ว</th><th scope="col" className="num">ตรวจนับ</th><th scope="col" className="num">ความแม่นยำ</th></tr></thead>
+        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col" className="num">วันที่มีเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit</th><th scope="col" className="num">งานรวม</th><th scope="col">เฉลี่ยงาน/วัน</th><th scope="col" className="num">ใบโอนครบ</th><th scope="col" className="num">ปัญหาที่ปิดแล้ว</th><th scope="col" className="num">ตรวจนับ</th><th scope="col" className="num">ความแม่นยำ</th><th scope="col" className="num">บันทึกงาน</th></tr></thead>
         <tbody>{rows.map(({ m, jobs, avg }) => <tr key={m.uid}>
           <th scope="row">{m.name}</th>
           <td className="num">{m.days}</td>
@@ -159,6 +246,7 @@ function MonthView({ data }) {
           <td className={m.resolved < m.issues ? "num sd-issue-open" : "num sd-resolved-ok"}>{m.resolved} / {m.issues}</td>
           <td className="num">{fmt(m.auditItems)}</td>
           <td className="num">{pct(m.auditItems - m.mismatch, m.auditItems)}</td>
+          <td className="num">{fmt(m.logs || 0)}</td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -177,6 +265,7 @@ export default function StoreDailyReport({ apiFetch, storeLabel = "สโตร�
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
+  const [logVersion, setLogVersion] = useState(0);
 
   const kind = tab === "month" ? "month" : "date";
   const value = kind === "month" ? month : date;
@@ -235,6 +324,7 @@ export default function StoreDailyReport({ apiFetch, storeLabel = "สโตร�
   const pickPerson = (uid) => { setPersonUid(uid); setToast(null); };
   const openPerson = (uid) => { setPersonUid(uid); setTab("person"); setToast(null); };
   const pickDate = choose(setDate);
+  const logsChanged = () => { setLogVersion((n) => n + 1); void load(true); };
 
   async function copy() {
     const ok = await copyText(line.text);
@@ -267,7 +357,7 @@ export default function StoreDailyReport({ apiFetch, storeLabel = "สโตร�
     {kind === "date" && dayData?.openIssuesCapped && <p role="status" className="sd-error">รายการใบโอนค้างมีจำนวนมาก รายการที่แสดงอาจไม่ครบ</p>}
     {loading && <p role="status" className="muted">กำลังโหลดรายงาน...</p>}
     {tab === "team" && dayData && <TeamView data={dayData} onPick={openPerson} />}
-    {tab === "person" && dayData && <PersonView data={dayData} person={person} dateLabel={dateLabel} today={today} onPickPerson={pickPerson} onPickDate={pickDate} />}
+    {tab === "person" && dayData && <PersonView data={dayData} person={person} dateLabel={dateLabel} today={today} onPickPerson={pickPerson} onPickDate={pickDate} apiFetch={apiFetch} onLogsChanged={logsChanged} logVersion={logVersion} />}
     {tab === "month" && monthData && <MonthView data={monthData} />}
 
     <section aria-label="ข้อความส่งกลุ่ม LINE" className="panel sd-line">

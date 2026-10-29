@@ -45,7 +45,7 @@ describe("periodRange", () => {
   });
 
   it("returns null for an unknown period or invalid date", () => {
-    expect(periodRange("year", "2026-10-28")).toBeNull();
+    expect(periodRange("decade", "2026-10-28")).toBeNull();
     expect(periodRange("7d", "2026-13-01")).toBeNull();
     expect(periodRange("7d", "")).toBeNull();
   });
