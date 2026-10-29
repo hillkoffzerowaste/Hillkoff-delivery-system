@@ -139,7 +139,7 @@ describe("GET /api/store/daily-report?date=", () => {
     await get(`date=${DATE}`);
     log.forEach((query) => {
       const fields = new Set(query.wheres.map(([field]) => field));
-      expect(fields.size).toBe(1);
+      expect(fields.size).toBeLessThanOrEqual(1);
       if (query.order.length) expect(query.order).toEqual([[...fields][0]]);
     });
     const byName = (name) => log.filter((query) => query.name === name);

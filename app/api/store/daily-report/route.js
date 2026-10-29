@@ -1,7 +1,7 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { addDaysToDateKey, bangkokDayRange, bangkokMonthRange, bangkokRangeIso } from "../../../../lib/storeFormat";
 import { DAILY_REPORT_LIMITS, bangkokDateOf, buildDailyReport, buildMonthReport } from "../../../../lib/storeDailyReport";
-import { readStoreRoster } from "../../../../lib/storeRoster";
+import { readStaffRoles, readStoreRoster } from "../../../../lib/storeRoster";
 
 export const runtime = "nodejs";
 
@@ -41,7 +41,7 @@ async function readDay(db, date) {
   const weekFrom = addDaysToDateKey(date, -6);
   const week = bangkokRangeIso(weekFrom, date);
   const day = bangkokDayRange(date);
-  const [roster, weekReports, weekTransfers, transfersResolved, openTransfers, weekAudits, orders, workLogs] = await Promise.all([
+  const [roster, weekReports, weekTransfers, transfersResolved, openTransfers, weekAudits, orders, workLogs, staffRoles, duties] = await Promise.all([
     readStoreRoster(db),
     readReports(db, weekFrom, date, week, DAILY_REPORT_LIMITS.reports),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
@@ -49,7 +49,9 @@ async function readDay(db, date) {
     readOptional(db.collection("store_transfers").where("issueState", "==", "open"), DAILY_REPORT_LIMITS.openIssues),
     readCapped(rangeQuery(db, "store_audits", "serviceDate", weekFrom, date), DAILY_REPORT_LIMITS.audits),
     readOptional(rangeQuery(db, "orders", "updatedAt", day.start, bangkokRangeIso(date, date).endExclusive, { exclusiveEnd: true }).select(...ORDER_FIELDS), DAILY_REPORT_LIMITS.orders),
-    readCapped(rangeQuery(db, "store_work_logs", "date", weekFrom, date), WORK_LOG_LIMIT)
+    readCapped(rangeQuery(db, "store_work_logs", "date", weekFrom, date), WORK_LOG_LIMIT),
+    readStaffRoles(db),
+    readCapped(db.collection("store_duties").where("date", "==", date), WORK_LOG_LIMIT)
   ]);
   const report = buildDailyReport({
     date,
@@ -64,7 +66,9 @@ async function readDay(db, date) {
     weekReports,
     weekTransfers,
     weekAudits,
-    workLogs
+    workLogs,
+    staffRoles,
+    duties
   });
   return { ...report, ordersCapped: orders.capped, openIssuesCapped: openTransfers.capped };
 }

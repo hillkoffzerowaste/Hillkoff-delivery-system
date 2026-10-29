@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import { bangkokMonthRange, fmt, lastNDates, pct, thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
 import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText, unattributedText } from "../../../lib/storeDailyReport.js";
 import { WORK_LOG_LIMITS, validateWorkLog, workLogHours } from "../../../lib/storeWorkLog.js";
+import { DUTY_LIMITS, dutyText, validateDuty } from "../../../lib/storeDuty.js";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
 import "./StoreDailyReport.css";
 
@@ -82,9 +83,10 @@ function TeamView({ data, onPick }) {
     </div>
     <div className="store-report-table-wrap sd-table-wrap">
       <table className="sd-table sd-table-team" aria-label="สรุปรายบุคคลประจำวัน">
-        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน (ไม่ครบ)</th><th scope="col" className="num">แก้ไขปัญหา</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">ตรวจออเดอร์*</th><th scope="col" className="num">งานรวม</th><th scope="col" className="num">บันทึกงาน</th><th scope="col">รายคน</th></tr></thead>
+        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col">ตำแหน่ง / หน้าที่วันนี้</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน (ไม่ครบ)</th><th scope="col" className="num">แก้ไขปัญหา</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">ตรวจออเดอร์*</th><th scope="col" className="num">งานรวม</th><th scope="col" className="num">บันทึกงาน</th><th scope="col">รายคน</th></tr></thead>
         <tbody>{rows.map((p) => <tr key={p.uid}>
           <th scope="row">{p.name}</th>
+          <td className={p.duty?.today ? "sd-duty-cell is-today" : "sd-duty-cell"}>{dutyText(p.duty) || "—"}</td>
           <td>{hoursOf(p)}</td>
           <td className="num">{p.booking}</td>
           <td className="num">{p.online}</td>
@@ -175,6 +177,54 @@ function WorkLogPanel({ apiFetch, person, date, today, onChanged }) {
   </div>;
 }
 
+function DutyPanel({ apiFetch, person, date, dateLabel, onChanged }) {
+  const duty = person.duty || { position: "", area: "", today: false, standing: { position: "", area: "" } };
+  const [day, setDay] = useState(() => ({ position: duty.today ? duty.position : duty.standing.position, area: duty.today ? duty.area : duty.standing.area }));
+  const [standing, setStanding] = useState(() => ({ ...duty.standing }));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const send = async (method, body) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await apiFetch("/api/store/duties", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ staffId: person.uid, ...body }) });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "บันทึกหน้าที่ไม่สำเร็จ");
+      onChanged();
+    } catch (e) {
+      setError(e.message || "บันทึกหน้าที่ไม่สำเร็จ");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  };
+  const check = (value) => { const result = validateDuty({ ...value, staffId: person.uid }); if (!result.ok) setError(result.error); return result.ok; };
+  const saveDay = (event) => { event.preventDefault(); if (check({ ...day, scope: "day", date })) void send("PUT", { ...day, scope: "day", date }); };
+  const saveStanding = (event) => { event.preventDefault(); if (check({ ...standing, scope: "default" })) void send("PUT", { ...standing, scope: "default" }); };
+  return <div className="sd-block">
+    <h3>ตำแหน่งและหน้าที่ · {person.name}</h3>
+    <p className={dutyText(duty) ? "sd-duty-now" : "muted"}>{dutyText(duty) ? `${duty.today ? `หน้าที่วันนี้ (${dateLabel})` : "ตำแหน่งประจำ"}: ${dutyText(duty)}` : "ยังไม่ได้กำหนดตำแหน่งหรือหน้าที่ · ใช้กับงานที่ไม่ใช่ใบสั่งจอง ใบขาย หรือใบโอน เช่น หัวหน้าคลังสินค้า"}</p>
+    {error && <p role="alert" className="sd-error">{error}</p>}
+    <div className="sd-duty-grid">
+      <form className="sd-log-form" onSubmit={saveDay} aria-label="หน้าที่วันนี้">
+        <b className="sd-log-full">หน้าที่เฉพาะวันที่ {dateLabel}</b>
+        <label>ตำแหน่งวันนี้<input maxLength={DUTY_LIMITS.position} placeholder="เช่น หัวหน้าคลังสินค้า" value={day.position} onChange={(e) => setDay({ ...day, position: e.target.value })} /></label>
+        <label>รับผิดชอบส่วนไหน<input maxLength={DUTY_LIMITS.area} placeholder="เช่น ตรวจรับสินค้าเข้าคลัง" value={day.area} onChange={(e) => setDay({ ...day, area: e.target.value })} /></label>
+        <div className="sd-log-actions"><button type="submit" className="primary" disabled={busy}>บันทึกหน้าที่วันนี้</button>{duty.today && <button type="button" className="secondary" disabled={busy} onClick={() => send("DELETE", { date })}>ใช้ตำแหน่งประจำแทน</button>}</div>
+      </form>
+      <form className="sd-log-form" onSubmit={saveStanding} aria-label="ตำแหน่งประจำ">
+        <b className="sd-log-full">ตำแหน่งประจำ (ใช้ทุกวันที่ไม่ได้กำหนดหน้าที่เฉพาะ)</b>
+        <label>ตำแหน่ง<input maxLength={DUTY_LIMITS.position} placeholder="เช่น หัวหน้าคลังสินค้า" value={standing.position} onChange={(e) => setStanding({ ...standing, position: e.target.value })} /></label>
+        <label>ส่วนงานที่รับผิดชอบ<input maxLength={DUTY_LIMITS.area} placeholder="เช่น ดูแลคลังสินค้าทั้งหมด" value={standing.area} onChange={(e) => setStanding({ ...standing, area: e.target.value })} /></label>
+        <div className="sd-log-actions"><button type="submit" className="secondary" disabled={busy}>บันทึกตำแหน่งประจำ</button></div>
+      </form>
+    </div>
+  </div>;
+}
+
 function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate, apiFetch, onLogsChanged, logVersion }) {
   if (!person) return <section aria-label="รายบุคคล" className="sd-section"><p className="sd-holiday">ยังไม่มีพนักงานสโตร์ในระบบ</p></section>;
   const week = data.week.map((day) => ({ day, entry: day.byUid[person.uid] || {} }));
@@ -191,6 +241,7 @@ function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate, 
       <StatCard label="ใบโอนที่จัด" value={person.transfer} note={`ไม่ครบ ${person.issues} · ค้าง ${person.openIssues} · แก้ไขปัญหา ${person.resolved}`} tone="problem" />
       <StatCard label="Internal Audit" value={fmt(person.auditItems)} note={`รายการ · ${person.auditDocs} เอกสาร · ตรง ${pct(person.auditItems - person.mismatch, person.auditItems)}`} tone="info" />
     </div>
+    {canLogFor(person) && <DutyPanel key={`duty:${person.uid}:${data.date}:${dutyText(person.duty)}:${dutyText(person.duty?.standing)}`} apiFetch={apiFetch} person={person} date={data.date} dateLabel={dateLabel} onChanged={onLogsChanged} />}
     <div className="sd-person-grid">
     {canLogFor(person) && <WorkLogPanel key={`${person.uid}:${data.date}`} apiFetch={apiFetch} person={person} date={data.date} today={today} onChanged={onLogsChanged} />}
     <div className="sd-block">

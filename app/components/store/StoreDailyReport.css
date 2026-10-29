@@ -23,7 +23,7 @@
 
 .sd-table-wrap { max-height: none; }
 .sd-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.sd-table-team { min-width: 900px; }
+.sd-table-team { min-width: 1040px; }
 .sd-table-history { min-width: 760px; }
 .sd-table-month { min-width: 900px; }
 .sd-table th, .sd-table td { padding: var(--sp-6); border-bottom: 1px solid var(--c-line); text-align: left; vertical-align: middle; }
@@ -95,3 +95,8 @@
 .sd-log-detail { color: var(--c-text-strong); overflow-wrap: anywhere; }
 .sd-tag.is-log { background: var(--c-warn-bg-strong); color: var(--c-warn-deep); }
 @media (max-width: 520px) { .sd-log-form { grid-template-columns: 1fr; } }
+.sd-duty-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: var(--sp-7); }
+.sd-duty-grid form { padding: var(--sp-6); border: 1px solid var(--c-line); border-radius: var(--r-md); }
+.sd-duty-now { margin: 0; font-weight: 600; color: var(--c-brand-deep); }
+.sd-duty-cell { color: var(--c-text-strong); font-size: 13px; }
+.sd-duty-cell.is-today { color: var(--c-brand-deep); font-weight: 600; }

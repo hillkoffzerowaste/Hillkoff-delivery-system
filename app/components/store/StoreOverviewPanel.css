@@ -128,5 +128,6 @@
 }
 .so-grid-staff { grid-template-columns: 1fr; }
 @media (min-width: 1280px) { .so-grid-staff { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
-.store-report-table.so-table-staff { table-layout: auto; min-width: 640px; }
+.store-report-table.so-table-staff { table-layout: auto; min-width: 760px; }
 .store-report-table.so-table-staff th:nth-child(n) { width: auto; }
+.so-table .so-position { color: var(--c-text-strong); font-size: 12px; }

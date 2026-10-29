@@ -7,6 +7,8 @@ import { getActiveBranches, sampleDocumentNumber } from "../../../lib/storeSetti
 import "./StoreAuditPanel.css";
 
 const AUDITS_URL = "/api/store/audits";
+const STAFF_URL = "/api/store/staff";
+const sharedAccount = (name) => String(name || "").trim().toLowerCase() === "store";
 const DAYS_IN_SUMMARY = 7;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const DEFAULT_FIELD = { label: "", show: true, required: false };
@@ -35,7 +37,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const today = todayKey();
 
   const emptyForm = useCallback((branchCode = "") => ({
-    no: "", noEdited: false, branchCode, zone: "", checker: profile?.name || "", total: "", match: "", note: ""
+    no: "", noEdited: false, branchCode, zone: "", checker: sharedAccount(profile?.name) ? "" : profile?.name || "", total: "", match: "", note: ""
   }), [profile?.name]);
 
   const [date, setDate] = useState(today);
@@ -49,12 +51,27 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const [toast, setToast] = useState(null);
   const [removal, setRemoval] = useState(null);
   const [removing, setRemoving] = useState(false);
+  const [staff, setStaff] = useState([]);
 
   const apiRef = useRef(apiFetch);
   const nextSequence = useRef(0);
   const savingRef = useRef(false);
   const removingRef = useRef(false);
   useEffect(() => { apiRef.current = apiFetch; });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiRef.current(STAFF_URL);
+        const json = await readJson(response);
+        if (!cancelled && response.ok && json.ok && Array.isArray(json.data)) setStaff(json.data);
+      } catch {
+        // Without the roster the dropdown keeps the default name only.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const branchCode = branches.some((branch) => branch.code === form.branchCode) ? form.branchCode : branches[0]?.code || "";
   // Only the branch pattern puts the branch into the number, so only then does a branch change need a new number.
@@ -110,6 +127,12 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const mismatchText = !hasNumbers ? "—" : overCount ? "เกินจำนวน" : fmt(liveMismatch);
   const accuracyLive = hasNumbers && !overCount ? pct(match, total) : "—";
 
+  const checkerNames = useMemo(() => {
+    const names = staff.map((person) => String(person.name || "").trim()).filter((name) => name && !sharedAccount(name));
+    // A name already in the form (e.g. the signed-in person's) stays selectable even before the roster loads.
+    return [...new Set([...(form.checker ? [form.checker] : []), ...names])];
+  }, [staff, form.checker]);
+
   const dayItems = useMemo(
     () => items.filter((item) => item.serviceDate === date).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))),
     [items, date]
@@ -135,6 +158,11 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
     const body = {
       documentNumber: form.no, numberAuto, branchCode, zone: form.zone, checkerName: form.checker, total: form.total, match: form.match, note: form.note
     };
+    // The shared store login is not a person, so a checker must be picked whenever the roster is available.
+    if (fields("checker").show && staff.length && !form.checker) {
+      setToast({ text: "กรุณาเลือกผู้ตรวจนับจากรายชื่อ", tone: "error" });
+      return;
+    }
     const checked = validateAuditInput(body, { settings, profile });
     if (!checked.ok) {
       setToast({ text: checked.error, tone: "error" });
@@ -147,7 +175,8 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
       const json = await readJson(response);
       if (!response.ok || !json.ok) throw new Error(json.error || "บันทึกผลตรวจนับไม่สำเร็จ");
       setToast({ text: `บันทึก ${json.data?.documentNumber || ""} แล้ว · ยอดรวมวันนี้และค่าเฉลี่ยอัปเดตแล้ว`, tone: "ok" });
-      setForm(emptyForm(branchCode));
+      // Keep the checker: the same person usually counts several zones in a row.
+      setForm({ ...emptyForm(branchCode), checker: form.checker });
       setDate(todayKey());
       setReloadTick((tick) => tick + 1);
       fetchNextNumber(numberBranch);
@@ -265,7 +294,10 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
             {fields("checker").show && (
               <label className="sa-field">
                 {labelOf("checker")}
-                <input value={form.checker} onChange={(event) => setField("checker", event.target.value)} placeholder="ชื่อผู้ตรวจ" />
+                <select value={form.checker} onChange={(event) => setField("checker", event.target.value)}>
+                  <option value="">เลือกผู้ตรวจนับ</option>
+                  {checkerNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
               </label>
             )}
           </div>

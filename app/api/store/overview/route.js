@@ -1,7 +1,7 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { bangkokRangeIso } from "../../../../lib/storeFormat.js";
 import { DAILY_CHART_MAX_DAYS, MAX_RANGE_DAYS, OVERVIEW_PERIODS, bangkokDateOf, buildStoreOverview, overviewRange } from "../../../../lib/storeOverview.js";
-import { readStoreRoster } from "../../../../lib/storeRoster.js";
+import { readStaffRoles, readStoreRoster } from "../../../../lib/storeRoster.js";
 
 export const runtime = "nodejs";
 
@@ -41,16 +41,17 @@ export async function GET(request) {
     const iso = bangkokRangeIso(range.from, range.to);
     const limits = range.dates.length > DAILY_CHART_MAX_DAYS ? LONG_LIMITS : LIMITS;
 
-    const [transfers, audits, reports, openTransfers, roster, workLogs] = await Promise.all([
+    const [transfers, audits, reports, openTransfers, roster, workLogs, staffRoles] = await Promise.all([
       readCapped(db.collection("store_transfers").where("serviceDate", ">=", range.from).where("serviceDate", "<=", range.to).orderBy("serviceDate"), limits.transfers),
       readCapped(db.collection("store_audits").where("serviceDate", ">=", range.from).where("serviceDate", "<=", range.to).orderBy("serviceDate"), limits.audits),
       readCapped(db.collection("store_reports").where("createdAt", ">=", iso.start).where("createdAt", "<", iso.endExclusive).orderBy("createdAt", "desc").select(...REPORT_FIELDS), limits.reports),
       readOptional(db.collection("store_transfers").where("issueState", "==", "open"), limits.openTransfers),
       readStoreRoster(db),
-      readCapped(db.collection("store_work_logs").where("date", ">=", range.from).where("date", "<=", range.to).orderBy("date"), limits.workLogs)
+      readCapped(db.collection("store_work_logs").where("date", ">=", range.from).where("date", "<=", range.to).orderBy("date"), limits.workLogs),
+      readStaffRoles(db)
     ]);
 
-    const overview = buildStoreOverview({ period, anchorDate, from, to, transfers, audits, reports, openTransfers: openTransfers.rows, roster, workLogs });
+    const overview = buildStoreOverview({ period, anchorDate, from, to, transfers, audits, reports, openTransfers: openTransfers.rows, roster, workLogs, staffRoles });
     return Response.json({ ok: true, data: { ...overview, openTransfersCapped: openTransfers.capped } });
   } catch (error) {
     return errorResponse(error);
