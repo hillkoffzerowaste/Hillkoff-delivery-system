@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
-import { addDaysToDateKey, bangkokTimeHHmm, thaiBuddhistYY, thaiDateLabel } from "../../../lib/storeFormat.js";
-import { getActiveBranches, sampleDocumentNumber } from "../../../lib/storeSettings.js";
+import { addDaysToDateKey, bangkokTimeHHmm, thaiDateLabel } from "../../../lib/storeFormat.js";
+import { getActiveBranches, lockedNumberPrefix, sampleDocumentNumber } from "../../../lib/storeSettings.js";
+import LockedNumberInput from "./LockedNumberInput.jsx";
 import {
   REQUEST_REF_SAMPLE,
   filterTransfers,
@@ -80,39 +81,10 @@ async function request(apiFetch, url, init) {
 
 const jsonInit = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
-// The part of a document number staff never retype: prefix (+ Buddhist YYMM) + "-". Branch numbers
-// depend on the chosen branch, so they stay free text.
-export function lockedNumberPrefix(cfg, dateKey) {
-  if (!cfg?.prefix || !dateKey) return "";
-  if (cfg.pattern === "yymm") return `${cfg.prefix}${thaiBuddhistYY(dateKey)}${dateKey.slice(5, 7)}-`;
-  if (cfg.pattern === "dash") return `${cfg.prefix}-`;
-  return "";
-}
-
 // An existing number keeps its own month (e.g. editing last month's transfer).
 function prefixOfNumber(value, cfg) {
   const match = /^(.*-)(\d+)$/.exec(String(value || ""));
   return match && cfg?.prefix && match[1].startsWith(cfg.prefix) ? match[1] : "";
-}
-
-export function runningPart(value, prefix) {
-  const text = String(value || "");
-  return prefix && text.startsWith(prefix) ? text.slice(prefix.length) : text;
-}
-
-function LockedNumberInput({ id, label, value, onChange, prefixes, digits, sampleText }) {
-  const prefix = prefixes.find((item) => String(value || "").startsWith(item)) || prefixes[0] || "";
-  if (!prefix) return <input id={id} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder={sampleText} autoComplete="off" />;
-  const running = runningPart(value, prefix);
-  const set = (nextPrefix, nextRunning) => onChange(nextRunning ? `${nextPrefix}${nextRunning}` : "");
-  return <span className="st-locked">
-    {prefixes.length > 1
-      ? <select aria-label={`${label} เดือน`} value={prefix} onChange={(event) => set(event.target.value, running)}>{prefixes.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-      : <span className="st-locked-prefix" aria-hidden="true">{prefix}</span>}
-    <input id={id} aria-label={`${label} เลขรัน`} inputMode="numeric" maxLength={6} value={running} placeholder={"0".repeat(digits - 1) + "1"} autoComplete="off"
-      onChange={(event) => set(prefix, event.target.value.replace(/\D/g, ""))}
-      onBlur={() => { if (running && running.length < digits) set(prefix, running.padStart(digits, "0")); }} />
-  </span>;
 }
 
 function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today }) {
@@ -123,7 +95,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
   const digits = cfg?.digits || 4;
-  const numberPrefix = prefixOfNumber(row.transferNumber, cfg) || lockedNumberPrefix(cfg, today);
+  const numberPrefix = prefixOfNumber(row.transferNumber, cfg) || (cfg?.pattern === "branch" ? "" : lockedNumberPrefix(cfg, today));
   // A request is often raised late last month and transferred early this month, so last month stays selectable.
   const lastMonth = today ? addDaysToDateKey(`${today.slice(0, 7)}-01`, -1) : "";
   const refPrefixes = [...new Set([prefixOfNumber(row.requestRef, cfg), lockedNumberPrefix(cfg, today), lockedNumberPrefix(cfg, lastMonth)].filter(Boolean))];

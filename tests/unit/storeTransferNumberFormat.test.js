@@ -17,7 +17,7 @@ describe("STK-TRF + year-month + running number", () => {
   it("keeps a hyphenated prefix in saved settings and still rejects bad ones", () => {
     expect(normalizeStoreSettings({ documents: { transfer: { prefix: "STK-TRF", pattern: "yymm", reset: "month", digits: 4 } } }).documents.transfer).toMatchObject({ prefix: "STK-TRF", pattern: "yymm", reset: "month" });
     expect(normalizeStoreSettings({ documents: { transfer: { prefix: "STK--TRF" } } }).documents.transfer.prefix).toBe("TR");
-    expect(normalizeStoreSettings({ documents: { transfer: { prefix: "A-B-C" } } }).documents.transfer.prefix).toBe("TR");
+    expect(normalizeStoreSettings({ documents: { transfer: { prefix: "STK-TRF-" } } }).documents.transfer.prefix).toBe("TR");
   });
 
   it("reads the branch from branch-pattern numbers even when the prefix has a hyphen", () => {
@@ -30,5 +30,18 @@ describe("STK-TRF + year-month + running number", () => {
     expect(REQUEST_REF_PATTERN.test("RQ-0395")).toBe(true);
     expect(REQUEST_REF_PATTERN.test("STK-TRF6913-0001")).toBe(false);
     expect(REQUEST_REF_PATTERN.test("STK-TRF-0001")).toBe(false);
+  });
+});
+
+describe("free-form prefixes", () => {
+  it("accepts letters, digits and several hyphen parts up to 15 characters", () => {
+    const keep = (prefix) => normalizeStoreSettings({ documents: { audit: { prefix } } }).documents.audit.prefix;
+    expect(keep("STK-AUD")).toBe("STK-AUD");
+    expect(keep("WH1-STK-AU")).toBe("WH1-STK-AU");
+    expect(keep("1AU")).toBe("AU");
+    expect(keep("STK_AU")).toBe("AU");
+    expect(keep("ABCDEFGHIJKLMNOP")).toBe("AU");
+    expect(formatDocumentNumber({ prefix: "WH1-AU", pattern: "yymm", digits: 4, sequence: 3, serviceDate: "2026-10-29" })).toBe("WH1-AU6910-0003");
+    expect(parseDocumentSequence("WH1-AU6910-0003", { prefix: "WH1-AU", pattern: "yymm", digits: 4 })).toBe(3);
   });
 });

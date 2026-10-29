@@ -97,7 +97,7 @@ describe("defaults and normalize", () => {
     const normalized = normalizeStoreSettings({
       branches: [branch("wh"), branch("WH"), { code: "X", name: "bad" }, { code: "BR01", name: "" }],
       documents: {
-        transfer: { prefix: "bad1", digits: 9, fields: [{ id: "no", show: false, label: "เลข" }, { id: "zzz" }] }
+        transfer: { prefix: "bad_1", digits: 9, fields: [{ id: "no", show: false, label: "เลข" }, { id: "zzz" }] }
       }
     });
     expect(normalized.branches).toEqual([branch("wh", { code: "WH" })]);
@@ -208,8 +208,8 @@ describe("validateStoreSettings", () => {
 
   it("rejects bad document settings", () => {
     const bad = (mutate) => validateStoreSettings(validInput(mutate));
-    expect(bad((s) => (s.documents.transfer.prefix = "T1")).errors[0].message).toBe("อักษรนำหน้าต้องเป็นภาษาอังกฤษ 1–6 ตัว คั่นด้วยขีดได้ 1 ครั้ง เช่น STK-TRF");
-    expect(bad((s) => (s.documents.transfer.prefix = "TOOLONGX")).ok).toBe(false);
+    expect(bad((s) => (s.documents.transfer.prefix = "1T")).errors[0].message).toBe("อักษรนำหน้าต้องขึ้นต้นด้วยภาษาอังกฤษ ใช้ตัวอักษร ตัวเลข และขีดคั่นได้ ไม่เกิน 15 ตัว เช่น STK-TRF");
+    expect(bad((s) => (s.documents.transfer.prefix = "TOOLONGPREFIXABCD")).ok).toBe(false);
     expect(bad((s) => (s.documents.audit.prefix = "tr")).errors[0].message).toBe("อักษรนำหน้า TR ถูกใช้แล้ว");
     expect(bad((s) => (s.documents.audit.digits = 2)).ok).toBe(false);
     expect(bad((s) => (s.documents.audit.digits = 6)).ok).toBe(false);

@@ -19,3 +19,12 @@ describe("audit checker dropdown", () => {
     expect(html).not.toContain('value="store"');
   });
 });
+
+describe("audit number with a locked prefix", () => {
+  it("locks prefix and year-month and leaves only the running number to type", () => {
+    const yymm = normalizeStoreSettings({ branches: [{ code: "WH", name: "คลังหลัก", type: "คลังสินค้า" }], documents: { audit: { title: "Audit", prefix: "STK-AUD", pattern: "yymm", digits: 4, reset: "month" } } });
+    const html = renderToStaticMarkup(<StoreAuditPanel apiFetch={apiFetch} settings={yymm} profile={{ uid: "u1", name: "สุภาพ" }} />);
+    expect(html).toMatch(/<span class="locked-number-prefix" aria-hidden="true">STK-AUD\d{4}-<\/span>/);
+    expect(html).toContain("แก้ได้เฉพาะเลขรัน");
+  });
+});

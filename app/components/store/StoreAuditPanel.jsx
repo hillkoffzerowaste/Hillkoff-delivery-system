@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildAuditDaily, computeAuditCounts, summarizeAuditDay, validateAuditInput } from "../../../lib/storeAudit";
 import { addDaysToDateKey, bangkokTimeHHmm, fmt, lastNDates, one, pct, thaiDateLabel } from "../../../lib/storeFormat";
-import { getActiveBranches, sampleDocumentNumber } from "../../../lib/storeSettings";
+import { getActiveBranches, lockedNumberPrefix, sampleDocumentNumber } from "../../../lib/storeSettings";
+import LockedNumberInput, { runningPart } from "./LockedNumberInput.jsx";
 import "./StoreAuditPanel.css";
 
 const AUDITS_URL = "/api/store/audits";
@@ -154,9 +155,11 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const submit = async (event) => {
     event.preventDefault();
     if (savingRef.current) return;
-    const numberAuto = form.no.trim() !== "" && form.no === autoNo;
+    // Always rebuild from today's locked prefix, so a branch change cannot leave the old branch in the number.
+    const documentNumber = lockedPrefix && form.no ? `${lockedPrefix}${runningPart(form.no, lockedPrefix)}` : form.no;
+    const numberAuto = documentNumber.trim() !== "" && documentNumber === autoNo;
     const body = {
-      documentNumber: form.no, numberAuto, branchCode, zone: form.zone, checkerName: form.checker, total: form.total, match: form.match, note: form.note
+      documentNumber, numberAuto, branchCode, zone: form.zone, checkerName: form.checker, total: form.total, match: form.match, note: form.note
     };
     // The shared store login is not a person, so a checker must be picked whenever the roster is available.
     if (fields("checker").show && staff.length && !form.checker) {
@@ -218,6 +221,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
     return `${field.label}${suffix}${field.required ? " *" : ""}`;
   };
   const sample = cfg ? sampleDocumentNumber(cfg, { branchCode: branchCode || "WH", serviceDate: today }) : "";
+  const lockedPrefix = lockedNumberPrefix(cfg, today, branchCode);
   const basisText = avgMode === "calendar" ? `หาร ${daily.basis} วันตามปฏิทิน` : `หาร ${daily.basis} วันที่มีการตรวจ`;
 
   return (
@@ -267,13 +271,13 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
       <section className="panel sa-form" aria-label="บันทึกผลตรวจนับ">
         <div className="panel-head">
           <h2>บันทึกผลตรวจนับ</h2>
-          <span>เลขที่เอกสารรันอัตโนมัติ ({sample}) · แก้ได้ก่อนบันทึก</span>
+          <span>เลขที่เอกสารรันอัตโนมัติ ({sample}) · {lockedPrefix ? "ระบบใส่หัวเลขให้ แก้ได้เฉพาะเลขรัน" : "แก้ได้ก่อนบันทึก"}</span>
         </div>
         <form onSubmit={submit} noValidate>
           <div className="sa-row">
             <label className="sa-field">
               {labelOf("no")}
-              <input value={form.no} onChange={(event) => setField("no", event.target.value)} autoComplete="off" />
+              <LockedNumberInput id="sa-number" label={fields("no").label} value={form.no} onChange={(value) => setField("no", value)} prefixes={lockedPrefix ? [lockedPrefix] : []} digits={cfg?.digits || 4} sampleText={sample} />
             </label>
             {branches.length ? (
               <label className="sa-field">
