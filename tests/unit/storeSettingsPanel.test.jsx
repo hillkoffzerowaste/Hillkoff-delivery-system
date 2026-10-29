@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import StoreSettingsPanel, { moveModule, saveStoreSettings, unlockStoreSettings, validateNewBranch } from "../../app/components/store/StoreSettingsPanel.jsx";
+import StoreSettingsPanel, { moveModule, patchBranchAt, saveStoreSettings, unlockStoreSettings, validateBranchCodeChanges, validateNewBranch } from "../../app/components/store/StoreSettingsPanel.jsx";
 import { STORE_MODULE_IDS, getDefaultStoreSettings } from "../../lib/storeSettings.js";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true }));
@@ -8,6 +8,23 @@ const render = (props = {}) => renderToStaticMarkup(
   <StoreSettingsPanel apiFetch={apiFetch} settings={getDefaultStoreSettings()} updatedAt="" pin="" onPinChange={() => {}} onSaved={() => {}} {...props} />
 );
 const jsonResponse = (status, body) => async () => new Response(JSON.stringify(body), { status });
+
+describe("editing branch codes", () => {
+  it("updates only the selected row even while two codes temporarily match", () => {
+    const branches = [{ code: "CP", name: "A" }, { code: "HQ", name: "B" }];
+    const sameCode = patchBranchAt(branches, 0, { code: "HQ" });
+    const result = patchBranchAt(sameCode, 0, { code: "HQA" });
+    expect(result).toEqual([{ code: "HQA", name: "A" }, { code: "HQ", name: "B" }]);
+    expect(branches[0].code).toBe("CP");
+  });
+
+  it("prevents reassigning an existing code to another branch", () => {
+    const original = [{ code: "CP" }, { code: "HQ" }];
+    expect(validateBranchCodeChanges([{ code: "HQ" }, { code: "CP" }], ["CP", "HQ"], original)).toMatch(/รหัส/);
+    expect(validateBranchCodeChanges([{ code: "HQ" }], [null], original)).toMatch(/รหัส/);
+    expect(validateBranchCodeChanges([{ code: "NEW" }, { code: "HQ" }], ["CP", "HQ"], original)).toBe("");
+  });
+});
 
 describe("StoreSettingsPanel lock screen", () => {
   it("shows only the PIN prompt while pin is empty", () => {

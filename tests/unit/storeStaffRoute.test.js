@@ -64,6 +64,14 @@ describe("store staff route", () => {
     expect((await (await get()).json()).data).toEqual([{ uid: "staff_1", name: "สมชาย" }]);
   });
 
+  it("excludes the shared store label while retaining named staff", async () => {
+    state.db = usersDb({ generic: user({ name: " Store " }), named: user({ name: "พนักงานจริง" }) }, { staff: [{ id: "staff_1", name: "คนตรวจ", active: true }, { id: "staff_2", name: "store", active: true }] });
+    const { data } = await (await get()).json();
+    expect(data).toHaveLength(2);
+    expect(data).toContainEqual({ uid: "named", name: "พนักงานจริง" });
+    expect(data).toContainEqual({ uid: "staff_1", name: "คนตรวจ" });
+  });
+
   it("never leaks email, phone or any other field", async () => {
     const text = await (await get()).text();
     expect(text).not.toContain("hillkoff.com");

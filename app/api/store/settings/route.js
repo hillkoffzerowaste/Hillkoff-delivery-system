@@ -99,7 +99,7 @@ export async function PUT(request) {
           transaction.get(db.collection("store_audits").where("branchCode", "==", code).limit(1))
         ]);
         if (references.some((snap) => snap.docs.length > 0)) {
-          throw httpError(409, `สาขา ${code} มีเอกสารอ้างอิงแล้ว ลบไม่ได้ ให้ปิดใช้งานแทน`);
+          throw httpError(409, `สาขา ${code} มีเอกสารอ้างอิงแล้ว เปลี่ยนรหัสหรือลบไม่ได้ ให้ปิดใช้งานแทน`);
         }
       }
 

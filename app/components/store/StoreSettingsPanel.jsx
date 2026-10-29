@@ -60,6 +60,19 @@ export function validateNewBranch(branches, draft) {
   return "";
 }
 
+export function patchBranchAt(branches, index, patch) {
+  return branches.map((item, row) => row === index ? { ...item, ...patch } : item);
+}
+
+export function validateBranchCodeChanges(branches, origins, originalBranches) {
+  const originalCodes = new Set(originalBranches.map((branch) => branch.code));
+  for (let index = 0; index < branches.length; index += 1) {
+    const code = String(branches[index].code || "").trim().toUpperCase();
+    if (code !== origins[index] && originalCodes.has(code)) return `รหัส ${code} เป็นของสาขาเดิม กรุณาใช้รหัสใหม่ที่ไม่ซ้ำ`;
+  }
+  return "";
+}
+
 async function request(apiFetch, init) {
   try {
     const response = await apiFetch(SETTINGS_URL, { ...init, headers: { "Content-Type": "application/json" } });
@@ -145,9 +158,10 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  const branchOrigins = useRef(settings.branches.map((branch) => branch.code));
 
   // The parent owns the saved settings: a fresh copy (after save or reload) replaces the draft.
-  useEffect(() => { setDraft(JSON.parse(settingsKey)); }, [settingsKey]);
+  useEffect(() => { const next = JSON.parse(settingsKey); branchOrigins.current = next.branches.map((branch) => branch.code); setDraft(next); }, [settingsKey]);
 
   const dirty = JSON.stringify(draft) !== settingsKey;
   const update = (change) => { setDraft((current) => change(current)); setToast(null); };
@@ -155,11 +169,12 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
   const fail = (text) => setToast({ text, tone: "error" });
 
   const patchModule = (id, patch) => update((current) => ({ ...current, modules: current.modules.map((item) => (item.id === id ? { ...item, ...patch } : item)) }));
-  const patchBranch = (code, patch) => update((current) => ({ ...current, branches: current.branches.map((item) => (item.code === code ? { ...item, ...patch } : item)) }));
+  const patchBranch = (index, patch) => update((current) => ({ ...current, branches: patchBranchAt(current.branches, index, patch) }));
 
   const addBranch = () => {
     const message = validateNewBranch(draft.branches, newBranch);
     if (message) return fail(message);
+    branchOrigins.current = [...branchOrigins.current, null];
     update((current) => ({
       ...current,
       branches: [...current.branches, { code: newBranch.code.trim().toUpperCase(), name: newBranch.name.trim(), type: newBranch.type, active: true }]
@@ -167,11 +182,13 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
     setNewBranch(EMPTY_BRANCH);
   };
 
-  const discard = () => { setDraft(JSON.parse(settingsKey)); setToast(null); };
+  const discard = () => { const next = JSON.parse(settingsKey); branchOrigins.current = next.branches.map((branch) => branch.code); setDraft(next); setToast(null); };
 
   const save = async () => {
     if (inFlight.current) return;
     if (draft.modules.some((item) => !item.name.trim() || item.name.trim().length > MODULE_NAME_MAX)) return fail("ชื่อโมดูลต้องมี 1–40 ตัวอักษร");
+    const branchError = validateBranchCodeChanges(draft.branches, branchOrigins.current, settings.branches);
+    if (branchError) return fail(branchError);
     inFlight.current = true;
     setBusy(true);
     setToast(null);
@@ -255,7 +272,7 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
         <section className="ss-panel-section" aria-label="สาขา">
           <div>
             <h3>สาขาและคลัง</h3>
-            <p className="ss-panel-hint">ใช้เป็นตัวเลือกต้นทาง/ปลายทางในใบโอน และสาขาที่ตรวจนับใน Internal Audit · สาขาที่มีเอกสารแล้วลบไม่ได้ ให้ปิดใช้งานแทน</p>
+            <p className="ss-panel-hint">แก้รหัส ชื่อ และประเภทสาขาได้ · สาขาที่มีใบโอนหรือ Audit อ้างอิงแล้วจะเปลี่ยนรหัสหรือลบไม่ได้ เพื่อรักษาข้อมูลเดิม</p>
           </div>
           <div className="store-report-table-wrap ss-panel-table-wrap">
             <table className="ss-panel-table" aria-label="รายการสาขา">
@@ -269,17 +286,17 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
                 </tr>
               </thead>
               <tbody>
-                {draft.branches.map((branch) => (
-                  <tr key={branch.code} className={branch.active ? "" : "is-off"}>
-                    <td><b>{branch.code}</b></td>
-                    <td><input aria-label={`ชื่อสาขา ${branch.code}`} value={branch.name} maxLength={60} onChange={(event) => patchBranch(branch.code, { name: event.target.value })} /></td>
+                {draft.branches.map((branch, index) => (
+                  <tr key={index} className={branch.active ? "" : "is-off"}>
+                    <td><input className="ss-panel-upper" aria-label={`รหัสสาขา ${branch.name}`} value={branch.code} maxLength={6} onChange={(event) => patchBranch(index, { code: event.target.value.toUpperCase() })} /></td>
+                    <td><input aria-label={`ชื่อสาขา ${branch.code}`} value={branch.name} maxLength={60} onChange={(event) => patchBranch(index, { name: event.target.value })} /></td>
                     <td>
-                      <select aria-label={`ประเภทสาขา ${branch.code}`} value={branch.type} onChange={(event) => patchBranch(branch.code, { type: event.target.value })}>
+                      <select aria-label={`ประเภทสาขา ${branch.code}`} value={branch.type} onChange={(event) => patchBranch(index, { type: event.target.value })}>
                         {BRANCH_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                       </select>
                     </td>
-                    <td><Switch on={branch.active} label={`เปิดใช้งานสาขา ${branch.code}`} onToggle={() => patchBranch(branch.code, { active: !branch.active })} /></td>
-                    <td><button type="button" className="secondary danger" onClick={() => update((current) => ({ ...current, branches: current.branches.filter((item) => item.code !== branch.code) }))}>ลบสาขา</button></td>
+                    <td><Switch on={branch.active} label={`เปิดใช้งานสาขา ${branch.code}`} onToggle={() => patchBranch(index, { active: !branch.active })} /></td>
+                    <td><button type="button" className="secondary danger" onClick={() => { branchOrigins.current = branchOrigins.current.filter((_, row) => row !== index); update((current) => ({ ...current, branches: current.branches.filter((_, row) => row !== index) })); }}>ลบสาขา</button></td>
                   </tr>
                 ))}
                 {draft.branches.length === 0 && (

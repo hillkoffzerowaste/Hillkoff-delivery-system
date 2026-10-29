@@ -24,6 +24,7 @@ export async function GET(request) {
       .map(({ uid, user }) => ({ uid, name: displayName(user) }))
       .filter((person) => person.name)
       .concat(normalizeStoreSettings(settingsSnap.exists ? settingsSnap.data() : undefined).staff.filter((person) => person.active).map((person) => ({ uid: person.id, name: person.name })))
+      .filter((person) => person.name.trim().toLowerCase() !== "store")
       .sort((a, b) => a.name.localeCompare(b.name, "th"));
     return Response.json({ ok: true, data: staff });
   } catch (error) {

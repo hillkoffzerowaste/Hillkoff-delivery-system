@@ -288,7 +288,7 @@ describe("store settings route", () => {
         state.db = createDb({ settings: savedSettings(), ...refs });
         const response = await call("PUT", withoutWh());
         expect(response.status).toBe(409);
-        expect((await response.json()).error).toBe("สาขา WH มีเอกสารอ้างอิงแล้ว ลบไม่ได้ ให้ปิดใช้งานแทน");
+        expect((await response.json()).error).toBe("สาขา WH มีเอกสารอ้างอิงแล้ว เปลี่ยนรหัสหรือลบไม่ได้ ให้ปิดใช้งานแทน");
         expect(state.db.writes).toEqual([]);
         expect(state.db.docs.get("store_settings/default").branches).toHaveLength(1);
       });
@@ -298,6 +298,16 @@ describe("store settings route", () => {
         const response = await call("PUT", withoutWh());
         expect(response.status).toBe(200);
         expect(state.db.docs.get("store_settings/default").branches).toEqual([]);
+      });
+
+      it("allows a new code when unreferenced and rejects it when documents use the old code", async () => {
+        const payload = body();
+        payload.settings.branches[0].code = "NEW";
+        expect((await call("PUT", payload)).status).toBe(200);
+        expect(state.db.docs.get("store_settings/default").branches[0].code).toBe("NEW");
+        state.db = createDb({ settings: savedSettings(), audits: [{ branchCode: "WH" }] });
+        expect((await call("PUT", payload)).status).toBe(409);
+        expect(state.db.docs.get("store_settings/default").branches[0].code).toBe("WH");
       });
 
       it("lets a referenced branch be deactivated instead", async () => {
