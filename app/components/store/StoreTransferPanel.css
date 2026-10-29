@@ -79,3 +79,7 @@
   .st-form-actions button { flex: 1 1 auto; justify-content: center; }
 }
 .st-field-no, .st-field-ref { flex-basis: 220px; }
+@media (min-width: 721px) {
+  .st-field-items { flex: 0 1 140px; }
+}
+.st-count { font-variant-numeric: tabular-nums; white-space: nowrap; }

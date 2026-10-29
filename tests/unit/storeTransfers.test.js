@@ -53,12 +53,25 @@ describe("validateTransferRow", () => {
         fromBranchName: "คลังหลัก",
         toBranchCode: "BR01",
         toBranchName: "สาขา 01",
+        itemCount: null,
         preparerUid: "store-2",
         preparerName: "สโตร์สอง",
         receipt: "complete",
         note: ""
       }
     });
+  });
+
+  it("checks the transferred item count: optional by default, a whole number 1–9999, required when set", () => {
+    expect(check({ itemCount: "12" }).value.itemCount).toBe(12);
+    expect(check({ itemCount: 7 }).value.itemCount).toBe(7);
+    expect(check({ itemCount: "" }).value.itemCount).toBeNull();
+    for (const bad of ["0", "1.5", "-3", "abc", "10000"]) expect(check({ itemCount: bad })).toMatchObject({ ok: false, status: 400, error: "จำนวนรายการที่โอนต้องเป็นตัวเลข 1–9999" });
+    const required = settingsWith((s) => { s.documents.transfer.fields.find((f) => f.id === "items").required = true; });
+    expect(check({ itemCount: "" }, required)).toMatchObject({ ok: false, error: "กรุณาระบุจำนวนรายการที่โอน" });
+    const hidden = settingsWith((s) => { Object.assign(s.documents.transfer.fields.find((f) => f.id === "items"), { show: false, required: false }); });
+    expect(check({ itemCount: "abc" }, hidden).value.itemCount).toBeNull();
+    expect(isBlankTransferRow({ itemCount: "3" })).toBe(false);
   });
 
   it("rejects a number that does not match the configured pattern", () => {

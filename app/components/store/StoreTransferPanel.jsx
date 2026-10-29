@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
-import { addDaysToDateKey, bangkokTimeHHmm, thaiDateLabel } from "../../../lib/storeFormat.js";
+import { addDaysToDateKey, bangkokTimeHHmm, fmt, thaiDateLabel } from "../../../lib/storeFormat.js";
 import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
 import LockedNumberInput from "./LockedNumberInput.jsx";
 import {
@@ -31,7 +31,7 @@ const CHIPS = [
 const NO_STAR_FIELDS = ["from", "to", "receipt"];
 
 let draftCounter = 0;
-const newDraft = () => ({ key: `d${(draftCounter += 1)}`, transferNumber: "", requestRef: "", fromBranchCode: "", toBranchCode: "", preparerUid: "", receipt: "complete", note: "" });
+const newDraft = () => ({ key: `d${(draftCounter += 1)}`, transferNumber: "", requestRef: "", fromBranchCode: "", toBranchCode: "", itemCount: "", preparerUid: "", receipt: "complete", note: "" });
 
 function fieldMap(settings) {
   const fields = settings?.documents?.transfer?.fields || [];
@@ -52,6 +52,7 @@ function effectiveRow(draft, branches, staff) {
     requestRef: draft.requestRef,
     fromBranchCode: draft.fromBranchCode || branches[0]?.code || "",
     toBranchCode: draft.toBranchCode || branches[1]?.code || "",
+    itemCount: draft.itemCount,
     preparerUid: preparer ? preparer.uid : "",
     preparerName: preparer ? preparer.name : "",
     receipt: draft.receipt,
@@ -66,6 +67,7 @@ function rowFromItem(item) {
     requestRef: item.requestRef || "",
     fromBranchCode: item.fromBranchCode || "",
     toBranchCode: item.toBranchCode || "",
+    itemCount: item.itemCount ? String(item.itemCount) : "",
     preparerUid: item.preparerUid || "",
     receipt: item.receipt || "complete",
     note: item.note || ""
@@ -116,6 +118,11 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
       <label className="st-field">{labelOf(fields, "to", "ปลายทาง")}
         <select value={value.toBranchCode} onChange={(event) => onChange({ toBranchCode: event.target.value })}>{branchOptions}</select>
       </label>
+      {fields.items?.show !== false && (
+        <label className="st-field st-field-items">{labelOf(fields, "items", "จำนวนรายการที่โอน")}
+          <input inputMode="numeric" maxLength={4} value={row.itemCount} onChange={(event) => onChange({ itemCount: event.target.value.replace(/\D/g, "") })} placeholder="เช่น 12" autoComplete="off" />
+        </label>
+      )}
       {fields.preparer?.show !== false && (
         <label className="st-field">{labelOf(fields, "preparer", "ผู้จัดใบโอน")}
           <select value={row.preparerUid} onChange={(event) => onChange({ preparerUid: event.target.value })}>
@@ -212,7 +219,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
         setDrafts(saved.slice(0, MAX_ROWS).map((row) => {
           const fresh = newDraft();
           const text = (name) => (typeof row?.[name] === "string" ? row[name] : fresh[name]);
-          return { ...fresh, transferNumber: text("transferNumber"), requestRef: text("requestRef"), fromBranchCode: text("fromBranchCode"), toBranchCode: text("toBranchCode"), preparerUid: text("preparerUid"), receipt: row?.receipt === "incomplete" ? "incomplete" : "complete", note: text("note") };
+          return { ...fresh, transferNumber: text("transferNumber"), requestRef: text("requestRef"), fromBranchCode: text("fromBranchCode"), toBranchCode: text("toBranchCode"), itemCount: text("itemCount"), preparerUid: text("preparerUid"), receipt: row?.receipt === "incomplete" ? "incomplete" : "complete", note: text("note") };
         }));
       }
     } catch {
@@ -465,6 +472,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
               <th scope="col">เลขที่ใบโอน</th>
               <th scope="col">อ้างอิงใบขอโอน</th>
               <th scope="col">ต้นทาง → ปลายทาง</th>
+              <th scope="col">จำนวนรายการ</th>
               <th scope="col">ผู้จัดใบโอน / หมายเหตุ</th>
               <th scope="col">เวลา / ผู้บันทึก</th>
               <th scope="col">สถานะ</th>
@@ -479,6 +487,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
                   <td><b>{item.transferNumber}</b></td>
                   <td className={item.requestRef ? "" : "st-muted"}>{item.requestRef || "ไม่มีอ้างอิง"}</td>
                   <td className="st-route">{item.fromBranchName} → {item.toBranchName}</td>
+                  <td className={item.itemCount ? "st-count" : "st-muted"}>{item.itemCount ? `${fmt(item.itemCount)} รายการ` : "—"}</td>
                   <td className="st-detail">
                     <div>{item.preparerName}</div>
                     {item.note && <div className="st-problem">หมายเหตุ: {item.note}</div>}

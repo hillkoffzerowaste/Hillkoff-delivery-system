@@ -123,6 +123,14 @@ describe("store transfers route", () => {
       } finally { vi.useRealTimers(); }
     });
 
+    it("stores the transferred item count and lets an edit change it", async () => {
+      const saved = await postOne({ itemCount: "12" });
+      expect(saved.itemCount).toBe(12);
+      const response = await call("PUT", { id: saved.id, ...row({ itemCount: "15" }), reason: "นับใหม่" });
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.itemCount).toBe(15);
+    });
+
     it("allows editing an existing number after the configured prefix changes", async () => {
       const saved = await postOne({ receipt: "incomplete", note: "missing" });
       state.db.docs.set("store_settings/default", { ...settingsDoc, documents: { transfer: { prefix: "TF", pattern: "dash", digits: 4, reset: "none" } } });

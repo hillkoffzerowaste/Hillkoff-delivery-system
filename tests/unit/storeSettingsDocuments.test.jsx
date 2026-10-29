@@ -35,7 +35,7 @@ describe("StoreSettingsDocuments", () => {
   it("disables the checkboxes of locked fields and keeps hidable ones editable", () => {
     const html = render();
     const rows = html.split('class="ss-docs-field-row"').slice(1);
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(8);
     const byLabel = (label) => rows.find((row) => row.includes(`aria-label="ชื่อช่อง ${label}"`));
     // locked field: both "แสดง" and "บังคับกรอก" disabled, with the system badge
     expect(byLabel("เลขที่ใบโอน").match(/disabled=""/g)).toHaveLength(2);

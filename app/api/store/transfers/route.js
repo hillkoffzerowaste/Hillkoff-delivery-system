@@ -33,7 +33,7 @@ const ALERT_LIMIT = 200;
 const ALERT_RETURN_LIMIT = 100;
 const HISTORY_LIMIT = 200;
 // Fields recorded in history "before/after" when a document is edited.
-const EDIT_FIELDS = ["transferNumber", "requestRef", "fromBranchCode", "toBranchCode", "preparerUid", "preparerName", "receipt", "note", "issueState", "resolution", "resolvedServiceDate"];
+const EDIT_FIELDS = ["transferNumber", "requestRef", "fromBranchCode", "toBranchCode", "itemCount", "preparerUid", "preparerName", "receipt", "note", "issueState", "resolution", "resolvedServiceDate"];
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
@@ -103,6 +103,7 @@ function rowInput(row) {
     requestRef: row?.requestRef,
     fromBranchCode: row?.fromBranchCode,
     toBranchCode: row?.toBranchCode,
+    itemCount: row?.itemCount,
     preparerUid: row?.preparerUid,
     preparerName: row?.preparerName,
     receipt: row?.receipt,
