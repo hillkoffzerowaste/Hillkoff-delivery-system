@@ -42,7 +42,7 @@
 .sd-bar { flex: 1; height: 12px; border-radius: var(--r-full); background: var(--c-surface-muted); overflow: hidden; }
 .sd-bar > div { height: 100%; background: var(--c-brand-cyan); }
 .sd-avg span { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-.sd-note { margin: 0; padding: var(--sp-5) var(--sp-6); border-radius: var(--r-lg); background: var(--c-info-bg); color: var(--c-info-deep); font-size: 12px; }
+.sd-note { margin: 0; padding: var(--sp-5) var(--sp-6); border-radius: var(--r-lg); background: var(--c-info-bg); color: var(--c-info-deep); font-size: 12px; white-space: pre-line; }
 
 .sd-people { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
 .sd-person { min-height: 44px; padding: 0 var(--sp-7); border: 1px solid var(--c-brand-border); border-radius: var(--r-full); background: var(--c-surface); color: var(--c-brand-dark); font-weight: 500; cursor: pointer; }

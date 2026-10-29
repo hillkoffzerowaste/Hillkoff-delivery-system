@@ -187,6 +187,8 @@ export async function POST(request) {
 
     const now = new Date().toISOString();
     const draft = Boolean(body?.draft);
+    const checkerName = clean(body?.checkerName, 160);
+    if (!draft && !checkerName) return Response.json({ ok: false, error: "Store checker name is required" }, { status: 400 });
     const saved = [];
     const bookingKeys = new Set();
     for (const row of rows) {
@@ -202,8 +204,8 @@ export async function POST(request) {
       if (bookingKey && bookingKeys.has(bookingKey)) return Response.json({ ok: false, error: `เลขที่ใบสั่งจอง ${bookingNumber} ซ้ำกันในรายการที่กำลังบันทึก` }, { status: 409 });
       if (bookingKey) bookingKeys.add(bookingKey);
       const ref = db.collection("store_reports").doc();
-      const base = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: draft ? "blocked" : "pending", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid };
-      const item = { ...base, workflowHistory: [reportKpiEvent(draft ? "created_draft" : "created", profile, now, base)] };
+      const base = { type, serviceDate, bookingNumber, bookingMonthKey: bookingNumber ? serviceDate.slice(0, 7) : "", detail, note, status, packStatus: draft ? "blocked" : "pending", confirmedAt: draft ? "" : now, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email, createdByUid: profile.uid, ...(draft ? {} : { storeCheckerName: checkerName }) };
+      const item = { ...base, workflowHistory: [reportKpiEvent(draft ? "created_draft" : "created", profile, now, base, "", draft ? "" : checkerName)] };
       saved.push({ id: ref.id, ref, bookingKey, ...item });
     }
     if (!saved.length) return Response.json({ ok: false, error: "Enter at least one report row" }, { status: 400 });
@@ -237,7 +239,7 @@ export async function POST(request) {
       for (const item of saved) {
         const { ref, bookingKey, ...data } = item;
         transaction.set(ref, data);
-        transaction.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, data));
+        transaction.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, data, "", draft ? "" : checkerName));
       }
       for (const { item, registryRef } of reservations) transaction.create(registryRef, bookingRegistryRecord({ serviceDate: item.serviceDate, bookingNumber: item.bookingNumber, source: "store_reports", sourceId: item.id, createdAt: now, createdBy: item.createdBy }));
       for (const linked of linkedOrderUpdates.values()) {
