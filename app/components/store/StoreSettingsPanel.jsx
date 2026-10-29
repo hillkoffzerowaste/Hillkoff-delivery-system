@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   ALWAYS_ENABLED_MODULE_IDS,
   BRANCH_TYPES,
-  STORE_MODULE_GROUPS
+  STORE_MODULE_GROUPS,
+  validateStoreSettings
 } from "../../../lib/storeSettings.js";
 import StoreSettingsDocuments from "./StoreSettingsDocuments.jsx";
 import "./StoreSettingsPanel.css";
@@ -14,6 +15,8 @@ const SETTINGS_URL = "/api/store/settings";
 const MODULE_NAME_MAX = 40;
 const BRANCH_CODE_PATTERN = /^[A-Z0-9]{2,6}$/;
 const META_KEYS = ["updatedAt", "updatedBy", "updatedByUid"];
+// Every edit is written to Firestore on its own shortly after the last keystroke.
+const AUTOSAVE_DELAY_MS = 800;
 
 // Hard-coded in the UI on purpose: descriptions are not stored in Firestore.
 const MODULE_DESCRIPTIONS = {
@@ -86,11 +89,23 @@ async function request(apiFetch, init) {
 export const unlockStoreSettings = (apiFetch, pin) =>
   request(apiFetch, { method: "POST", body: JSON.stringify({ pin }) });
 
-export const saveStoreSettings = (apiFetch, { pin, baseUpdatedAt, settings }) => {
+const stripMeta = (settings) => {
   const body = { ...settings };
   META_KEYS.forEach((key) => delete body[key]);
-  return request(apiFetch, { method: "PUT", body: JSON.stringify({ pin, baseUpdatedAt: baseUpdatedAt || "", settings: body }) });
+  return body;
 };
+
+// What the server would store for these settings, or null when they cannot be saved yet.
+// Equal keys mean there is nothing new to save (blank rows and spacing do not count).
+export function settingsSaveKey(settings) {
+  const result = validateStoreSettings(stripMeta(settings));
+  return result.ok ? JSON.stringify(result.value) : null;
+}
+
+export const saveStoreSettings = (apiFetch, { pin, baseUpdatedAt, settings }) =>
+  request(apiFetch, { method: "PUT", body: JSON.stringify({ pin, baseUpdatedAt: baseUpdatedAt || "", settings: stripMeta(settings) }) });
+
+const loadStoreSettings = (apiFetch) => request(apiFetch, { method: "GET" });
 
 function Switch({ on, label, disabled, onToggle }) {
   return (
@@ -151,7 +166,11 @@ export default function StoreSettingsPanel({ apiFetch, settings, updatedAt, pin,
 
 function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSaved }) {
   const settingsKey = JSON.stringify(settings);
+  const savedKey = useMemo(() => settingsSaveKey(JSON.parse(settingsKey)), [settingsKey]);
   const [draft, setDraft] = useState(() => clone(settings));
+  const [savedAt, setSavedAt] = useState("");
+  const [blockedKey, setBlockedKey] = useState("");
+  const [conflict, setConflict] = useState(false);
   const [tab, setTab] = useState("modules");
   const [newBranch, setNewBranch] = useState(EMPTY_BRANCH);
   const [newStaff, setNewStaff] = useState("");
@@ -160,10 +179,33 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
   const inFlight = useRef(false);
   const branchOrigins = useRef(settings.branches.map((branch) => branch.code));
 
-  // The parent owns the saved settings: a fresh copy (after save or reload) replaces the draft.
-  useEffect(() => { const next = JSON.parse(settingsKey); branchOrigins.current = next.branches.map((branch) => branch.code); setDraft(next); }, [settingsKey]);
+  const branchError = validateBranchCodeChanges(draft.branches, branchOrigins.current, settings.branches);
+  const draftCheck = useMemo(() => validateStoreSettings(stripMeta(draft)), [draft]);
+  const pendingKey = draftCheck.ok && !branchError ? JSON.stringify(draftCheck.value) : null;
+  const draftError = branchError || (draftCheck.ok ? "" : draftCheck.errors[0]?.message || "ข้อมูลยังไม่ครบ");
+  const dirty = pendingKey === null || pendingKey !== savedKey;
+  const latest = useRef({});
+  latest.current = { draft, pendingKey, savedKey, blockedKey, pin, updatedAt, apiFetch, onSaved };
+  const ownSaveKey = useRef("");
 
-  const dirty = JSON.stringify(draft) !== settingsKey;
+  // A fresh copy from outside (reload, someone else's save) replaces the draft. Our own save does not,
+  // so typing that continued while it was in flight is kept.
+  useEffect(() => {
+    const next = JSON.parse(settingsKey);
+    const key = settingsSaveKey(next);
+    if (key && (key === ownSaveKey.current || key === latest.current.pendingKey)) return;
+    branchOrigins.current = next.branches.map((branch) => branch.code);
+    setDraft(next);
+  }, [settingsKey]);
+
+  // Opening the page always starts from what is in the database, not from the copy loaded at login.
+  useEffect(() => {
+    let cancelled = false;
+    loadStoreSettings(latest.current.apiFetch).then((result) => {
+      if (!cancelled && result.ok && result.data?.settings && result.data.updatedAt !== latest.current.updatedAt) latest.current.onSaved(result.data.settings, result.data.updatedAt);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const update = (change) => { setDraft((current) => change(current)); setToast(null); };
   const patchDraft = (patch) => update((current) => ({ ...current, ...patch }));
   const fail = (text) => setToast({ text, tone: "error" });
@@ -182,28 +224,82 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
     setNewBranch(EMPTY_BRANCH);
   };
 
-  const discard = () => { const next = JSON.parse(settingsKey); branchOrigins.current = next.branches.map((branch) => branch.code); setDraft(next); setToast(null); };
+  const discard = () => { const next = JSON.parse(settingsKey); branchOrigins.current = next.branches.map((branch) => branch.code); setDraft(next); setBlockedKey(""); setToast(null); };
 
   const save = async () => {
     if (inFlight.current) return;
     if (draft.modules.some((item) => !item.name.trim() || item.name.trim().length > MODULE_NAME_MAX)) return fail("ชื่อโมดูลต้องมี 1–40 ตัวอักษร");
-    const branchError = validateBranchCodeChanges(draft.branches, branchOrigins.current, settings.branches);
     if (branchError) return fail(branchError);
+    const sent = draft;
+    const sentKey = pendingKey;
     inFlight.current = true;
     setBusy(true);
-    setToast(null);
-    const result = await saveStoreSettings(apiFetch, { pin, baseUpdatedAt: updatedAt, settings: draft });
+    const result = await saveStoreSettings(apiFetch, { pin, baseUpdatedAt: updatedAt, settings: sent });
     inFlight.current = false;
     setBusy(false);
     if (result.ok) {
-      setToast({ text: "บันทึกการตั้งค่าแล้ว", tone: "ok" });
+      setToast(null);
+      setBlockedKey("");
+      setConflict(false);
+      setSavedAt(result.data.updatedAt || new Date().toISOString());
+      branchOrigins.current = sent.branches.map((branch) => String(branch.code || "").trim().toUpperCase());
+      ownSaveKey.current = settingsSaveKey(result.data.settings) || "";
       onSaved(result.data.settings, result.data.updatedAt);
     } else if (result.status === 403) {
       onPinChange("");
     } else {
-      fail(result.error || "บันทึกการตั้งค่าไม่สำเร็จ");
+      // Do not retry the same content automatically; the next edit (or the button) tries again.
+      setBlockedKey(sentKey || "");
+      // 409 also covers a branch code that documents already use; only the stale-copy case needs a reload.
+      const stale = result.status === 409 && String(result.error).startsWith("มีผู้อื่นบันทึก");
+      setConflict(stale);
+      fail(stale ? "มีผู้อื่นบันทึกการตั้งค่าไปก่อน · กด “โหลดข้อมูลล่าสุด” แล้วแก้อีกครั้ง" : result.error || "บันทึกการตั้งค่าไม่สำเร็จ");
     }
   };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  useEffect(() => {
+    if (!pendingKey || pendingKey === savedKey || pendingKey === blockedKey || busy) return undefined;
+    const timer = setTimeout(() => saveRef.current(), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [pendingKey, savedKey, blockedKey, busy]);
+
+  // Leaving the page (another tab of the app) still writes a pending change; closing the browser asks first.
+  useEffect(() => {
+    const warn = (event) => { if (latest.current.pendingKey === null || latest.current.pendingKey !== latest.current.savedKey) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      const { draft: last, pendingKey: key, savedKey: stored, blockedKey: blocked, pin: lastPin, updatedAt: base, apiFetch: fetcher, onSaved: done } = latest.current;
+      if (!key || key === stored || key === blocked || inFlight.current) return;
+      saveStoreSettings(fetcher, { pin: lastPin, baseUpdatedAt: base, settings: last }).then((result) => { if (result.ok) done(result.data.settings, result.data.updatedAt); });
+    };
+  }, []);
+
+  const reload = async () => {
+    const result = await loadStoreSettings(apiFetch);
+    if (!result.ok || !result.data?.settings) return fail(result.error || "โหลดข้อมูลล่าสุดไม่สำเร็จ");
+    ownSaveKey.current = "";
+    setBlockedKey("");
+    setConflict(false);
+    setToast(null);
+    const next = clone(result.data.settings);
+    branchOrigins.current = next.branches.map((branch) => branch.code);
+    setDraft(next);
+    onSaved(result.data.settings, result.data.updatedAt);
+  };
+
+  const timeText = (iso) => new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+  const saveStatus = busy
+    ? { tone: "busy", text: "กำลังบันทึกลงฐานข้อมูล…" }
+    : pendingKey === null
+      ? { tone: "error", text: `ยังไม่บันทึก: ${draftError}` }
+      : pendingKey === blockedKey
+        ? { tone: "error", text: "บันทึกไม่สำเร็จ" }
+        : dirty
+          ? { tone: "pending", text: "รอบันทึกอัตโนมัติ…" }
+          : { tone: "ok", text: savedAt || updatedAt ? `บันทึกลงฐานข้อมูลแล้ว · ${timeText(savedAt || updatedAt)} น.` : "บันทึกลงฐานข้อมูลแล้ว" };
 
   return (
     <div className="ss-panel">
@@ -214,9 +310,10 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
           <p>จัดการโมดูล สาขา พนักงาน หัวเอกสาร และรูปแบบเลขที่เอกสาร</p>
         </div>
         <div className="ss-panel-actions">
-          {dirty && <span className="ss-panel-dirty">มีการเปลี่ยนแปลงที่ยังไม่บันทึก</span>}
+          <span className={`ss-panel-save is-${saveStatus.tone}`} role="status">{saveStatus.text}</span>
+          {conflict && <button className="secondary" type="button" onClick={reload} disabled={busy}>โหลดข้อมูลล่าสุด</button>}
           <button className="secondary" type="button" onClick={discard} disabled={busy || !dirty}>ยกเลิกการเปลี่ยนแปลง</button>
-          <button className="primary" type="button" onClick={save} disabled={busy || !dirty}>บันทึกการตั้งค่า</button>
+          <button className="primary" type="button" onClick={save} disabled={busy || !dirty || pendingKey === null}>บันทึกตอนนี้</button>
         </div>
       </header>
 

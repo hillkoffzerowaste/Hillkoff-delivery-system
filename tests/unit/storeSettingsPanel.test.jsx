@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import StoreSettingsPanel, { moveModule, patchBranchAt, saveStoreSettings, unlockStoreSettings, validateBranchCodeChanges, validateNewBranch } from "../../app/components/store/StoreSettingsPanel.jsx";
+import StoreSettingsPanel, { moveModule, patchBranchAt, saveStoreSettings, settingsSaveKey, unlockStoreSettings, validateBranchCodeChanges, validateNewBranch } from "../../app/components/store/StoreSettingsPanel.jsx";
 import { STORE_MODULE_IDS, getDefaultStoreSettings } from "../../lib/storeSettings.js";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true }));
@@ -47,10 +47,10 @@ describe("StoreSettingsPanel unlocked", () => {
     expect(html).toContain("ตั้งค่าสโตร์");
     expect(html).toContain("STORE SETTINGS");
     for (const label of ["โมดูล", "สาขา", "หัวเอกสารและรูปแบบ"]) expect(html).toContain(`>${label}</button>`);
-    expect(html).toContain("บันทึกการตั้งค่า");
+    expect(html).toContain("บันทึกตอนนี้");
     expect(html).toContain("ยกเลิกการเปลี่ยนแปลง");
     expect(html).not.toContain("ใส่รหัส PIN");
-    expect(html).not.toContain("มีการเปลี่ยนแปลงที่ยังไม่บันทึก");
+    expect(html).toContain('class="ss-panel-save is-ok" role="status">บันทึกลงฐานข้อมูลแล้ว</span>');
   });
 
   it("shows all six module names, the group titles and the descriptions", () => {
@@ -171,5 +171,24 @@ describe("settings requests", () => {
     const offline = await saveStoreSettings(async () => { throw new Error("offline"); }, { pin: "2532", baseUpdatedAt: "", settings: {} });
     expect(offline).toMatchObject({ ok: false, status: 0 });
     expect(offline.error).toBeTruthy();
+  });
+});
+
+describe("autosave key", () => {
+  it("changes when a staff name is added and ignores rows that are not filled in yet", () => {
+    const base = getDefaultStoreSettings();
+    const key = settingsSaveKey(base);
+    expect(key).toBeTruthy();
+    expect(settingsSaveKey({ ...base, updatedAt: "2026-10-29T00:00:00Z", updatedBy: "x" })).toBe(key);
+    const withStaff = { ...base, staff: [{ id: "staff_1", name: "สมนึก", active: true }] };
+    expect(settingsSaveKey(withStaff)).not.toBe(key);
+    expect(settingsSaveKey(withStaff)).toContain("สมนึก");
+    const blankHead = { ...base, documents: { ...base.documents, transfer: { ...base.documents.transfer, extraPrefixes: [""] } } };
+    expect(settingsSaveKey(blankHead)).toBe(key);
+  });
+
+  it("is null while the draft cannot be saved", () => {
+    const base = getDefaultStoreSettings();
+    expect(settingsSaveKey({ ...base, modules: base.modules.map((item, index) => (index ? item : { ...item, name: "" })) })).toBeNull();
   });
 });

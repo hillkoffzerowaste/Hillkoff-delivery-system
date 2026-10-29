@@ -21,14 +21,17 @@
   min-height: 44px;
 }
 
-.ss-panel-dirty {
+.ss-panel-save {
   padding: var(--sp-2) var(--sp-5);
   border-radius: var(--r-full);
-  background: var(--c-warn-bg-strong);
-  color: var(--c-warn-deep);
   font-size: 12px;
   font-weight: 600;
 }
+
+.ss-panel-save.is-ok { background: var(--c-brand-bg-strong); color: var(--c-brand-deep); }
+.ss-panel-save.is-busy,
+.ss-panel-save.is-pending { background: var(--c-warn-bg-strong); color: var(--c-warn-deep); }
+.ss-panel-save.is-error { background: var(--c-danger-bg); color: var(--c-danger-deep); }
 
 .ss-panel-message {
   margin: 0;
