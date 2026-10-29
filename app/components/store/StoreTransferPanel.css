@@ -78,3 +78,9 @@
   .st-form-actions > div { justify-content: stretch; }
   .st-form-actions button { flex: 1 1 auto; justify-content: center; }
 }
+.st-locked { display: flex; align-items: stretch; min-width: 0; }
+.st-locked-prefix,
+.st-locked select { display: inline-flex; align-items: center; padding: 0 var(--sp-4); border: 1px solid var(--c-line-strong); border-right: 0; border-radius: var(--r-md) 0 0 var(--r-md); background: var(--c-surface-muted); color: var(--c-text-heading); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-field .st-locked select { width: auto; flex: 0 0 auto; }
+.st-field .st-locked input { flex: 1 1 64px; min-width: 64px; border-radius: 0 var(--r-md) var(--r-md) 0; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.st-field-no, .st-field-ref { flex-basis: 220px; }

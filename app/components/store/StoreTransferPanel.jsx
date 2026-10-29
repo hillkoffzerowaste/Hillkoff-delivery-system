@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
-import { bangkokTimeHHmm, thaiDateLabel } from "../../../lib/storeFormat.js";
+import { addDaysToDateKey, bangkokTimeHHmm, thaiBuddhistYY, thaiDateLabel } from "../../../lib/storeFormat.js";
 import { getActiveBranches, sampleDocumentNumber } from "../../../lib/storeSettings.js";
 import {
   REQUEST_REF_SAMPLE,
@@ -80,21 +80,61 @@ async function request(apiFetch, url, init) {
 
 const jsonInit = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
-function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix }) {
+// The part of a document number staff never retype: prefix (+ Buddhist YYMM) + "-". Branch numbers
+// depend on the chosen branch, so they stay free text.
+export function lockedNumberPrefix(cfg, dateKey) {
+  if (!cfg?.prefix || !dateKey) return "";
+  if (cfg.pattern === "yymm") return `${cfg.prefix}${thaiBuddhistYY(dateKey)}${dateKey.slice(5, 7)}-`;
+  if (cfg.pattern === "dash") return `${cfg.prefix}-`;
+  return "";
+}
+
+// An existing number keeps its own month (e.g. editing last month's transfer).
+function prefixOfNumber(value, cfg) {
+  const match = /^(.*-)(\d+)$/.exec(String(value || ""));
+  return match && cfg?.prefix && match[1].startsWith(cfg.prefix) ? match[1] : "";
+}
+
+export function runningPart(value, prefix) {
+  const text = String(value || "");
+  return prefix && text.startsWith(prefix) ? text.slice(prefix.length) : text;
+}
+
+function LockedNumberInput({ id, label, value, onChange, prefixes, digits, sampleText }) {
+  const prefix = prefixes.find((item) => String(value || "").startsWith(item)) || prefixes[0] || "";
+  if (!prefix) return <input id={id} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder={sampleText} autoComplete="off" />;
+  const running = runningPart(value, prefix);
+  const set = (nextPrefix, nextRunning) => onChange(nextRunning ? `${nextPrefix}${nextRunning}` : "");
+  return <span className="st-locked">
+    {prefixes.length > 1
+      ? <select aria-label={`${label} เดือน`} value={prefix} onChange={(event) => set(event.target.value, running)}>{prefixes.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+      : <span className="st-locked-prefix" aria-hidden="true">{prefix}</span>}
+    <input id={id} aria-label={`${label} เลขรัน`} inputMode="numeric" maxLength={6} value={running} placeholder={"0".repeat(digits - 1) + "1"} autoComplete="off"
+      onChange={(event) => set(prefix, event.target.value.replace(/\D/g, ""))}
+      onBlur={() => { if (running && running.length < digits) set(prefix, running.padStart(digits, "0")); }} />
+  </span>;
+}
+
+function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today }) {
   const incomplete = row.receipt === "incomplete";
   const missingNote = incomplete && !row.note.trim();
   const value = effectiveRow(row, branches, staff);
   const branchOptions = branches.map((branch) => <option key={branch.code} value={branch.code}>{branch.name}</option>);
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
+  const digits = cfg?.digits || 4;
+  const numberPrefix = prefixOfNumber(row.transferNumber, cfg) || lockedNumberPrefix(cfg, today);
+  // A request is often raised late last month and transferred early this month, so last month stays selectable.
+  const lastMonth = today ? addDaysToDateKey(`${today.slice(0, 7)}-01`, -1) : "";
+  const refPrefixes = [...new Set([prefixOfNumber(row.requestRef, cfg), lockedNumberPrefix(cfg, today), lockedNumberPrefix(cfg, lastMonth)].filter(Boolean))];
   return (
     <div className="st-fields">
       <label className="st-field st-field-no">{labelOf(fields, "no", "เลขที่ใบโอน")}
-        <input id={`${idPrefix}-no`} value={row.transferNumber} onChange={(event) => onChange({ transferNumber: event.target.value })} placeholder={sample} autoComplete="off" />
+        <LockedNumberInput id={`${idPrefix}-no`} label="เลขที่ใบโอน" value={row.transferNumber} onChange={(transferNumber) => onChange({ transferNumber })} prefixes={numberPrefix ? [numberPrefix] : []} digits={digits} sampleText={sample} />
       </label>
       {fields.ref?.show !== false && (
         <label className="st-field st-field-ref">{labelOf(fields, "ref", "อ้างอิงใบขอโอน")}
-          <input value={row.requestRef} onChange={(event) => onChange({ requestRef: event.target.value })} placeholder={REQUEST_REF_SAMPLE} autoComplete="off" />
+          <LockedNumberInput id={`${idPrefix}-ref`} label="อ้างอิงใบขอโอน" value={row.requestRef} onChange={(requestRef) => onChange({ requestRef })} prefixes={cfg?.pattern === "yymm" ? refPrefixes : []} digits={digits} sampleText={REQUEST_REF_SAMPLE} />
         </label>
       )}
       <label className="st-field">{labelOf(fields, "from", "ต้นทาง")}
@@ -358,7 +398,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
       <section className="panel st-form" aria-label="เพิ่มรายการใบโอน">
         <div className="panel-head">
           <h2>เพิ่มรายการใบโอน</h2>
-          <span>เลขที่ใบโอนรูปแบบ {sample} · เปลี่ยนรูปแบบได้ที่หน้าตั้งค่าสโตร์</span>
+          <span>เลขที่ใบโอนรูปแบบ {sample} · {lockedNumberPrefix(cfg, today) ? "ระบบใส่อักษรนำหน้าและปีเดือนให้ กรอกเฉพาะเลขรัน" : "เปลี่ยนรูปแบบได้ที่หน้าตั้งค่าสโตร์"}</span>
         </div>
         {!branches.length ? (
           <p className="st-empty-branches" role="status">
@@ -367,7 +407,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
           </p>
         ) : drafts.map((draft, index) => (
           <div className="st-draft-row" key={draft.key}>
-            <TransferFields row={draft} onChange={(patch) => updateDraft(draft.key, patch)} branches={branches} staff={staff} fields={fields} sample={sample} idPrefix={`st-draft-${index}`} />
+            <TransferFields row={draft} onChange={(patch) => updateDraft(draft.key, patch)} branches={branches} staff={staff} fields={fields} sample={sample} idPrefix={`st-draft-${index}`} cfg={cfg} today={today} />
             <button type="button" className="secondary st-icon-button" aria-label="ลบแถวนี้" onClick={() => removeDraft(draft.key)}><Trash2 size={18} aria-hidden="true" /></button>
           </div>
         ))}
@@ -421,7 +461,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
       {panel?.kind === "edit" && (
         <section className="st-panel is-edit" aria-label="แก้ไขใบโอน">
           <b>แก้ไขใบโอน · {panel.original.transferNumber}</b>
-          <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" />
+          <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" cfg={cfg} today={today} />
           <label className="st-field">เหตุผลในการแก้ไข *
             <input value={panel.reason} onChange={(event) => setPanel({ ...panel, reason: event.target.value })} placeholder="ระบุเหตุผล" />
           </label>
