@@ -181,7 +181,7 @@ describe("store transfers route", () => {
     it("validates each field with 400", async () => {
       const cases = [
         [{ transferNumber: "418" }, "เลขที่ใบโอนต้องอยู่ในรูปแบบ TR-0418"],
-        [{ requestRef: "XX" }, "เลขที่ใบขอโอนต้องอยู่ในรูปแบบ RQ-0000"],
+        [{ requestRef: "XX" }, "เลขที่ใบขอโอนต้องอยู่ในรูปแบบ STK-TRF6910-0001"],
         [{ toBranchCode: "WH" }, "ต้นทางและปลายทางต้องเป็นคนละสาขา"],
         [{ preparerName: "", preparerUid: "" }, "กรุณาเลือกผู้จัดใบโอน"],
         [{ receipt: "incomplete", note: "" }, "กรณีสินค้าไม่ครบ ต้องระบุหมายเหตุว่าขาดอะไร"],

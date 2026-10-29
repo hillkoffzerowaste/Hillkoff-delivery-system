@@ -7,6 +7,7 @@ import {
   STORE_DOCUMENT_REGISTRY_COLLECTION,
   STORE_SETTINGS_COLLECTION,
   STORE_SETTINGS_DOC_ID,
+  documentBranchCode,
   documentCounterId,
   documentPeriodKey,
   documentRegistryId,
@@ -139,7 +140,7 @@ export async function POST(request) {
         } else {
           // Only a number that belongs to this period moves the counter (e.g. yymm digits must match today).
           const parsed = parseDocumentSequence(number, cfg);
-          const branchPart = cfg.pattern === "branch" ? number.split("-")[1] : "";
+          const branchPart = documentBranchCode(number, cfg);
           if (parsed !== null && numberFor(cfg, parsed, branchPart, serviceDate) === number) sequence = parsed;
         }
       }

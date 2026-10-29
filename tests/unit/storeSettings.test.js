@@ -208,7 +208,7 @@ describe("validateStoreSettings", () => {
 
   it("rejects bad document settings", () => {
     const bad = (mutate) => validateStoreSettings(validInput(mutate));
-    expect(bad((s) => (s.documents.transfer.prefix = "T1")).errors[0].message).toBe("อักษรนำหน้าต้องเป็นภาษาอังกฤษ 1–6 ตัว");
+    expect(bad((s) => (s.documents.transfer.prefix = "T1")).errors[0].message).toBe("อักษรนำหน้าต้องเป็นภาษาอังกฤษ 1–6 ตัว คั่นด้วยขีดได้ 1 ครั้ง เช่น STK-TRF");
     expect(bad((s) => (s.documents.transfer.prefix = "TOOLONGX")).ok).toBe(false);
     expect(bad((s) => (s.documents.audit.prefix = "tr")).errors[0].message).toBe("อักษรนำหน้า TR ถูกใช้แล้ว");
     expect(bad((s) => (s.documents.audit.digits = 2)).ok).toBe(false);

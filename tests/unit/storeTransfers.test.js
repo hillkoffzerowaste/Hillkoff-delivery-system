@@ -74,7 +74,7 @@ describe("validateTransferRow", () => {
 
   it("validates the request reference only when it is filled in", () => {
     expect(check({ requestRef: "" }).value.requestRef).toBe("");
-    expect(check({ requestRef: "RQ-39" })).toMatchObject({ ok: false, error: "เลขที่ใบขอโอนต้องอยู่ในรูปแบบ RQ-0000" });
+    expect(check({ requestRef: "RQ-39" })).toMatchObject({ ok: false, error: "เลขที่ใบขอโอนต้องอยู่ในรูปแบบ STK-TRF6910-0001" });
   });
 
   it("requires the request reference when settings say so and ignores it when hidden", () => {

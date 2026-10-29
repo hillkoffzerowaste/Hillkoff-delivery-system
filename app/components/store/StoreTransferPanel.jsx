@@ -94,7 +94,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
       </label>
       {fields.ref?.show !== false && (
         <label className="st-field st-field-ref">{labelOf(fields, "ref", "อ้างอิงใบขอโอน")}
-          <input value={row.requestRef} onChange={(event) => onChange({ requestRef: event.target.value })} placeholder="RQ-0395" autoComplete="off" />
+          <input value={row.requestRef} onChange={(event) => onChange({ requestRef: event.target.value })} placeholder={REQUEST_REF_SAMPLE} autoComplete="off" />
         </label>
       )}
       <label className="st-field">{labelOf(fields, "from", "ต้นทาง")}
