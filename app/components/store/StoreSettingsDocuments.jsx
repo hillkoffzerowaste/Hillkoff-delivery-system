@@ -9,13 +9,17 @@ import {
   REQUEST_PREFIX_MAX,
   getActiveBranches,
   getBranchHeader,
+  lockedRequestRefPrefixes,
   sampleDocumentNumber
 } from "../../../lib/storeSettings.js";
 import "./StoreSettingsDocuments.css";
 
 const KIND_BY_MODULE = { "store-transfer": "transfer", "store-audit": "audit" };
 const FIXED_NUMBER_MODULES = ["store-booking", "store-online"];
-const DOCUMENT_MODULES = ["store-booking", "store-online", "store-transfer", "store-audit"];
+// ใบขอโอน is not a module of its own: its heads live on the transfer settings but get their own page here.
+const REQUEST_MODULE = "store-transfer-request";
+const DOCUMENT_MODULES = ["store-booking", "store-online", "store-transfer", REQUEST_MODULE, "store-audit"];
+const SAMPLE_DATE = "2026-10-28";
 
 const PATTERN_OPTIONS = [
   { value: "dash", label: "อักษร-เลขรัน (TR-0418)" },
@@ -51,15 +55,19 @@ function PrefixList({ label, hint, values, max, placeholder, onChange }) {
   );
 }
 
-export default function StoreSettingsDocuments({ draft, onPatch }) {
-  const [moduleId, setModuleId] = useState("store-transfer");
+export default function StoreSettingsDocuments({ draft, onPatch, initialModuleId = "store-transfer" }) {
+  const [moduleId, setModuleId] = useState(initialModuleId);
   const [branchCode, setBranchCode] = useState("");
   const kind = KIND_BY_MODULE[moduleId] || null;
   const doc = kind ? draft.documents[kind] : null;
   const header = draft.header;
   const branch = draft.branches.find((item) => item.code === branchCode);
   const previewHeader = branch ? getBranchHeader(draft, branch.code) : header;
-  const moduleName = (id) => draft.modules.find((item) => item.id === id)?.name || id;
+  const moduleName = (id) => (id === REQUEST_MODULE ? "ใบขอโอน" : draft.modules.find((item) => item.id === id)?.name || id);
+  const transferDoc = draft.documents.transfer;
+  const requestPrefixes = transferDoc.requestPrefixes || [];
+  const requestSamples = lockedRequestRefPrefixes({ ...transferDoc, requestPrefixes: requestPrefixes.filter(Boolean) }, SAMPLE_DATE)
+    .map((head) => `${head}${"418".padStart(transferDoc.digits || 4, "0")}`);
   const firstBranch = getActiveBranches(draft)[0];
 
   const patchDoc = (patch) => onPatch({ documents: { ...draft.documents, [kind]: { ...doc, ...patch } } });
@@ -90,6 +98,22 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
           <p className="ss-docs-note">ใบสั่งจอง / ใบขายออนไลน์ ใช้รูปแบบเลขเดิม (PREFIX-1234) ที่ผูกกับระบบกันเลขซ้ำรายเดือน จึงแก้ได้เฉพาะชื่อเมนู</p>
         )}
 
+        {moduleId === REQUEST_MODULE && (
+          <div className="panel ss-docs-card">
+            <div>
+              <h2>หัวเลขใบขอโอน</h2>
+              <p className="ss-docs-hint">ใช้ในช่อง “อ้างอิงใบขอโอน” ของหน้าใบโอน · รูปแบบ หัว+ปีเดือน-เลขรัน · เลือกได้ทั้งเดือนนี้และเดือนก่อน แล้วกรอกเฉพาะเลขรัน</p>
+            </div>
+            <PrefixList label="หัวเลขใบขอโอน" hint="แต่ละหัวขึ้นเป็นดรอปดาวน์ให้เลือก" values={requestPrefixes} max={REQUEST_PREFIX_MAX} placeholder="เช่น STK-RQ" onChange={(list) => onPatch({ documents: { ...draft.documents, transfer: { ...transferDoc, requestPrefixes: list } } })} />
+            <p className="ss-docs-example">
+              {requestSamples.length
+                ? <>{"ตัวเลือกในดรอปดาวน์ เช่น "}{requestSamples.map((sample, index) => <span key={sample}>{index ? " · " : ""}<b>{sample}</b></span>)}</>
+                : "ยังไม่ได้ตั้งหัวเลข · ช่องอ้างอิงใบขอโอนจะเป็นช่องกรอกอิสระ"}
+              {!requestPrefixes.filter(Boolean).length && requestSamples.length > 0 && " (ยังไม่ได้ตั้ง จึงใช้หัวเดียวกับใบโอน)"}
+            </p>
+          </div>
+        )}
+
         {doc && (
           <div className="panel ss-docs-card">
             <h2>เลขที่และชื่อเอกสาร</h2>
@@ -104,9 +128,7 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
               </label>
             </div>
             <PrefixList label="หัวเลขเพิ่มเติม" hint="แสดงเป็นดรอปดาวน์ให้เลือกในฟอร์ม · แต่ละหัวเลขรันเลขแยกกัน" values={extraPrefixes} max={EXTRA_PREFIX_MAX} placeholder="เช่น STK-TRO" onChange={patchExtra} />
-            {kind === "transfer" && (
-              <PrefixList label="หัวเลขใบขอโอน" hint="แสดงเป็นดรอปดาวน์ในช่องอ้างอิงใบขอโอน (หัว+ปีเดือน-เลขรัน) · ว่างไว้ = ใช้หัวเดียวกับใบโอน" values={doc.requestPrefixes || []} max={REQUEST_PREFIX_MAX} placeholder="เช่น STK-RQ" onChange={(list) => patchDoc({ requestPrefixes: list })} />
-            )}
+            {kind === "transfer" && <p className="ss-docs-hint">หัวเลขใบขอโอนตั้งแยกได้ที่ “ใบขอโอน” ในตัวเลือกโมดูลด้านบน</p>}
             <div className="ss-docs-row">
               <label className="ss-docs-field ss-docs-grow-2">
                 รูปแบบเลขที่

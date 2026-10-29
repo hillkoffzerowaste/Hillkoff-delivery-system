@@ -120,3 +120,27 @@ describe("StoreSettingsDocuments", () => {
     expect(html).not.toContain("ลบช่อง");
   });
 });
+
+describe("ใบขอโอน settings page", () => {
+  const renderRequest = (draft) => renderToStaticMarkup(<StoreSettingsDocuments draft={draft} onPatch={() => {}} initialModuleId="store-transfer-request" />);
+
+  it("is its own entry in the module dropdown and no longer sits on the transfer card", () => {
+    const html = render();
+    expect(html).toContain('<option value="store-transfer-request">ใบขอโอน</option>');
+    expect(html).not.toContain('aria-label="หัวเลขใบขอโอน 1"');
+    expect(plain(html)).toContain("หัวเลขใบขอโอนตั้งแยกได้ที่");
+  });
+
+  it("edits the request heads and previews the dropdown choices", () => {
+    const html = renderRequest(withDocument("transfer", { prefix: "STK-TRF", pattern: "dash", requestPrefixes: ["STK-RQ", "RQ"] }));
+    expect(html).toContain('<option value="store-transfer-request" selected="">ใบขอโอน</option>');
+    expect(html).toContain('aria-label="หัวเลขใบขอโอน 2"');
+    expect(plain(html)).toContain("ตัวเลือกในดรอปดาวน์ เช่น STK-RQ6910-0418 · RQ6910-0418");
+    expect(html).not.toContain("เลขที่และชื่อเอกสาร");
+  });
+
+  it("explains the fallback when no request heads are set", () => {
+    expect(plain(renderRequest(withDocument("transfer", { prefix: "STK-TRF", pattern: "yymm" })))).toContain("STK-TRF6910-0418 (ยังไม่ได้ตั้ง จึงใช้หัวเดียวกับใบโอน)");
+    expect(plain(renderRequest(getDefaultStoreSettings()))).toContain("ยังไม่ได้ตั้งหัวเลข · ช่องอ้างอิงใบขอโอนจะเป็นช่องกรอกอิสระ");
+  });
+});
