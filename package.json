@@ -14,6 +14,7 @@
     "customers:backfill-search": "node scripts/backfill-customer-phone-digits.mjs",
     "firebase:backfill-integrity": "node scripts/backfill-firebase-integrity.mjs --apply",
     "booking:audit-registry": "node scripts/backfill-booking-registry.mjs",
+    "store:backfill-report-stats": "node scripts/backfill-store-report-stats.mjs",
     "firebase:migrate-driver-logins": "node scripts/migrate-driver-logins.mjs --apply",
     "backup": "node lib/backup/cli.js backup",
     "backup:list": "node lib/backup/cli.js list",

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bangkokTimeHHmm, fmt, pct, thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
-import { MAX_RANGE_DAYS, bangkokDateOf } from "../../../lib/storeOverview.js";
+import { DAILY_CHART_MAX_DAYS, MAX_RANGE_DAYS, bangkokDateOf, customRange } from "../../../lib/storeOverview.js";
 import { workLogHours } from "../../../lib/storeWorkLog.js";
 import "./StoreOverviewPanel.css";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
@@ -63,6 +63,13 @@ export function barLabel(key, granularity) {
 
 export function barTitle(key, granularity) {
   return granularity === "month" ? thaiMonthLabel(key) : thaiDateLabel(key);
+}
+
+// Multi-month figures barely move within 15 minutes, so long ranges load on demand only (saves reads).
+export function autoRefreshes(period, custom) {
+  if (period === "3m" || period === "year") return false;
+  if (period === "custom") return (customRange(custom?.from, custom?.to)?.dates.length || 0) <= DAILY_CHART_MAX_DAYS;
+  return true;
 }
 
 export function overviewQuery(period, custom) {
@@ -197,11 +204,13 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
     }
   }, [apiFetch, period, custom]);
 
+  const refreshes = autoRefreshes(period, custom);
   useEffect(() => {
     load();
+    if (!refreshes) return undefined;
     const interval = setInterval(() => { if (document.visibilityState === "visible") load(); }, REFRESH_MS);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [load, refreshes]);
 
   const applyCustom = (event) => {
     event.preventDefault();
@@ -261,12 +270,13 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
               {PERIODS.map((item) => (
                 <button key={item.id} type="button" className={period === item.id ? "primary" : "secondary"} aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>{item.label}</button>
               ))}
+              <button type="button" className="secondary" onClick={() => load()} disabled={loading}>{loading ? "กำลังโหลด" : "โหลดข้อมูลล่าสุด"}</button>
             </div>
             {period === "custom" && <form className="so-range" onSubmit={applyCustom} aria-label="กำหนดช่วงวันที่">
               <label>ตั้งแต่<input type="date" value={draft.from} max={today} onChange={(e) => setDraft({ ...draft, from: e.target.value })} /></label>
               <label>ถึง<input type="date" value={draft.to} max={today} onChange={(e) => setDraft({ ...draft, to: e.target.value })} /></label>
               <button type="submit" className="primary">ดูรายงาน</button>
-              <small className="muted">เลือกได้ไม่เกิน {MAX_RANGE_DAYS} วัน · ช่วงเกิน 2 เดือนกราฟจะแสดงเป็นรายเดือน</small>
+              <small className="muted">เลือกได้ไม่เกิน {MAX_RANGE_DAYS} วัน · ช่วงเกิน 2 เดือนกราฟจะแสดงเป็นรายเดือนและไม่รีเฟรชอัตโนมัติ</small>
             </form>}
           </div>
         </header>
@@ -274,6 +284,8 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
         <label className="so-source-filter">กรองประเภทข้อมูล <select aria-label="กรองประเภทข้อมูล" value={source} onChange={(e) => setSource(e.target.value)}><option value="all">ทุกประเภท</option><option value="booking">ใบสั่งจอง</option><option value="online">ใบขายออนไลน์</option><option value="transfer">ใบโอนสินค้า</option><option value="audit">Internal Audit</option></select></label>
         {error && <p className="so-message is-error" role="alert">{error}</p>}
         {data?.openTransfersCapped && <p className="so-message" role="status">รายการใบโอนค้างมีจำนวนมาก รายการที่แสดงอาจไม่ครบ</p>}
+        {data?.openReportsCapped && <p className="so-message" role="status">เอกสารที่ยังค้างปัญหามีจำนวนมาก ยอดค้างที่แสดงอาจไม่ครบ</p>}
+        {!refreshes && <p className="so-message" role="status">ช่วงหลายเดือนไม่รีเฟรชอัตโนมัติ · กด “โหลดข้อมูลล่าสุด” เมื่อต้องการตัวเลขใหม่</p>}
         {loading && !error && <p className="so-message" role="status">กำลังโหลดข้อมูล...</p>}
 
         <div className="so-modules" aria-label="สรุปทุกโมดูล">

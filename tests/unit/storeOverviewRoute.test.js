@@ -22,6 +22,7 @@ function createDb(collections, calls = []) {
         where(field, op, value) { filters.push({ field, op, value }); return query; },
         orderBy(field) { order = field; return query; },
         select() { return query; },
+        doc(id) { return { id, get: async () => ({ exists: false }) }; },
         limit(count) { query.max = count; return query; },
         async get() {
           calls.push({ name, filters: [...filters], order, limit: query.max });
@@ -100,6 +101,28 @@ describe("GET /api/store/overview", () => {
     expect(open.order).toBeNull();
     // ไม่มี query ใดผสม == กับ orderBy
     calls.forEach((call) => expect(call.filters.some((f) => f.op === "==") && call.order).toBeFalsy());
+  });
+
+  it("reads only the live window of reports for a whole year and takes older days from stored summaries", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T05:00:00.000Z"));
+    try {
+      const calls = [];
+      const db = createDb({ store_reports: [row("r1", { type: "booking", status: "waiting", createdAt: "2026-10-28T02:00:00.000Z", updatedAt: "2026-10-28T02:00:00.000Z" }), row("old", { type: "online", status: "saved", createdAt: "2026-07-01T02:00:00.000Z", updatedAt: "2026-07-01T02:00:00.000Z" })] }, calls);
+      db.batch = () => ({ set: () => {}, commit: async () => {} });
+      state.db = db;
+      const { GET } = await import("../../app/api/store/overview/route.js");
+      const res = await GET(request("?period=year&date=2026-10-28"));
+      expect(res.status).toBe(200);
+      const data = (await res.json()).data;
+      expect(data.granularity).toBe("month");
+      const live = calls.find((call) => call.name === "store_reports" && call.filters[0]?.field === "createdAt" && call.limit === 24001);
+      expect(live.filters[0].value).toBe("2026-09-13T17:00:00.000Z");
+      expect(calls.some((call) => call.name === "store_report_daily_stats")).toBe(true);
+      expect(data.reportCharts.daily.find((bar) => bar.date === "2026-07")).toMatchObject({ online: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects pack with 403", async () => {
