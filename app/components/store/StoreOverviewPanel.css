@@ -78,3 +78,10 @@
   .so-bars { gap: 6px; }
   .so-axis { gap: 6px; }
 }
+.so-view-tabs { display:flex; flex-wrap:wrap; gap:var(--sp-3); }
+.so-source-filter { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
+.so-source-filter select { width:auto; min-width:190px; }
+.so-bar-online { background:var(--c-info); border-radius:4px 4px 0 0; }
+.so-problem-pair { flex:1 1 0; min-width:0; height:100%; display:flex; align-items:flex-end; gap:2px; }
+.so-problem-bar, .so-resolved-bar { flex:1 1 0; min-width:0; border-radius:3px 3px 0 0; }
+.so-problem-bar { background:var(--c-danger); } .so-resolved-bar { background:var(--c-brand-cyan); }

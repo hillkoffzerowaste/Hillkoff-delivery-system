@@ -15,6 +15,7 @@ function settingsWith(mutate = () => {}, { branches = true } = {}) {
       { code: "BR09", name: "สาขาเก่า", type: "สาขา", active: false }
     ];
   }
+  if (!branches) settings.branches = [];
   mutate(settings);
   return normalizeStoreSettings(settings);
 }

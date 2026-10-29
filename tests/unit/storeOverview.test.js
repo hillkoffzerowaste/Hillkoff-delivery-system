@@ -190,7 +190,7 @@ describe("buildStoreOverview booking and online", () => {
         report({ id: "8", packStatus: "returned" })
       ]
     });
-    expect(modules.booking).toEqual({ docs: 4, problems: 2, open: 2 });
+    expect(modules.booking).toEqual({ docs: 4, problems: 3, open: 3 });
     expect(modules.online).toEqual({ docs: 4, problems: 3, open: 2 });
   });
 

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 // ทุก query เป็น single-field (range + orderBy field เดียวกัน หรือ == อย่างเดียว) จึงไม่ต้องเพิ่ม composite index
 const LIMITS = { reports: 6000, transfers: 3000, audits: 3000, openTransfers: 500 };
 const TOO_MANY = "ข้อมูลมากเกินขีดจำกัด กรุณาเลือกช่วงให้สั้นลง";
-const REPORT_FIELDS = ["type", "status", "packStatus", "createdAt", "deletedAt", "workflowHistory"];
+const REPORT_FIELDS = ["type", "status", "packStatus", "createdAt", "deletedAt", "workflowHistory", "bookingNumber", "detail", "note", "returnReason"];
 
 function tooMany() {
   return Object.assign(new Error(TOO_MANY), { status: 422 });

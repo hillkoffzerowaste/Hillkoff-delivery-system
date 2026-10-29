@@ -49,10 +49,11 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | `store-dashboard` | รายงานประจำวัน | แทนที่ "รายงาน KPI สโตร์" เดิม |
 | `store-transfer` | ใบโอนสินค้า | เลขเอกสารออกตามค่าที่ตั้งใน `store_settings` |
 | `store-audit` | Internal Audit | |
-| `store-overview` | รายงานแดชบอร์ด | สรุปใบโอน/audit/รายงานตามช่วงวัน |
+| `store-overview` | รายงานแดชบอร์ด | กราฟและตัวกรองเอกสาร/ปัญหา พร้อมแผนงานและปฏิทิน |
 | `store-settings` | ตั้งค่าสโตร์ | ล็อกด้วย PIN — ตรวจที่ server (`/api/store/settings`) ไม่ใช่ที่ client |
 
 - เมนูตั้งค่าได้ใน Firestore doc `store_settings/default` (เปิด/ปิดโมดูล, สาขา, รูปแบบเลขเอกสาร) — ใบสั่งจองและใบขายออนไลน์ปิดไม่ได้ ถ้า tab ที่เลือกไม่เปิดอยู่ระบบจะย้ายไปโมดูลแรกที่เปิด (`getFirstEnabledStoreTab`)
+- เมื่อยังไม่มีฟิลด์รายการสาขาที่บันทึกไว้ ระบบใช้สาขาเริ่มต้น ช้างเผือก (CP), สำนักงานใหญ่ (HQ), ป่าแพ่ง (PP), มหิดล (MH); รายการสาขาที่บันทึกไว้แล้วจะไม่ถูกแทนที่
 - สโตร์ไม่มีแท็บรอบเชียงใหม่ / Grab-pickup อีกแล้ว (เดิม `store-work`, `store-pickup`, `store-chiangmai-track`)
 - PIN ตั้งค่าสโตร์มีค่า default ในโค้ด (เก็บเป็น hash) — override ได้ด้วย env `STORE_SETTINGS_PIN` (ไม่ต้องใส่ถ้าใช้ค่า default)
 
@@ -186,6 +187,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 - `/api/store/transfers` — ใบโอนสินค้า: `GET` (store|admin) · `POST`/`PATCH` (resolve, reopen)/`PUT`/`DELETE` (store เท่านั้น)
 - `/api/store/audits` — Internal Audit: `GET` (store|admin) · `POST`/`DELETE` (store เท่านั้น)
 - `GET /api/store/overview` · `GET /api/store/daily-report` — รายงานแดชบอร์ด / รายงานประจำวัน (store|admin)
+- `/api/store/plans` — แผนงานรายวัน/รายเดือน: `GET` (store|admin), `POST`/`PATCH`/`DELETE` (store เท่านั้น); แก้ไขด้วย optimistic concurrency และลบแบบ soft delete
 - `GET /api/store/staff` — รายชื่อพนักงานสโตร์ (store|admin)
 - `POST /api/line/push` · `POST /api/line/webhook` (ตรวจ LINE signature)
 - `POST /api/push/register` — เก็บ FCM token
@@ -213,7 +215,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | รถ/คนขับ | `vehicle_master`, `vehicle_usage_events`, `vehicle_odometer_audits`, `fuel_bills`, `driver_daily_assessments`, `driver_weekly_assessments`, `driver_locations`, `driver_delivery_sequences` |
 | ต่างจังหวัด | `outstation_label_settings`, `outstation_recipient_addresses` |
 | รายงาน | `store_reports` (+ `history`), `events`, `activity` |
-| สโตร์ | `store_settings` (doc `default`), `store_transfers` (+ `history`), `store_audits` (+ `history`), `store_document_registry`, `store_document_counters` |
+| สโตร์ | `store_settings` (doc `default`), `store_transfers` (+ `history`), `store_audits` (+ `history`), `store_plans`, `store_document_registry`, `store_document_counters` |
 | ระบบ | `app_settings`, `audit_logs`, `notifications`, `push_tokens`, `line_webhook_events`, `chat_messages`, `chat_meta` |
 
 คอลเลกชัน `store_*` ใหม่ทั้งหมดเข้าถึงผ่าน Admin SDK ใน `app/api/store/**` เท่านั้น (Firestore Rules ปิด client read/write อยู่แล้ว จึงไม่ต้องแก้ `firestore.rules` / `firestore.indexes.json`)

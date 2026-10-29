@@ -55,7 +55,7 @@ describe("StoreAuditPanel", () => {
   });
 
   it("explains how to add a branch and disables saving when there is none", () => {
-    const empty = render(normalizeStoreSettings({}));
+    const empty = render(normalizeStoreSettings({ branches: [] }));
     expect(empty).toContain("ยังไม่มีสาขา · ไปที่ตั้งค่าสโตร์ &gt; สาขา เพื่อเพิ่ม");
     expect(empty).toMatch(/<button type="submit" class="primary" disabled/);
   });

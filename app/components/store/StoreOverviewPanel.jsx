@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bangkokTimeHHmm, fmt, thaiDateLabel } from "../../../lib/storeFormat.js";
 import { bangkokDateOf } from "../../../lib/storeOverview.js";
 import "./StoreOverviewPanel.css";
+import StorePlanningPanel from "./StorePlanningPanel.jsx";
 
 const REFRESH_MS = 900_000;
 const PERIODS = [
@@ -116,8 +117,31 @@ function DailyChart({ audits, rangeLabel }) {
   );
 }
 
+function ReportCharts({ data, source, onNavigate }) {
+  if (!data?.reportCharts) return null;
+  const chart = data.reportCharts;
+  const types = source === "booking" ? ["booking"] : source === "online" ? ["online"] : ["booking", "online"];
+  const docs = types.reduce((sum, type) => sum + (data.modules?.[type]?.docs || 0), 0);
+  const problems = types.reduce((sum, type) => sum + (data.modules?.[type]?.problems || 0), 0);
+  const open = types.reduce((sum, type) => sum + (data.modules?.[type]?.open || 0), 0);
+  const resolved = types.reduce((sum, type) => sum + (chart.resolvedByType?.[type] || 0), 0);
+  const values = chart.daily.map((day) => ({ ...day, total: types.reduce((sum, type) => sum + day[type], 0) }));
+  const max = Math.max(1, ...values.map((day) => day.total));
+  const problemDays = values.map(day => ({ ...day, issueCount: types.reduce((sum,type) => sum + day[`${type}Problems`], 0), resolvedCount: types.reduce((sum,type) => sum + day[`${type}Resolved`], 0) }));
+  const problemMax = Math.max(1, ...problemDays.map(day => day.issueCount));
+  const issues = chart.issues.filter((item) => types.includes(item.type)).slice(0, 20);
+  return <>
+    <div className="store-report-kpis so-kpis"><Kpi tone="neutral" label="เอกสารทั้งหมด" value={fmt(docs)} sub="ตามช่วงวันที่เลือก"/><Kpi tone="danger" label="รายการที่เคยมีปัญหา" value={fmt(problems)} sub={`ยังต้องติดตาม ${fmt(open)} รายการ`}/><Kpi tone="brand" label="ปัญหาที่ตรวจครบแล้ว" value={fmt(resolved)} sub="อิงประวัติห้องแพ็ค"/></div>
+    <div className="so-row"><section className="so-card so-card-wide"><h3>ใบสั่งจองและใบขายออนไลน์รายวัน</h3><div className="so-legend">{types.includes("booking")&&<span><i className="so-swatch so-swatch-match"/>ใบสั่งจอง</span>}{types.includes("online")&&<span><i className="so-swatch so-swatch-resolved"/>ใบขายออนไลน์</span>}</div><figure className="so-chart" role="img" aria-label={`กราฟเอกสารรายวัน ${data.rangeLabel}`}><div className={values.length > 7 ? "so-bars is-dense" : "so-bars"}>{values.map(day=><div className="so-bar" key={day.date} title={`${thaiDateLabel(day.date)} · ใบสั่งจอง ${day.booking} · ออนไลน์ ${day.online} · พบปัญหา ${source === "booking" ? day.bookingProblems : source === "online" ? day.onlineProblems : day.problems}`}><span className="so-bar-value">{day.total || ""}</span>{types.includes("online")&&<div className="so-bar-online" style={{height:`${day.online/max*85}%`}}/>}{types.includes("booking")&&<div className="so-bar-match" style={{height:`${day.booking/max*85}%`}}/>}</div>)}</div></figure><div className={values.length > 7 ? "so-axis is-dense" : "so-axis"} aria-hidden="true">{values.map(day=><span key={day.date}>{Number(day.date.slice(8))}</span>)}</div></section>
+    <section className="so-card"><h3>ปัญหาและแนวทางติดตาม</h3>{issues.length?issues.map(item=><div key={item.id} className="so-item is-danger"><div><b>{item.bookingNumber||"ไม่มีเลขเอกสาร"}</b> · {item.type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}<div className="so-item-note">{item.reason || item.detail || "ยังไม่ระบุรายละเอียด"}</div><small>{item.packStatus === "returned" ? "แนวทาง: ตรวจเหตุผล แก้ไขข้อมูล แล้วส่งตรวจใหม่" : "แนวทาง: ตรวจรายละเอียดและติดตามสินค้าหรือข้อมูลที่ค้าง"}</small></div></div>):<p className="so-empty">ไม่พบปัญหาค้างในช่วงวันที่เลือก</p>}{issues.length>0&&<small className="muted">แสดงไม่เกิน 20 รายการล่าสุดในช่วงวันที่เลือก</small>}<div><button type="button" className="so-link" onClick={()=>onNavigate?.(source === "online" ? "store-online" : "store-booking")}>ไปตรวจเอกสาร</button></div></section></div>
+    <section className="so-card"><h3>ปัญหาและผลการแก้ไขตามวันที่สร้างเอกสาร</h3><p className="muted">จำนวนปัญหาที่พบ เทียบกับรายการที่ห้องแพ็คตรวจครบแล้วในปัจจุบัน</p><div className="so-legend"><span><i className="so-swatch so-swatch-open"/>มีปัญหา</span><span><i className="so-swatch so-swatch-match"/>ตรวจครบแล้ว</span></div><figure className="so-chart" role="img" aria-label={`กราฟปัญหาและผลแก้ไข ${data.rangeLabel}`}><div className={problemDays.length > 7 ? "so-bars is-dense" : "so-bars"}>{problemDays.map(day=><div className="so-problem-pair" key={day.date} title={`${thaiDateLabel(day.date)} · ปัญหา ${day.issueCount} · ตรวจครบ ${day.resolvedCount}`}><div className="so-problem-bar" style={{height:`${day.issueCount/problemMax*90}%`}}/><div className="so-resolved-bar" style={{height:`${day.resolvedCount/problemMax*90}%`}}/></div>)}</div></figure><div className={problemDays.length > 7 ? "so-axis is-dense" : "so-axis"} aria-hidden="true">{problemDays.map(day=><span key={day.date}>{Number(day.date.slice(8))}</span>)}</div></section>
+  </>;
+}
+
 export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
   const [period, setPeriod] = useState("7d");
+  const [view, setView] = useState("dashboard");
+  const [source, setSource] = useState("all");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -163,6 +187,8 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
 
   return (
     <section className="panel role-workspace so-workspace">
+      <div className="so-view-tabs" role="tablist" aria-label="หน้ารายงานสโตร์"><button type="button" role="tab" aria-selected={view === "dashboard"} className={view === "dashboard" ? "primary" : "secondary"} onClick={()=>setView("dashboard")}>แดชบอร์ด</button><button type="button" role="tab" aria-selected={view === "planning"} className={view === "planning" ? "primary" : "secondary"} onClick={()=>setView("planning")}>แผนงานและปฏิทิน</button></div>
+      {view === "planning" ? <StorePlanningPanel apiFetch={apiFetch}/> : <>
       <header className="store-report-header">
         <div>
           <span className="store-report-eyebrow">STORE REPORT</span>
@@ -178,21 +204,25 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
         </div>
       </header>
 
+      <label className="so-source-filter">กรองประเภทข้อมูล <select aria-label="กรองประเภทข้อมูล" value={source} onChange={e=>setSource(e.target.value)}><option value="all">ทุกประเภท</option><option value="booking">ใบสั่งจอง</option><option value="online">ใบขายออนไลน์</option><option value="transfer">ใบโอนสินค้า</option><option value="audit">Internal Audit</option></select></label>
       {error && <p className="so-message is-error" role="alert">{error}</p>}
       {data?.openTransfersCapped && <p className="so-message" role="status">รายการใบโอนค้างมีจำนวนมาก รายการที่แสดงอาจไม่ครบ</p>}
       {loading && !error && <p className="so-message" role="status">กำลังโหลดข้อมูล...</p>}
 
-      <div className="store-report-kpis so-kpis">
-        <Kpi tone="neutral" label="ใบโอนทั้งหมด" value={transfers ? fmt(transfers.total) : dash} sub={transfers ? `ครบ ${fmt(transfers.complete)} · ไม่ครบ ${fmt(transfers.incomplete)}` : dash} />
+      {["all", "booking", "online"].includes(source) && <ReportCharts data={data} source={source} onNavigate={onNavigate}/>}
+      {["all", "transfer", "audit"].includes(source) && <div className="store-report-kpis so-kpis">
+        {["all", "transfer"].includes(source) && <><Kpi tone="neutral" label="ใบโอนทั้งหมด" value={transfers ? fmt(transfers.total) : dash} sub={transfers ? `ครบ ${fmt(transfers.complete)} · ไม่ครบ ${fmt(transfers.incomplete)}` : dash} />
         <Kpi tone="danger" label="ไม่ครบ · ค้างแก้ไข" value={transfers ? fmt(transfers.open) : dash} sub={`ใช้เวลาแก้ไขเฉลี่ย ${formatResolveHours(transfers?.avgResolveHours)}`} />
         <Kpi tone="info" label="อัตราแก้ไขแล้ว" value={formatRate(transfers?.resolveRate)} sub={transfers ? `แก้ไขแล้ว ${fmt(transfers.resolved)} จาก ${fmt(transfers.incomplete)}` : dash} />
-        <Kpi tone="brand" label="ตรวจนับทั้งหมด" value={audits ? fmt(audits.total) : dash} sub={audits ? `${fmt(audits.docs)} เอกสาร · ไม่ตรง ${fmt(audits.mismatch)}` : dash} />
+        </>}
+        {["all", "audit"].includes(source) && <><Kpi tone="brand" label="ตรวจนับทั้งหมด" value={audits ? fmt(audits.total) : dash} sub={audits ? `${fmt(audits.docs)} เอกสาร · ไม่ตรง ${fmt(audits.mismatch)}` : dash} />
         <Kpi tone="deep" label="ความแม่นยำสต็อก" value={formatAccuracy(audits?.accuracy)} sub="สินค้าตรง ÷ ตรวจนับทั้งหมด" />
         <Kpi tone="info-dark" label="เฉลี่ยตรวจนับต่อวัน" value={audits ? fmt(audits.avg) : dash} sub={`รายการ/วัน · ${audits ? fmt(audits.activeDays) : dash} วันที่มีการตรวจ`} />
-      </div>
+        </>}
+      </div>}
 
-      <div className="so-row">
-        <section className="so-card so-card-wide" aria-label="ตรวจนับรายวัน">
+      {["all", "transfer", "audit"].includes(source) && <div className="so-row">
+        {["all", "audit"].includes(source) && <section className="so-card so-card-wide" aria-label="ตรวจนับรายวัน">
           <div className="so-card-head">
             <h3>จำนวนตรวจนับรายวัน</h3>
             <div className="so-legend">
@@ -202,9 +232,9 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
             </div>
           </div>
           <DailyChart audits={audits} rangeLabel={rangeLabel} />
-        </section>
+        </section>}
 
-        <section className="so-card" aria-label="ใบโอนไม่ครบแยกสาขา">
+        {["all", "transfer"].includes(source) && <section className="so-card" aria-label="ใบโอนไม่ครบแยกสาขา">
           <div>
             <h3>ใบโอนไม่ครบ แยกสาขาปลายทาง</h3>
             <div className="so-legend">
@@ -225,11 +255,11 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
             );
           })}
           {transfers && transfers.byDestination.length === 0 && <p className="so-empty">ไม่มีใบโอนไม่ครบในช่วงนี้</p>}
-        </section>
-      </div>
+        </section>}
+      </div>}
 
-      <div className="so-row">
-        <section className="so-card" aria-label="งานค้างแก้ไข">
+      {["all", "transfer", "audit"].includes(source) && <div className="so-row">
+        {["all", "transfer"].includes(source) && <section className="so-card" aria-label="งานค้างแก้ไข">
           <div className="so-card-head">
             <h3>ใบโอนค้างแก้ไข</h3>
             <button type="button" className="so-link" onClick={() => onNavigate?.("store-transfer")}>ไปหน้าใบโอน</button>
@@ -246,9 +276,9 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
             ))}
             {transfers && transfers.openList.length === 0 && <p className="so-empty">ไม่มีใบโอนค้างแก้ไข</p>}
           </div>
-        </section>
+        </section>}
 
-        <section className="so-card" aria-label="ตรวจนับพบสินค้าไม่ตรง">
+        {["all", "audit"].includes(source) && <section className="so-card" aria-label="ตรวจนับพบสินค้าไม่ตรง">
           <div className="so-card-head">
             <h3>ตรวจนับพบสินค้าไม่ตรงล่าสุด</h3>
             <button type="button" className="so-link" onClick={() => onNavigate?.("store-audit")}>ไปหน้า Audit</button>
@@ -265,8 +295,8 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
             ))}
             {audits && audits.latestMismatched.length === 0 && <p className="so-empty">ไม่พบสินค้าไม่ตรงในช่วงนี้</p>}
           </div>
-        </section>
-      </div>
+        </section>}
+      </div>}
 
       <section className="so-table-section" aria-label="ภาพรวมทุกโมดูล">
         <h3>ภาพรวมทุกโมดูลสโตร์{rangeLabel ? ` · ${rangeLabel}` : ""}</h3>
@@ -282,7 +312,7 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
               </tr>
             </thead>
             <tbody>
-              {MODULE_ROWS.map((row) => {
+              {MODULE_ROWS.filter((row) => source === "all" || source === row.key).map((row) => {
                 const values = moduleValues[row.key];
                 const hasOpen = Number.isFinite(values?.open);
                 return (
@@ -299,6 +329,7 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
           </table>
         </div>
       </section>
+      </>}
     </section>
   );
 }

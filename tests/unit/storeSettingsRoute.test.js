@@ -84,7 +84,7 @@ describe("store settings route", () => {
       expect(json.ok).toBe(true);
       expect(json.data.updatedAt).toBe("");
       expect(json.data.settings.modules.map((m) => m.id)).toHaveLength(6);
-      expect(json.data.settings.branches).toEqual([]);
+      expect(json.data.settings.branches).toEqual(getDefaultStoreSettings().branches);
     });
 
     it("returns the stored settings with updatedAt", async () => {

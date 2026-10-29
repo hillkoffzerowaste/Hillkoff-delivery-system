@@ -84,7 +84,7 @@ describe("StoreSettingsDocuments", () => {
 
   it("builds the sample number from the pattern, prefix and digits", () => {
     expect(plain(render(withDocument("transfer", { pattern: "yymm" })))).toContain("ตัวอย่างเลขที่ถัดไป: TR6910-0418");
-    expect(plain(render(withDocument("transfer", { pattern: "branch" })))).toContain("ตัวอย่างเลขที่ถัดไป: TR-WH-0418");
+    expect(plain(render(withDocument("transfer", { pattern: "branch" })))).toContain("ตัวอย่างเลขที่ถัดไป: TR-CP-0418");
     expect(plain(render(withDocument("transfer", { digits: 5, prefix: "XF" })))).toContain("ตัวอย่างเลขที่ถัดไป: XF-00418");
     expect(plain(render(withDocument("transfer", { reset: "month" })))).toContain("เลขรันเริ่ม 1 ใหม่ทุกต้นเดือน");
     expect(plain(render(withDocument("transfer", { reset: "year" })))).toContain("เลขรันเริ่ม 1 ใหม่ทุกต้นปี");
@@ -100,7 +100,7 @@ describe("StoreSettingsDocuments", () => {
     const text = plain(render(draft));
     expect(text).toContain("สาขา: สาขาเก้า");
     expect(text).toContain("ตัวอย่างเลขที่ถัดไป: TR-BR9-0418");
-    expect(plain(render())).not.toContain("สาขา: ");
+    expect(plain(render({ ...getDefaultStoreSettings(), branches: [] }))).not.toContain("สาขา: ");
   });
 
   it("marks required fields with * in the preview table and shows only visible fields", () => {

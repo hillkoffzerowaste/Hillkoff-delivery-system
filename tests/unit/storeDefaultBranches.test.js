@@ -1,0 +1,3 @@
+import { describe, expect, it } from "vitest";
+import { getDefaultStoreSettings, normalizeStoreSettings } from "../../lib/storeSettings.js";
+describe("requested default branches",()=>{it("provides the four branches when no store configuration exists",()=>{expect(getDefaultStoreSettings().branches.map(x=>x.name)).toEqual(["สาขาช้างเผือก","สาขาสำนักงานใหญ่","สาขาป่าแพ่ง","สาขามหิดล"]);expect(normalizeStoreSettings({}).branches).toEqual(getDefaultStoreSettings().branches);});it("preserves a deliberately saved empty branch list",()=>{expect(normalizeStoreSettings({branches:[]}).branches).toEqual([]);});});

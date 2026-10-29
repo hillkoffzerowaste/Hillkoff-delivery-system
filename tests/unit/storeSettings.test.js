@@ -165,7 +165,7 @@ describe("validateStoreSettings", () => {
   it("accepts defaults and returns a normalized value", () => {
     const result = validateStoreSettings(validInput((s) => s.branches.push(branch("wh"))));
     expect(result.ok).toBe(true);
-    expect(result.value.branches[0].code).toBe("WH");
+    expect(result.value.branches.some((item) => item.code === "WH")).toBe(true);
     expect(result.value.modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
