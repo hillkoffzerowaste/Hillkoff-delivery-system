@@ -10,8 +10,10 @@ import {
   documentPrefixes,
   getDefaultStoreSettings,
   lockedNumberPrefixes,
+  lockedRequestRefPrefixes,
   normalizeStoreSettings,
   parseDocumentSequence,
+  requestRefPrefixes,
   validateDocumentNumber,
   validateStoreSettings
 } from "../../lib/storeSettings.js";
@@ -81,5 +83,37 @@ describe("forms with several heads", () => {
     const apiFetch = async () => new Response(JSON.stringify({ ok: true, data: { items: [] } }));
     const html = renderToStaticMarkup(<StoreAuditPanel apiFetch={apiFetch} settings={settings} profile={{ uid: "u1", name: "สุภาพ" }} />);
     expect(html).toContain('<option value="AU-" selected="">AU-</option><option value="AX-">AX-</option>');
+  });
+});
+
+describe("transfer-request heads", () => {
+  it("keeps its own list, falling back to the transfer heads only for the yymm format", () => {
+    const doc = normalizeStoreSettings({ documents: { transfer: { prefix: "STK-TRF", requestPrefixes: ["stk-rq", "STK-TRF", "STK-RQ", "bad_1"] } } }).documents.transfer;
+    expect(doc.requestPrefixes).toEqual(["STK-RQ", "STK-TRF"]);
+    expect(normalizeStoreSettings({}).documents.transfer.requestPrefixes).toEqual([]);
+    expect(normalizeStoreSettings({}).documents.audit.requestPrefixes).toBeUndefined();
+    expect(requestRefPrefixes({ prefix: "TR", pattern: "dash", requestPrefixes: ["STK-RQ"] })).toEqual(["STK-RQ"]);
+    expect(requestRefPrefixes({ prefix: "TR", pattern: "dash", requestPrefixes: [] })).toEqual([]);
+    expect(requestRefPrefixes(cfg)).toEqual(["STK-TRF", "STK-TRO", "STK"]);
+    expect(lockedRequestRefPrefixes({ prefix: "TR", pattern: "dash", requestPrefixes: ["STK-RQ"] }, "2026-10-29")).toEqual(["STK-RQ6910-"]);
+  });
+
+  it("validates request heads: may repeat a transfer head, not each other", () => {
+    const base = getDefaultStoreSettings();
+    const withRequest = (list) => ({ ...base, documents: { ...base.documents, transfer: { ...base.documents.transfer, prefix: "STK-TRF", requestPrefixes: list } } });
+    const ok = validateStoreSettings(withRequest(["STK-TRF", "stk-rq", ""]));
+    expect(ok.ok).toBe(true);
+    expect(ok.value.documents.transfer.requestPrefixes).toEqual(["STK-TRF", "STK-RQ"]);
+    expect(ok.value.documents.audit.requestPrefixes).toBeUndefined();
+    expect(validateStoreSettings(withRequest(["STK-RQ", "STK-RQ"])).ok).toBe(false);
+    expect(validateStoreSettings(withRequest(["bad_1"])).ok).toBe(false);
+    expect(validateStoreSettings(withRequest(["A", "B", "C", "D", "E", "F", "G"])).ok).toBe(false);
+  });
+
+  it("shows the request heads as a dropdown with the running-number box", () => {
+    const settings = normalizeStoreSettings({ branches, documents: { transfer: { title: "ใบโอนสินค้า", prefix: "TR", pattern: "dash", digits: 4, reset: "none", requestPrefixes: ["STK-RQ", "STK-TRF"] } } });
+    const html = renderToStaticMarkup(<StoreTransferPanel apiFetch={async () => new Response("{}")} settings={settings} profile={{ uid: "u", name: "ณัฐ" }} />);
+    expect(html).toMatch(/aria-label="อ้างอิงใบขอโอน หัวเลข"><option value="STK-RQ\d{4}-" selected="">STK-RQ\d{4}-<\/option><option value="STK-TRF\d{4}-">/);
+    expect(html).toContain('aria-label="อ้างอิงใบขอโอน เลขรัน"');
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
 import { addDaysToDateKey, bangkokTimeHHmm, thaiDateLabel } from "../../../lib/storeFormat.js";
-import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
+import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
 import LockedNumberInput from "./LockedNumberInput.jsx";
 import {
   REQUEST_REF_SAMPLE,
@@ -82,9 +82,9 @@ async function request(apiFetch, url, init) {
 const jsonInit = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 // An existing number keeps its own month (e.g. editing last month's transfer).
-function prefixOfNumber(value, cfg) {
+function prefixOfNumber(value, heads) {
   const match = /^(.*-)(\d+)$/.exec(String(value || ""));
-  return match && documentPrefixes(cfg).some((prefix) => match[1].startsWith(prefix)) ? match[1] : "";
+  return match && heads.some((prefix) => match[1].startsWith(prefix)) ? match[1] : "";
 }
 
 function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today }) {
@@ -95,10 +95,11 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
   const digits = cfg?.digits || 4;
-  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, cfg), ...(cfg?.pattern === "branch" ? [] : lockedNumberPrefixes(cfg, today))].filter(Boolean))];
+  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg)), ...(cfg?.pattern === "branch" ? [] : lockedNumberPrefixes(cfg, today))].filter(Boolean))];
   // A request is often raised late last month and transferred early this month, so last month stays selectable.
   const lastMonth = today ? addDaysToDateKey(`${today.slice(0, 7)}-01`, -1) : "";
-  const refPrefixes = [...new Set([prefixOfNumber(row.requestRef, cfg), ...lockedNumberPrefixes(cfg, today), ...lockedNumberPrefixes(cfg, lastMonth)].filter(Boolean))];
+  const refHeads = requestRefPrefixes(cfg);
+  const refPrefixes = refHeads.length ? [...new Set([prefixOfNumber(row.requestRef, refHeads), ...lockedRequestRefPrefixes(cfg, today), ...lockedRequestRefPrefixes(cfg, lastMonth)].filter(Boolean))] : [];
   return (
     <div className="st-fields">
       <label className="st-field st-field-no">{labelOf(fields, "no", "เลขที่ใบโอน")}
@@ -106,7 +107,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
       </label>
       {fields.ref?.show !== false && (
         <label className="st-field st-field-ref">{labelOf(fields, "ref", "อ้างอิงใบขอโอน")}
-          <LockedNumberInput id={`${idPrefix}-ref`} label="อ้างอิงใบขอโอน" value={row.requestRef} onChange={(requestRef) => onChange({ requestRef })} prefixes={cfg?.pattern === "yymm" ? refPrefixes : []} digits={digits} sampleText={REQUEST_REF_SAMPLE} />
+          <LockedNumberInput id={`${idPrefix}-ref`} label="อ้างอิงใบขอโอน" value={row.requestRef} onChange={(requestRef) => onChange({ requestRef })} prefixes={refPrefixes} digits={digits} sampleText={REQUEST_REF_SAMPLE} />
         </label>
       )}
       <label className="st-field">{labelOf(fields, "from", "ต้นทาง")}

@@ -6,6 +6,7 @@ import {
   DOCUMENT_SIGNERS,
   EXTRA_PREFIX_MAX,
   FIELD_DEFINITIONS,
+  REQUEST_PREFIX_MAX,
   getActiveBranches,
   getBranchHeader,
   sampleDocumentNumber
@@ -31,6 +32,24 @@ const RESET_TEXT = {
   month: "เลขรันเริ่ม 1 ใหม่ทุกต้นเดือน",
   year: "เลขรันเริ่ม 1 ใหม่ทุกต้นปี"
 };
+
+// An editable list of number heads with add/remove buttons.
+function PrefixList({ label, hint, values, max, placeholder, onChange }) {
+  return (
+    <div className="ss-docs-field">
+      <span>{label} <small className="ss-docs-hint">{hint}</small></span>
+      {values.map((value, index) => (
+        <div className="ss-docs-prefix-row" key={index}>
+          <input className="ss-docs-upper" aria-label={`${label} ${index + 1}`} value={value} placeholder={placeholder} onChange={(event) => onChange(values.map((item, at) => (at === index ? event.target.value.toUpperCase() : item)))} />
+          <button type="button" className="secondary ss-docs-prefix-remove" aria-label={`ลบ${label} ${value || index + 1}`} onClick={() => onChange(values.filter((_, at) => at !== index))}><X size={16} aria-hidden="true" /></button>
+        </div>
+      ))}
+      {values.length < max && (
+        <button type="button" className="secondary ss-docs-prefix-add" onClick={() => onChange([...values, ""])}><Plus size={16} aria-hidden="true" />เพิ่มหัวเลข</button>
+      )}
+    </div>
+  );
+}
 
 export default function StoreSettingsDocuments({ draft, onPatch }) {
   const [moduleId, setModuleId] = useState("store-transfer");
@@ -84,18 +103,10 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
                 <input className="ss-docs-upper" value={doc.prefix} onChange={(event) => patchDoc({ prefix: event.target.value.toUpperCase() })} />
               </label>
             </div>
-            <div className="ss-docs-field">
-              <span>หัวเลขเพิ่มเติม <small className="ss-docs-hint">พนักงานเลือกหัวเลขได้ในฟอร์ม · แต่ละหัวเลขรันเลขแยกกัน</small></span>
-              {extraPrefixes.map((value, index) => (
-                <div className="ss-docs-prefix-row" key={index}>
-                  <input className="ss-docs-upper" aria-label={`หัวเลขเพิ่มเติม ${index + 1}`} value={value} placeholder="เช่น STK-TRO" onChange={(event) => patchExtra(extraPrefixes.map((item, at) => (at === index ? event.target.value.toUpperCase() : item)))} />
-                  <button type="button" className="secondary ss-docs-prefix-remove" aria-label={`ลบหัวเลข ${value || index + 1}`} onClick={() => patchExtra(extraPrefixes.filter((_, at) => at !== index))}><X size={16} aria-hidden="true" /></button>
-                </div>
-              ))}
-              {extraPrefixes.length < EXTRA_PREFIX_MAX && (
-                <button type="button" className="secondary ss-docs-prefix-add" onClick={() => patchExtra([...extraPrefixes, ""])}><Plus size={16} aria-hidden="true" />เพิ่มหัวเลข</button>
-              )}
-            </div>
+            <PrefixList label="หัวเลขเพิ่มเติม" hint="แสดงเป็นดรอปดาวน์ให้เลือกในฟอร์ม · แต่ละหัวเลขรันเลขแยกกัน" values={extraPrefixes} max={EXTRA_PREFIX_MAX} placeholder="เช่น STK-TRO" onChange={patchExtra} />
+            {kind === "transfer" && (
+              <PrefixList label="หัวเลขใบขอโอน" hint="แสดงเป็นดรอปดาวน์ในช่องอ้างอิงใบขอโอน (หัว+ปีเดือน-เลขรัน) · ว่างไว้ = ใช้หัวเดียวกับใบโอน" values={doc.requestPrefixes || []} max={REQUEST_PREFIX_MAX} placeholder="เช่น STK-RQ" onChange={(list) => patchDoc({ requestPrefixes: list })} />
+            )}
             <div className="ss-docs-row">
               <label className="ss-docs-field ss-docs-grow-2">
                 รูปแบบเลขที่
