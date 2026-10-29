@@ -17,6 +17,7 @@ const DATE = "2026-10-28";
 function createDb(collections, log) {
   const compare = { "==": (a, b) => a === b, ">=": (a, b) => a >= b, "<=": (a, b) => a <= b, "<": (a, b) => a < b, ">": (a, b) => a > b };
   const build = (name, wheres = [], order = [], selected = null, max = null) => ({
+    doc: (id) => ({ get: async () => ({ exists: Boolean(collections[name]?.[id]), data: () => collections[name]?.[id] }) }),
     where: (field, op, value) => build(name, [...wheres, [field, op, value]], order, selected, max),
     orderBy: (field) => build(name, wheres, [...order, field], selected, max),
     select: (...fields) => build(name, wheres, order, fields, max),
@@ -79,6 +80,15 @@ async function get(query) {
 }
 
 describe("GET /api/store/daily-report roles and validation", () => {
+  it("includes configured active staff and retains former staff with recorded work", async () => {
+    const data = sampleData();
+    data.store_settings = { default: { staff: [{ id: "staff_1", name: "สมชาย", active: false }, { id: "staff_2", name: "สมหญิง", active: true }] } };
+    data.store_transfers.t3 = { preparerUid: "staff_1", preparerName: "สมชาย", serviceDate: DATE, createdAt: at(DATE, "12:00"), receipt: "complete" };
+    state.db = createDb(data, log);
+    const result = await (await get(`date=${DATE}`)).json();
+    expect(result.data.people).toContainEqual(expect.objectContaining({ uid: "staff_1", name: "สมชาย", transfer: 1 }));
+    expect(result.data.people).toContainEqual(expect.objectContaining({ uid: "staff_2", name: "สมหญิง" }));
+  });
   it.each(["store", "admin"])("allows %s", async (role) => {
     state.role = role;
     expect((await get(`date=${DATE}`)).status).toBe(200);

@@ -77,9 +77,15 @@ async function readSettings(db, transaction) {
   return normalizeStoreSettings(snap.exists ? snap.data() : undefined);
 }
 
-async function verifyPreparer(transaction, db, value, profile) {
+async function verifyPreparer(transaction, db, value, profile, settings) {
   if (value.preparerUid === profile.uid) {
     value.preparerName = profile.name || profile.email || profile.uid;
+    return;
+  }
+  const person = settings.staff.find((entry) => entry.id === value.preparerUid);
+  if (person) {
+    if (!person.active) throw httpError("ผู้จัดใบโอนไม่ใช่พนักงานสโตร์ที่ใช้งานอยู่", 400);
+    value.preparerName = person.name;
     return;
   }
   if (!validDocId(value.preparerUid)) throw httpError("ผู้จัดใบโอนไม่ถูกต้อง", 400);
@@ -171,7 +177,7 @@ export async function POST(request) {
       for (const row of filled) {
         const checked = validateTransferRow(row, { settings, profile });
         if (!checked.ok) throw httpError(checked.error, checked.status);
-        await verifyPreparer(transaction, db, checked.value, profile);
+        await verifyPreparer(transaction, db, checked.value, profile, settings);
         const number = checked.value.transferNumber;
         const registryId = documentRegistryId("transfer", number, { reset: cfg.reset, serviceDate, pattern: cfg.pattern });
         if (seen.has(registryId)) throw httpError(`เลขที่ใบโอน ${number} ซ้ำกันในรายการที่กำลังบันทึก`, 409);
@@ -251,7 +257,7 @@ export async function PUT(request) {
       const checked = validateTransferRow(rowInput(body), { settings, profile, keepBranchCodes: [doc.fromBranchCode, doc.toBranchCode], keepNumber: doc.transferNumber });
       if (!checked.ok) throw httpError(checked.error, checked.status);
       const value = checked.value;
-      await verifyPreparer(transaction, db, value, profile);
+      await verifyPreparer(transaction, db, value, profile, settings);
 
       const patch = { ...value, updatedAt: now, updatedBy: profile.name || profile.email || "" };
       if (value.receipt === "complete") Object.assign(patch, { issueState: "", resolution: null, resolvedServiceDate: "" });

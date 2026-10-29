@@ -10,11 +10,12 @@ vi.mock("../../lib/workflowAuth.js", () => ({
   errorResponse: (error) => Response.json({ ok: false, error: error.message }, { status: error.status || 500 })
 }));
 
-function usersDb(users) {
+function usersDb(users, settings = null) {
   const calls = [];
   return {
     calls,
     collection: (name) => ({
+      doc: () => ({ get: async () => ({ exists: Boolean(settings), data: () => settings }) }),
       where: (field, op, value) => ({
         limit: (n) => ({
           get: async () => {
@@ -56,6 +57,11 @@ describe("store staff route", () => {
     expect(data.filter((person) => person.uid !== "u5")).toEqual([{ uid: "u2", name: "สโตร์สอง" }, { uid: "u1", name: "สโตร์หนึ่ง" }]);
     expect(data).toHaveLength(3);
     expect(state.db.calls).toEqual([{ name: "users", field: "role", op: "==", value: "store", limit: 101 }]);
+  });
+
+  it("includes configured staff names without granting login accounts and omits removed names", async () => {
+    state.db = usersDb({}, { staff: [{ id: "staff_1", name: "สมชาย", active: true }, { id: "staff_2", name: "อดีต", active: false }] });
+    expect((await (await get()).json()).data).toEqual([{ uid: "staff_1", name: "สมชาย" }]);
   });
 
   it("never leaks email, phone or any other field", async () => {

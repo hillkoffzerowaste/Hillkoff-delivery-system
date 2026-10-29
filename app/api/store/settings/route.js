@@ -80,7 +80,16 @@ export async function PUT(request) {
         throw httpError(409, "มีผู้อื่นบันทึกการตั้งค่าไปก่อน กรุณาโหลดใหม่แล้วแก้อีกครั้ง");
       }
 
-      const result = validateStoreSettings(body.settings);
+      const incoming = body.settings && typeof body.settings === "object" && !Array.isArray(body.settings) ? { ...body.settings } : body.settings;
+      if (incoming && typeof incoming === "object") {
+        if (incoming.staff === undefined) incoming.staff = previous.staff;
+        if (Array.isArray(incoming.branches)) incoming.branches = incoming.branches.map((branch) => {
+          if (!branch || typeof branch !== "object" || branch.header !== undefined) return branch;
+          const prior = previous.branches.find((item) => item.code === String(branch.code || "").trim().toUpperCase());
+          return prior?.header ? { ...branch, header: prior.header } : branch;
+        });
+      }
+      const result = validateStoreSettings(incoming);
       if (!result.ok) throw httpError(400, result.errors[0].message, { errors: result.errors });
 
       for (const code of removedBranchCodes(previous, result.value)) {

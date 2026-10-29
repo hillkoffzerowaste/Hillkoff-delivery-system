@@ -6,6 +6,7 @@ import {
   DOCUMENT_SIGNERS,
   FIELD_DEFINITIONS,
   getActiveBranches,
+  getBranchHeader,
   sampleDocumentNumber
 } from "../../../lib/storeSettings.js";
 import "./StoreSettingsDocuments.css";
@@ -32,15 +33,24 @@ const RESET_TEXT = {
 
 export default function StoreSettingsDocuments({ draft, onPatch }) {
   const [moduleId, setModuleId] = useState("store-transfer");
+  const [branchCode, setBranchCode] = useState("");
   const kind = KIND_BY_MODULE[moduleId] || null;
   const doc = kind ? draft.documents[kind] : null;
   const header = draft.header;
+  const branch = draft.branches.find((item) => item.code === branchCode);
+  const previewHeader = branch ? getBranchHeader(draft, branch.code) : header;
   const moduleName = (id) => draft.modules.find((item) => item.id === id)?.name || id;
   const firstBranch = getActiveBranches(draft)[0];
 
   const patchDoc = (patch) => onPatch({ documents: { ...draft.documents, [kind]: { ...doc, ...patch } } });
   const patchField = (fieldId, patch) => patchDoc({ fields: doc.fields.map((item) => (item.id === fieldId ? { ...item, ...patch } : item)) });
   const patchHeader = (patch) => onPatch({ header: { ...header, ...patch } });
+  const patchBranchHeader = (key, value) => onPatch({ branches: draft.branches.map((item) => {
+    if (item.code !== branchCode) return item;
+    const nextHeader = { ...item.header };
+    if (value === "") delete nextHeader[key]; else nextHeader[key] = value;
+    return { ...item, header: nextHeader };
+  }) });
 
   const example = doc ? sampleDocumentNumber(doc, { branchCode: firstBranch?.code || "WH" }) : "";
   const shownFields = doc ? doc.fields.filter((item) => item.show) : [];
@@ -124,6 +134,16 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
           </div>
         </div>
 
+        <div className="panel ss-docs-card">
+          <h2>หัวบิลแยกตามสาขา</h2>
+          <p className="ss-docs-hint">เลือกสาขาเพื่อกำหนดข้อมูลเฉพาะ ช่องที่ยังไม่ได้กำหนดใช้ค่ากลางด้านบน</p>
+          <label className="ss-docs-field">สาขา<select value={branchCode} onChange={(event) => setBranchCode(event.target.value)}><option value="">ข้อมูลส่วนกลาง</option>{draft.branches.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
+          {branch && <>
+            {[["company", "ชื่อบริษัท / ร้าน"], ["address", "ที่อยู่"], ["taxId", "เลขประจำตัวผู้เสียภาษี"], ["phone", "เบอร์โทร"]].map(([key, label]) => <label key={key} className="ss-docs-field">{label}<input maxLength={200} value={branch.header?.[key] ?? ""} placeholder={header[key] || "ใช้ข้อมูลส่วนกลาง"} onChange={(event) => patchBranchHeader(key, event.target.value)} /></label>)}
+            <button type="button" className="secondary" onClick={() => onPatch({ branches: draft.branches.map((item) => item.code === branchCode ? { ...item, header: {} } : item) })}>ใช้ข้อมูลส่วนกลางทั้งหมด</button>
+          </>}
+        </div>
+
         {doc && (
           <div className="panel ss-docs-card">
             <div>
@@ -172,14 +192,14 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
           <div className="ss-docs-paper">
             <div className="ss-docs-paper-head">
               <div className="ss-docs-paper-company">
-                {header.showLogo && <span className="ss-docs-logo" aria-hidden="true">H</span>}
+                {previewHeader.showLogo && <span className="ss-docs-logo" aria-hidden="true">H</span>}
                 <div>
-                  <b>{header.company}</b>
-                  {header.showAddress && (
+                  <b>{previewHeader.company}</b>
+                  {previewHeader.showAddress && (
                     <>
-                      {header.address && <span>{header.address}</span>}
-                      {(header.taxId || header.phone) && (
-                        <span>{[header.taxId && `เลขประจำตัวผู้เสียภาษี ${header.taxId}`, header.phone && `โทร ${header.phone}`].filter(Boolean).join(" · ")}</span>
+                      {previewHeader.address && <span>{previewHeader.address}</span>}
+                      {(previewHeader.taxId || previewHeader.phone) && (
+                        <span>{[previewHeader.taxId && `เลขประจำตัวผู้เสียภาษี ${previewHeader.taxId}`, previewHeader.phone && `โทร ${previewHeader.phone}`].filter(Boolean).join(" · ")}</span>
                       )}
                     </>
                   )}
@@ -189,7 +209,7 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
                 <b>{doc.title}</b>
                 <span>เลขที่ <b>{example}</b></span>
                 <span>วันที่ 28 ต.ค. 2569</span>
-                {firstBranch && <span>{`สาขา: ${firstBranch.name}`}</span>}
+                {branch && <span>{`สาขา: ${branch.name}`}</span>}
               </div>
             </div>
             <div className="ss-docs-table-wrap">

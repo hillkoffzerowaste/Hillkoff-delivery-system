@@ -28,6 +28,7 @@ const MODULE_DESCRIPTIONS = {
 const TABS = [
   { id: "modules", label: "โมดูล" },
   { id: "branches", label: "สาขา" },
+  { id: "staff", label: "พนักงานสโตร์" },
   { id: "docs", label: "หัวเอกสารและรูปแบบ" }
 ];
 
@@ -140,6 +141,7 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
   const [draft, setDraft] = useState(() => clone(settings));
   const [tab, setTab] = useState("modules");
   const [newBranch, setNewBranch] = useState(EMPTY_BRANCH);
+  const [newStaff, setNewStaff] = useState("");
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
@@ -192,7 +194,7 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
         <div>
           <span className="store-report-eyebrow">STORE SETTINGS</span>
           <h2>ตั้งค่าสโตร์</h2>
-          <p>จัดการโมดูล สาขา หัวเอกสาร และรูปแบบเลขที่เอกสาร · มีผลกับบัญชีสโตร์เท่านั้น</p>
+          <p>จัดการโมดูล สาขา พนักงาน หัวเอกสาร และรูปแบบเลขที่เอกสาร</p>
         </div>
         <div className="ss-panel-actions">
           {dirty && <span className="ss-panel-dirty">มีการเปลี่ยนแปลงที่ยังไม่บันทึก</span>}
@@ -306,6 +308,16 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
         </section>
       )}
 
+      {tab === "staff" && (
+        <section className="ss-panel-section" aria-label="พนักงานสโตร์">
+          <div><h3>รายชื่อพนักงานสโตร์</h3><p className="ss-panel-hint">ชื่อสำหรับเลือกผู้จัดใบโอนและรายงานรายบุคคล ไม่ใช่บัญชีเข้าสู่ระบบ · เมื่อเอาชื่อออก ระบบเก็บประวัติงานเดิมไว้</p></div>
+          <div className="store-report-table-wrap ss-panel-table-wrap"><table className="ss-panel-table" aria-label="รายชื่อพนักงานสโตร์"><thead><tr><th>ชื่อ</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>
+            {(draft.staff || []).map((person) => <tr key={person.id} className={person.active ? "" : "is-off"}><td><input aria-label={`ชื่อพนักงาน ${person.name}`} maxLength={160} value={person.name} onChange={(event) => update((current) => ({ ...current, staff: current.staff.map((item) => item.id === person.id ? { ...item, name: event.target.value } : item) }))} /></td><td>{person.active ? "ใช้งาน" : "เอาออกแล้ว"}</td><td><button type="button" className="secondary" onClick={() => update((current) => ({ ...current, staff: current.staff.map((item) => item.id === person.id ? { ...item, active: !item.active } : item) }))}>{person.active ? "เอาชื่อออก" : "นำกลับมาใช้"}</button></td></tr>)}
+            {!draft.staff?.length && <tr><td colSpan={3} className="ss-panel-empty">ยังไม่มีรายชื่อที่เพิ่ม</td></tr>}
+          </tbody></table></div>
+          <div className="ss-panel-add"><label className="ss-panel-field ss-panel-grow-2">ชื่อพนักงาน<input maxLength={160} value={newStaff} onChange={(event) => setNewStaff(event.target.value)} /></label><button type="button" className="primary" onClick={() => { const name = newStaff.trim(); if (!name) return fail("กรุณาระบุชื่อพนักงาน"); if ((draft.staff || []).length >= 100) return fail("รายชื่อพนักงานเกิน 100 คน"); update((current) => ({ ...current, staff: [...(current.staff || []), { id: `staff_${crypto.randomUUID()}`, name, active: true }] })); setNewStaff(""); }}>+ เพิ่มพนักงาน</button></div>
+        </section>
+      )}
       {tab === "docs" && <StoreSettingsDocuments draft={draft} onPatch={patchDraft} />}
     </div>
   );

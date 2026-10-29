@@ -75,6 +75,20 @@ describe("store settings route", () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it("keeps new staff and branch headers when an older client omits them", async () => {
+    vi.stubEnv("STORE_SETTINGS_PIN", "9876");
+    const old = savedSettings({ staff: [{ id: "staff_1", name: "สมชาย", active: true }], branches: [{ code: "WH", name: "คลังหลัก", type: "คลังสินค้า", active: true, header: { company: "บริษัทสาขา" } }] });
+    state.db = createDb({ settings: old });
+    const draft = draftFrom(old);
+    delete draft.staff;
+    delete draft.branches[0].header;
+    const response = await call("PUT", { pin: "9876", baseUpdatedAt: old.updatedAt, settings: draft });
+    expect(response.status).toBe(200);
+    const saved = state.db.docs.get("store_settings/default");
+    expect(saved.staff).toEqual(old.staff);
+    expect(saved.branches[0].header).toEqual(old.branches[0].header);
+  });
+
   describe("GET", () => {
     it("returns defaults with empty updatedAt when no document exists", async () => {
       state.db = createDb();

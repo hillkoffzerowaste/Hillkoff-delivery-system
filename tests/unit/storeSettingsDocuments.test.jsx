@@ -90,7 +90,7 @@ describe("StoreSettingsDocuments", () => {
     expect(plain(render(withDocument("transfer", { reset: "year" })))).toContain("เลขรันเริ่ม 1 ใหม่ทุกต้นปี");
   });
 
-  it("uses the first active branch in the preview and the branch pattern", () => {
+  it("uses the first active branch for the example number and defaults to the shared header", () => {
     const draft = getDefaultStoreSettings();
     draft.branches = [
       { code: "OLD", name: "สาขาปิด", type: "สาขา", active: false },
@@ -98,7 +98,8 @@ describe("StoreSettingsDocuments", () => {
     ];
     draft.documents.transfer.pattern = "branch";
     const text = plain(render(draft));
-    expect(text).toContain("สาขา: สาขาเก้า");
+    expect(text).not.toContain("สาขา: สาขาเก้า");
+    expect(text).toContain("ข้อมูลส่วนกลาง");
     expect(text).toContain("ตัวอย่างเลขที่ถัดไป: TR-BR9-0418");
     expect(plain(render({ ...getDefaultStoreSettings(), branches: [] }))).not.toContain("สาขา: ");
   });

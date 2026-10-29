@@ -105,6 +105,13 @@ describe("store transfers route", () => {
   });
 
   describe("review regressions", () => {
+    it("accepts a configured staff name and rejects names removed from the roster", async () => {
+      state.db.docs.set("store_settings/default", { ...settingsDoc, staff: [{ id: "staff_123", name: "สมชาย", active: true }] });
+      const saved = await postOne({ preparerUid: "staff_123", preparerName: "ชื่อปลอม" });
+      expect(saved.preparerName).toBe("สมชาย");
+      state.db.docs.set("store_settings/default", { ...settingsDoc, staff: [{ id: "staff_123", name: "สมชาย", active: false }] });
+      expect((await call("POST", { rows: [row({ transferNumber: "TR-0419", preparerUid: "staff_123" })] })).status).toBe(400);
+    });
     it("rejects a repeated yymm transfer number across service months", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       try {
