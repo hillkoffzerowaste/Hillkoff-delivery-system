@@ -265,3 +265,29 @@
   height: 28px;
   border-bottom: 1px dotted var(--c-text-soft);
 }
+
+.ss-docs-prefix-row {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.ss-docs-prefix-row input {
+  flex: 1 1 auto;
+}
+
+.ss-docs-prefix-remove {
+  flex: 0 0 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ss-docs-prefix-add {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}

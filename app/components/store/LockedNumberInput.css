@@ -1,5 +1,6 @@
 .locked-number { display: flex; align-items: stretch; min-width: 0; }
 .locked-number-prefix,
 .locked-number select { display: inline-flex; align-items: center; padding: 0 var(--sp-4); border: 1px solid var(--c-line-strong); border-right: 0; border-radius: var(--r-md) 0 0 var(--r-md); background: var(--c-surface-muted); color: var(--c-text-heading); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.locked-number select { width: auto; flex: 0 0 auto; min-height: 44px; }
+/* Two classes so form rules like `.st-field select { width: 100% }` cannot squeeze out the running number. */
+.locked-number .locked-number-head { width: auto; min-width: 0; max-width: 70%; flex: 0 1 auto; min-height: 44px; text-overflow: ellipsis; }
 .locked-number input { flex: 1 1 64px; width: auto; min-width: 64px; min-height: 44px; box-sizing: border-box; border-radius: 0 var(--r-md) var(--r-md) 0; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }

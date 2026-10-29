@@ -247,6 +247,20 @@ describe("store audits route", () => {
       expect((await (await call("GET", "?next=true")).json()).data.documentNumber).toBe("AU-0003");
     });
 
+    it("runs each extra head on its own sequence and falls back to the default head", async () => {
+      state.db = createDb(seedSettings({ extraPrefixes: ["AX"] }));
+      await post(goodBody);
+      expect((await (await call("GET", "?next=true&prefix=AX")).json()).data.documentNumber).toBe("AX-0001");
+      expect((await (await call("GET", "?next=true&prefix=ZZ")).json()).data.documentNumber).toBe("AU-0002");
+      const issued = await (await post({ ...goodBody, numberPrefix: "AX" })).json();
+      expect(issued.data.documentNumber).toBe("AX-0001");
+      expect(state.db.docs.get("store_document_counters/audit__all__AX")).toMatchObject({ last: 1 });
+      expect(state.db.docs.get("store_document_counters/audit__all")).toMatchObject({ last: 1 });
+      expect((await (await post({ ...goodBody, documentNumber: "AX-0002" })).json()).data.documentNumber).toBe("AX-0002");
+      expect(state.db.docs.get("store_document_counters/audit__all__AX")).toMatchObject({ last: 2 });
+      expect((await post({ ...goodBody, documentNumber: "ZZ-0001" })).status).toBe(400);
+    });
+
     it("uses the requested branch for the branch pattern and rejects an unknown one", async () => {
       state.db = createDb(seedSettings({ pattern: "branch" }));
       expect((await (await call("GET", "?next=true&branchCode=BR01")).json()).data.documentNumber).toBe("AU-BR01-0001");

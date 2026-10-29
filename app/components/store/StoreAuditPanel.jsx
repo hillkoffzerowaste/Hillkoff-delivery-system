@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildAuditDaily, computeAuditCounts, summarizeAuditDay, validateAuditInput } from "../../../lib/storeAudit";
 import { addDaysToDateKey, bangkokTimeHHmm, fmt, lastNDates, one, pct, thaiDateLabel } from "../../../lib/storeFormat";
-import { getActiveBranches, lockedNumberPrefix, sampleDocumentNumber } from "../../../lib/storeSettings";
+import { documentPrefixes, getActiveBranches, lockedNumberPrefix, sampleDocumentNumber } from "../../../lib/storeSettings";
 import LockedNumberInput, { runningPart } from "./LockedNumberInput.jsx";
 import "./StoreAuditPanel.css";
 
@@ -48,6 +48,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const [avgMode, setAvgMode] = useState("active");
   const [form, setForm] = useState(() => emptyForm());
   const [autoNo, setAutoNo] = useState("");
+  const [headPrefix, setHeadPrefix] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [removal, setRemoval] = useState(null);
@@ -77,6 +78,8 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const branchCode = branches.some((branch) => branch.code === form.branchCode) ? form.branchCode : branches[0]?.code || "";
   // Only the branch pattern puts the branch into the number, so only then does a branch change need a new number.
   const numberBranch = cfg?.pattern === "branch" ? branchCode : "";
+  const prefixes = documentPrefixes(cfg);
+  const numberHead = prefixes.includes(headPrefix) ? headPrefix : prefixes[0] || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -95,10 +98,10 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
     return () => { cancelled = true; };
   }, [date, reloadTick]);
 
-  const fetchNextNumber = useCallback(async (forBranch) => {
+  const fetchNextNumber = useCallback(async (forBranch, head) => {
     const sequence = (nextSequence.current += 1);
     try {
-      const response = await apiRef.current(`${AUDITS_URL}?next=true${forBranch ? `&branchCode=${encodeURIComponent(forBranch)}` : ""}`);
+      const response = await apiRef.current(`${AUDITS_URL}?next=true${forBranch ? `&branchCode=${encodeURIComponent(forBranch)}` : ""}${head ? `&prefix=${encodeURIComponent(head)}` : ""}`);
       const json = await readJson(response);
       if (sequence !== nextSequence.current || !response.ok || !json.ok) return;
       const number = json.data?.documentNumber || "";
@@ -110,8 +113,8 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   }, []);
 
   useEffect(() => {
-    fetchNextNumber(numberBranch);
-  }, [numberBranch, fetchNextNumber]);
+    fetchNextNumber(numberBranch, numberHead);
+  }, [numberBranch, numberHead, fetchNextNumber]);
 
   const setField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value, ...(key === "no" ? { noEdited: true } : {}) }));
@@ -149,7 +152,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const resetForm = () => {
     setForm(emptyForm(branchCode));
     setToast(null);
-    fetchNextNumber(numberBranch);
+    fetchNextNumber(numberBranch, numberHead);
   };
 
   const submit = async (event) => {
@@ -159,7 +162,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
     const documentNumber = lockedPrefix && form.no ? `${lockedPrefix}${runningPart(form.no, lockedPrefix)}` : form.no;
     const numberAuto = documentNumber.trim() !== "" && documentNumber === autoNo;
     const body = {
-      documentNumber, numberAuto, branchCode, zone: form.zone, checkerName: form.checker, total: form.total, match: form.match, note: form.note
+      documentNumber, numberAuto, numberPrefix: numberHead, branchCode, zone: form.zone, checkerName: form.checker, total: form.total, match: form.match, note: form.note
     };
     // The shared store login is not a person, so a checker must be picked whenever the roster is available.
     if (fields("checker").show && staff.length && !form.checker) {
@@ -221,7 +224,14 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
     return `${field.label}${suffix}${field.required ? " *" : ""}`;
   };
   const sample = cfg ? sampleDocumentNumber(cfg, { branchCode: branchCode || "WH", serviceDate: today }) : "";
-  const lockedPrefix = lockedNumberPrefix(cfg, today, branchCode);
+  const lockedPrefix = lockedNumberPrefix(cfg, today, branchCode, numberHead);
+  const lockedHeads = prefixes.map((prefix) => ({ prefix, head: lockedNumberPrefix(cfg, today, branchCode, prefix) })).filter((item) => item.head);
+  // Each head runs its own sequence, so switching heads asks the server for that head's next number.
+  const changeHead = (head) => {
+    setHeadPrefix(lockedHeads.find((item) => item.head === head)?.prefix || "");
+    setAutoNo("");
+    setForm((current) => ({ ...current, no: "", noEdited: false }));
+  };
   const basisText = avgMode === "calendar" ? `หาร ${daily.basis} วันตามปฏิทิน` : `หาร ${daily.basis} วันที่มีการตรวจ`;
 
   return (
@@ -277,7 +287,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
           <div className="sa-row">
             <label className="sa-field">
               {labelOf("no")}
-              <LockedNumberInput id="sa-number" label={fields("no").label} value={form.no} onChange={(value) => setField("no", value)} prefixes={lockedPrefix ? [lockedPrefix] : []} digits={cfg?.digits || 4} sampleText={sample} />
+              <LockedNumberInput id="sa-number" label={fields("no").label} value={form.no} onChange={(value) => setField("no", value)} prefixes={lockedHeads.map((item) => item.head)} prefix={lockedPrefix} onPrefixChange={changeHead} digits={cfg?.digits || 4} sampleText={sample} />
             </label>
             {branches.length ? (
               <label className="sa-field">

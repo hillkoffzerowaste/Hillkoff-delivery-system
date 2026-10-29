@@ -10,6 +10,8 @@ import {
   documentBranchCode,
   documentCounterId,
   documentPeriodKey,
+  documentNumberPrefix,
+  documentPrefixes,
   documentRegistryId,
   findBranch,
   formatDocumentNumber,
@@ -49,18 +51,28 @@ function auditHistory(event, profile, now, { before = null, after = null, reason
   return { event, at: now, by: profile.name || profile.email, byUid: profile.uid, reason: clean(reason, 1000), before, after };
 }
 
-function numberFor(cfg, sequence, branchCode, serviceDate) {
-  return formatDocumentNumber({ prefix: cfg.prefix, pattern: cfg.pattern, digits: cfg.digits, sequence, branchCode, serviceDate });
+function numberFor(cfg, sequence, branchCode, serviceDate, prefix = cfg.prefix) {
+  return formatDocumentNumber({ prefix, pattern: cfg.pattern, digits: cfg.digits, sequence, branchCode, serviceDate });
+}
+
+// One of the configured heads, or the default one.
+function pickPrefix(cfg, value) {
+  const prefix = clean(value, 20).toUpperCase();
+  return documentPrefixes(cfg).includes(prefix) ? prefix : cfg.prefix;
+}
+
+function counterRefFor(db, cfg, serviceDate, prefix) {
+  return db.collection(STORE_DOCUMENT_COUNTERS_COLLECTION).doc(documentCounterId(KIND, { reset: cfg.reset, serviceDate }, prefix === cfg.prefix ? "" : prefix));
 }
 
 // Finds the first free number after the counter. `read` is db.get or transaction.get so the same
 // search serves the read-only preview and the transactional save.
-async function findFreeNumber({ read, db, cfg, branchCode, serviceDate, counterLast }) {
+async function findFreeNumber({ read, db, cfg, branchCode, serviceDate, counterLast, prefix }) {
   const taken = new Set();
   for (;;) {
     const sequence = nextAuditSequence(counterLast, taken);
     if (sequence === null) return null;
-    const number = numberFor(cfg, sequence, branchCode, serviceDate);
+    const number = numberFor(cfg, sequence, branchCode, serviceDate, prefix);
     const registryRef = db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(documentRegistryId(KIND, number, { reset: cfg.reset, serviceDate, pattern: cfg.pattern }));
     const snap = await read(registryRef);
     if (!snap.exists) return { number, sequence };
@@ -81,9 +93,10 @@ export async function GET(request) {
       const branch = requested ? findBranch(settings, requested) : getActiveBranches(settings)[0];
       if (requested && (!branch || branch.active === false)) return Response.json({ ok: false, error: "สาขาไม่ถูกต้องหรือถูกปิดใช้งาน" }, { status: 400 });
       if (cfg.pattern === "branch" && !branch) return Response.json({ ok: true, data: { documentNumber: "" } });
-      const counterSnap = await db.collection(STORE_DOCUMENT_COUNTERS_COLLECTION).doc(documentCounterId(KIND, { reset: cfg.reset, serviceDate })).get();
+      const prefix = pickPrefix(cfg, params.get("prefix"));
+      const counterSnap = await counterRefFor(db, cfg, serviceDate, prefix).get();
       const free = await findFreeNumber({
-        read: (ref) => ref.get(), db, cfg, branchCode: branch?.code || "", serviceDate, counterLast: counterSnap.exists ? counterSnap.data()?.last : 0
+        read: (ref) => ref.get(), db, cfg, branchCode: branch?.code || "", serviceDate, counterLast: counterSnap.exists ? counterSnap.data()?.last : 0, prefix
       });
       return Response.json({ ok: true, data: { documentNumber: free?.number || "" } });
     }
@@ -125,7 +138,9 @@ export async function POST(request) {
       const cfg = settings.documents.audit;
       const { value } = checked;
       const periodKey = documentPeriodKey(cfg.reset, serviceDate);
-      const counterRef = db.collection(STORE_DOCUMENT_COUNTERS_COLLECTION).doc(documentCounterId(KIND, { reset: cfg.reset, serviceDate }));
+      // A typed number carries its own head; a blank one is issued under the head the form had selected.
+      const prefix = (value.documentNumber && documentNumberPrefix(value.documentNumber, cfg)) || pickPrefix(cfg, body.numberPrefix);
+      const counterRef = counterRefFor(db, cfg, serviceDate, prefix);
       const counterSnap = await transaction.get(counterRef);
       const counterLast = counterSnap.exists ? Number(counterSnap.data()?.last) || 0 : 0;
 
@@ -141,12 +156,12 @@ export async function POST(request) {
           // Only a number that belongs to this period moves the counter (e.g. yymm digits must match today).
           const parsed = parseDocumentSequence(number, cfg);
           const branchPart = documentBranchCode(number, cfg);
-          if (parsed !== null && numberFor(cfg, parsed, branchPart, serviceDate) === number) sequence = parsed;
+          if (parsed !== null && numberFor(cfg, parsed, branchPart, serviceDate, prefix) === number) sequence = parsed;
         }
       }
       if (!number) {
         const free = await findFreeNumber({
-          read: (ref) => transaction.get(ref), db, cfg, branchCode: value.branchCode, serviceDate, counterLast
+          read: (ref) => transaction.get(ref), db, cfg, branchCode: value.branchCode, serviceDate, counterLast, prefix
         });
         if (!free) throw fail("ไม่สามารถสร้างเลขที่เอกสารได้ กรุณาลองใหม่อีกครั้ง", 409);
         number = free.number;

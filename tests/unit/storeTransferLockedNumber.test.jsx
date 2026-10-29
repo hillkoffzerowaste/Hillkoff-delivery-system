@@ -26,7 +26,7 @@ describe("locked transfer number prefix", () => {
     expect(html).toMatch(/<span class="locked-number-prefix" aria-hidden="true">STK-TRF\d{4}-<\/span>/);
     expect(html).toContain('aria-label="เลขที่ใบโอน เลขรัน"');
     expect(html).toContain('inputMode="numeric"');
-    expect(html).toContain('aria-label="อ้างอิงใบขอโอน เดือน"');
+    expect(html).toContain('aria-label="อ้างอิงใบขอโอน หัวเลข"');
     expect(html).toContain("กรอกเฉพาะเลขรัน");
   });
 });

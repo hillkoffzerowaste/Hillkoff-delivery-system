@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Plus, X } from "lucide-react";
 import {
   DOCUMENT_SIGNERS,
+  EXTRA_PREFIX_MAX,
   FIELD_DEFINITIONS,
   getActiveBranches,
   getBranchHeader,
@@ -43,6 +44,8 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
   const firstBranch = getActiveBranches(draft)[0];
 
   const patchDoc = (patch) => onPatch({ documents: { ...draft.documents, [kind]: { ...doc, ...patch } } });
+  const extraPrefixes = doc?.extraPrefixes || [];
+  const patchExtra = (list) => patchDoc({ extraPrefixes: list });
   const patchField = (fieldId, patch) => patchDoc({ fields: doc.fields.map((item) => (item.id === fieldId ? { ...item, ...patch } : item)) });
   const patchHeader = (patch) => onPatch({ header: { ...header, ...patch } });
   const patchBranchHeader = (key, value) => onPatch({ branches: draft.branches.map((item) => {
@@ -77,9 +80,21 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
                 <input value={doc.title} onChange={(event) => patchDoc({ title: event.target.value })} />
               </label>
               <label className="ss-docs-field ss-docs-grow-1">
-                อักษรนำหน้า
+                อักษรนำหน้า (ค่าเริ่มต้น)
                 <input className="ss-docs-upper" value={doc.prefix} onChange={(event) => patchDoc({ prefix: event.target.value.toUpperCase() })} />
               </label>
+            </div>
+            <div className="ss-docs-field">
+              <span>หัวเลขเพิ่มเติม <small className="ss-docs-hint">พนักงานเลือกหัวเลขได้ในฟอร์ม · แต่ละหัวเลขรันเลขแยกกัน</small></span>
+              {extraPrefixes.map((value, index) => (
+                <div className="ss-docs-prefix-row" key={index}>
+                  <input className="ss-docs-upper" aria-label={`หัวเลขเพิ่มเติม ${index + 1}`} value={value} placeholder="เช่น STK-TRO" onChange={(event) => patchExtra(extraPrefixes.map((item, at) => (at === index ? event.target.value.toUpperCase() : item)))} />
+                  <button type="button" className="secondary ss-docs-prefix-remove" aria-label={`ลบหัวเลข ${value || index + 1}`} onClick={() => patchExtra(extraPrefixes.filter((_, at) => at !== index))}><X size={16} aria-hidden="true" /></button>
+                </div>
+              ))}
+              {extraPrefixes.length < EXTRA_PREFIX_MAX && (
+                <button type="button" className="secondary ss-docs-prefix-add" onClick={() => patchExtra([...extraPrefixes, ""])}><Plus size={16} aria-hidden="true" />เพิ่มหัวเลข</button>
+              )}
             </div>
             <div className="ss-docs-row">
               <label className="ss-docs-field ss-docs-grow-2">
@@ -102,7 +117,9 @@ export default function StoreSettingsDocuments({ draft, onPatch }) {
               </label>
             </div>
             <p className="ss-docs-example">
-              {"ตัวอย่างเลขที่ถัดไป: "}<b>{example}</b>{` · ${RESET_TEXT[doc.reset] || RESET_TEXT.none}`}
+              {"ตัวอย่างเลขที่ถัดไป: "}<b>{example}</b>
+              {extraPrefixes.filter(Boolean).map((prefix) => <span key={prefix}>{" หรือ "}<b>{sampleDocumentNumber({ ...doc, prefix }, { branchCode: firstBranch?.code || "WH" })}</b></span>)}
+              {` · ${RESET_TEXT[doc.reset] || RESET_TEXT.none}`}
             </p>
           </div>
         )}
