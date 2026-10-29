@@ -46,9 +46,9 @@ function sampleData() {
       u3: { role: "store", username: "ผู้ใช้สาม", email: "three@hillkoff.com", active: false }
     },
     store_reports: {
-      r1: { type: "booking", createdByUid: "u1", createdBy: "สโตร์ 1", serviceDate: DATE, createdAt: at(DATE, "08:32"), confirmedAt: at(DATE, "08:32"), bookingNumber: "SO-1" },
-      r2: { type: "online", createdByUid: "u2", createdBy: "สโตร์ 2", serviceDate: DATE, createdAt: at(DATE, "09:00"), confirmedAt: at(DATE, "09:00") },
-      old: { type: "booking", createdByUid: "u1", createdBy: "สโตร์ 1", serviceDate: "2026-10-01", createdAt: at("2026-10-01", "09:00"), confirmedAt: at("2026-10-01", "09:00") }
+      r1: { type: "booking", createdByUid: "u1", createdBy: "สโตร์ 1", storeCheckerName: "สโตร์ 1", serviceDate: DATE, createdAt: at(DATE, "08:32"), confirmedAt: at(DATE, "08:32"), bookingNumber: "SO-1" },
+      r2: { type: "online", createdByUid: "u2", createdBy: "สโตร์ 2", storeCheckerName: "สโตร์ 2", serviceDate: DATE, createdAt: at(DATE, "09:00"), confirmedAt: at(DATE, "09:00") },
+      old: { type: "booking", createdByUid: "u1", createdBy: "สโตร์ 1", storeCheckerName: "สโตร์ 1", serviceDate: "2026-10-01", createdAt: at("2026-10-01", "09:00"), confirmedAt: at("2026-10-01", "09:00") }
     },
     store_transfers: {
       t1: { preparerUid: "u2", preparerName: "สโตร์ 2", transferNumber: "TR-1", fromBranchName: "A", toBranchName: "B", receipt: "incomplete", note: "ขาด", issueState: "open", resolvedServiceDate: "", resolution: null, serviceDate: DATE, createdAt: at(DATE, "10:00") },
@@ -143,8 +143,9 @@ describe("GET /api/store/daily-report?date=", () => {
       if (query.order.length) expect(query.order).toEqual([[...fields][0]]);
     });
     const byName = (name) => log.filter((query) => query.name === name);
-    expect(byName("store_reports")).toHaveLength(1);
+    expect(byName("store_reports")).toHaveLength(2);
     expect(byName("store_reports")[0]).toMatchObject({ order: ["createdAt"], max: 1501 });
+    expect(byName("store_reports")[1]).toMatchObject({ order: ["serviceDate"], max: 1501 });
     expect(byName("store_transfers").map((q) => q.wheres[0][0]).sort()).toEqual(["issueState", "resolvedServiceDate", "serviceDate"]);
     expect(byName("store_audits")[0]).toMatchObject({ order: ["serviceDate"], max: 1001 });
     expect(byName("orders")).toHaveLength(1);
@@ -198,6 +199,15 @@ describe("GET /api/store/daily-report?date=", () => {
 });
 
 describe("GET /api/store/daily-report?month=", () => {
+  it("finds a report by its service date when created in another month and does not count it twice", async () => {
+    const data = sampleData();
+    data.store_reports.cross = { type: "booking", storeCheckerName: "สโตร์ 1", serviceDate: DATE, createdAt: at("2026-09-30", "09:00"), confirmedAt: at(DATE, "09:00") };
+    state.db = createDb(data, log);
+    const day = (await (await get(`date=${DATE}`)).json()).data;
+    const month = (await (await get("month=2026-10")).json()).data;
+    expect(day.people.find((p) => p.uid === "u1").booking).toBe(2);
+    expect(month.people.find((p) => p.uid === "u1").booking).toBe(3);
+  });
   it("returns month rows for the current month up to today without reading orders", async () => {
     const response = await get("month=2026-10");
     const { ok, data } = await response.json();

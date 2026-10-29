@@ -138,7 +138,7 @@ describe("LINE text builders (full-string equality)", () => {
       "📋 รายงานประจำวันรายบุคคล · สโตร์ WH",
       "สโตร์ 1 · พ. 28 ต.ค. 2569",
       "",
-      "เวลาทำงาน 08:32–15:30 น.",
+      "ช่วงเวลาเอกสารในระบบ 08:32–15:30 น.",
       "• งานรวม 14 รายการ",
       "• ใบสั่งจอง 6 · ใบขายออนไลน์ 4",
       "• ใบโอนที่จัด 2 (ไม่ครบ 0 · ค้าง 0) · แก้ไขปัญหา 0 ครั้ง",
@@ -172,7 +172,7 @@ describe("LINE text builders (full-string equality)", () => {
       "📋 รายงานประจำวันรายบุคคล · สโตร์ WH",
       "สโตร์ 3 · พ. 28 ต.ค. 2569",
       "",
-      "เวลาทำงาน 10:00–10:00 น.",
+      "ช่วงเวลาเอกสารในระบบ 10:00–10:00 น.",
       "• งานรวม 0 รายการ",
       "• ใบสั่งจอง 0 · ใบขายออนไลน์ 0",
       "• ใบโอนที่จัด 0 (ไม่ครบ 0 · ค้าง 0) · แก้ไขปัญหา 1 ครั้ง",
@@ -195,12 +195,16 @@ describe("LINE text builders (full-string equality)", () => {
       "ต.ค. 2569 (1–28)",
       "",
       "1) สโตร์ 1 · 24 วัน · งานรวม 302 (เฉลี่ย 12.6/วัน)",
+      "   ใบสั่งจอง 121 · ออนไลน์ 79 · ใบโอน 68 · Audit 34",
       "   ใบโอนครบ 86.8% · ปิดปัญหา 9/9 · ตรวจนับตรง 97.6%",
       "2) สโตร์ 2 · 23 วัน · งานรวม 231 (เฉลี่ย 10.0/วัน)",
+      "   ใบสั่งจอง 94 · ออนไลน์ 62 · ใบโอน 53 · Audit 22",
       "   ใบโอนครบ 83.0% · ปิดปัญหา 7/9 · ตรวจนับตรง 97.9%",
       "3) สโตร์ 3 · 21 วัน · งานรวม 131 (เฉลี่ย 6.2/วัน)",
+      "   ใบสั่งจอง 53 · ออนไลน์ 35 · ใบโอน 31 · Audit 12",
       "   ใบโอนครบ 80.6% · ปิดปัญหา 6/6 · ตรวจนับตรง 97.8%",
       "4) สโตร์ 4 · 0 วัน · งานรวม 0 (เฉลี่ย 0.0/วัน)",
+      "   ใบสั่งจอง 0 · ออนไลน์ 0 · ใบโอน 0 · Audit 0",
       "   ใบโอนครบ — · ปิดปัญหา 0/0 · ตรวจนับตรง —"
     ].join("\n"));
   });
@@ -213,7 +217,7 @@ describe("buildDailyReport", () => {
     { uid: "u3", name: "สโตร์ 3" },
     { uid: "u4", name: "สโตร์ 4" }
   ];
-  const report = (id, uid, type, hhmm, extra = {}) => ({ id, type, createdByUid: uid, createdBy: uid, serviceDate: TODAY, createdAt: at(TODAY, hhmm), confirmedAt: at(TODAY, hhmm), bookingNumber: "", ...extra });
+  const report = (id, uid, type, hhmm, extra = {}) => ({ id, type, createdByUid: uid, createdBy: uid, storeCheckerName: roster.find((r) => r.uid === uid)?.name || "คนนอก", serviceDate: TODAY, createdAt: at(TODAY, hhmm), confirmedAt: at(TODAY, hhmm), bookingNumber: "", ...extra });
   const transfer = (id, uid, hhmm, extra = {}) => ({ id, preparerUid: uid, preparerName: roster.find((r) => r.uid === uid)?.name || "", transferNumber: id.toUpperCase(), fromBranchName: "คลังหลัก", toBranchName: "สาขา 02", receipt: "complete", note: "", issueState: "", resolution: null, resolvedServiceDate: "", serviceDate: TODAY, createdAt: at(TODAY, hhmm), ...extra });
   const audit = (id, uid, hhmm, extra = {}) => ({ id, documentNumber: id.toUpperCase(), createdByUid: uid, createdBy: uid, branchName: "คลังหลัก", zone: "", total: 10, match: 10, mismatch: 0, serviceDate: TODAY, createdAt: at(TODAY, hhmm), ...extra });
 
@@ -265,14 +269,14 @@ describe("buildDailyReport", () => {
   const byUid = Object.fromEntries(result.people.map((p) => [p.uid, p]));
 
   it("keeps roster order, includes idle members and appends outsiders with work", () => {
-    expect(result.people.map((p) => p.uid)).toEqual(["u1", "u2", "u3", "u4", "u9"]);
+    expect(result.people.map((p) => p.uid)).toEqual(["u1", "u2", "u3", "u4", "name:คนนอก"]);
     expect(result.date).toBe(TODAY);
     expect(result.isToday).toBe(true);
     expect(byUid.u4).toMatchObject({ booking: 0, transfer: 0, start: "", end: "", timeline: [] });
-    expect(byUid.u9).toMatchObject({ name: "คนนอก", booking: 1 });
+    expect(byUid["name:คนนอก"]).toMatchObject({ name: "คนนอก", booking: 1 });
   });
 
-  it("attributes reports to the creator and skips deleted, draft and other-day reports", () => {
+  it("attributes reports to the checker and skips deleted, draft and other-day reports", () => {
     expect(byUid.u1).toMatchObject({ booking: 4, online: 1 });
     expect(byUid.u2.booking).toBe(0);
   });
@@ -347,7 +351,7 @@ describe("buildDailyReport", () => {
 
 describe("buildMonthReport", () => {
   const roster = [{ uid: "u1", name: "สโตร์ 1" }, { uid: "u2", name: "สโตร์ 2" }];
-  const rep = (id, type, date, extra = {}) => ({ id, type, createdByUid: "u1", createdBy: "u1", serviceDate: date, createdAt: at(date, "09:00"), confirmedAt: at(date, "09:00"), ...extra });
+  const rep = (id, type, date, extra = {}) => ({ id, type, createdByUid: "u1", createdBy: "u1", storeCheckerName: "สโตร์ 1", serviceDate: date, createdAt: at(date, "09:00"), confirmedAt: at(date, "09:00"), ...extra });
   const tr = (id, date, extra = {}) => ({ id, preparerUid: "u1", preparerName: "u1", serviceDate: date, createdAt: at(date, "10:00"), receipt: "complete", issueState: "", ...extra });
   const au = (id, date, extra = {}) => ({ id, createdByUid: "u1", createdBy: "u1", serviceDate: date, createdAt: at(date, "11:00"), total: 50, mismatch: 2, ...extra });
 
@@ -387,8 +391,10 @@ describe("buildMonthReport", () => {
       "ต.ค. 2569 (1–28)",
       "",
       "1) สโตร์ 1 · 3 วัน · งานรวม 7 (เฉลี่ย 2.3/วัน)",
+      "   ใบสั่งจอง 1 · ออนไลน์ 1 · ใบโอน 3 · Audit 2",
       "   ใบโอนครบ 33.3% · ปิดปัญหา 1/2 · ตรวจนับตรง 96.0%",
       "2) สโตร์ 2 · 0 วัน · งานรวม 0 (เฉลี่ย 0.0/วัน)",
+      "   ใบสั่งจอง 0 · ออนไลน์ 0 · ใบโอน 0 · Audit 0",
       "   ใบโอนครบ — · ปิดปัญหา 0/0 · ตรวจนับตรง —"
     ].join("\n"));
   });

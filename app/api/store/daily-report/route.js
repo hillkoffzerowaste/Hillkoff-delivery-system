@@ -27,6 +27,16 @@ function rangeQuery(db, collection, field, from, to, { exclusiveEnd = false } = 
   return db.collection(collection).where(field, ">=", from).where(field, exclusiveEnd ? "<" : "<=", to).orderBy(field);
 }
 
+async function readReports(db, from, to, bounds, cap) {
+  const [byCreated, byService] = await Promise.all([
+    readCapped(rangeQuery(db, "store_reports", "createdAt", bounds.start, bounds.endExclusive, { exclusiveEnd: true }), cap),
+    readCapped(rangeQuery(db, "store_reports", "serviceDate", from, to), cap)
+  ]);
+  const rows = [...new Map([...byCreated, ...byService].map((item) => [item.id, item])).values()];
+  if (rows.length > cap) throw Object.assign(new Error(OVER_LIMIT_MESSAGE), { status: 422 });
+  return rows;
+}
+
 async function readRoster(db) {
   const [snap, settingsSnap] = await Promise.all([
     db.collection("users").where("role", "==", "store").limit(ROSTER_LIMIT + 1).get(),
@@ -48,7 +58,7 @@ async function readDay(db, date) {
   const day = bangkokDayRange(date);
   const [roster, weekReports, weekTransfers, transfersResolved, openTransfers, weekAudits, orders] = await Promise.all([
     readRoster(db),
-    readCapped(rangeQuery(db, "store_reports", "createdAt", week.start, week.endExclusive, { exclusiveEnd: true }), DAILY_REPORT_LIMITS.reports),
+    readReports(db, weekFrom, date, week, DAILY_REPORT_LIMITS.reports),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
     readCapped(rangeQuery(db, "store_transfers", "resolvedServiceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
     readOptional(db.collection("store_transfers").where("issueState", "==", "open"), DAILY_REPORT_LIMITS.openIssues),
@@ -79,7 +89,7 @@ async function readMonth(db, month) {
   const endDay = today.startsWith(`${month}-`) ? Number(today.slice(8, 10)) : Number(range.to.slice(8, 10));
   const [roster, reports, transfers, audits] = await Promise.all([
     readRoster(db),
-    readCapped(rangeQuery(db, "store_reports", "createdAt", bounds.start, bounds.endExclusive, { exclusiveEnd: true }), DAILY_REPORT_LIMITS.monthReports),
+    readReports(db, range.from, range.to, bounds, DAILY_REPORT_LIMITS.monthReports),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthTransfers),
     readCapped(rangeQuery(db, "store_audits", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthAudits)
   ]);
@@ -93,8 +103,8 @@ export async function GET(request) {
     if (params.has("month")) {
       const month = params.get("month");
       if (!bangkokMonthRange(month)) return fail("เดือนไม่ถูกต้อง", 400);
-      const { month: key, rangeLabel, people } = await readMonth(db, month);
-      return Response.json({ ok: true, data: { month: key, rangeLabel, people, generatedAt: new Date().toISOString() } });
+      const { month: key, rangeLabel, people, unattributed } = await readMonth(db, month);
+      return Response.json({ ok: true, data: { month: key, rangeLabel, people, unattributed, generatedAt: new Date().toISOString() } });
     }
     const date = params.get("date");
     if (!bangkokDayRange(date)) return fail("วันที่ไม่ถูกต้อง", 400);

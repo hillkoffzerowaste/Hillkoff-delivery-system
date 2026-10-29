@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { bangkokMonthRange, fmt, lastNDates, pct, thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
-import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText } from "../../../lib/storeDailyReport.js";
+import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText, unattributedText } from "../../../lib/storeDailyReport.js";
 import "./StoreDailyReport.css";
 
 const REFRESH_MS = 900_000;
@@ -67,7 +67,7 @@ function StatCard({ label, value, note, tone }) {
 function TeamView({ data, onPick }) {
   const rows = data.people;
   return <section aria-label="ภาพรวมทั้งทีม" className="sd-section">
-    {data.team.people === 0 && <p className="sd-holiday">วันหยุด · ไม่มีการบันทึกงานในวันนี้</p>}
+    {data.team.people === 0 && !jobsOf(data.team) && !data.team.resolved && !data.unattributed?.orderChecks && <p className="sd-holiday">ไม่มีการบันทึกงานในวันนี้</p>}
     <div className="store-report-kpis sd-kpis">
       <StatCard label="งานรวมทั้งทีม" value={fmt(jobsOf(data.team))} note={`เอกสารที่บันทึก · ${data.team.people} คน`} />
       <StatCard label="ใบสั่งจอง / ออนไลน์" value={`${fmt(data.team.booking)} / ${fmt(data.team.online)}`} note="ใบ" tone="ok" />
@@ -76,7 +76,7 @@ function TeamView({ data, onPick }) {
     </div>
     <div className="store-report-table-wrap sd-table-wrap">
       <table className="sd-table sd-table-team" aria-label="สรุปรายบุคคลประจำวัน">
-        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col">ช่วงเวลาทำงาน</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน (ไม่ครบ)</th><th scope="col" className="num">แก้ไขปัญหา</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">งานรวม</th><th scope="col">รายคน</th></tr></thead>
+        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน (ไม่ครบ)</th><th scope="col" className="num">แก้ไขปัญหา</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">ตรวจออเดอร์*</th><th scope="col" className="num">งานรวม</th><th scope="col">รายคน</th></tr></thead>
         <tbody>{rows.map((p) => <tr key={p.uid}>
           <th scope="row">{p.name}</th>
           <td>{hoursOf(p)}</td>
@@ -85,11 +85,14 @@ function TeamView({ data, onPick }) {
           <td className="num">{p.transfer} <span className={p.openIssues ? "sd-issue-open" : "sd-issue"}>({p.issues})</span></td>
           <td className="num">{p.resolved}</td>
           <td className="num">{fmt(p.auditItems)}</td>
+          <td className="num">{p.orderChecks}</td>
           <td className="num sd-strong">{jobsOf(p)}</td>
           <td><button type="button" className="secondary" onClick={() => onPick(p.uid)}>ดูรายคน</button></td>
         </tr>)}</tbody>
       </table>
     </div>
+    {unattributedText(data.unattributed) && <p className="sd-note">{unattributedText(data.unattributed)}</p>}
+    <p className="sd-note">* ตรวจออเดอร์นับจากออเดอร์ที่อัปเดตในวันที่เลือก อาจไม่รวมประวัติของออเดอร์ที่ถูกอัปเดตอีกภายหลัง และไม่นับซ้ำในงานรวม</p>
   </section>;
 }
 
@@ -102,7 +105,7 @@ function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate }
     </div>
     <div className="store-report-kpis sd-kpis">
       <StatCard label={`งานรวม · ${person.name}`} value={jobsOf(person)} note={dateLabel} />
-      <StatCard label="ช่วงเวลาทำงาน" value={hoursOf(person)} note="จากรายการแรก–รายการสุดท้าย" tone="ok" />
+      <StatCard label="ช่วงเวลาเอกสารในระบบ" value={hoursOf(person)} note="จากรายการแรก–รายการสุดท้าย ไม่ใช่เวลาเข้างาน" tone="ok" />
       <StatCard label="ใบโอนที่จัด" value={person.transfer} note={`ไม่ครบ ${person.issues} · ค้าง ${person.openIssues} · แก้ไขปัญหา ${person.resolved}`} tone="problem" />
       <StatCard label="Internal Audit" value={fmt(person.auditItems)} note={`รายการ · ${person.auditDocs} เอกสาร · ตรง ${pct(person.auditItems - person.mismatch, person.auditItems)}`} tone="info" />
     </div>
@@ -118,7 +121,7 @@ function PersonView({ data, person, dateLabel, today, onPickPerson, onPickDate }
       <h3>ย้อนหลัง 7 วัน · {person.name}</h3>
       <div className="store-report-table-wrap sd-table-wrap">
         <table className="sd-table sd-table-history" aria-label="ประวัติรายวันของพนักงาน">
-          <thead><tr><th scope="col">วันที่</th><th scope="col">เวลาทำงาน</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">งานรวม</th><th scope="col">ดู</th></tr></thead>
+          <thead><tr><th scope="col">วันที่</th><th scope="col">ช่วงเวลาเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit (รายการ)</th><th scope="col" className="num">งานรวม</th><th scope="col">ดู</th></tr></thead>
           <tbody>{week.map(({ day, entry }) => {
             const label = thaiDateLabel(day.date);
             const shown = day.date === data.date;
@@ -145,10 +148,11 @@ function MonthView({ data }) {
   return <section aria-label="วัดผลรายเดือน" className="sd-section">
     <div className="store-report-table-wrap sd-table-wrap">
       <table className="sd-table sd-table-month" aria-label="วัดผลรายเดือนรายบุคคล">
-        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col" className="num">วันทำงาน</th><th scope="col" className="num">งานรวม</th><th scope="col">เฉลี่ยงาน/วัน</th><th scope="col" className="num">ใบโอนครบ</th><th scope="col" className="num">ปัญหาที่ปิดแล้ว</th><th scope="col" className="num">ตรวจนับ</th><th scope="col" className="num">ความแม่นยำ</th></tr></thead>
+        <thead><tr><th scope="col">ชื่อสโตร์</th><th scope="col" className="num">วันที่มีเอกสาร</th><th scope="col" className="num">ใบสั่งจอง</th><th scope="col" className="num">ออนไลน์</th><th scope="col" className="num">ใบโอน</th><th scope="col" className="num">Audit</th><th scope="col" className="num">งานรวม</th><th scope="col">เฉลี่ยงาน/วัน</th><th scope="col" className="num">ใบโอนครบ</th><th scope="col" className="num">ปัญหาที่ปิดแล้ว</th><th scope="col" className="num">ตรวจนับ</th><th scope="col" className="num">ความแม่นยำ</th></tr></thead>
         <tbody>{rows.map(({ m, jobs, avg }) => <tr key={m.uid}>
           <th scope="row">{m.name}</th>
           <td className="num">{m.days}</td>
+          <td className="num">{fmt(m.booking)}</td><td className="num">{fmt(m.online)}</td><td className="num">{fmt(m.transfer)}</td><td className="num">{fmt(m.auditDocs)}</td>
           <td className="num sd-strong">{fmt(jobs)}</td>
           <td><div className="sd-avg"><div className="sd-bar" aria-hidden="true"><div style={{ width: `${maxAvg ? Math.round((avg / maxAvg) * 100) : 0}%` }} /></div><span>{avg.toFixed(1)}</span></div></td>
           <td className="num">{pct(m.transfer - m.issues, m.transfer)}</td>
@@ -158,6 +162,7 @@ function MonthView({ data }) {
         </tr>)}</tbody>
       </table>
     </div>
+    {unattributedText(data.unattributed) && <p className="sd-note">{unattributedText(data.unattributed)}</p>}
     <p className="sd-note">ตัวชี้วัดเริ่มต้น: งานรวม = ใบสั่งจอง + ใบขายออนไลน์ + ใบโอนที่จัด + เอกสาร Audit · ใบโอนครบ = ใบโอนที่รับครบ ÷ ใบโอนที่จัด · ปัญหาที่ปิดแล้ว = ใบโอนไม่ครบที่แก้ไขแล้ว ÷ ใบโอนไม่ครบ · ความแม่นยำ = สินค้าตรง ÷ ตรวจนับทั้งหมด</p>
   </section>;
 }
@@ -216,9 +221,10 @@ export default function StoreDailyReport({ apiFetch, storeLabel = "สโตร�
   const dateLabel = thaiDateLabel(date);
 
   let line = { title: "", text: "" };
-  if (tab === "team" && dayData) line = { title: `ทั้งทีม ${dateLabel}`, text: teamText({ dateKey: date, rows: dayData.people, openIssues: dayData.openIssues, storeLabel }) };
+  if (tab === "team" && dayData) line = { title: `ทั้งทีม ${dateLabel}`, text: teamText({ dateKey: date, rows: dayData.people, openIssues: dayData.openIssues, unattributed: dayData.unattributed, storeLabel }) };
   if (tab === "person" && dayData && person) line = { title: `${person.name} ${dateLabel}`, text: personText({ dateKey: date, person, storeLabel }) };
-  if (tab === "month" && monthData) line = { title: `สรุปรายเดือน ${thaiMonthLabel(month)}`, text: monthText({ rangeLabel: monthData.rangeLabel, rows: monthData.people, storeLabel }) };
+  if (tab === "month" && monthData) line = { title: `สรุปรายเดือน ${thaiMonthLabel(month)}`, text: monthText({ rangeLabel: monthData.rangeLabel, rows: monthData.people, unattributed: monthData.unattributed, storeLabel }) };
+  if (line.text) line.text += "\nหมายเหตุ: ใบสั่งจองและออนไลน์นับตามผู้ตรวจสโตร์ล่าสุด · ใบโอนนับตามผู้จัด · เวลาเป็นเวลาบันทึกรายการ";
   if (line.text && kind === "date" && dayData?.openIssuesCapped && tab === "team") line.text += "\nหมายเหตุ: รายการใบโอนค้างแสดงไม่ครบ";
   if (line.text && kind === "date" && dayData?.ordersCapped) line.text += "\nหมายเหตุ: ข้อมูลตรวจออเดอร์ไม่ครบ จึงไม่แสดงรายการตรวจออเดอร์";
   if (!line.title) line.title = tab === "month" ? `สรุปรายเดือน ${thaiMonthLabel(month)}` : tab === "person" ? dateLabel : `ทั้งทีม ${dateLabel}`;
@@ -245,7 +251,7 @@ export default function StoreDailyReport({ apiFetch, storeLabel = "สโตร�
         <p>สรุปงานทั้งหมดของ{storeLabel} จากประวัติงานรายวัน · คัดลอกส่งกลุ่ม LINE ได้ · ดูย้อนหลังรายคนและวัดผลรายเดือน</p>
       </div>
       <div className="sd-tools">
-        {tab !== "month" && <label>วันที่<select value={date} onChange={(e) => pickDate(e.target.value)}>{dateOptions.map((d) => <option key={d} value={d}>{thaiDateLabel(d)}{d === today ? " (วันนี้)" : ""}</option>)}</select></label>}
+        {tab !== "month" && <><label>วันที่<select value={date} onChange={(e) => pickDate(e.target.value)}>{dateOptions.map((d) => <option key={d} value={d}>{thaiDateLabel(d)}{d === today ? " (วันนี้)" : ""}</option>)}</select></label><label>เลือกวันที่ย้อนหลัง<input type="date" value={date} max={today} onChange={(e) => { if (e.target.value) pickDate(e.target.value); }} /></label></>}
         {tab === "month" && <label>เดือน<select value={month} onChange={(e) => { setMonth(e.target.value); setToast(null); }}>{monthOptions.map((m) => <option key={m} value={m}>{thaiMonthLabel(m, { endDay: monthEndDay(m, today) })}</option>)}</select></label>}
         <button type="button" className="secondary" onClick={() => load(true)} disabled={busy}><RefreshCw size={16} /> {busy ? "กำลังโหลด" : "รีเฟรช"}</button>
       </div>
@@ -254,6 +260,7 @@ export default function StoreDailyReport({ apiFetch, storeLabel = "สโตร�
     <div role="tablist" aria-label="มุมมองรายงาน" className="sd-tabs">
       {TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "is-active" : undefined} onClick={() => pickTab(id)}>{label}</button>)}
     </div>
+    <p className="sd-note">ใบสั่งจองและใบขายออนไลน์แยกตามผู้ตรวจสโตร์ล่าสุดที่ระบุในเอกสาร · ใบโอนแยกตามผู้จัด · ช่วงเวลาเป็นเวลาที่ระบบบันทึกรายการ</p>
 
     {error && <p role="alert" className="sd-error">{error}</p>}
     {kind === "date" && dayData?.ordersCapped && <p role="status" className="sd-error">ข้อมูลตรวจออเดอร์มีจำนวนมาก จึงไม่แสดงรายการตรวจออเดอร์ในรายงานนี้</p>}
