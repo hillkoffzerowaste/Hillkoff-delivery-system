@@ -5,7 +5,7 @@ import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
 import { addDaysToDateKey, bangkokTimeHHmm, fmt, thaiDateLabel } from "../../../lib/storeFormat.js";
 import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
-import LockedNumberInput from "./LockedNumberInput.jsx";
+import LockedNumberInput, { runningPart } from "./LockedNumberInput.jsx";
 import {
   REQUEST_REF_SAMPLE,
   filterTransfers,
@@ -97,7 +97,15 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
   const digits = cfg?.digits || 4;
-  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg)), ...(cfg?.pattern === "branch" ? [] : lockedNumberPrefixes(cfg, today))].filter(Boolean))];
+  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg)), ...lockedNumberPrefixes(cfg, today, value.fromBranchCode)].filter(Boolean))];
+  const changeFromBranch = (next) => {
+    if (cfg?.pattern !== "branch" || !row.transferNumber) return onChange({ fromBranchCode: next });
+    const previousHeads = lockedNumberPrefixes(cfg, today, value.fromBranchCode);
+    const previous = previousHeads.find((head) => row.transferNumber.startsWith(head));
+    const index = previousHeads.indexOf(previous);
+    const replacement = lockedNumberPrefixes(cfg, today, next)[index];
+    return onChange({ fromBranchCode: next, ...(replacement ? { transferNumber: replacement + runningPart(row.transferNumber, previous) } : {}) });
+  };
   // A request is often raised late last month and transferred early this month, so last month stays selectable.
   const lastMonth = today ? addDaysToDateKey(`${today.slice(0, 7)}-01`, -1) : "";
   const refHeads = requestRefPrefixes(cfg);
@@ -113,7 +121,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
         </label>
       )}
       <label className="st-field">{labelOf(fields, "from", "ต้นทาง")}
-        <select value={value.fromBranchCode} onChange={(event) => onChange({ fromBranchCode: event.target.value })}>{branchOptions}</select>
+        <select value={value.fromBranchCode} onChange={(event) => changeFromBranch(event.target.value)}>{branchOptions}</select>
       </label>
       <label className="st-field">{labelOf(fields, "to", "ปลายทาง")}
         <select value={value.toBranchCode} onChange={(event) => onChange({ toBranchCode: event.target.value })}>{branchOptions}</select>

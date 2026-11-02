@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import StoreTransferPanel, { TRANSFER_DRAFT_KEY } from "../../app/components/store/StoreTransferPanel.jsx";
-import { getDefaultStoreSettings, normalizeStoreSettings } from "../../lib/storeSettings.js";
+import { getDefaultStoreSettings, normalizeStoreSettings, validateStoreSettings } from "../../lib/storeSettings.js";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true, data: { items: [], summary: {}, count: 0 } }));
 const profile = { uid: "store-1", name: "สโตร์หนึ่ง" };
@@ -24,6 +24,28 @@ const render = (settings) => renderToStaticMarkup(<StoreTransferPanel apiFetch={
 const field = (settings, id) => settings.documents.transfer.fields.find((item) => item.id === id);
 
 describe("StoreTransferPanel", () => {
+  it("offers more than six configured transfer heads without dropping later entries", () => {
+    const settings = settingsWith((s) => {
+      s.documents.transfer.prefix = "STK-A";
+      s.documents.transfer.extraPrefixes = ["STK-B", "STK-C", "STK-D", "STK-E", "STK-F", "STK-G"];
+      s.documents.transfer.requestPrefixes = ["RQ-A", "RQ-B", "RQ-C", "RQ-D", "RQ-E", "RQ-F", "RQ-G"];
+    });
+    expect(validateStoreSettings(settings).ok).toBe(true);
+    const html = render(settings);
+    expect(html).toContain("STK-G-");
+    expect(html).toContain("RQ-G");
+    expect(html).toContain('aria-label="เลขที่ใบโอน หัวเลข"');
+  });
+
+  it("offers configured heads with the selected branch in branch-number format", () => {
+    const html = render(settingsWith((s) => {
+      s.documents.transfer.pattern = "branch";
+      s.documents.transfer.extraPrefixes = ["STK-CFS"];
+    }));
+    expect(html).toContain("TR-WH-");
+    expect(html).toContain("STK-CFS-WH-");
+    expect(html).toContain('aria-label="เลขที่ใบโอน หัวเลข"');
+  });
   it("renders the form, status chips and table headers", () => {
     const html = render(settingsWith());
     for (const text of ["เพิ่มรายการใบโอน", "เลขที่ใบโอน *", "อ้างอิงใบขอโอน", "ผู้จัดใบโอน *", "เลือกผู้จัด", "ยืนยันรายการ", "บันทึกร่าง", "+ เพิ่มรายการ", "ไม่มีรายการตามตัวกรองที่เลือก", "รายการใบโอน", "เลขที่ใบโอนรูปแบบ TR-0418"]) {

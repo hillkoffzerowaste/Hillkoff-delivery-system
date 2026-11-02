@@ -8,12 +8,14 @@ import {
   documentCounterId,
   documentNumberPrefix,
   documentPrefixes,
+  EXTRA_PREFIX_MAX,
   getDefaultStoreSettings,
   lockedNumberPrefixes,
   lockedRequestRefPrefixes,
   normalizeStoreSettings,
   parseDocumentSequence,
   requestRefPrefixes,
+  REQUEST_PREFIX_MAX,
   validateDocumentNumber,
   validateStoreSettings
 } from "../../lib/storeSettings.js";
@@ -24,7 +26,7 @@ const branches = [{ code: "WH", name: "คลัง", type: "คลังสิ�
 describe("several document heads", () => {
   it("keeps valid extra heads, drops bad, blank, repeated and default ones", () => {
     const doc = normalizeStoreSettings({ documents: { transfer: { prefix: "STK-TRF", extraPrefixes: ["stk-tro", "STK-TRO", "STK-TRF", "", "bad_1", "A", "B", "C", "D", "E"] } } }).documents.transfer;
-    expect(doc.extraPrefixes).toEqual(["STK-TRO", "A", "B", "C", "D"]);
+    expect(doc.extraPrefixes).toEqual(["STK-TRO", "A", "B", "C", "D", "E"]);
     expect(getDefaultStoreSettings().documents.audit.extraPrefixes).toEqual([]);
     expect(normalizeStoreSettings({}).documents.transfer.extraPrefixes).toEqual([]);
   });
@@ -39,7 +41,7 @@ describe("several document heads", () => {
     expect(validateStoreSettings(withExtra(["STK-X"], ["STK-X"])).ok).toBe(false);
     expect(validateStoreSettings(withExtra(["TR"])).ok).toBe(false);
     expect(validateStoreSettings(withExtra(["bad_1"])).ok).toBe(false);
-    expect(validateStoreSettings(withExtra(["A", "B", "C", "D", "E", "F"])).ok).toBe(false);
+    expect(validateStoreSettings(withExtra(Array.from({ length: EXTRA_PREFIX_MAX + 1 }, (_, i) => `X${i}`))).ok).toBe(false);
     expect(validateStoreSettings(withExtra("STK-TRO")).ok).toBe(false);
   });
 
@@ -107,7 +109,7 @@ describe("transfer-request heads", () => {
     expect(ok.value.documents.audit.requestPrefixes).toBeUndefined();
     expect(validateStoreSettings(withRequest(["STK-RQ", "STK-RQ"])).ok).toBe(false);
     expect(validateStoreSettings(withRequest(["bad_1"])).ok).toBe(false);
-    expect(validateStoreSettings(withRequest(["A", "B", "C", "D", "E", "F", "G"])).ok).toBe(false);
+    expect(validateStoreSettings(withRequest(Array.from({ length: REQUEST_PREFIX_MAX + 1 }, (_, i) => `X${i}`))).ok).toBe(false);
   });
 
   it("shows the request heads as a dropdown with the running-number box", () => {

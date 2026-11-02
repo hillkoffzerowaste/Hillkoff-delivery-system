@@ -1637,23 +1637,28 @@ export default function App() {
   ), [refreshAuthToken]);
   const hasAuthToken = Boolean(state.auth?.token);
   useEffect(() => {
-    if (!fbAuthReady || !hasAuthToken || state.auth?.role !== "store") return undefined;
+    if (!fbAuthReady || !hasAuthToken || state.auth?.role !== "store" || displayTab === STORE_SETTINGS_TAB_ID) return undefined;
     let cancelled = false;
-    (async () => {
+    let generation = 0;
+    const loadStoreSettings = async () => {
+      const sequence = ++generation;
       try {
         const res = await authenticatedApiFetch("/api/store/settings");
         const json = await res.json();
         if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-        if (cancelled) return;
+        if (cancelled || sequence !== generation) return;
         setStoreSettings(normalizeStoreSettings(json.data?.settings));
         setStoreSettingsUpdatedAt(json.data?.updatedAt || "");
       } catch (error) {
         // โหลดค่าตั้งค่าไม่ได้ให้ใช้ค่าเริ่มต้นต่อ ห้ามบล็อกการใช้งานสโตร์
         console.warn("Store settings load failed", error?.message || error);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [authenticatedApiFetch, fbAuthReady, hasAuthToken, state.auth?.role]);
+    };
+    void loadStoreSettings();
+    const onVisibilityChange = () => { if (document.visibilityState === "visible" && displayTab !== STORE_SETTINGS_TAB_ID) void loadStoreSettings(); };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => { cancelled = true; document.removeEventListener("visibilitychange", onVisibilityChange); };
+  }, [authenticatedApiFetch, fbAuthReady, hasAuthToken, state.auth?.role, displayTab]);
   useEffect(() => {
     if (state.auth?.role !== "store") setStoreSettingsPin("");
   }, [state.auth?.role]);
