@@ -249,16 +249,20 @@ export async function PUT(request) {
       const snap = await transaction.get(ref);
       if (!snap.exists) throw httpError("ไม่พบใบโอน", 404);
       const doc = snap.data();
-      if (doc.deletedAt || doc.createdByUid !== profile.uid) throw httpError("แก้ไขใบโอนนี้ไม่ได้", 403);
+      if (doc.deletedAt) throw httpError("แก้ไขใบโอนนี้ไม่ได้", 403);
       const reason = clean(body?.reason, 1000);
       if (!reason) throw httpError("กรุณาระบุเหตุผลในการแก้ไข", 400);
+      if (typeof body?.baseUpdatedAt === "string" && body.baseUpdatedAt !== (doc.updatedAt || doc.createdAt || "")) {
+        throw httpError("ใบโอนมีการเปลี่ยนแปลงแล้ว กรุณาปิดหน้าต่างแก้ไขและเปิดรายการใหม่", 409);
+      }
 
       const settings = await readSettings(db, transaction);
       const cfg = settings.documents.transfer;
       const checked = validateTransferRow(rowInput(body), { settings, profile, keepBranchCodes: [doc.fromBranchCode, doc.toBranchCode], keepNumber: doc.transferNumber });
       if (!checked.ok) throw httpError(checked.error, checked.status);
       const value = checked.value;
-      await verifyPreparer(transaction, db, value, profile, settings);
+      if (value.preparerUid && value.preparerUid === doc.preparerUid && doc.preparerName) value.preparerName = doc.preparerName;
+      else await verifyPreparer(transaction, db, value, profile, settings);
 
       const patch = { ...value, updatedAt: now, updatedBy: profile.name || profile.email || "" };
       if (value.receipt === "complete") Object.assign(patch, { issueState: "", resolution: null, resolvedServiceDate: "" });

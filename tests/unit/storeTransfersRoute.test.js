@@ -313,15 +313,41 @@ describe("store transfers route", () => {
   });
 
   describe("PUT", () => {
-    it("lets only the creator edit and asks for a reason", async () => {
+    it("lets another store account correct branches and keeps the editor and before/after history", async () => {
       const saved = await postOne({});
-      const edit = { id: saved.id, ...row({ note: "" }) };
       state.uid = "store-9";
-      expect((await call("PUT", { ...edit, reason: "แก้" })).status).toBe(403);
-      state.uid = "store-1";
+      const edit = { id: saved.id, ...row({ fromBranchCode: "BR01", toBranchCode: "WH" }) };
       const noReason = await call("PUT", edit);
       expect(noReason.status).toBe(400);
       expect((await noReason.json()).error).toBe("กรุณาระบุเหตุผลในการแก้ไข");
+      expect((await call("PUT", { ...edit, reason: "เลือกสาขาผิด" })).status).toBe(200);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`)).toMatchObject({ createdByUid: "store-1", fromBranchCode: "BR01", fromBranchName: "สาขา 01", toBranchCode: "WH", toBranchName: "คลังหลัก" });
+      const event = historyPaths(state.db).map((p) => state.db.docs.get(p)).find((item) => item.event === "updated");
+      expect(event).toMatchObject({ byUid: "store-9", reason: "เลือกสาขาผิด", before: { fromBranchCode: "WH", toBranchCode: "BR01" }, after: { fromBranchCode: "BR01", toBranchCode: "WH" } });
+    });
+
+    it("rejects stale edits without overwriting a later change", async () => {
+      const saved = await postOne({});
+      state.db.docs.set(`store_transfers/${saved.id}`, { ...saved, updatedAt: "2099-01-01T00:00:00.000Z" });
+      const response = await call("PUT", { id: saved.id, ...row({ toBranchCode: "WH" }), reason: "แก้ไข", baseUpdatedAt: saved.updatedAt });
+      expect(response.status).toBe(409);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`).updatedAt).toBe("2099-01-01T00:00:00.000Z");
+    });
+
+    it("keeps the original inactive preparer when correcting other fields", async () => {
+      const saved = await postOne({});
+      state.db.docs.set("users/store-2", { role: "store", name: "สโตร์สอง", active: false });
+      const response = await call("PUT", { id: saved.id, ...row({ fromBranchCode: "BR01", toBranchCode: "WH" }), reason: "เลือกสาขาผิด" });
+      expect(response.status).toBe(200);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`)).toMatchObject({ preparerUid: "store-2", preparerName: "สโตร์สอง" });
+    });
+
+    it("rejects a change to an inactive preparer while allowing the original one", async () => {
+      const saved = await postOne({});
+      state.db.docs.set("users/store-3", { role: "store", name: "เลิกใช้งาน", active: false });
+      const response = await call("PUT", { id: saved.id, ...row({ preparerUid: "store-3", preparerName: "เลิกใช้งาน" }), reason: "แก้ผู้จัด" });
+      expect(response.status).toBe(400);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`).preparerUid).toBe("store-2");
     });
 
     it("changes the number by reserving the new one and releasing the old one", async () => {

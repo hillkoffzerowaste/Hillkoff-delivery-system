@@ -84,12 +84,12 @@ async function request(apiFetch, url, init) {
 const jsonInit = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 // An existing number keeps its own month (e.g. editing last month's transfer).
-function prefixOfNumber(value, heads) {
+function prefixOfNumber(value, heads, keepExisting = false) {
   const match = /^(.*-)(\d+)$/.exec(String(value || ""));
-  return match && heads.some((prefix) => match[1].startsWith(prefix)) ? match[1] : "";
+  return match && (keepExisting || heads.some((prefix) => match[1].startsWith(prefix))) ? match[1] : "";
 }
 
-function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today }) {
+function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today, originalNumber = "" }) {
   const incomplete = row.receipt === "incomplete";
   const missingNote = incomplete && !row.note.trim();
   const value = effectiveRow(row, branches, staff);
@@ -97,7 +97,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
   const digits = cfg?.digits || 4;
-  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg)), ...lockedNumberPrefixes(cfg, today, value.fromBranchCode)].filter(Boolean))];
+  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg), row.transferNumber === originalNumber), ...lockedNumberPrefixes(cfg, today, value.fromBranchCode)].filter(Boolean))];
   const changeFromBranch = (next) => {
     if (cfg?.pattern !== "branch" || !row.transferNumber) return onChange({ fromBranchCode: next });
     const previousHeads = lockedNumberPrefixes(cfg, today, value.fromBranchCode);
@@ -322,9 +322,9 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
     if (!reason) { setToast({ text: "กรุณาระบุเหตุผลในการแก้ไข", tone: "error" }); return; }
     const row = effectiveRow(panel.row, branches, staff);
     if (!panel.row.preparerUid) { row.preparerUid = panel.original.preparerUid; row.preparerName = panel.original.preparerName; }
-    const checked = validateTransferRow(row, { settings, profile, keepBranchCodes: [panel.original.fromBranchCode, panel.original.toBranchCode] });
+    const checked = validateTransferRow(row, { settings, profile, keepBranchCodes: [panel.original.fromBranchCode, panel.original.toBranchCode], keepNumber: panel.original.transferNumber });
     if (!checked.ok) { setToast({ text: checked.error, tone: "error" }); return; }
-    await request(apiFetch, "/api/store/transfers", jsonInit("PUT", { id: panel.id, reason, ...row }));
+    await request(apiFetch, "/api/store/transfers", jsonInit("PUT", { id: panel.id, reason, baseUpdatedAt: panel.original.updatedAt || panel.original.createdAt || "", ...row }));
     setPanel(null);
     setToast({ text: "บันทึกการแก้ไขใบโอนแล้ว", tone: "ok" });
     await refresh();
@@ -347,7 +347,8 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
     setPanel({ kind: "edit", id: item.id, original: item, row: stillStaff ? base : { ...base, preparerUid: "" }, reason: "" });
   };
   const patchEditRow = (patch) => setPanel((current) => ({ ...current, row: { ...current.row, ...patch } }));
-  const canManage = (item) => !item.deletedAt && Boolean(profile?.uid) && item.createdByUid === profile.uid;
+  const canEdit = (item) => !item.deletedAt && Boolean(profile?.uid);
+  const canDelete = (item) => canEdit(item) && item.createdByUid === profile.uid;
   const inFlight = Boolean(busy);
 
   return (
@@ -449,7 +450,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
       {panel?.kind === "edit" && (
         <section className="st-panel is-edit" aria-label="แก้ไขใบโอน">
           <b>แก้ไขใบโอน · {panel.original.transferNumber}</b>
-          <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" cfg={cfg} today={today} />
+          <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" cfg={cfg} today={today} originalNumber={panel.original.transferNumber} />
           <label className="st-field">เหตุผลในการแก้ไข *
             <input value={panel.reason} onChange={(event) => setPanel({ ...panel, reason: event.target.value })} placeholder="ระบุเหตุผล" />
           </label>
@@ -514,8 +515,8 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
                       {state === "open" && <button type="button" className="secondary" disabled={inFlight} onClick={() => setPanel({ kind: "resolve", id: item.id, transferNumber: item.transferNumber, note: item.note, text: "" })}>บันทึกการแก้ไข</button>}
                       {state === "resolved" && <button type="button" className="secondary" disabled={inFlight} onClick={() => reopen(item)}>เปิดเรื่องใหม่</button>}
                       {state === "complete" && <span className="st-muted">—</span>}
-                      {canManage(item) && <button type="button" className="secondary" disabled={inFlight} onClick={() => startEdit(item)}>แก้ไข</button>}
-                      {canManage(item) && <button type="button" className="secondary" disabled={inFlight} onClick={() => setPanel({ kind: "delete", id: item.id, transferNumber: item.transferNumber, reason: "" })}>ลบ</button>}
+                      {canEdit(item) && <button type="button" className="secondary" disabled={inFlight} onClick={() => startEdit(item)}>แก้ไข</button>}
+                      {canDelete(item) && <button type="button" className="secondary" disabled={inFlight} onClick={() => setPanel({ kind: "delete", id: item.id, transferNumber: item.transferNumber, reason: "" })}>ลบ</button>}
                     </div>
                   </td>
                 </tr>
