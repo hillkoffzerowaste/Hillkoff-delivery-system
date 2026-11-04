@@ -313,6 +313,29 @@ describe("store transfers route", () => {
   });
 
   describe("PUT", () => {
+    it("saves both warehouses and preserves their names on later edits and old clients", async () => {
+      const branches = [
+        { ...settingsDoc.branches[0], warehouses: [{ id: "w1", name: "คลังหนึ่ง", active: true }] },
+        { ...settingsDoc.branches[1], warehouses: [{ id: "w2", name: "คลังสอง", active: true }] }
+      ];
+      state.db.docs.set("store_settings/default", { ...settingsDoc, branches });
+      const saved = await postOne({ fromWarehouseId: "w1", toWarehouseId: "w2" });
+      expect(saved).toMatchObject({ fromWarehouseId: "w1", fromWarehouseName: "คลังหนึ่ง", toWarehouseId: "w2", toWarehouseName: "คลังสอง" });
+      branches[0].warehouses[0] = { id: "w1", name: "ชื่อใหม่", active: false };
+      const response = await call("PUT", { id: saved.id, ...row(), reason: "แก้ไข" });
+      expect(response.status).toBe(200);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`)).toMatchObject({ fromWarehouseId: "w1", fromWarehouseName: "คลังหนึ่ง", toWarehouseId: "w2", toWarehouseName: "คลังสอง" });
+      const event = historyPaths(state.db).map((p) => state.db.docs.get(p)).find((entry) => entry.event === "updated");
+      expect(event).toMatchObject({ before: { fromWarehouseId: "w1" }, after: { fromWarehouseId: "w1" } });
+    });
+
+    it("clears an old warehouse when an older client changes its branch", async () => {
+      state.db.docs.set("store_settings/default", { ...settingsDoc, branches: [{ ...settingsDoc.branches[0], warehouses: [{ id: "w1", name: "คลังหนึ่ง", active: true }] }, settingsDoc.branches[1]] });
+      const saved = await postOne({ fromWarehouseId: "w1" });
+      const response = await call("PUT", { id: saved.id, ...row({ fromBranchCode: "BR01", toBranchCode: "WH" }), reason: "สลับสาขา" });
+      expect(response.status).toBe(200);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`)).toMatchObject({ fromBranchCode: "BR01", fromWarehouseId: "", fromWarehouseName: "" });
+    });
     it("lets another store account correct branches and keeps the editor and before/after history", async () => {
       const saved = await postOne({});
       state.uid = "store-9";

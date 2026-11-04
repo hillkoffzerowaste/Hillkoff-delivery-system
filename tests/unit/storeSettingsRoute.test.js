@@ -89,6 +89,18 @@ describe("store settings route", () => {
     expect(saved.branches[0].header).toEqual(old.branches[0].header);
   });
 
+  it("does not erase branch warehouses when an older settings client omits them", async () => {
+    vi.stubEnv("STORE_SETTINGS_PIN", "9876");
+    const warehouses = [{ id: "w1", name: "คลังหนึ่ง", active: true }];
+    const old = savedSettings({ branches: [{ code: "WH", name: "คลังหลัก", type: "คลังสินค้า", active: true, warehouses }] });
+    state.db = createDb({ settings: old });
+    const draft = draftFrom(old);
+    delete draft.branches[0].warehouses;
+    const response = await call("PUT", { pin: "9876", baseUpdatedAt: old.updatedAt, settings: draft });
+    expect(response.status).toBe(200);
+    expect(state.db.docs.get("store_settings/default").branches[0].warehouses).toEqual(warehouses);
+  });
+
   describe("GET", () => {
     it("returns defaults with empty updatedAt when no document exists", async () => {
       state.db = createDb();

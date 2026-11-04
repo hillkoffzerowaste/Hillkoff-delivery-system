@@ -31,7 +31,7 @@ const CHIPS = [
 const NO_STAR_FIELDS = ["from", "to", "receipt"];
 
 let draftCounter = 0;
-const newDraft = () => ({ key: `d${(draftCounter += 1)}`, transferNumber: "", requestRef: "", fromBranchCode: "", toBranchCode: "", itemCount: "", preparerUid: "", receipt: "complete", note: "" });
+const newDraft = () => ({ key: `d${(draftCounter += 1)}`, transferNumber: "", requestRef: "", fromBranchCode: "", toBranchCode: "", fromWarehouseId: "", toWarehouseId: "", itemCount: "", preparerUid: "", receipt: "complete", note: "" });
 
 function fieldMap(settings) {
   const fields = settings?.documents?.transfer?.fields || [];
@@ -52,6 +52,8 @@ function effectiveRow(draft, branches, staff) {
     requestRef: draft.requestRef,
     fromBranchCode: draft.fromBranchCode || branches[0]?.code || "",
     toBranchCode: draft.toBranchCode || branches[1]?.code || "",
+    fromWarehouseId: draft.fromWarehouseId || "",
+    toWarehouseId: draft.toWarehouseId || "",
     itemCount: draft.itemCount,
     preparerUid: preparer ? preparer.uid : "",
     preparerName: preparer ? preparer.name : "",
@@ -67,6 +69,8 @@ function rowFromItem(item) {
     requestRef: item.requestRef || "",
     fromBranchCode: item.fromBranchCode || "",
     toBranchCode: item.toBranchCode || "",
+    fromWarehouseId: item.fromWarehouseId || "",
+    toWarehouseId: item.toWarehouseId || "",
     itemCount: item.itemCount ? String(item.itemCount) : "",
     preparerUid: item.preparerUid || "",
     receipt: item.receipt || "complete",
@@ -89,7 +93,7 @@ function prefixOfNumber(value, heads, keepExisting = false) {
   return match && (keepExisting || heads.some((prefix) => match[1].startsWith(prefix))) ? match[1] : "";
 }
 
-function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today, originalNumber = "" }) {
+function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today, original = null }) {
   const incomplete = row.receipt === "incomplete";
   const missingNote = incomplete && !row.note.trim();
   const value = effectiveRow(row, branches, staff);
@@ -97,14 +101,23 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
   const digits = cfg?.digits || 4;
-  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg), row.transferNumber === originalNumber), ...lockedNumberPrefixes(cfg, today, value.fromBranchCode)].filter(Boolean))];
+  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg), row.transferNumber === original?.transferNumber), ...lockedNumberPrefixes(cfg, today, value.fromBranchCode)].filter(Boolean))];
+  const warehouseOptions = (side) => {
+    const branchCode = value[`${side}BranchCode`];
+    const available = (branches.find((branch) => branch.code === branchCode)?.warehouses || []).filter((item) => item.active !== false);
+    const id = value[`${side}WarehouseId`];
+    if (id && original?.[`${side}BranchCode`] === branchCode && original?.[`${side}WarehouseId`] === id && !available.some((item) => item.id === id)) available.push({ id, name: original[`${side}WarehouseName`] || "คลังเดิม" });
+    return available;
+  };
+  const fromWarehouses = warehouseOptions("from");
+  const toWarehouses = warehouseOptions("to");
   const changeFromBranch = (next) => {
-    if (cfg?.pattern !== "branch" || !row.transferNumber) return onChange({ fromBranchCode: next });
+    if (cfg?.pattern !== "branch" || !row.transferNumber) return onChange({ fromBranchCode: next, fromWarehouseId: "" });
     const previousHeads = lockedNumberPrefixes(cfg, today, value.fromBranchCode);
     const previous = previousHeads.find((head) => row.transferNumber.startsWith(head));
     const index = previousHeads.indexOf(previous);
     const replacement = lockedNumberPrefixes(cfg, today, next)[index];
-    return onChange({ fromBranchCode: next, ...(replacement ? { transferNumber: replacement + runningPart(row.transferNumber, previous) } : {}) });
+    return onChange({ fromBranchCode: next, fromWarehouseId: "", ...(replacement ? { transferNumber: replacement + runningPart(row.transferNumber, previous) } : {}) });
   };
   // A request is often raised late last month and transferred early this month, so last month stays selectable.
   const lastMonth = today ? addDaysToDateKey(`${today.slice(0, 7)}-01`, -1) : "";
@@ -123,9 +136,11 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
       <label className="st-field">{labelOf(fields, "from", "ต้นทาง")}
         <select value={value.fromBranchCode} onChange={(event) => changeFromBranch(event.target.value)}>{branchOptions}</select>
       </label>
+      {fromWarehouses.length > 0 && <label className="st-field">คลังต้นทาง<select value={value.fromWarehouseId} onChange={(event) => onChange({ fromWarehouseId: event.target.value })}><option value="">ไม่ระบุคลัง</option>{fromWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>}
       <label className="st-field">{labelOf(fields, "to", "ปลายทาง")}
-        <select value={value.toBranchCode} onChange={(event) => onChange({ toBranchCode: event.target.value })}>{branchOptions}</select>
+        <select value={value.toBranchCode} onChange={(event) => onChange({ toBranchCode: event.target.value, toWarehouseId: "" })}>{branchOptions}</select>
       </label>
+      {toWarehouses.length > 0 && <label className="st-field">คลังปลายทาง<select value={value.toWarehouseId} onChange={(event) => onChange({ toWarehouseId: event.target.value })}><option value="">ไม่ระบุคลัง</option>{toWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>}
       {fields.items?.show !== false && (
         <label className="st-field st-field-items">{labelOf(fields, "items", "จำนวนรายการที่โอน")}
           <input inputMode="numeric" maxLength={4} value={row.itemCount} onChange={(event) => onChange({ itemCount: event.target.value.replace(/\D/g, "") })} placeholder="เช่น 12" autoComplete="off" />
@@ -227,7 +242,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
         setDrafts(saved.slice(0, MAX_ROWS).map((row) => {
           const fresh = newDraft();
           const text = (name) => (typeof row?.[name] === "string" ? row[name] : fresh[name]);
-          return { ...fresh, transferNumber: text("transferNumber"), requestRef: text("requestRef"), fromBranchCode: text("fromBranchCode"), toBranchCode: text("toBranchCode"), itemCount: text("itemCount"), preparerUid: text("preparerUid"), receipt: row?.receipt === "incomplete" ? "incomplete" : "complete", note: text("note") };
+          return { ...fresh, transferNumber: text("transferNumber"), requestRef: text("requestRef"), fromBranchCode: text("fromBranchCode"), toBranchCode: text("toBranchCode"), fromWarehouseId: text("fromWarehouseId"), toWarehouseId: text("toWarehouseId"), itemCount: text("itemCount"), preparerUid: text("preparerUid"), receipt: row?.receipt === "incomplete" ? "incomplete" : "complete", note: text("note") };
         }));
       }
     } catch {
@@ -322,7 +337,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
     if (!reason) { setToast({ text: "กรุณาระบุเหตุผลในการแก้ไข", tone: "error" }); return; }
     const row = effectiveRow(panel.row, branches, staff);
     if (!panel.row.preparerUid) { row.preparerUid = panel.original.preparerUid; row.preparerName = panel.original.preparerName; }
-    const checked = validateTransferRow(row, { settings, profile, keepBranchCodes: [panel.original.fromBranchCode, panel.original.toBranchCode], keepNumber: panel.original.transferNumber });
+    const checked = validateTransferRow(row, { settings, profile, keepBranchCodes: [panel.original.fromBranchCode, panel.original.toBranchCode], keepNumber: panel.original.transferNumber, original: panel.original });
     if (!checked.ok) { setToast({ text: checked.error, tone: "error" }); return; }
     await request(apiFetch, "/api/store/transfers", jsonInit("PUT", { id: panel.id, reason, baseUpdatedAt: panel.original.updatedAt || panel.original.createdAt || "", ...row }));
     setPanel(null);
@@ -450,7 +465,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
       {panel?.kind === "edit" && (
         <section className="st-panel is-edit" aria-label="แก้ไขใบโอน">
           <b>แก้ไขใบโอน · {panel.original.transferNumber}</b>
-          <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" cfg={cfg} today={today} originalNumber={panel.original.transferNumber} />
+          <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" cfg={cfg} today={today} original={panel.original} />
           <label className="st-field">เหตุผลในการแก้ไข *
             <input value={panel.reason} onChange={(event) => setPanel({ ...panel, reason: event.target.value })} placeholder="ระบุเหตุผล" />
           </label>
@@ -495,7 +510,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
                 <tr key={item.id} className={`st-row is-${state}${panel?.id === item.id ? " is-active" : ""}`}>
                   <td><b>{item.transferNumber}</b></td>
                   <td className={item.requestRef ? "" : "st-muted"}>{item.requestRef || "ไม่มีอ้างอิง"}</td>
-                  <td className="st-route">{item.fromBranchName} → {item.toBranchName}</td>
+                  <td className="st-route">{item.fromBranchName}{item.fromWarehouseName ? ` / ${item.fromWarehouseName}` : ""} → {item.toBranchName}{item.toWarehouseName ? ` / ${item.toWarehouseName}` : ""}</td>
                   <td className={item.itemCount ? "st-count" : "st-muted"}>{item.itemCount ? `${fmt(item.itemCount)} รายการ` : "—"}</td>
                   <td className="st-detail">
                     <div>{item.preparerName}</div>

@@ -115,6 +115,28 @@ function Switch({ on, label, disabled, onToggle }) {
   );
 }
 
+function WarehouseEditor({ branch, onChange }) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const warehouses = branch.warehouses || [];
+  const add = () => {
+    const value = name.trim();
+    if (!value || warehouses.some((item) => item.name.toLowerCase() === value.toLowerCase())) { setError("กรุณาใส่ชื่อคลังที่ไม่ซ้ำในสาขานี้"); return; }
+    if (warehouses.length >= 50) { setError("เพิ่มคลังได้ไม่เกิน 50 แห่งต่อสาขา"); return; }
+    onChange([...warehouses, { id: `wh_${crypto.randomUUID()}`, name: value, active: true }]);
+    setName(""); setError("");
+  };
+  return <details className="ss-panel-warehouses">
+    <summary>จัดการคลัง ({warehouses.filter((item) => item.active).length})</summary>
+    {warehouses.map((warehouse) => <div className="ss-panel-warehouse-row" key={warehouse.id}>
+      <input aria-label={`ชื่อคลัง ${warehouse.name} ใน ${branch.name}`} maxLength={60} value={warehouse.name} onChange={(event) => onChange(warehouses.map((item) => item.id === warehouse.id ? { ...item, name: event.target.value } : item))} />
+      <button type="button" className="secondary" onClick={() => onChange(warehouses.map((item) => item.id === warehouse.id ? { ...item, active: !item.active } : item))}>{warehouse.active ? "ปิดใช้" : "เปิดใช้"}</button>
+    </div>)}
+    <div className="ss-panel-warehouse-row"><input aria-label={`ชื่อคลังใหม่ ${branch.name}`} maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="ชื่อคลังใหม่" /><button type="button" className="secondary" onClick={add}>เพิ่มคลัง</button></div>
+    {error && <p role="alert">{error}</p>}
+  </details>;
+}
+
 function PinGate({ apiFetch, onPinChange }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
@@ -393,7 +415,7 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
                       </select>
                     </td>
                     <td><Switch on={branch.active} label={`เปิดใช้งานสาขา ${branch.code}`} onToggle={() => patchBranch(index, { active: !branch.active })} /></td>
-                    <td><button type="button" className="secondary danger" onClick={() => { branchOrigins.current = branchOrigins.current.filter((_, row) => row !== index); update((current) => ({ ...current, branches: current.branches.filter((_, row) => row !== index) })); }}>ลบสาขา</button></td>
+                    <td><WarehouseEditor branch={branch} onChange={(warehouses) => patchBranch(index, { warehouses })} /><button type="button" className="secondary danger" onClick={() => { branchOrigins.current = branchOrigins.current.filter((_, row) => row !== index); update((current) => ({ ...current, branches: current.branches.filter((_, row) => row !== index) })); }}>ลบสาขา</button></td>
                   </tr>
                 ))}
                 {draft.branches.length === 0 && (

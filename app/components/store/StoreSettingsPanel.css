@@ -325,3 +325,8 @@
 .ss-panel-grow-2 {
   flex: 2 1 220px;
 }
+
+.ss-panel-warehouses { min-width: 220px; margin-bottom: var(--sp-3); }
+.ss-panel-warehouses summary { cursor: pointer; color: var(--c-brand-dark); }
+.ss-panel-warehouse-row { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.ss-panel-warehouse-row input { min-width: 120px; }

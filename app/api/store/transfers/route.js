@@ -33,7 +33,7 @@ const ALERT_LIMIT = 200;
 const ALERT_RETURN_LIMIT = 100;
 const HISTORY_LIMIT = 200;
 // Fields recorded in history "before/after" when a document is edited.
-const EDIT_FIELDS = ["transferNumber", "requestRef", "fromBranchCode", "toBranchCode", "itemCount", "preparerUid", "preparerName", "receipt", "note", "issueState", "resolution", "resolvedServiceDate"];
+const EDIT_FIELDS = ["transferNumber", "requestRef", "fromBranchCode", "toBranchCode", "fromWarehouseId", "fromWarehouseName", "toWarehouseId", "toWarehouseName", "itemCount", "preparerUid", "preparerName", "receipt", "note", "issueState", "resolution", "resolvedServiceDate"];
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
@@ -103,6 +103,8 @@ function rowInput(row) {
     requestRef: row?.requestRef,
     fromBranchCode: row?.fromBranchCode,
     toBranchCode: row?.toBranchCode,
+    ...(row?.fromWarehouseId !== undefined ? { fromWarehouseId: row.fromWarehouseId } : {}),
+    ...(row?.toWarehouseId !== undefined ? { toWarehouseId: row.toWarehouseId } : {}),
     itemCount: row?.itemCount,
     preparerUid: row?.preparerUid,
     preparerName: row?.preparerName,
@@ -258,7 +260,11 @@ export async function PUT(request) {
 
       const settings = await readSettings(db, transaction);
       const cfg = settings.documents.transfer;
-      const checked = validateTransferRow(rowInput(body), { settings, profile, keepBranchCodes: [doc.fromBranchCode, doc.toBranchCode], keepNumber: doc.transferNumber });
+      const input = rowInput(body);
+      for (const side of ["from", "to"]) {
+        if (input[`${side}WarehouseId`] === undefined && doc[`${side}WarehouseId`]) input[`${side}WarehouseId`] = input[`${side}BranchCode`] === doc[`${side}BranchCode`] ? doc[`${side}WarehouseId`] : "";
+      }
+      const checked = validateTransferRow(input, { settings, profile, keepBranchCodes: [doc.fromBranchCode, doc.toBranchCode], keepNumber: doc.transferNumber, original: doc });
       if (!checked.ok) throw httpError(checked.error, checked.status);
       const value = checked.value;
       if (value.preparerUid && value.preparerUid === doc.preparerUid && doc.preparerName) value.preparerName = doc.preparerName;

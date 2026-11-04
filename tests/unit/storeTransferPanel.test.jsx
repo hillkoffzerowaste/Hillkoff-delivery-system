@@ -24,6 +24,17 @@ const render = (settings) => renderToStaticMarkup(<StoreTransferPanel apiFetch={
 const field = (settings, id) => settings.documents.transfer.fields.find((item) => item.id === id);
 
 describe("StoreTransferPanel", () => {
+  it("shows each branch's active warehouses in its own selector", () => {
+    const html = render(settingsWith((s) => {
+      s.branches[0].warehouses = [{ id: "a", name: "คลังต้นทาง A", active: true }, { id: "x", name: "คลังปิด", active: false }];
+      s.branches[1].warehouses = [{ id: "b", name: "คลังปลายทาง B", active: true }];
+    }));
+    expect(html).toContain("คลังต้นทาง");
+    expect(html).toContain("คลังปลายทาง");
+    expect(html).toContain("คลังต้นทาง A");
+    expect(html).toContain("คลังปลายทาง B");
+    expect(html).not.toContain("คลังปิด");
+  });
   it("offers more than six configured transfer heads without dropping later entries", () => {
     const settings = settingsWith((s) => {
       s.documents.transfer.prefix = "STK-A";

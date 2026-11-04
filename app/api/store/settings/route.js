@@ -84,9 +84,9 @@ export async function PUT(request) {
       if (incoming && typeof incoming === "object") {
         if (incoming.staff === undefined) incoming.staff = previous.staff;
         if (Array.isArray(incoming.branches)) incoming.branches = incoming.branches.map((branch) => {
-          if (!branch || typeof branch !== "object" || branch.header !== undefined) return branch;
+          if (!branch || typeof branch !== "object") return branch;
           const prior = previous.branches.find((item) => item.code === String(branch.code || "").trim().toUpperCase());
-          return prior?.header ? { ...branch, header: prior.header } : branch;
+          return { ...branch, ...(branch.header === undefined && prior?.header ? { header: prior.header } : {}), ...(branch.warehouses === undefined && prior?.warehouses ? { warehouses: prior.warehouses } : {}) };
         });
       }
       const result = validateStoreSettings(incoming);
