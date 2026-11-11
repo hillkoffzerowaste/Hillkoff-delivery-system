@@ -5,26 +5,20 @@ import StoreOverviewPanel, { barHeights, branchWidths, chartScale, formatAccurac
 const apiFetch = async () => new Response(JSON.stringify({ ok: true, data: null }));
 
 describe("StoreOverviewPanel", () => {
-  it("renders the title, period buttons and the module table on first render", () => {
+  it("offers four operational views, one scope and lazy legacy tools", () => {
     const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={apiFetch} settings={{ modules: [] }} onNavigate={() => {}} />);
-    expect(html).toContain("รายงานแดชบอร์ดสโตร์");
+    ["ศูนย์ปฏิบัติการสโตร์", "ภาพรวมทีม", "รายบุคคล", "เคสและของค้าง", "คุณภาพการรับ", "รายงานเดิม / LINE / บันทึกงาน", "แผนงานและปฏิทิน"].forEach((label) => expect(html).toContain(label));
     expect(html).toContain('aria-label="ช่วงเวลา"');
-    ["วันนี้", "7 วัน", "เดือนนี้"].forEach((label) => expect(html).toContain(`>${label}</button>`));
-    expect(html).toContain('aria-pressed="true">7 วัน');
-    expect(html).toContain("ภาพรวมทุกโมดูลสโตร์");
-    expect(html).toContain("ไปหน้าใบโอน");
-    expect(html).toContain("ไปหน้า Audit");
-    ["ใบโอนทั้งหมด", "ไม่ครบ · ค้างแก้ไข", "อัตราแก้ไขแล้ว", "ตรวจนับทั้งหมด", "ความแม่นยำสต็อก", "เฉลี่ยตรวจนับต่อวัน"].forEach((label) => expect(html).toContain(label));
+    expect(html).toContain("กำลังรวบรวมเอกสารและเคส");
+    expect(html).not.toContain('id="line-report-text"');
+    expect(html).not.toContain("ความแม่นยำสต็อก");
     expect(html).not.toContain("ข้อมูลตัวอย่าง");
   });
 
-  it("takes module names from settings by id and falls back to defaults", () => {
+  it("keeps configured module labels on the operational scope filter", () => {
     const settings = { modules: [{ id: "store-transfer", name: "โอนของ" }, { id: "store-audit", name: "ตรวจสต็อก" }] };
-    const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={apiFetch} settings={settings} onNavigate={() => {}} />);
-    expect(html).toContain(">โอนของ</th>");
-    expect(html).toContain(">ตรวจสต็อก</th>");
-    expect(html).toContain(">ใบสั่งจอง</th>");
-    expect(html).toContain(">ใบขายออนไลน์</th>");
+    const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={apiFetch} settings={settings} />);
+    ["โอนของ", "ตรวจสต็อก", "ใบสั่งจอง", "ใบขายออนไลน์"].forEach((label) => expect(html).toContain(label));
   });
 });
 

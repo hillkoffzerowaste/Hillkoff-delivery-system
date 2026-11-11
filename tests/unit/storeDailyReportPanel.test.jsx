@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import StoreDailyReport, { copyText } from "../../app/components/store/StoreDailyReport.jsx";
+import { LegacyStoreDailyReport as StoreDailyReport, copyText } from "../../app/components/store/StoreDailyReport.jsx";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true, data: {} }));
 

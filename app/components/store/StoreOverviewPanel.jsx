@@ -7,6 +7,8 @@ import { workLogHours } from "../../../lib/storeWorkLog.js";
 import "./StoreOverviewPanel.css";
 import StoreDashboardCharts from "./StoreDashboardCharts.jsx";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
+import StoreOperationalDashboard from "./StoreOperationalDashboard.jsx";
+import { LegacyStoreDailyReport } from "./StoreDailyReport.jsx";
 
 const REFRESH_MS = 900_000;
 const PERIODS = [
@@ -174,7 +176,7 @@ function ProblemChart({ bars, granularity, rangeLabel }) {
   </>;
 }
 
-export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
+export function LegacyStoreOverviewPanel({ apiFetch, settings, onNavigate }) {
   const [today] = useState(() => bangkokDateOf(new Date().toISOString()));
   const [period, setPeriod] = useState("7d");
   const [draft, setDraft] = useState(() => ({ from: `${today.slice(0, 7)}-01`, to: today }));
@@ -424,4 +426,8 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
       </>}
     </section>
   );
+}
+
+export default function StoreOverviewPanel(props) {
+  return <StoreOperationalDashboard {...props} renderLegacy={() => <LegacyStoreDailyReport {...props} />} />;
 }

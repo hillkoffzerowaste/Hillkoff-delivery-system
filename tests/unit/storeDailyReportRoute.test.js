@@ -15,7 +15,7 @@ const DATE = "2026-10-28";
 
 // Minimal in-memory Firestore: evaluates single-field where/orderBy/limit and records every query.
 function createDb(collections, log) {
-  const compare = { "==": (a, b) => a === b, ">=": (a, b) => a >= b, "<=": (a, b) => a <= b, "<": (a, b) => a < b, ">": (a, b) => a > b };
+  const compare = { "==": (a, b) => a === b, "in": (a, b) => b.includes(a), ">=": (a, b) => a >= b, "<=": (a, b) => a <= b, "<": (a, b) => a < b, ">": (a, b) => a > b };
   const build = (name, wheres = [], order = [], selected = null, max = null) => ({
     doc: (id) => ({ get: async () => ({ exists: Boolean(collections[name]?.[id]), data: () => collections[name]?.[id] }) }),
     where: (field, op, value) => build(name, [...wheres, [field, op, value]], order, selected, max),
@@ -248,4 +248,27 @@ it("returns a filtered document dashboard over an explicit range", async () => {
   const data = (await result.json()).data;
   expect(data.total).toBe(2);
   expect(data.documents.map((d) => d.type).sort()).toEqual(["online", "transfer"]);
+});
+
+
+describe("operational dashboard opt-in", () => {
+  it.each(["store", "admin"])("allows %s and returns one consistent data source", async (role) => {
+    state.role = role;
+    const response = await get(`view=operations&from=${DATE}&to=${DATE}`);
+    expect(response.status).toBe(200);
+    const { data } = await response.json();
+    expect(data.documents).toHaveLength(4);
+    expect(data.cases.some((row) => row.sourceId === "t2")).toBe(true);
+    expect(log.filter((query) => query.name === "users")).toHaveLength(1);
+    expect(log.some((query) => query.name === "orders")).toBe(false);
+  });
+  it.each(["sales", "pack", "driver", "accounting"])("rejects %s before reading operational data", async (role) => {
+    state.role = role;
+    expect((await get(`view=operations&from=${DATE}&to=${DATE}`)).status).toBe(403);
+    expect(log).toHaveLength(0);
+  });
+  it("rejects a missing operations range without falling back to a different report", async () => {
+    expect((await get("view=operations")).status).toBe(400);
+    expect(log).toHaveLength(0);
+  });
 });

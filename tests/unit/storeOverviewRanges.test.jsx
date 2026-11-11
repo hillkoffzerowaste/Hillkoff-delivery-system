@@ -66,7 +66,7 @@ describe("dashboard and calendar screens", () => {
   it("offers every range and keeps all modules on one page", () => {
     const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={async () => new Response("{}")} settings={{ modules: [] }} />);
     ["วันนี้", "7 วัน", "เดือนนี้", "3 เดือน", "ทั้งปี", "กำหนดช่วงเอง"].forEach((label) => expect(html).toContain(`>${label}</button>`));
-    ["ใบโอนสินค้ารายวัน", "ใบสั่งจองและใบขายออนไลน์รายวัน", "จำนวนตรวจนับรายวัน", "ผลงานรายบุคคล", "บันทึกงานพนักงานล่าสุด"].forEach((text) => expect(html).toContain(text));
+    ["กรองประเภทข้อมูล", "เคสและของค้าง", "คุณภาพการรับ", "รายบุคคล", "รายงานเดิม / LINE / บันทึกงาน"].forEach((text) => expect(html).toContain(text));
   });
 
   it("lets the team calendar assign an owner and the personal calendar show one person", () => {

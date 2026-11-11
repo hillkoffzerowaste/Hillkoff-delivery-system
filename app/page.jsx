@@ -6577,7 +6577,7 @@ export default function App() {
 
         {auth.role === "store" && displayTab === "store-dashboard" && (
           <section className="panel role-workspace ops-workspace">
-            <StoreDailyReport apiFetch={authenticatedApiFetch} settings={storeSettings} />
+            <StoreDailyReport apiFetch={authenticatedApiFetch} settings={storeSettings} onNavigate={selectAppTab} />
           </section>
         )}
 

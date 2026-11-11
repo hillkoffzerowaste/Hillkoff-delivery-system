@@ -4,6 +4,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { addDaysToDateKey, bangkokDayRange, bangkokMonthRange, bangkokRangeIso } from "../../../../lib/storeFormat";
 import { DAILY_REPORT_LIMITS, bangkokDateOf, buildDailyReport, buildMonthReport } from "../../../../lib/storeDailyReport";
 import { readStaffRoles, readStoreRoster } from "../../../../lib/storeRoster";
+import { readOperationalDashboard } from "../../../../lib/storeOperationalRead.js";
 
 export const runtime = "nodejs";
 
@@ -94,6 +95,12 @@ export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["store", "admin"]);
     const params = new URL(request.url).searchParams;
+    if (params.get("view") === "operations") {
+      const range = customRange(params.get("from"), params.get("to"));
+      if (!range) return fail("ช่วงวันที่ไม่ถูกต้อง หรือเกิน 366 วัน", 400);
+      const data = await readOperationalDashboard(db, range);
+      return Response.json({ ok: true, data: { ...data, generatedAt: new Date().toISOString() } });
+    }
     if (params.has("from") || params.has("to")) {
       const range = customRange(params.get("from"), params.get("to"));
       if (!range) return fail("ช่วงวันที่ไม่ถูกต้อง หรือเกิน 366 วัน", 400);

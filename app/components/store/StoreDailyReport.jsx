@@ -6,7 +6,7 @@ import { bangkokMonthRange, fmt, lastNDates, pct, thaiDateLabel, thaiMonthLabel 
 import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText, unattributedText } from "../../../lib/storeDailyReport.js";
 import { WORK_LOG_LIMITS, validateWorkLog, workLogHours } from "../../../lib/storeWorkLog.js";
 import { DUTY_LIMITS, dutyText, validateDuty } from "../../../lib/storeDuty.js";
-import StoreDashboardCharts from "./StoreDashboardCharts.jsx";
+import StoreOperationalDashboard from "./StoreOperationalDashboard.jsx";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
 import "./StoreDailyReport.css";
 
@@ -307,7 +307,7 @@ function MonthView({ data }) {
   </section>;
 }
 
-export default function StoreDailyReport({ apiFetch, settings, storeLabel = "สโตร์ WH" }) {
+export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์ WH" }) {
   const [today] = useState(bangkokToday);
   const [tab, setTab] = useState("team");
   const [date, setDate] = useState(today);
@@ -386,8 +386,6 @@ export default function StoreDailyReport({ apiFetch, settings, storeLabel = "ส
   const error = errors[key];
   const loading = !active && !error;
   return <div className="sd-workspace">
-    <StoreDashboardCharts apiFetch={apiFetch} settings={settings} />
-    <details className="sd-legacy-details"><summary>รายละเอียดรายวัน รายบุคคล รายเดือน และข้อความ LINE</summary>
     <header className="store-report-header sd-header">
       <div>
         <span className="store-report-eyebrow">DAILY STORE REPORT</span>
@@ -425,6 +423,9 @@ export default function StoreDailyReport({ apiFetch, settings, storeLabel = "ส
       <label className="sd-line-box">ตัวอย่างข้อความ<textarea id={TEXT_BOX_ID} readOnly rows={rows} value={line.text} /></label>
       {toast && <p role="status" className={`sd-toast is-${toast.tone}`}>{toast.text}</p>}
     </section>
-      </details>
 </div>;
+}
+
+export default function StoreDailyReport(props) {
+  return <StoreOperationalDashboard {...props} renderLegacy={() => <LegacyStoreDailyReport {...props} />} />;
 }
