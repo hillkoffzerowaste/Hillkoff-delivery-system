@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
+import { isValidServiceDate } from "../../../lib/serviceDate.js";
 import { addDaysToDateKey, bangkokTimeHHmm, fmt, thaiDateLabel } from "../../../lib/storeFormat.js";
 import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
 import LockedNumberInput, { runningPart } from "./LockedNumberInput.jsx";
@@ -20,6 +21,12 @@ import {
 import "./StoreTransferPanel.css";
 
 export const TRANSFER_DRAFT_KEY = "store-transfer-draft";
+export function transferDateError(serviceDate, reason, today) {
+  if (!isValidServiceDate(serviceDate)) return "กรุณาเลือกวันที่ใบโอนให้ถูกต้อง";
+  if (serviceDate > today) return "วันที่ใบโอนต้องไม่เป็นวันในอนาคต";
+  if (serviceDate < today && !reason.trim()) return "กรุณาระบุเหตุผลในการคีย์ย้อนหลัง";
+  return "";
+}
 const MAX_ROWS = 50;
 const NO_BRANCH_TEXT = "ยังไม่มีสาขา · ไปที่ตั้งค่าสโตร์ > สาขา เพื่อเพิ่ม";
 const STATUS_LABELS = { complete: "สินค้าครบ", open: "ไม่ครบ · ยังไม่แก้ไข", resolved: "ไม่ครบ · แก้ไขแล้ว" };
@@ -301,6 +308,12 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   };
   const removeDraft = (key) => setDrafts((rows) => (rows.length > 1 ? rows.filter((row) => row.key !== key) : [newDraft()]));
   const addDraft = () => setDrafts((rows) => (rows.length >= MAX_ROWS ? rows : [...rows, newDraft()]));
+  const changeDocumentDate = (next) => {
+    setToast(null);
+    setDocumentDate(next);
+    if (!isValidServiceDate(next) || next > today) return;
+    setDrafts((rows) => rows.map((row) => ({ ...row, transferNumber: transferNumberForDate(row.transferNumber, cfg, next, row.fromBranchCode || branches[0]?.code) })));
+  };
 
   // Runs one request at a time; a second click while one is in flight is dropped.
   const run = async (name, action) => {
@@ -329,6 +342,8 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   };
 
   const confirmDrafts = () => run("confirm", async () => {
+    const dateError = transferDateError(documentDate, backdateReason, today);
+    if (dateError) { setToast({ text: dateError, tone: "error" }); return; }
     const rows = drafts.map((draft) => effectiveRow({ ...draft, serviceDate: documentDate }, branches, staff)).filter((row) => !isBlankTransferRow(row));
     if (!rows.length) { setToast({ text: "ยังไม่มีรายการให้ยืนยัน", tone: "warn" }); return; }
     for (const row of rows) {
@@ -432,18 +447,21 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
           <h2>เพิ่มรายการใบโอน</h2>
           <span>เลขที่ใบโอนรูปแบบ {sample} · {lockedNumberPrefix(cfg, today) ? "ระบบใส่อักษรนำหน้าและปีเดือนให้ กรอกเฉพาะเลขรัน" : "เปลี่ยนรูปแบบได้ที่หน้าตั้งค่าสโตร์"}</span>
         </div>
-        <div className="st-fields">
-          <label className="st-field">วันที่เอกสารใหม่
-            <input type="date" max={today} aria-label="วันที่เอกสารใหม่" value={documentDate} onChange={(event) => {
-              const next = event.target.value;
-              if (!next) return;
-              setDocumentDate(next);
-              setDrafts((rows) => rows.map((row) => ({ ...row, transferNumber: transferNumberForDate(row.transferNumber, cfg, next, row.fromBranchCode || branches[0]?.code) })));
-            }} />
-          </label>
-          <label className="st-field">เหตุผลในการคีย์ย้อนหลัง {documentDate < today ? "*" : ""}
-            <input value={backdateReason} onChange={(event) => setBackdateReason(event.target.value)} maxLength={1000} />
-          </label>
+        <div className="st-document-date">
+          <div className="st-fields">
+            <label className="st-field">วันที่ใบโอน / บันทึกย้อนหลัง
+              <input type="date" max={today} aria-label="วันที่เอกสารใหม่" aria-describedby="st-document-date-help" value={documentDate} onChange={(event) => changeDocumentDate(event.target.value)} />
+            </label>
+            <label className="st-field">เหตุผลในการคีย์ย้อนหลัง {documentDate < today ? "*" : ""}
+              <input value={backdateReason} onChange={(event) => setBackdateReason(event.target.value)} maxLength={1000} required={documentDate < today} placeholder="เช่น ได้รับเอกสารจากสาขาล่าช้า" />
+            </label>
+          </div>
+          <div className="st-date-shortcuts" role="group" aria-label="เลือกวันที่ใบโอนด่วน">
+            <button type="button" className="secondary" onClick={() => changeDocumentDate(today)}>วันนี้</button>
+            <button type="button" className="secondary" onClick={() => changeDocumentDate(addDaysToDateKey(today, -1))}>เมื่อวาน</button>
+            <button type="button" className="secondary" disabled={!isValidServiceDate(date) || date > today} onClick={() => changeDocumentDate(date)}>ใช้วันที่รายงาน</button>
+          </div>
+          <p id="st-document-date-help">วันที่ใบโอนใช้จัดเข้ารายงานของวันนั้น · เวลาบันทึกจริงเป็นเวลาที่กดยืนยันรายการ</p>
         </div>
         {!branches.length ? (
           <p className="st-empty-branches" role="status">
@@ -456,6 +474,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
             <button type="button" className="secondary st-icon-button" aria-label="ลบแถวนี้" onClick={() => removeDraft(draft.key)}><Trash2 size={18} aria-hidden="true" /></button>
           </div>
         ))}
+        <p className="st-date-confirm">วันที่ใบโอนที่จะบันทึก: <b>{isValidServiceDate(documentDate) ? thaiDateLabel(documentDate) : "กรุณาเลือกวันที่"}</b>{documentDate < today && " · บันทึกย้อนหลัง"}</p>
         <div className="store-report-actions st-form-actions">
           <button type="button" className="secondary" onClick={addDraft} disabled={drafts.length >= MAX_ROWS || !branches.length}>+ เพิ่มรายการ</button>
           <div>

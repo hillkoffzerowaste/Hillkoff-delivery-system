@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import StoreTransferPanel, { TRANSFER_DRAFT_KEY } from "../../app/components/store/StoreTransferPanel.jsx";
+import StoreTransferPanel, { TRANSFER_DRAFT_KEY, transferDateError } from "../../app/components/store/StoreTransferPanel.jsx";
 import { getDefaultStoreSettings, normalizeStoreSettings, validateStoreSettings } from "../../lib/storeSettings.js";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true, data: { items: [], summary: {}, count: 0 } }));
@@ -24,6 +24,18 @@ const render = (settings) => renderToStaticMarkup(<StoreTransferPanel apiFetch={
 const field = (settings, id) => settings.documents.transfer.fields.find((item) => item.id === id);
 
 describe("StoreTransferPanel", () => {
+  it("rejects invalid, future and unexplained backdated documents before submission", () => {
+    expect(transferDateError("", "", "2026-11-01")).toBeTruthy();
+    expect(transferDateError("2026-02-30", "reason", "2026-11-01")).toBeTruthy();
+    expect(transferDateError("2026-11-02", "reason", "2026-11-01")).toBeTruthy();
+    expect(transferDateError("2026-10-31", "   ", "2026-11-01")).toBeTruthy();
+    expect(transferDateError("2026-10-31", "เอกสารตกหล่น", "2026-11-01")).toBe("");
+    expect(transferDateError("2026-11-01", "", "2026-11-01")).toBe("");
+  });
+  it("offers explicit document-date shortcuts and explains the actual recording time", () => {
+    const html = render(settingsWith());
+    for (const text of ["วันที่ใบโอน / บันทึกย้อนหลัง", "วันนี้", "เมื่อวาน", "ใช้วันที่รายงาน", "วันที่ใบโอนที่จะบันทึก", "เวลาบันทึกจริง"]) expect(html).toContain(text);
+  });
   it("separates document dates from the report filter and offers an independent request month", () => {
     const html = render(settingsWith());
     expect(html).toContain('aria-label="วันที่เอกสารใหม่"');
