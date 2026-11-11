@@ -35,7 +35,7 @@ const validInput = (mutate) => {
 const errorPaths = (result) => result.errors.map((e) => e.path);
 
 describe("defaults and normalize", () => {
-  it("has the six store modules in the default order, all enabled", () => {
+  it("has the seven store modules in the default order, all enabled", () => {
     const { modules } = getDefaultStoreSettings();
     expect(modules.map((m) => m.id)).toEqual([
       "store-booking",
@@ -43,7 +43,8 @@ describe("defaults and normalize", () => {
       "store-dashboard",
       "store-transfer",
       "store-audit",
-      "store-overview"
+      "store-overview",
+      "store-shortage"
     ]);
     expect(modules.map((m) => m.id)).toEqual(STORE_MODULE_IDS);
     expect(modules.map((m) => m.name)).toEqual([
@@ -52,9 +53,10 @@ describe("defaults and normalize", () => {
       "รายงานประจำวัน",
       "ใบโอนสินค้า",
       "Internal Audit",
-      "รายงานแดชบอร์ด"
+      "รายงานแดชบอร์ด",
+      "เคสและสินค้าขาด"
     ]);
-    expect(modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(modules.every((m) => m.enabled)).toBe(true);
     expect(getDefaultStoreSettings()).not.toBe(getDefaultStoreSettings());
   });
@@ -86,11 +88,12 @@ describe("defaults and normalize", () => {
       "store-online",
       "store-dashboard",
       "store-transfer",
-      "store-overview"
+      "store-overview",
+      "store-shortage"
     ]);
     expect(normalized.modules[0]).toMatchObject({ name: "ตรวจนับ", enabled: false, order: 0 });
     expect(normalized.modules[1]).toMatchObject({ name: "ใบสั่งจอง", enabled: true });
-    expect(normalized.modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(normalized.modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it("keeps only valid branches and tolerant document fields", () => {
@@ -166,7 +169,7 @@ describe("validateStoreSettings", () => {
     const result = validateStoreSettings(validInput((s) => s.branches.push(branch("wh"))));
     expect(result.ok).toBe(true);
     expect(result.value.branches.some((item) => item.code === "WH")).toBe(true);
-    expect(result.value.modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(result.value.modules.map((m) => m.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it("forces booking/online enabled and locked fields", () => {

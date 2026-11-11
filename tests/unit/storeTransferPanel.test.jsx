@@ -24,6 +24,13 @@ const render = (settings) => renderToStaticMarkup(<StoreTransferPanel apiFetch={
 const field = (settings, id) => settings.documents.transfer.fields.find((item) => item.id === id);
 
 describe("StoreTransferPanel", () => {
+  it("separates document dates from the report filter and offers an independent request month", () => {
+    const html = render(settingsWith());
+    expect(html).toContain('aria-label="วันที่เอกสารใหม่"');
+    expect(html).toContain('aria-label="เดือนใบขอโอน"');
+    expect(html).toContain('type="month"');
+    expect(html).toContain("เหตุผลในการคีย์ย้อนหลัง");
+  });
   it("shows each branch's active warehouses in its own selector", () => {
     const html = render(settingsWith((s) => {
       s.branches[0].warehouses = [{ id: "a", name: "คลังต้นทาง A", active: true }, { id: "x", name: "คลังปิด", active: false }];

@@ -7,6 +7,8 @@ import { addDaysToDateKey, bangkokTimeHHmm, fmt, thaiDateLabel } from "../../../
 import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
 import LockedNumberInput, { runningPart } from "./LockedNumberInput.jsx";
 import {
+  restoreTransferDraft,
+  transferNumberForDate,
   REQUEST_REF_SAMPLE,
   filterTransfers,
   isBlankTransferRow,
@@ -48,6 +50,7 @@ function labelOf(fields, id, fallback) {
 function effectiveRow(draft, branches, staff) {
   const preparer = staff.find((person) => person.uid === draft.preparerUid);
   return {
+    serviceDate: draft.serviceDate,
     transferNumber: draft.transferNumber,
     requestRef: draft.requestRef,
     fromBranchCode: draft.fromBranchCode || branches[0]?.code || "",
@@ -65,6 +68,7 @@ function effectiveRow(draft, branches, staff) {
 function rowFromItem(item) {
   return {
     key: item.id,
+    serviceDate: item.serviceDate || bangkokDateKey(item.createdAt),
     transferNumber: item.transferNumber || "",
     requestRef: item.requestRef || "",
     fromBranchCode: item.fromBranchCode || "",
@@ -94,6 +98,11 @@ function prefixOfNumber(value, heads, keepExisting = false) {
 }
 
 function TransferFields({ row, onChange, branches, staff, fields, sample, idPrefix, cfg, today, original = null }) {
+  const documentDate = row.serviceDate || today;
+  const [requestMonth, setRequestMonth] = useState(() => {
+    const match = /(\d{2})(0[1-9]|1[0-2])-\d+$/.exec(row.requestRef || "");
+    return match ? `${Number(match[1]) + 2500 - 543}-${match[2]}` : documentDate.slice(0, 7);
+  });
   const incomplete = row.receipt === "incomplete";
   const missingNote = incomplete && !row.note.trim();
   const value = effectiveRow(row, branches, staff);
@@ -101,7 +110,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const noteVisible = fields.note?.show !== false || incomplete;
   const noteLabel = incomplete ? `${fields.note?.label || "หมายเหตุสินค้าไม่ครบ"} *` : "หมายเหตุ";
   const digits = cfg?.digits || 4;
-  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg), row.transferNumber === original?.transferNumber), ...lockedNumberPrefixes(cfg, today, value.fromBranchCode)].filter(Boolean))];
+  const numberPrefixes = [...new Set([prefixOfNumber(row.transferNumber, documentPrefixes(cfg), row.transferNumber === original?.transferNumber), ...lockedNumberPrefixes(cfg, documentDate, value.fromBranchCode)].filter(Boolean))];
   const warehouseOptions = (side) => {
     const branchCode = value[`${side}BranchCode`];
     const available = (branches.find((branch) => branch.code === branchCode)?.warehouses || []).filter((item) => item.active !== false);
@@ -113,21 +122,33 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   const toWarehouses = warehouseOptions("to");
   const changeFromBranch = (next) => {
     if (cfg?.pattern !== "branch" || !row.transferNumber) return onChange({ fromBranchCode: next, fromWarehouseId: "" });
-    const previousHeads = lockedNumberPrefixes(cfg, today, value.fromBranchCode);
+    const previousHeads = lockedNumberPrefixes(cfg, documentDate, value.fromBranchCode);
     const previous = previousHeads.find((head) => row.transferNumber.startsWith(head));
     const index = previousHeads.indexOf(previous);
-    const replacement = lockedNumberPrefixes(cfg, today, next)[index];
+    const replacement = lockedNumberPrefixes(cfg, documentDate, next)[index];
     return onChange({ fromBranchCode: next, fromWarehouseId: "", ...(replacement ? { transferNumber: replacement + runningPart(row.transferNumber, previous) } : {}) });
   };
   // A request is often raised late last month and transferred early this month, so last month stays selectable.
-  const lastMonth = today ? addDaysToDateKey(`${today.slice(0, 7)}-01`, -1) : "";
+  const requestDate = `${requestMonth}-01`;
+  const lastMonth = addDaysToDateKey(requestDate, -1);
   const refHeads = requestRefPrefixes(cfg);
-  const refPrefixes = refHeads.length ? [...new Set([prefixOfNumber(row.requestRef, refHeads), ...lockedRequestRefPrefixes(cfg, today), ...lockedRequestRefPrefixes(cfg, lastMonth)].filter(Boolean))] : [];
+  const refPrefixes = refHeads.length ? [...new Set([prefixOfNumber(row.requestRef, refHeads), ...lockedRequestRefPrefixes(cfg, requestDate), ...lockedRequestRefPrefixes(cfg, lastMonth)].filter(Boolean))] : [];
   return (
     <div className="st-fields">
       <label className="st-field st-field-no">{labelOf(fields, "no", "เลขที่ใบโอน")}
         <LockedNumberInput id={`${idPrefix}-no`} label="เลขที่ใบโอน" value={row.transferNumber} onChange={(transferNumber) => onChange({ transferNumber })} prefixes={numberPrefixes} digits={digits} sampleText={sample} />
       </label>
+      {fields.ref?.show !== false && <label className="st-field">เดือนใบขอโอน
+        <input type="month" aria-label="เดือนใบขอโอน" value={requestMonth} onChange={(event) => {
+          const next = event.target.value;
+          if (!next) return;
+          const oldPrefixes = lockedRequestRefPrefixes(cfg, requestDate);
+          const newPrefixes = lockedRequestRefPrefixes(cfg, `${next}-01`);
+          const index = oldPrefixes.findIndex((prefix) => row.requestRef.startsWith(prefix));
+          setRequestMonth(next);
+          if (index >= 0 && newPrefixes[index]) onChange({ requestRef: newPrefixes[index] + runningPart(row.requestRef, oldPrefixes[index]) });
+        }} />
+      </label>}
       {fields.ref?.show !== false && (
         <label className="st-field st-field-ref">{labelOf(fields, "ref", "อ้างอิงใบขอโอน")}
           <LockedNumberInput id={`${idPrefix}-ref`} label="อ้างอิงใบขอโอน" value={row.requestRef} onChange={(requestRef) => onChange({ requestRef })} prefixes={refPrefixes} digits={digits} sampleText={REQUEST_REF_SAMPLE} />
@@ -178,6 +199,8 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   const title = (settings?.modules || []).find((module) => module.id === "store-transfer")?.name || "ใบโอนสินค้า";
 
   const [date, setDate] = useState(today);
+  const [documentDate, setDocumentDate] = useState(today);
+  const [backdateReason, setBackdateReason] = useState("");
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({ total: 0, complete: 0, open: 0, resolved: 0, incomplete: 0 });
   const [alerts, setAlerts] = useState({ count: 0, items: [] });
@@ -237,9 +260,11 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   }, [apiFetch]);
   useEffect(() => {
     try {
-      const saved = JSON.parse(window.sessionStorage.getItem(TRANSFER_DRAFT_KEY) || "null");
-      if (Array.isArray(saved) && saved.length) {
-        setDrafts(saved.slice(0, MAX_ROWS).map((row) => {
+      const saved = restoreTransferDraft(JSON.parse(window.sessionStorage.getItem(TRANSFER_DRAFT_KEY) || "null"), bangkokDateKey());
+      if (saved.rows.length) {
+        setDocumentDate(saved.serviceDate);
+        setBackdateReason(saved.backdateReason);
+        setDrafts(saved.rows.slice(0, MAX_ROWS).map((row) => {
           const fresh = newDraft();
           const text = (name) => (typeof row?.[name] === "string" ? row[name] : fresh[name]);
           return { ...fresh, transferNumber: text("transferNumber"), requestRef: text("requestRef"), fromBranchCode: text("fromBranchCode"), toBranchCode: text("toBranchCode"), fromWarehouseId: text("fromWarehouseId"), toWarehouseId: text("toWarehouseId"), itemCount: text("itemCount"), preparerUid: text("preparerUid"), receipt: row?.receipt === "incomplete" ? "incomplete" : "complete", note: text("note") };
@@ -296,7 +321,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
 
   const saveDraft = () => {
     try {
-      window.sessionStorage.setItem(TRANSFER_DRAFT_KEY, JSON.stringify(drafts));
+      window.sessionStorage.setItem(TRANSFER_DRAFT_KEY, JSON.stringify({ rows: drafts, serviceDate: documentDate, backdateReason }));
       setToast({ text: "บันทึกร่างแล้ว · ยังไม่ส่งยืนยัน", tone: "warn" });
     } catch {
       setToast({ text: "เบราว์เซอร์นี้ไม่อนุญาตให้บันทึกร่าง", tone: "error" });
@@ -304,14 +329,17 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   };
 
   const confirmDrafts = () => run("confirm", async () => {
-    const rows = drafts.map((draft) => effectiveRow(draft, branches, staff)).filter((row) => !isBlankTransferRow(row));
+    const rows = drafts.map((draft) => effectiveRow({ ...draft, serviceDate: documentDate }, branches, staff)).filter((row) => !isBlankTransferRow(row));
     if (!rows.length) { setToast({ text: "ยังไม่มีรายการให้ยืนยัน", tone: "warn" }); return; }
     for (const row of rows) {
       const checked = validateTransferRow(row, { settings, profile });
       if (!checked.ok) { setToast({ text: checked.error, tone: "error" }); return; }
     }
-    const saved = await request(apiFetch, "/api/store/transfers", jsonInit("POST", { rows }));
+    const saved = await request(apiFetch, "/api/store/transfers", jsonInit("POST", { rows, serviceDate: documentDate, backdateReason }));
     setDrafts([newDraft()]);
+    setDate(documentDate);
+    setView("day");
+    setQuery("");
     try { window.sessionStorage.removeItem(TRANSFER_DRAFT_KEY); } catch { /* ignore */ }
     setToast({ text: `ยืนยันใบโอน ${saved.length} รายการแล้ว`, tone: "ok" });
     await refresh();
@@ -404,6 +432,19 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
           <h2>เพิ่มรายการใบโอน</h2>
           <span>เลขที่ใบโอนรูปแบบ {sample} · {lockedNumberPrefix(cfg, today) ? "ระบบใส่อักษรนำหน้าและปีเดือนให้ กรอกเฉพาะเลขรัน" : "เปลี่ยนรูปแบบได้ที่หน้าตั้งค่าสโตร์"}</span>
         </div>
+        <div className="st-fields">
+          <label className="st-field">วันที่เอกสารใหม่
+            <input type="date" max={today} aria-label="วันที่เอกสารใหม่" value={documentDate} onChange={(event) => {
+              const next = event.target.value;
+              if (!next) return;
+              setDocumentDate(next);
+              setDrafts((rows) => rows.map((row) => ({ ...row, transferNumber: transferNumberForDate(row.transferNumber, cfg, next, row.fromBranchCode || branches[0]?.code) })));
+            }} />
+          </label>
+          <label className="st-field">เหตุผลในการคีย์ย้อนหลัง {documentDate < today ? "*" : ""}
+            <input value={backdateReason} onChange={(event) => setBackdateReason(event.target.value)} maxLength={1000} />
+          </label>
+        </div>
         {!branches.length ? (
           <p className="st-empty-branches" role="status">
             {NO_BRANCH_TEXT}
@@ -411,7 +452,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
           </p>
         ) : drafts.map((draft, index) => (
           <div className="st-draft-row" key={draft.key}>
-            <TransferFields row={draft} onChange={(patch) => updateDraft(draft.key, patch)} branches={branches} staff={staff} fields={fields} sample={sample} idPrefix={`st-draft-${index}`} cfg={cfg} today={today} />
+            <TransferFields row={draft} onChange={(patch) => updateDraft(draft.key, patch)} branches={branches} staff={staff} fields={fields} sample={sample} idPrefix={`st-draft-${index}`} cfg={cfg} today={documentDate} />
             <button type="button" className="secondary st-icon-button" aria-label="ลบแถวนี้" onClick={() => removeDraft(draft.key)}><Trash2 size={18} aria-hidden="true" /></button>
           </div>
         ))}
@@ -465,6 +506,12 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
       {panel?.kind === "edit" && (
         <section className="st-panel is-edit" aria-label="แก้ไขใบโอน">
           <b>แก้ไขใบโอน · {panel.original.transferNumber}</b>
+          <label className="st-field">วันที่เอกสาร
+            <input type="date" max={panel.original.serviceDate > today ? panel.original.serviceDate : today} aria-label="วันที่เอกสารแก้ไข" value={panel.row.serviceDate} onChange={(event) => {
+              const next = event.target.value;
+              if (next) patchEditRow({ serviceDate: next, transferNumber: transferNumberForDate(panel.row.transferNumber, cfg, next, panel.row.fromBranchCode) });
+            }} />
+          </label>
           <TransferFields row={panel.row} onChange={patchEditRow} branches={getActiveBranchesWith(settings, panel.original)} staff={staff} fields={fields} sample={sample} idPrefix="st-edit" cfg={cfg} today={today} original={panel.original} />
           <label className="st-field">เหตุผลในการแก้ไข *
             <input value={panel.reason} onChange={(event) => setPanel({ ...panel, reason: event.target.value })} placeholder="ระบุเหตุผล" />

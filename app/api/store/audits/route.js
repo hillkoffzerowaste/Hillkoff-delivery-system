@@ -1,3 +1,4 @@
+import { readSourceCase, prepareSourceCaseUpsert, sourceMutationVersion } from "../../../../lib/storeCaseTransactions";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { bangkokDateKey } from "../../../../lib/operationsReporting";
 import { STORE_AUDITS_COLLECTION, nextAuditSequence, validateAuditInput } from "../../../../lib/storeAudit";
@@ -178,7 +179,10 @@ export async function POST(request) {
         createdBy: profile.name || profile.email,
         createdByUid: profile.uid
       };
+      const canonical = await readSourceCase(transaction, db, "audit", auditRef.id);
+      const casePatch = prepareSourceCaseUpsert(canonical.value, "audit", auditRef.id, null, doc, now, profile);
       transaction.set(auditRef, doc);
+      if (casePatch) transaction.set(canonical.ref, casePatch, { merge: true });
       transaction.set(auditRef.collection("history").doc(), auditHistory("created", profile, now, { after: doc }));
       transaction.create(db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(registryId), {
         kind: KIND, number, periodKey, sourceId: auditRef.id, createdAt: now, createdBy: doc.createdBy
@@ -215,7 +219,11 @@ export async function DELETE(request) {
       const registryRef = item.registryId ? db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(item.registryId) : null;
       const registrySnap = registryRef ? await transaction.get(registryRef) : null;
       const patch = { deletedAt: now, deletedBy: profile.name || profile.email, deleteReason: reason };
+      const canonical = await readSourceCase(transaction, db, "audit", id);
+      patch.updatedAt = sourceMutationVersion(item, now);
+      const casePatch = prepareSourceCaseUpsert(canonical.value, "audit", id, item, patch, now, profile);
       transaction.set(ref, patch, { merge: true });
+      if (casePatch) transaction.set(canonical.ref, casePatch, { merge: true });
       transaction.set(ref.collection("history").doc(), auditHistory("deleted", profile, now, { before: item, after: { ...item, ...patch }, reason }));
       // Release the number only if this audit still owns it, so it can be typed again.
       if (registrySnap?.exists && registrySnap.data()?.sourceId === id) transaction.delete(registryRef);

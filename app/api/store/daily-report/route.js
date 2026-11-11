@@ -1,3 +1,5 @@
+import { buildDocumentDashboard } from "../../../../lib/storeDashboard.js";
+import { customRange } from "../../../../lib/storeOverview.js";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { addDaysToDateKey, bangkokDayRange, bangkokMonthRange, bangkokRangeIso } from "../../../../lib/storeFormat";
 import { DAILY_REPORT_LIMITS, bangkokDateOf, buildDailyReport, buildMonthReport } from "../../../../lib/storeDailyReport";
@@ -92,6 +94,19 @@ export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["store", "admin"]);
     const params = new URL(request.url).searchParams;
+    if (params.has("from") || params.has("to")) {
+      const range = customRange(params.get("from"), params.get("to"));
+      if (!range) return fail("ช่วงวันที่ไม่ถูกต้อง หรือเกิน 366 วัน", 400);
+      const [roster, reports, transfers, audits] = await Promise.all([
+        readStoreRoster(db),
+        readReports(db, range.from, range.to, bangkokRangeIso(range.from, range.to), DAILY_REPORT_LIMITS.monthReports),
+        readCapped(rangeQuery(db, "store_transfers", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthTransfers),
+        readCapped(rangeQuery(db, "store_audits", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthAudits)
+      ]);
+      const data = buildDocumentDashboard({ ...range, roster, reports, transfers, audits, staffId: params.get("staffId") || "", branchCode: params.get("branchCode") || "" });
+      const allPeople = buildDocumentDashboard({ ...range, roster, reports, transfers, audits }).people;
+      return Response.json({ ok: true, data: { ...data, staffChoices: allPeople, generatedAt: new Date().toISOString() } });
+    }
     if (params.has("month")) {
       const month = params.get("month");
       if (!bangkokMonthRange(month)) return fail("เดือนไม่ถูกต้อง", 400);

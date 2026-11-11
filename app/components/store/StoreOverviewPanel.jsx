@@ -5,6 +5,7 @@ import { bangkokTimeHHmm, fmt, pct, thaiDateLabel, thaiMonthLabel } from "../../
 import { DAILY_CHART_MAX_DAYS, MAX_RANGE_DAYS, bangkokDateOf, customRange } from "../../../lib/storeOverview.js";
 import { workLogHours } from "../../../lib/storeWorkLog.js";
 import "./StoreOverviewPanel.css";
+import StoreDashboardCharts from "./StoreDashboardCharts.jsx";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
 
 const REFRESH_MS = 900_000;
@@ -258,6 +259,7 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
   return (
     <section className="panel role-workspace so-workspace">
       <div className="so-view-tabs" role="tablist" aria-label="หน้ารายงานสโตร์"><button type="button" role="tab" aria-selected={view === "dashboard"} className={view === "dashboard" ? "primary" : "secondary"} onClick={() => setView("dashboard")}>แดชบอร์ด</button><button type="button" role="tab" aria-selected={view === "planning"} className={view === "planning" ? "primary" : "secondary"} onClick={() => setView("planning")}>แผนงานและปฏิทิน</button></div>
+      {view === "dashboard" && <StoreDashboardCharts apiFetch={apiFetch} settings={settings} />}
       {view === "planning" ? <StorePlanningPanel apiFetch={apiFetch} staff={staffList} /> : <>
         <header className="store-report-header">
           <div>
@@ -288,6 +290,7 @@ export default function StoreOverviewPanel({ apiFetch, settings, onNavigate }) {
         {!refreshes && <p className="so-message" role="status">ช่วงหลายเดือนไม่รีเฟรชอัตโนมัติ · กด “โหลดข้อมูลล่าสุด” เมื่อต้องการตัวเลขใหม่</p>}
         {loading && !error && <p className="so-message" role="status">กำลังโหลดข้อมูล...</p>}
 
+        <p className="muted">รายละเอียดต่อไปนี้เป็นผลตรวจเอกสารและสถานะ workflow เดิม ไม่ใช่ยอดเคสติดตามปัจจุบัน · ยอดเคสปัจจุบันและกราฟเอกสารใช้แดชบอร์ดด้านบน · จำนวน Audit ไม่ตรงเป็นผลตรวจเดิม แม้ปิดเคสแล้วก็ไม่ลบผลตรวจ</p>
         <div className="so-modules" aria-label="สรุปทุกโมดูล">
           {show("booking") && docCard("booking", moduleName(settings, "store-booking", "ใบสั่งจอง"), "brand", "store-booking")}
           {show("online") && docCard("online", moduleName(settings, "store-online", "ใบขายออนไลน์"), "info", "store-online")}

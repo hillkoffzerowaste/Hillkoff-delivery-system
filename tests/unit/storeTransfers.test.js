@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getDefaultStoreSettings, normalizeStoreSettings } from "../../lib/storeSettings.js";
 import {
+  restoreTransferDraft,
+  transferNumberForDate,
   applyTransferReopen,
   applyTransferResolve,
   buildTransferDoc,
@@ -220,5 +222,30 @@ describe("transfer lists", () => {
     expect(filterTransfers(rows, { query: "ส่งเพิ่ม" }).map((r) => r.id)).toEqual(["c"]);
     expect(filterTransfers(rows, { query: "tr-0001" }).map((r) => r.id)).toEqual(["a"]);
     expect(filterTransfers(rows, {}).length).toBe(5);
+  });
+});
+
+
+describe("transferNumberForDate", () => {
+  it("keeps the running number while changing the Buddhist year and month", () => {
+    expect(transferNumberForDate("STK-TRF6911-0042", { prefix: "STK-TRF", pattern: "yymm", digits: 4 }, "2025-12-31", "WH")).toBe("STK-TRF6812-0042");
+  });
+  it("retains the selected alternate head and leaves old unknown heads alone", () => {
+    const cfg = { prefix: "TR", extraPrefixes: ["STK-CFS"], pattern: "yymm", digits: 4 };
+    expect(transferNumberForDate("STK-CFS6911-0042", cfg, "2027-01-01", "WH")).toBe("STK-CFS7001-0042");
+    expect(transferNumberForDate("OLD6911-0042", cfg, "2027-01-01", "WH")).toBe("OLD6911-0042");
+  });
+});
+
+
+describe("restoreTransferDraft", () => {
+  it("restores a backdated draft with its date and reason instead of defaulting to today", () => {
+    const rows = [{ transferNumber: "STK-TRF6712-0001" }];
+    expect(restoreTransferDraft({ rows, serviceDate: "2024-12-31", backdateReason: "ตกหล่น" }, "2026-11-10")).toEqual({ rows, serviceDate: "2024-12-31", backdateReason: "ตกหล่น" });
+  });
+  it("still restores old array drafts and ignores malformed draft dates", () => {
+    const rows = [{ transferNumber: "TR-0001" }];
+    expect(restoreTransferDraft(rows, "2026-11-10")).toEqual({ rows, serviceDate: "2026-11-10", backdateReason: "" });
+    expect(restoreTransferDraft({ rows, serviceDate: "2024-02-30" }, "2026-11-10").serviceDate).toBe("2026-11-10");
   });
 });

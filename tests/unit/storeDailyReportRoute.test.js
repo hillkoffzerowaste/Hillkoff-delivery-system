@@ -241,3 +241,11 @@ describe("GET /api/store/daily-report?month=", () => {
     expect(body).not.toContain("0811111111");
   });
 });
+
+it("returns a filtered document dashboard over an explicit range", async () => {
+  const result = await get(`from=${DATE}&to=${DATE}&staffId=u2`);
+  expect(result.status).toBe(200);
+  const data = (await result.json()).data;
+  expect(data.total).toBe(2);
+  expect(data.documents.map((d) => d.type).sort()).toEqual(["online", "transfer"]);
+});

@@ -42,8 +42,11 @@ function createDb(seed = {}) {
     async runTransaction(callback) {
       const writes = [];
       await callback({
-        get: async (target) => target.get(),
-        set: (ref, value) => writes.push(() => docs.set(ref.path, value)),
+        get: async (target) => {
+          if (writes.length) throw new Error("Firestore transactions require all reads before writes");
+          return target.get();
+        },
+        set: (ref, value, options) => writes.push(() => docs.set(ref.path, options?.merge ? { ...docs.get(ref.path), ...value } : value)),
         update: (ref, value) => writes.push(() => docs.set(ref.path, { ...docs.get(ref.path), ...value })),
         create: (ref, value) => writes.push(() => { if (docs.has(ref.path)) throw new Error("ALREADY_EXISTS"); docs.set(ref.path, value); }),
         delete: (ref) => writes.push(() => docs.delete(ref.path))
@@ -151,6 +154,74 @@ describe("store transfers route", () => {
     it("rejects a preparer name with no uid so work cannot disappear from reports", async () => {
       expect((await call("POST", { rows: [row({ preparerUid: "" })] })).status).toBe(400);
       expect(transferPaths(state.db)).toHaveLength(0);
+    });
+  });
+
+  describe("document dates", () => {
+    it("creates last-year documents with real server timestamps and a backdate reason", async () => {
+      const response = await call("POST", { serviceDate: "2025-12-31", backdateReason: "ตกหล่น", rows: [row()] });
+      expect(response.status).toBe(200);
+      const saved = (await response.json()).data[0];
+      expect(saved).toMatchObject({ serviceDate: "2025-12-31", backdateReason: "ตกหล่น", createdByUid: "store-1" });
+      expect(saved.createdAt).not.toContain("2025-12-31");
+      expect((await (await call("GET", undefined, "?date=2025-12-31")).json()).data.items).toHaveLength(1);
+    });
+
+    it("requires a year-month number to match an explicitly selected document date", async () => {
+      state.db.docs.set("store_settings/default", { ...settingsDoc, documents: { transfer: { prefix: "TR", pattern: "yymm", digits: 4, reset: "month" } } });
+      expect((await call("POST", { serviceDate: "2024-12-31", backdateReason: "ตกหล่น", rows: [row({ transferNumber: "TR6911-0418" })] })).status).toBe(400);
+      const response = await call("POST", { serviceDate: "2024-12-31", backdateReason: "ตกหล่น", rows: [row({ transferNumber: "TR6712-0418", requestRef: "STK-TRF6601-0001" })] });
+      expect(response.status).toBe(200);
+      const saved = (await response.json()).data[0];
+      expect(saved).toMatchObject({ serviceDate: "2024-12-31", requestRef: "STK-TRF6601-0001" });
+      expect((await call("PUT", { id: saved.id, ...row({ transferNumber: "TR6712-0418" }), serviceDate: "2024-11-30", reason: "ผิดเดือน", baseUpdatedAt: saved.updatedAt })).status).toBe(400);
+    });
+
+    it("rejects invalid dates and missing backdate reasons without writes", async () => {
+      for (const serviceDate of ["2025-02-29", "2025-12-31"]) {
+        expect((await call("POST", { serviceDate, rows: [row()] })).status).toBe(400);
+      }
+      expect(transferPaths(state.db)).toHaveLength(0);
+    });
+
+    it("moves a monthly registry on a date-only edit and keeps resolution timestamps", async () => {
+      state.db.docs.set("store_settings/default", { ...settingsDoc, documents: { transfer: { reset: "month" } } });
+      const saved = await postOne({ receipt: "incomplete", note: "ขาด" });
+      await call("PATCH", { id: saved.id, action: "resolve", text: "รับเพิ่ม" });
+      const before = state.db.docs.get(`store_transfers/${saved.id}`);
+      const response = await call("PUT", { id: saved.id, ...row({ receipt: "incomplete", note: "ขาด" }), serviceDate: "2025-12-31", reason: "แก้วันที่", baseUpdatedAt: before.updatedAt });
+      expect(response.status).toBe(200);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`)).toMatchObject({ serviceDate: "2025-12-31", resolution: before.resolution, resolvedServiceDate: before.resolvedServiceDate });
+      expect(registryPaths(state.db)).toEqual(["store_document_registry/transfer__2025-12__TR-0418"]);
+    });
+
+    it("rejects a date move into an occupied period without releasing either number", async () => {
+      state.db.docs.set("store_settings/default", { ...settingsDoc, documents: { transfer: { reset: "month" } } });
+      const saved = await postOne({});
+      state.db.docs.set("store_document_registry/transfer__2025-12__TR-0418", { sourceId: "other" });
+      expect((await call("PUT", { id: saved.id, ...row(), serviceDate: "2025-12-31", reason: "แก้วันที่", baseUpdatedAt: saved.updatedAt })).status).toBe(409);
+      expect(registryPaths(state.db)).toHaveLength(2);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`).serviceDate).toBe(saved.serviceDate);
+    });
+
+    it("rejects new future document dates and keeps an existing legacy future date", async () => {
+      expect((await call("POST", { serviceDate: "2099-01-01", rows: [row()] })).status).toBe(400);
+      const saved = await postOne({});
+      expect((await call("PUT", { id: saved.id, ...row(), serviceDate: "2099-01-01", reason: "แก้วันที่", baseUpdatedAt: saved.updatedAt })).status).toBe(400);
+      state.db.docs.set(`store_transfers/${saved.id}`, { ...saved, serviceDate: "2099-01-01" });
+      expect((await call("PUT", { id: saved.id, ...row(), serviceDate: "2099-01-01", reason: "แก้ข้อความ", baseUpdatedAt: saved.updatedAt })).status).toBe(200);
+    });
+
+    it("requires a current base version for a document date change", async () => {
+      const saved = await postOne({});
+      expect((await call("PUT", { id: saved.id, ...row(), serviceDate: "2025-12-31", reason: "แก้วันที่" })).status).toBe(409);
+    });
+
+    it("refuses to release a registry owned by another document", async () => {
+      const saved = await postOne({});
+      state.db.docs.set(`store_document_registry/${saved.registryId}`, { sourceId: "another" });
+      expect((await call("PUT", { id: saved.id, ...row({ transferNumber: "TR-0999" }), reason: "แก้เลข" })).status).toBe(409);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`).transferNumber).toBe("TR-0418");
     });
   });
 
@@ -270,6 +341,76 @@ describe("store transfers route", () => {
       expect(data).toMatchObject({ id: saved.id, transferNumber: "TR-0418" });
       expect(data.history.map((event) => event.event)).toEqual(["created"]);
       expect((await call("GET", undefined, "?id=missing")).status).toBe(404);
+    });
+  });
+
+  describe("canonical case synchronization", () => {
+    it("reopens a resolved legacy transfer without moving its origin or losing its original close activity", async () => {
+      const createdAt = "2026-01-01T02:00:00.000Z";
+      const resolvedAt = "2026-02-01T03:00:00.000Z";
+      state.db.docs.set("store_transfers/legacy", { ...row({ receipt: "incomplete", note: "ขาด" }), issueState: "resolved", createdAt, updatedAt: resolvedAt, resolution: { at: resolvedAt, byUid: "old-solver", byName: "ผู้แก้เดิม", text: "ส่งเพิ่มแล้ว" } });
+      expect((await call("PATCH", { id: "legacy", action: "reopen" })).status).toBe(200);
+      const value = state.db.docs.get("store_cases/transfer_legacy");
+      expect(value).toMatchObject({ status: "reopened", createdAt, sourceCreatedAt: createdAt, originDateEstimated: true, discoveredAt: "" });
+      expect(value.history.filter((event) => event.action === "closed")).toMatchObject([{ effectiveAt: resolvedAt, actorUid: "old-solver", actorName: "ผู้แก้เดิม", note: "ส่งเพิ่มแล้ว", legacyImported: true, closure: "exception" }]);
+      expect(value.history.find((event) => event.action === "closed").recordedAt).not.toBe(resolvedAt);
+    });
+
+    it("creates an incomplete transfer case immediately and retains the same case after resolve and reopen", async () => {
+      const saved = await postOne({ receipt: "incomplete", note: "ขาดแก้ว" });
+      const casePath = `store_cases/transfer_${saved.id}`;
+      expect(state.db.docs.get(casePath)).toMatchObject({ sourceType: "transfer", sourceId: saved.id, sourceNumber: "TR-0418", status: "open", lines: [], createdAt: saved.createdAt, originDateEstimated: false });
+      expect((await call("PATCH", { id: saved.id, action: "resolve", text: "ตรวจรับแล้ว" })).status).toBe(200);
+      expect(state.db.docs.get(casePath)).toMatchObject({ status: "closed", closure: "exception", closureReason: "ตรวจรับแล้ว" });
+      expect((await call("PATCH", { id: saved.id, action: "reopen" })).status).toBe(200);
+      expect(state.db.docs.get(casePath).status).toBe("reopened");
+      expect([...state.db.docs.keys()].filter((path) => path.startsWith("store_cases/"))).toEqual([casePath]);
+    });
+    it("does not leave duplicate source cases behind when Firestore retries a create transaction", async () => {
+      const run = state.db.runTransaction.bind(state.db);
+      state.db.runTransaction = async (callback) => {
+        await callback({ get: (ref) => ref.get(), set() {}, update() {}, create() {}, delete() {} });
+        return run(callback);
+      };
+      const saved = await postOne({ receipt: "incomplete", note: "ขาด" });
+      expect(transferPaths(state.db)).toEqual([`store_transfers/${saved.id}`]);
+      expect([...state.db.docs.keys()].filter((path) => path.startsWith("store_cases/"))).toEqual([`store_cases/transfer_${saved.id}`]);
+      expect(state.db.docs.get(`store_cases/transfer_${saved.id}`).sourceId).toBe(saved.id);
+    });
+    it("creates a first-problem case when an initially complete transfer is corrected", async () => {
+      const saved = await postOne({});
+      expect(state.db.docs.has(`store_cases/transfer_${saved.id}`)).toBe(false);
+      expect((await call("PUT", { id: saved.id, ...row({ receipt: "incomplete", note: "พบขาด" }), reason: "นับใหม่", baseUpdatedAt: saved.updatedAt })).status).toBe(200);
+      expect(state.db.docs.get(`store_cases/transfer_${saved.id}`)).toMatchObject({ sourceId: saved.id, status: "open", originDateEstimated: false, sourceCreatedAt: saved.createdAt });
+    });
+    it("advances the source version on a mutation even if its old version is ahead of the request clock", async () => {
+      const saved = await postOne({ receipt: "incomplete", note: "ขาด" });
+      const future = "2099-01-01T00:00:00.000Z";
+      state.db.docs.set(`store_transfers/${saved.id}`, { ...saved, updatedAt: future });
+      expect((await call("PATCH", { id: saved.id, action: "resolve", text: "รับแล้ว" })).status).toBe(200);
+      expect(Date.parse(state.db.docs.get(`store_transfers/${saved.id}`).updatedAt)).toBeGreaterThan(Date.parse(future));
+      expect(state.db.docs.get(`store_transfers/${saved.id}`).createdAt).toBe(saved.createdAt);
+    });
+
+    it("blocks legacy resolve while known goods are outstanding", async () => {
+      const saved = await postOne({ receipt: "incomplete", note: "ขาด" });
+      state.db.docs.set(`store_cases/transfer_${saved.id}`, { status: "open", note: "ขาด", lines: [{ id: "a", required: 5, received: 1, cancelled: 0 }], history: [] });
+      expect((await call("PATCH", { id: saved.id, action: "resolve", text: "ปิด" })).status).toBe(400);
+      expect(state.db.docs.get(`store_transfers/${saved.id}`).issueState).toBe("open");
+    });
+    it("closes and reopens the same canonical case in the source transaction", async () => {
+      const saved = await postOne({ receipt: "incomplete", note: "ขาด" });
+      state.db.docs.set(`store_cases/transfer_${saved.id}`, { status: "open", note: "ขาด", sourceId: saved.id, lines: [{ id: "a", required: 5, received: 5, cancelled: 0 }], history: [] });
+      expect((await call("PATCH", { id: saved.id, action: "resolve", text: "รับครบ" })).status).toBe(200);
+      expect(state.db.docs.get(`store_cases/transfer_${saved.id}`)).toMatchObject({ status: "closed", closure: "fulfilled", sourceId: saved.id });
+      expect((await call("PATCH", { id: saved.id, action: "reopen" })).status).toBe(200);
+      expect(state.db.docs.get(`store_cases/transfer_${saved.id}`)).toMatchObject({ status: "reopened", closure: "" });
+    });
+    it("marks the canonical case as an exception when its source is deleted", async () => {
+      const saved = await postOne({ receipt: "incomplete", note: "ขาด" });
+      state.db.docs.set(`store_cases/transfer_${saved.id}`, { status: "open", lines: [], history: [] });
+      expect((await call("DELETE", { id: saved.id, reason: "เอกสารผิด" })).status).toBe(200);
+      expect(state.db.docs.get(`store_cases/transfer_${saved.id}`)).toMatchObject({ status: "closed", closure: "exception" });
     });
   });
 

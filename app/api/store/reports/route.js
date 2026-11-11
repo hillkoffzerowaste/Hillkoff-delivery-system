@@ -1,3 +1,4 @@
+import { readSourceCase, prepareSourceCaseUpsert, sourceMutationVersion } from "../../../../lib/storeCaseTransactions";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, canReleaseStoreReportReservation, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
@@ -84,6 +85,36 @@ function linkedOrderSummary(id, order = {}) {
     address: order.address || "",
     deliveryMethod: order.deliveryMethod || ""
   };
+}
+
+async function readReportCaseUpdate(transaction, db, ref, item, patch, profile, now) {
+  const current = await transaction.get(ref);
+  if (!current.exists || JSON.stringify(current.data()) !== JSON.stringify(item)) {
+    throw Object.assign(new Error("Report changed; refresh before trying again"), { status: 409 });
+  }
+  const canonical = await readSourceCase(transaction, db, item.type, ref.id);
+  patch.updatedAt = sourceMutationVersion(item, now);
+  const sourceChanges = { ...patch };
+  if (!patch.packUpdatedAt) {
+    if (sourceChanges.status === item.status) delete sourceChanges.status;
+    if (sourceChanges.packStatus === item.packStatus) delete sourceChanges.packStatus;
+  }
+  return { ...canonical, patch: prepareSourceCaseUpsert(canonical.value, item.type, ref.id, item, sourceChanges, now, profile) };
+}
+
+async function commitReportChanges(db, changes, profile, now) {
+  await db.runTransaction(async (transaction) => {
+    const prepared = [];
+    for (const change of changes) {
+      const canonical = await readReportCaseUpdate(transaction, db, change.ref, change.item, change.patch, profile, now);
+      prepared.push({ ...change, canonical });
+    }
+    for (const { ref, item, patch, event, reason = "", checkerName = "", canonical } of prepared) {
+      transaction.set(ref, patch, { merge: true });
+      if (canonical.patch) transaction.set(canonical.ref, canonical.patch, { merge: true });
+      transaction.set(ref.collection("history").doc(), reportLog(ref, event, profile, now, item, { ...item, ...patch }, reason, checkerName));
+    }
+  });
 }
 
 export async function GET(request) {
@@ -236,9 +267,15 @@ export async function POST(request) {
         }
         reservations.push({ item, registryRef });
       }
+      const cases = [];
       for (const item of saved) {
+        const canonical = await readSourceCase(transaction, db, item.type, item.id);
+        cases.push({ ref: canonical.ref, patch: prepareSourceCaseUpsert(canonical.value, item.type, item.id, null, item, now, profile) });
+      }
+      for (const [index, item] of saved.entries()) {
         const { ref, bookingKey, ...data } = item;
         transaction.set(ref, data);
+        if (cases[index].patch) transaction.set(cases[index].ref, cases[index].patch, { merge: true });
         transaction.set(ref.collection("history").doc(), reportLog(ref, draft ? "created_draft" : "created", profile, now, null, data, "", draft ? "" : checkerName));
       }
       for (const { item, registryRef } of reservations) transaction.create(registryRef, bookingRegistryRecord({ serviceDate: item.serviceDate, bookingNumber: item.bookingNumber, source: "store_reports", sourceId: item.id, createdAt: now, createdBy: item.createdBy }));
@@ -283,7 +320,7 @@ export async function PATCH(request) {
         if (!checkerName) return Response.json({ ok: false, error: "Pack checker name is required" }, { status: 400 });
         const snapshots = await db.getAll(...ids.map((id) => db.collection("store_reports").doc(id)));
         const now = new Date().toISOString();
-        const batch = db.batch();
+        const changes = [];
         const updatedIds = [];
         snapshots.forEach((snap) => {
           if (!snap.exists) return;
@@ -291,12 +328,11 @@ export async function PATCH(request) {
           if (item.type !== type || item.deletedAt || item.packStatus !== "pending") return;
           const patch = { packStatus: "checked", packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: "", status: "saved", updatedAt: now };
           patch.workflowHistory = appendReportHistory(item, reportKpiEvent("pack_checked", profile, now, { ...item, ...patch }, "", checkerName));
-          batch.set(snap.ref, patch, { merge: true });
-          batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "pack_checked", profile, now, item, { ...item, ...patch }, "", checkerName));
+          changes.push({ ref: snap.ref, item, patch, event: "pack_checked", checkerName });
           updatedIds.push(snap.id);
         });
         if (!updatedIds.length) return Response.json({ ok: false, error: "Selected rows are no longer waiting for pack confirmation" }, { status: 409 });
-        await batch.commit();
+        await commitReportChanges(db, changes, profile, now);
         return Response.json({ ok: true, data: { ids: updatedIds, confirmedAt: now } });
       }
       const id = clean(body?.id, 200);
@@ -310,10 +346,7 @@ export async function PATCH(request) {
       if (packStatus === "returned" && !reason) return Response.json({ ok: false, error: "Provide return reason" }, { status: 400 });
       const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
       patch.workflowHistory = appendReportHistory(item, reportKpiEvent(`pack_${packStatus}`, profile, now, { ...item, ...patch }, reason, checkerName));
-      const batch = db.batch();
-      batch.set(ref, patch, { merge: true });
-      batch.set(ref.collection("history").doc(), reportLog(ref, `pack_${packStatus}`, profile, now, item, { ...item, ...patch }, reason, checkerName));
-      await batch.commit();
+      await commitReportChanges(db, [{ ref, item, patch, event: `pack_${packStatus}`, reason, checkerName }], profile, now);
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }
     if (body?.action === "resubmit") {
@@ -329,10 +362,7 @@ export async function PATCH(request) {
       const now = new Date().toISOString();
       const patch = { status: "saved", packStatus: "pending", returnReason: "", resubmittedAt: now, resubmittedBy: profile.name || profile.email, storeCheckerName: checkerName, updatedAt: now };
       patch.workflowHistory = appendReportHistory(item, reportKpiEvent("store_resubmitted", profile, now, { ...item, ...patch }, clean(body?.reason, 1000), checkerName));
-      const batch = db.batch();
-      batch.set(ref, patch, { merge: true });
-      batch.set(ref.collection("history").doc(), reportLog(ref, "store_resubmitted", profile, now, item, { ...item, ...patch }, clean(body?.reason, 1000), checkerName));
-      await batch.commit();
+      await commitReportChanges(db, [{ ref, item, patch, event: "store_resubmitted", reason: clean(body?.reason, 1000), checkerName }], profile, now);
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }
     const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.slice(0, 50).map((id) => String(id || "").trim()).filter(validDocId))] : [];
@@ -346,7 +376,7 @@ export async function PATCH(request) {
     const refs = ids.map((id) => db.collection("store_reports").doc(id));
     const snapshots = await db.getAll(...refs);
     const now = new Date().toISOString();
-    const batch = db.batch();
+    const changes = [];
     let updated = 0;
     const updatedIds = [];
     snapshots.forEach((snap) => {
@@ -355,13 +385,12 @@ export async function PATCH(request) {
       if (item.type !== type || String(item.serviceDate || bangkokDateKey(item.createdAt)) !== date) return;
       const after = { ...item, status: item.status === "draft" ? "saved" : item.status, packStatus: item.packStatus === "blocked" || !item.packStatus ? "pending" : item.packStatus, confirmedAt: now, updatedAt: now, confirmedBy: profile.name || profile.email, storeCheckerName: checkerName };
       after.workflowHistory = appendReportHistory(item, reportKpiEvent("confirmed", profile, now, after, "", checkerName));
-      batch.update(snap.ref, after);
-      batch.set(snap.ref.collection("history").doc(), reportLog(snap.ref, "confirmed", profile, now, item, after, "", checkerName));
+      changes.push({ ref: snap.ref, item, patch: after, event: "confirmed", checkerName });
       updated += 1;
       updatedIds.push(snap.id);
     });
     if (!updated) return Response.json({ ok: false, error: "No permitted report rows found" }, { status: 403 });
-    await batch.commit();
+    await commitReportChanges(db, changes, profile, now);
     return Response.json({ ok: true, data: { ids: updatedIds, confirmedAt: now } });
   } catch (error) {
     return errorResponse(error);
@@ -393,7 +422,9 @@ export async function PUT(request) {
       const orderRef = db.collection("orders").doc(String(item.linkedOrderId));
       await db.runTransaction(async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
+        const canonical = await readReportCaseUpdate(transaction, db, ref, item, patch, profile, patch.updatedAt);
         transaction.set(ref, patch, { merge: true });
+        if (canonical.patch) transaction.set(canonical.ref, canonical.patch, { merge: true });
         transaction.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
         if (!orderSnap.exists) return;
         const order = orderSnap.data() || {};
@@ -413,16 +444,15 @@ export async function PUT(request) {
         const registrySnap = await transaction.get(registryRef);
         const previousSnap = previousRef ? await transaction.get(previousRef) : null;
         if (registrySnap.exists) throw Object.assign(new Error(bookingConflictMessage(registrySnap.data())), { status: 409 });
+        const canonical = await readReportCaseUpdate(transaction, db, ref, item, patch, profile, patch.updatedAt);
         transaction.set(ref, patch, { merge: true });
+        if (canonical.patch) transaction.set(canonical.ref, canonical.patch, { merge: true });
         transaction.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
         transaction.create(registryRef, bookingRegistryRecord({ serviceDate, bookingNumber, source: "store_reports", sourceId: id, createdAt: updatedAt, createdBy: profile.name || profile.email }));
         if (previousSnap?.exists && canReleaseStoreReportReservation(previousSnap.data(), id)) transaction.delete(previousRef);
       });
     } else {
-      const batch = db.batch();
-      batch.set(ref, patch, { merge: true });
-      batch.set(ref.collection("history").doc(), reportLog(ref, "updated", profile, updatedAt, item, { ...item, ...patch }, reason));
-      await batch.commit();
+      await commitReportChanges(db, [{ ref, item, patch, event: "updated", reason, checkerName: "" }], profile, updatedAt);
     }
     return Response.json({ ok: true, data: { id, ...item, ...patch } });
   } catch (error) { return errorResponse(error); }
@@ -448,7 +478,9 @@ export async function DELETE(request) {
       const orderRef = db.collection("orders").doc(String(item.linkedOrderId));
       await db.runTransaction(async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
+        const canonical = await readReportCaseUpdate(transaction, db, ref, item, patch, profile, patch.updatedAt);
         transaction.set(ref, patch, { merge: true });
+        if (canonical.patch) transaction.set(canonical.ref, canonical.patch, { merge: true });
         transaction.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
         if (!orderSnap.exists) return;
         const order = orderSnap.data() || {};
@@ -466,7 +498,9 @@ export async function DELETE(request) {
       const registryRef = registryId ? db.collection("booking_month_registry").doc(registryId) : null;
       const registrySnap = registryRef ? await transaction.get(registryRef) : null;
       const releasable = registrySnap?.exists && canReleaseStoreReportReservation(registrySnap.data(), id);
+      const canonical = await readReportCaseUpdate(transaction, db, ref, item, patch, profile, now);
       transaction.set(ref, patch, { merge: true });
+      if (canonical.patch) transaction.set(canonical.ref, canonical.patch, { merge: true });
       transaction.set(ref.collection("history").doc(), reportLog(ref, "deleted", profile, now, item, { ...item, ...patch }, reason));
       if (releasable) {
         transaction.delete(registryRef);

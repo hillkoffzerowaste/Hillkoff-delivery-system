@@ -1,3 +1,4 @@
+import { readTransferCase, prepareSourceCaseUpsert, sourceMutationVersion } from "../../../../lib/storeCaseTransactions";
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { bangkokDateKey } from "../../../../lib/operationsReporting";
 import { bangkokDayRange } from "../../../../lib/storeFormat";
@@ -7,6 +8,7 @@ import {
   STORE_SETTINGS_DOC_ID,
   documentPeriodKey,
   documentRegistryId,
+  lockedNumberPrefixes,
   normalizeStoreSettings
 } from "../../../../lib/storeSettings";
 import {
@@ -33,7 +35,7 @@ const ALERT_LIMIT = 200;
 const ALERT_RETURN_LIMIT = 100;
 const HISTORY_LIMIT = 200;
 // Fields recorded in history "before/after" when a document is edited.
-const EDIT_FIELDS = ["transferNumber", "requestRef", "fromBranchCode", "toBranchCode", "fromWarehouseId", "fromWarehouseName", "toWarehouseId", "toWarehouseName", "itemCount", "preparerUid", "preparerName", "receipt", "note", "issueState", "resolution", "resolvedServiceDate"];
+const EDIT_FIELDS = ["serviceDate", "backdateReason", "transferNumber", "requestRef", "fromBranchCode", "toBranchCode", "fromWarehouseId", "fromWarehouseName", "toWarehouseId", "toWarehouseName", "itemCount", "preparerUid", "preparerName", "receipt", "note", "issueState", "resolution", "resolvedServiceDate"];
 
 function clean(value, max = 500) {
   return String(value || "").trim().slice(0, max);
@@ -169,7 +171,11 @@ export async function POST(request) {
     if (!filled.length) return fail("ยังไม่มีรายการให้ยืนยัน", 400);
 
     const now = new Date().toISOString();
-    const serviceDate = bangkokDateKey(now);
+    const serviceDate = body.serviceDate === undefined ? bangkokDateKey(now) : clean(body.serviceDate, 20);
+    if (!bangkokDayRange(serviceDate)) return fail("วันที่เอกสารไม่ถูกต้อง", 400);
+    if (serviceDate > bangkokDateKey(now)) return fail("วันที่เอกสารต้องไม่เกินวันนี้", 400);
+    const backdateReason = clean(body.backdateReason, 1000);
+    if (serviceDate < bangkokDateKey(now) && !backdateReason) return fail("กรุณาระบุเหตุผลในการคีย์ย้อนหลัง", 400);
     let saved = [];
     // Everything is validated and reserved inside one transaction so a bad or duplicate row writes nothing.
     await db.runTransaction(async (transaction) => {
@@ -180,22 +186,32 @@ export async function POST(request) {
       for (const row of filled) {
         const checked = validateTransferRow(row, { settings, profile });
         if (!checked.ok) throw httpError(checked.error, checked.status);
+        if (body.serviceDate !== undefined && cfg.pattern === "yymm" && !lockedNumberPrefixes(cfg, serviceDate, checked.value.fromBranchCode).some((prefix) => checked.value.transferNumber.startsWith(prefix))) {
+          throw httpError("ปีเดือนในเลขที่ใบโอนไม่ตรงกับวันที่เอกสาร", 400);
+        }
         await verifyPreparer(transaction, db, checked.value, profile, settings);
         const number = checked.value.transferNumber;
         const registryId = documentRegistryId("transfer", number, { reset: cfg.reset, serviceDate, pattern: cfg.pattern });
         if (seen.has(registryId)) throw httpError(`เลขที่ใบโอน ${number} ซ้ำกันในรายการที่กำลังบันทึก`, 409);
         seen.add(registryId);
         const ref = db.collection(STORE_TRANSFERS_COLLECTION).doc();
-        saved.push({ id: ref.id, ref, registryId, ...buildTransferDoc(checked.value, { profile, now, serviceDate, registryId }) });
+        saved.push({ id: ref.id, ref, registryId, ...buildTransferDoc(checked.value, { profile, now, serviceDate, registryId }), backdateReason });
       }
       const registryRefs = saved.map((item) => db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(item.registryId));
       for (let index = 0; index < saved.length; index += 1) {
         const registrySnap = await transaction.get(registryRefs[index]);
         if (registrySnap.exists) throw httpError(`เลขที่ใบโอน ${saved[index].transferNumber} ถูกบันทึกแล้ว`, 409);
       }
+      const cases = [];
+      for (const item of saved) {
+        const canonical = await readTransferCase(transaction, db, item.id);
+        const patch = prepareSourceCaseUpsert(canonical.value, "transfer", item.id, null, item, now, profile);
+        cases.push({ ref: canonical.ref, patch });
+      }
       saved.forEach((item, index) => {
         const { id, ref, ...data } = item;
         transaction.set(ref, data);
+        if (cases[index].patch) transaction.set(cases[index].ref, cases[index].patch, { merge: true });
         transaction.set(ref.collection("history").doc(), buildTransferHistoryEvent("created", profile, now, { after: pick(data, EDIT_FIELDS) }));
         transaction.create(registryRefs[index], registryRecord({ cfg, serviceDate, number: data.transferNumber, sourceId: id, now, createdBy: data.createdBy }));
       });
@@ -227,7 +243,11 @@ export async function PATCH(request) {
         : applyTransferReopen(doc, { profile, now });
       const before = pick(doc, ["issueState", "resolution", "resolvedServiceDate"]);
       const after = pick(patch, ["issueState", "resolution", "resolvedServiceDate"]);
+      const canonical = await readTransferCase(transaction, db, id);
+      patch.updatedAt = sourceMutationVersion(doc, now);
+      const casePatch = prepareSourceCaseUpsert(canonical.value, "transfer", id, doc, { ...patch, reason: body?.reason }, now, profile);
       transaction.update(ref, patch);
+      if (casePatch) transaction.set(canonical.ref, casePatch, { merge: true });
       transaction.set(ref.collection("history").doc(), buildTransferHistoryEvent(action === "resolve" ? "resolved" : "reopened", profile, now, { before, after, reason: body?.reason }));
       result = { id, ...doc, ...patch };
     });
@@ -260,6 +280,12 @@ export async function PUT(request) {
 
       const settings = await readSettings(db, transaction);
       const cfg = settings.documents.transfer;
+      const serviceDate = body.serviceDate === undefined ? (doc.serviceDate || bangkokDateKey(doc.createdAt)) : clean(body.serviceDate, 20);
+      if (!bangkokDayRange(serviceDate)) throw httpError("วันที่เอกสารไม่ถูกต้อง", 400);
+      if (serviceDate > bangkokDateKey(now) && serviceDate !== doc.serviceDate) throw httpError("วันที่เอกสารต้องไม่เกินวันนี้", 400);
+      if (serviceDate !== doc.serviceDate && body?.baseUpdatedAt !== (doc.updatedAt || doc.createdAt || "")) {
+        throw httpError("ใบโอนมีการเปลี่ยนแปลงแล้ว กรุณาปิดหน้าต่างแก้ไขและเปิดรายการใหม่", 409);
+      }
       const input = rowInput(body);
       for (const side of ["from", "to"]) {
         if (input[`${side}WarehouseId`] === undefined && doc[`${side}WarehouseId`]) input[`${side}WarehouseId`] = input[`${side}BranchCode`] === doc[`${side}BranchCode`] ? doc[`${side}WarehouseId`] : "";
@@ -267,31 +293,39 @@ export async function PUT(request) {
       const checked = validateTransferRow(input, { settings, profile, keepBranchCodes: [doc.fromBranchCode, doc.toBranchCode], keepNumber: doc.transferNumber, original: doc });
       if (!checked.ok) throw httpError(checked.error, checked.status);
       const value = checked.value;
+      if (serviceDate !== doc.serviceDate && cfg.pattern === "yymm" && !lockedNumberPrefixes(cfg, serviceDate, value.fromBranchCode).some((prefix) => value.transferNumber.startsWith(prefix))) {
+        throw httpError("ปีเดือนในเลขที่ใบโอนไม่ตรงกับวันที่เอกสาร", 400);
+      }
       if (value.preparerUid && value.preparerUid === doc.preparerUid && doc.preparerName) value.preparerName = doc.preparerName;
       else await verifyPreparer(transaction, db, value, profile, settings);
 
-      const patch = { ...value, updatedAt: now, updatedBy: profile.name || profile.email || "" };
+      const patch = { ...value, serviceDate, updatedAt: now, updatedBy: profile.name || profile.email || "", updatedByUid: profile.uid };
+      if (serviceDate !== doc.serviceDate && serviceDate < bangkokDateKey(now)) patch.backdateReason = reason;
       if (value.receipt === "complete") Object.assign(patch, { issueState: "", resolution: null, resolvedServiceDate: "" });
       else if (doc.receipt !== "incomplete") Object.assign(patch, { issueState: "open", resolution: null, resolvedServiceDate: "" });
 
       let reserve = null;
       let release = null;
-      if (value.transferNumber !== doc.transferNumber) {
-        const serviceDate = doc.serviceDate || bangkokDateKey(doc.createdAt);
-        const registryId = documentRegistryId("transfer", value.transferNumber, { reset: cfg.reset, serviceDate, pattern: cfg.pattern });
+      const registryId = documentRegistryId("transfer", value.transferNumber, { reset: cfg.reset, serviceDate, pattern: cfg.pattern });
+      if (registryId !== doc.registryId && (value.transferNumber !== doc.transferNumber || serviceDate !== doc.serviceDate || value.fromBranchCode !== doc.fromBranchCode)) {
         const newRef = db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(registryId);
         const oldRef = doc.registryId && doc.registryId !== registryId ? db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(doc.registryId) : null;
         const newSnap = await transaction.get(newRef);
         const oldSnap = oldRef ? await transaction.get(oldRef) : null;
-        if (newSnap.exists) throw httpError(`เลขที่ใบโอน ${value.transferNumber} ถูกบันทึกแล้ว`, 409);
+        if (newSnap.exists && newSnap.data()?.sourceId !== id) throw httpError(`เลขที่ใบโอน ${value.transferNumber} ถูกบันทึกแล้ว`, 409);
+        if (oldSnap?.exists && oldSnap.data()?.sourceId !== id) throw httpError("ทะเบียนเลขใบโอนเป็นของเอกสารอื่น กรุณาตรวจสอบ", 409);
         patch.registryId = registryId;
         reserve = { ref: newRef, record: registryRecord({ cfg, serviceDate, number: value.transferNumber, sourceId: id, now, createdBy: profile.name || profile.email }) };
         if (oldSnap?.exists && oldSnap.data()?.sourceId === id) release = oldRef;
       }
 
+      const canonical = await readTransferCase(transaction, db, id);
+      patch.updatedAt = sourceMutationVersion(doc, now);
+      const casePatch = prepareSourceCaseUpsert(canonical.value, "transfer", id, doc, { ...patch, reason: body?.reason }, now, profile);
       transaction.update(ref, patch);
+      if (casePatch) transaction.set(canonical.ref, casePatch, { merge: true });
       transaction.set(ref.collection("history").doc(), buildTransferHistoryEvent("updated", profile, now, { before: pick(doc, EDIT_FIELDS), after: pick({ ...doc, ...patch }, EDIT_FIELDS), reason }));
-      if (reserve) transaction.create(reserve.ref, reserve.record);
+      if (reserve) transaction.set(reserve.ref, reserve.record);
       if (release) transaction.delete(release);
       result = { id, ...doc, ...patch };
     });
@@ -323,7 +357,11 @@ export async function DELETE(request) {
       const registryRef = doc.registryId ? db.collection(STORE_DOCUMENT_REGISTRY_COLLECTION).doc(doc.registryId) : null;
       const registrySnap = registryRef ? await transaction.get(registryRef) : null;
       const patch = { deletedAt: now, deletedBy: profile.name || profile.email || "", deleteReason: reason, updatedAt: now };
+      const canonical = await readTransferCase(transaction, db, id);
+      patch.updatedAt = sourceMutationVersion(doc, now);
+      const casePatch = prepareSourceCaseUpsert(canonical.value, "transfer", id, doc, { ...patch, reason: body?.reason }, now, profile);
       transaction.update(ref, patch);
+      if (casePatch) transaction.set(canonical.ref, casePatch, { merge: true });
       transaction.set(ref.collection("history").doc(), buildTransferHistoryEvent("deleted", profile, now, { before: pick(doc, EDIT_FIELDS), reason }));
       if (registrySnap?.exists && registrySnap.data()?.sourceId === id) transaction.delete(registryRef);
       result = { id, ...doc, ...patch };

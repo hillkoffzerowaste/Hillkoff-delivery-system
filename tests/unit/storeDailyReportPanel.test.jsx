@@ -27,7 +27,8 @@ describe("StoreDailyReport first render", () => {
 
   it("offers the last seven days with today labelled", () => {
     expect(html).toContain("(วันนี้)");
-    const select = html.slice(html.indexOf("<select"), html.indexOf("</select>"));
+    const start = html.indexOf("<label>วันที่<select");
+    const select = html.slice(start, html.indexOf("</select>", start));
     expect(select.match(/<option/g)).toHaveLength(7);
   });
 

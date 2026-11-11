@@ -55,3 +55,8 @@ describe("Firestore read policy", () => {
       .toEqual({ from: "2026-09-01", to: "2026-09-30" });
   });
 });
+
+it("keeps shortage tracking independent from active orders", () => {
+  expect(needsActiveOrdersQuery("store-shortage")).toBe(false);
+  expect(getOrdersSyncMode("store-shortage")).toBe("none");
+});

@@ -83,3 +83,6 @@
   .st-field-items { flex: 0 1 140px; }
 }
 .st-count { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 720px) {
+  .store-report-actions.st-form-actions { position: static; }
+}

@@ -109,7 +109,7 @@ describe("store settings route", () => {
       const json = await response.json();
       expect(json.ok).toBe(true);
       expect(json.data.updatedAt).toBe("");
-      expect(json.data.settings.modules.map((m) => m.id)).toHaveLength(6);
+      expect(json.data.settings.modules.map((m) => m.id)).toHaveLength(7);
       expect(json.data.settings.branches).toEqual(getDefaultStoreSettings().branches);
     });
 

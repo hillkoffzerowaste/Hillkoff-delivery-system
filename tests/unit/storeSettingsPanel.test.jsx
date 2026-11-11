@@ -53,14 +53,14 @@ describe("StoreSettingsPanel unlocked", () => {
     expect(html).toContain('class="ss-panel-save is-ok" role="status">บันทึกลงฐานข้อมูลแล้ว</span>');
   });
 
-  it("shows all six module names, the group titles and the descriptions", () => {
-    expect(STORE_MODULE_IDS).toHaveLength(6);
-    for (const name of ["ใบสั่งจอง", "ใบขายออนไลน์", "รายงานประจำวัน", "ใบโอนสินค้า", "Internal Audit", "รายงานแดชบอร์ด"]) {
+  it("shows all seven module names, the group titles and the descriptions", () => {
+    expect(STORE_MODULE_IDS).toHaveLength(7);
+    for (const name of ["ใบสั่งจอง", "ใบขายออนไลน์", "รายงานประจำวัน", "ใบโอนสินค้า", "Internal Audit", "รายงานแดชบอร์ด", "เคสและสินค้าขาด"]) {
       expect(html).toContain(`value="${name}"`);
     }
     for (const title of ["โมดูลหลัก", "โมดูลเสริม", "รายงาน"]) expect(html).toContain(`<h3>${title}</h3>`);
     expect(html).toContain("ตรวจนับสต็อก สินค้าตรง / ไม่ตรง และเฉลี่ยต่อวัน");
-    expect(html.match(/ชื่อที่แสดงในเมนู/g)).toHaveLength(6);
+    expect(html.match(/ชื่อที่แสดงในเมนู/g)).toHaveLength(7);
   });
 
   it("locks the switches of booking and online only", () => {
@@ -97,8 +97,8 @@ describe("moveModule", () => {
 
   it("swaps with the neighbour in the same group and renumbers order", () => {
     const moved = moveModule(getDefaultStoreSettings().modules, "store-audit", -1);
-    expect(ids(moved)).toEqual(["store-booking", "store-online", "store-dashboard", "store-audit", "store-transfer", "store-overview"]);
-    expect(moved.map((item) => item.order)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(ids(moved)).toEqual(["store-booking", "store-online", "store-dashboard", "store-audit", "store-transfer", "store-overview", "store-shortage"]);
+    expect(moved.map((item) => item.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it("does not move across groups", () => {
@@ -161,7 +161,7 @@ describe("settings requests", () => {
     expect(sent.baseUpdatedAt).toBe("t1");
     expect(sent.settings).not.toHaveProperty("updatedAt");
     expect(sent.settings).not.toHaveProperty("updatedByUid");
-    expect(sent.settings.modules).toHaveLength(6);
+    expect(sent.settings.modules).toHaveLength(7);
     expect(result).toMatchObject({ ok: true, status: 200, data: { updatedAt: "t2" } });
   });
 

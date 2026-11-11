@@ -54,6 +54,7 @@ function createDb(seed = {}) {
         const writes = [];
         const transaction = {
           get: async (target) => {
+            if (writes.length) throw new Error("Firestore transactions require reads before writes");
             reads.set(target.path, versions.get(target.path) || 0);
             await Promise.resolve();
             return snapshot(target.path);
@@ -97,6 +98,28 @@ const call = async (method, search = "", body) => {
 const post = (body) => call("POST", "", body);
 const auditDocs = () => [...state.db.docs.entries()].filter(([path]) => /^store_audits\/[^/]+$/.test(path));
 const registryIds = () => [...state.db.docs.keys()].filter((path) => path.startsWith("store_document_registry/")).sort();
+
+describe("audit canonical case deletion", () => {
+  it("creates a deterministic audit case on mismatch and keeps the source and actual event dates", async () => {
+    state.role = "store";
+    state.uid = "store-1";
+    state.db = createDb(seedSettings());
+    const response = await post(goodBody);
+    expect(response.status).toBe(200);
+    const source = (await response.json()).data;
+    expect(state.db.docs.get(`store_cases/audit_${source.id}`)).toMatchObject({ sourceType: "audit", sourceId: source.id, sourceNumber: source.documentNumber, status: "open", lines: [], sourceCreatedAt: source.createdAt, createdAt: source.createdAt, discoveredAt: source.createdAt, originDateEstimated: false, history: [{ effectiveAt: source.createdAt, recordedAt: source.createdAt }] });
+    expect(state.db.docs.get(`store_audits/${source.id}`).mismatch).toBe(3);
+  });
+
+  it("closes the canonical case without changing the audit mismatch count", async () => {
+    state.role = "store";
+    state.uid = "store-1";
+    state.db = createDb({ "store_audits/a1": { createdByUid: "store-1", mismatch: 3 }, "store_cases/audit_a1": { sourceType: "audit", sourceId: "a1", status: "open", lines: [], history: [] } });
+    expect((await call("DELETE", "", { id: "a1", reason: "เอกสารผิด" })).status).toBe(200);
+    expect(state.db.docs.get("store_audits/a1").mismatch).toBe(3);
+    expect(state.db.docs.get("store_cases/audit_a1")).toMatchObject({ status: "closed", closure: "exception" });
+  });
+});
 
 describe("store audits route", () => {
   beforeEach(() => {

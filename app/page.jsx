@@ -1,4 +1,5 @@
-﻿"use client";
+"use client";
+import StoreCasesPanel from "./components/store/StoreCasesPanel";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
@@ -227,6 +228,7 @@ const TAB_TITLES = {
   "store-transfer": "ใบโอนสินค้า · สโตร์",
   "store-audit": "Internal Audit · สโตร์",
   "store-overview": "รายงานแดชบอร์ด · สโตร์",
+  "store-shortage": "เคสและสินค้าขาด · สโตร์",
   "store-settings": "ตั้งค่าสโตร์",
   "pack-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค",
   "pack-pickup": "Grab/รับหน้าร้าน · ห้องแพ็ค",
@@ -252,6 +254,7 @@ const STORE_NAV_ICONS = {
   "store-dashboard": ClipboardList,
   "store-transfer": ArrowLeftRight,
   "store-audit": ClipboardCheck,
+  "store-shortage": ClipboardList,
   "store-overview": ChartNoAxesCombined
 };
 
@@ -6590,6 +6593,7 @@ export default function App() {
           </section>
         )}
 
+        {auth.role === "store" && displayTab === "store-shortage" && <section className="panel role-workspace ops-workspace"><StoreCasesPanel apiFetch={authenticatedApiFetch} settings={storeSettings} /></section>}
         {auth.role === "store" && displayTab === "store-overview" && (
           <section className="panel role-workspace ops-workspace">
             <StoreOverviewPanel apiFetch={authenticatedApiFetch} settings={storeSettings} onNavigate={selectAppTab} />
