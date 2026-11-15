@@ -439,8 +439,8 @@
 ### 4.8 Preparation, Push, LINE, Public, Backup, Legacy
 
 #### 📄 `app/api/preparation/checkers/route.js`
-* **บทบาท:** จัดการรายชื่อผู้ตรวจของสโตร์/ห้องแพ็ค — `store`, `pack`, `admin`
-* **Flow:** `GET` อ่าน `app_settings/preparation_checkers` fallback `DEFAULT_CHECKERS` (store: เล็ก, ณัฐ, สุภาพ, ลืน, โจ้, สมนึก · pack: กิต, มาย, ยุทธ, หล้า, มุก); `PUT` แยกสิทธิ์ต่อรายการ — `canEditStore` = store|admin, `canEditPack` = pack|admin, role ที่ไม่มีสิทธิ์จะคงค่าเดิมไว้; `cleanNames` dedupe + ตัด 80 ตัวอักษร + ≤ 50 รายชื่อ
+* **บทบาท:** จัดการรายชื่อผู้ตรวจห้องแพ็ค — `pack`, `admin`; รายชื่อผู้ตรวจสโตร์อยู่ใน Store Settings
+* **Flow:** `GET` อ่าน `app_settings/preparation_checkers` เฉพาะรายชื่อผู้ตรวจห้องแพ็ค fallback `DEFAULT_CHECKERS.pack` (กิต, มาย, ยุทธ, หล้า, มุก); `PUT` ให้ `pack|admin` แก้ไขรายชื่อห้องแพ็ค; รายชื่อผู้ตรวจสโตร์ใช้ `store_settings/default.staff` ผ่าน `getActiveStoreStaff` และไม่อ่านการตั้งค่ารายชื่อจากฝ่ายขายอีก; `cleanNames` dedupe + ตัด 80 ตัวอักษร + ≤ 50 รายชื่อ
 
 #### 📄 `app/api/push/register/route.js`
 * **บทบาท:** ลงทะเบียน FCM web-push token — `driver` หรือ `sales` และ role ที่อ้างต้องตรงกับโปรไฟล์
@@ -713,7 +713,7 @@
 | | `store_audits` (+ `history`) | `/api/store/audits` |
 | | `store_document_registry`, `store_document_counters` | `/api/store/transfers`, `/api/store/audits` (กันเลขเอกสารซ้ำ/นับเลขถัดไป) |
 | | `events`, `activity` | server เท่านั้น |
-| ระบบ | `app_settings` (doc `preparation_checkers`) | `/api/preparation/checkers` |
+| ระบบ | `app_settings` (doc `preparation_checkers`, เฉพาะผู้ตรวจห้องแพ็ค) | `/api/preparation/checkers` |
 | | `audit_logs` | server เท่านั้น (admin actions, driver/vehicle CRUD, order delete, OTP) |
 | | `notifications` | `/api/line/push`, `/api/orders/create` |
 | | `push_tokens` | `/api/push/register` (อ่าน+ลบ token เสียโดย route ที่ส่ง FCM) |

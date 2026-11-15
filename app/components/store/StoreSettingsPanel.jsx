@@ -446,7 +446,7 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
 
       {tab === "staff" && (
         <section className="ss-panel-section" aria-label="พนักงานสโตร์">
-          <div><h3>รายชื่อพนักงานสโตร์</h3><p className="ss-panel-hint">ชื่อสำหรับเลือกผู้จัดใบโอนและรายงานรายบุคคล ไม่ใช่บัญชีเข้าสู่ระบบ · เมื่อเอาชื่อออก ระบบเก็บประวัติงานเดิมไว้</p></div>
+          <div><h3>รายชื่อพนักงานสโตร์</h3><p className="ss-panel-hint">รายชื่อชุดเดียวสำหรับเลือกผู้จัดใบโอน ผู้ตรวจใบสั่งจอง และผู้ตรวจใบขายออนไลน์ รวมถึงรายงานรายบุคคล · ไม่ใช่บัญชีเข้าสู่ระบบ · เมื่อเอาชื่อออก ระบบเก็บประวัติงานเดิมไว้</p></div>
           <div className="store-report-table-wrap ss-panel-table-wrap"><table className="ss-panel-table" aria-label="รายชื่อพนักงานสโตร์"><thead><tr><th>ชื่อ</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>
             {(draft.staff || []).map((person) => <tr key={person.id} className={person.active ? "" : "is-off"}><td><input aria-label={`ชื่อพนักงาน ${person.name}`} maxLength={160} value={person.name} onChange={(event) => update((current) => ({ ...current, staff: current.staff.map((item) => item.id === person.id ? { ...item, name: event.target.value } : item) }))} /></td><td>{person.active ? "ใช้งาน" : "เอาออกแล้ว"}</td><td><button type="button" className="secondary" onClick={() => update((current) => ({ ...current, staff: current.staff.map((item) => item.id === person.id ? { ...item, active: !item.active } : item) }))}>{person.active ? "เอาชื่อออก" : "นำกลับมาใช้"}</button></td></tr>)}
             {!draft.staff?.length && <tr><td colSpan={3} className="ss-panel-empty">ยังไม่มีรายชื่อที่เพิ่ม</td></tr>}

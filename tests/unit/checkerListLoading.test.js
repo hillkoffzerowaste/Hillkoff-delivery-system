@@ -8,7 +8,7 @@ const loaderSource = pageSource.slice(loaderStart, loaderEnd);
 
 describe("preparation checker list loading", () => {
   it("waits for Firebase Auth before loading Firestore-backed names and retries when auth becomes ready", () => {
-    expect(loaderSource).toContain("if (!fbAuthReady || ![\"store\", \"pack\", \"admin\"].includes(auth.role)) return;");
+    expect(loaderSource).toContain("if (!fbAuthReady || ![\"pack\", \"admin\"].includes(auth.role)) return;");
     expect(loaderSource).toContain("[auth.role, auth.token, fbAuthReady, refreshAuthToken]");
   });
 

@@ -23,7 +23,7 @@ import StoreAuditPanel from "./components/store/StoreAuditPanel";
 import StoreOverviewPanel from "./components/store/StoreOverviewPanel";
 import StoreDailyReport from "./components/store/StoreDailyReport";
 import StoreSettingsPanel from "./components/store/StoreSettingsPanel";
-import { STORE_SETTINGS_TAB_ID, getDefaultStoreSettings, getEnabledStoreModules, getFirstEnabledStoreTab, normalizeStoreSettings, resolveStoreDisplayTab } from "../lib/storeSettings";
+import { STORE_SETTINGS_TAB_ID, getActiveStoreStaff, getDefaultStoreSettings, getEnabledStoreModules, getFirstEnabledStoreTab, normalizeStoreSettings, resolveStoreDisplayTab } from "../lib/storeSettings";
 import {
   buildChiangmaiRoundGroups,
   canSalesCompleteChiangmaiOrder,
@@ -666,7 +666,6 @@ function formatOrderBookingNumbers(order) {
 }
 
 const DEFAULT_PREPARATION_CHECKERS = {
-  store: ["เล็ก", "ณัฐ", "สุภาพ", "ลืน", "โจ้", "สมนึก"],
   pack: ["กิต", "มาย", "ยุทธ", "หล้า", "มุก"]
 };
 
@@ -892,7 +891,7 @@ export default function App() {
   const [workSharedToLine, setWorkSharedToLine] = useState(false);
   const [workSubmitting, setWorkSubmitting] = useState(false);
   const [workSubmitError, setWorkSubmitError] = useState("");
-  const [checkerLists, setCheckerLists] = useState(DEFAULT_PREPARATION_CHECKERS);
+  const [checkerLists, setCheckerLists] = useState({ store: [], pack: DEFAULT_PREPARATION_CHECKERS.pack });
   const checkerListsLoadedTokenRef = useRef("");
   const [newCheckerName, setNewCheckerName] = useState("");
   const [storeReports, setStoreReports] = useState([]);
@@ -933,6 +932,7 @@ export default function App() {
   const [packReportBulkSubmitting, setPackReportBulkSubmitting] = useState(false);
   const [reportStoreCheckerName, setReportStoreCheckerName] = useState("");
   const [reportPackCheckerName, setReportPackCheckerName] = useState("");
+  const storeStaffNames = useMemo(() => getActiveStoreStaff(storeSettings).map((person) => person.name), [storeSettings]);
   const [reportModal, setReportModal] = useState(null);
   const [reportRows, setReportRows] = useState([{ bookingNumber: "", detail: "", note: "", status: "saved" }]);
   const [reportPhotoPreview, setReportPhotoPreview] = useState("");
@@ -2461,8 +2461,10 @@ export default function App() {
   };
 
   const resubmitStoreReport = async (item) => {
-    const checkerName = (window.prompt("ชื่อผู้ตรวจสโตร์ที่แก้ไขรายการ:", reportStoreCheckerName || lastCheckerNames.store || auth.name || "") ?? "").trim();
+    if (!storeStaffNames.length) return setSyncStatus("⚠️ กรุณาเพิ่มพนักงานใน ตั้งค่าสโตร์ > พนักงานสโตร์ ก่อนส่งตรวจใหม่");
+    const checkerName = (window.prompt("ชื่อผู้ตรวจสโตร์ที่แก้ไขรายการ:", reportStoreCheckerName || storeStaffNames[0] || lastCheckerNames.store || auth.name || "") ?? "").trim();
     if (!checkerName) return setSyncStatus("⚠️ กรุณาระบุชื่อผู้ตรวจสโตร์");
+    if (!storeStaffNames.includes(checkerName)) return setSyncStatus("⚠️ กรุณาเลือกชื่อจากรายชื่อพนักงานในตั้งค่าสโตร์");
     const reason = window.prompt("ระบุสิ่งที่สโตร์แก้ไขแล้ว (ถ้ามี):", "") ?? "";
     try { const res = await authenticatedApiFetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, action: "resubmit", reason, checkerName }) }); const json = await res.json(); if (!res.ok || !json?.ok) throw new Error(json?.error || "ส่งตรวจใหม่ไม่สำเร็จ"); setStoreReports(items => items.map(row => row.id === item.id ? json.data : row)); setReportStoreCheckerName(checkerName); setSyncStatus("✅ สโตร์แก้ไขและส่งให้ห้องแพ็คตรวจใหม่แล้ว"); } catch (e) { setSyncStatus(`❌ ส่งตรวจใหม่ไม่สำเร็จ: ${e?.message || e}`); }
   };
@@ -3841,7 +3843,7 @@ export default function App() {
   const reportHistoryLabel = (event) => ({ created: "สโตร์สร้างรายการ", created_draft: "สโตร์บันทึกร่าง", confirmed: "สโตร์ยืนยันรายการ", updated: "สโตร์แก้ไขรายการ", pack_checked: "ห้องแพ็คตรวจครบ", pack_partial: "ห้องแพ็คตรวจพบของไม่ครบ", pack_returned: "ห้องแพ็คส่งกลับสโตร์", store_resubmitted: "สโตร์แก้ไขและส่งตรวจใหม่", deleted: "ลบรายการ" }[event] || event || "อัปเดตรายการ");
 
   const loadCheckerLists = useCallback(async () => {
-    if (!fbAuthReady || !["store", "pack", "admin"].includes(auth.role)) return;
+    if (!fbAuthReady || !["pack", "admin"].includes(auth.role)) return;
     if (!auth.token) return;
     try {
       const idToken = await refreshAuthToken(false);
@@ -3849,15 +3851,16 @@ export default function App() {
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       checkerListsLoadedTokenRef.current = idToken;
-      setCheckerLists({ store: Array.isArray(json.data?.store) ? json.data.store : DEFAULT_PREPARATION_CHECKERS.store, pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
+      setCheckerLists({ store: [], pack: Array.isArray(json.data?.pack) ? json.data.pack : DEFAULT_PREPARATION_CHECKERS.pack });
     } catch (error) {
       setSyncStatus(`⚠️ โหลดรายชื่อผู้ตรวจไม่สำเร็จ: ${error?.message || error}`);
     }
   }, [auth.role, auth.token, fbAuthReady, refreshAuthToken]);
 
   const saveCheckerList = async (role, names) => {
+    if (role !== "pack") return;
     const clean = [...new Set(names.map(name => String(name || "").trim()).filter(Boolean))];
-    const next = { ...checkerLists, [role]: clean };
+    const next = { ...checkerLists, pack: clean };
     setCheckerLists(next);
     try {
       const idToken = await refreshAuthToken(true);
@@ -3895,6 +3898,7 @@ export default function App() {
     delete workPhotoFilesRef.current[`${role}:${order.id}`];
     const details = role === "store" ? order.storeWorkDetails : order.packWorkDetails;
     setWorkModal({ order, role, ...options });
+    const configuredChecker = role === "store" ? storeStaffNames.find((name) => name === order.storeCheckerName) || storeStaffNames[0] || "" : "";
     setWorkForm({
       bookingNumber: "",
       bookingNumbers: role === "store" ? getOrderBookingNumbers(order) : [],
@@ -3902,7 +3906,7 @@ export default function App() {
       detail: details?.detail || "",
       note: details?.note || "",
       missingNote: Array.isArray(order.missingItems) ? order.missingItems.join(", ") : "",
-      checkerName: role === "store" ? (order.storeCheckerName || lastCheckerNames.store || auth.name || "") : (order.packCheckerName || lastCheckerNames.pack || auth.name || ""),
+      checkerName: role === "store" ? (configuredChecker || order.storeCheckerName || lastCheckerNames.store || auth.name || "") : (order.packCheckerName || lastCheckerNames.pack || auth.name || ""),
       checkResult: "complete",
       checklist: { verified: false }
     });
@@ -3942,6 +3946,7 @@ export default function App() {
     const { role } = workModal;
     const fail = (message) => { setWorkSubmitError(message); setSyncStatus(message); return false; };
     if (!workForm.checkerName.trim()) return fail(`❌ กรุณาเลือกชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`);
+    if (role === "store" && (!storeStaffNames.length || !storeStaffNames.includes(workForm.checkerName.trim()))) return fail("❌ กรุณาเลือกชื่อจากรายชื่อพนักงานในตั้งค่าสโตร์");
     if (!workForm.checklist.verified) return fail("❌ กรุณาติ๊กยืนยันว่าตรวจสอบออเดอร์แล้ว");
     if (["partial", "returned"].includes(workForm.checkResult) && !workForm.missingNote.trim()) return fail("❌ กรุณาระบุรายการและเหตุผล");
     return true;
@@ -4085,6 +4090,8 @@ export default function App() {
     if (!ids.length) return setShowStoreReportConfirm(false);
     const checkerName = reportStoreCheckerName.trim();
     if (!checkerName) return setSyncStatus("⚠️ กรุณาเลือกชื่อผู้ตรวจสโตร์");
+    if (!storeStaffNames.length) return setSyncStatus("⚠️ กรุณาเพิ่มพนักงานใน ตั้งค่าสโตร์ > พนักงานสโตร์ ก่อนยืนยัน");
+    if (!storeStaffNames.includes(checkerName)) return setSyncStatus("⚠️ กรุณาเลือกชื่อจากรายชื่อพนักงานในตั้งค่าสโตร์");
     try {
       const res = await authenticatedApiFetch("/api/store/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, type: showStoreReportConfirm, date: storeReportDate, checkerName }) });
       const json = await res.json();
@@ -6744,7 +6751,7 @@ export default function App() {
               <div className="panel-head"><h2>ยืนยันบันทึกรายงาน</h2><span>สโตร์</span></div>
               <p>รายการที่ยังไม่ยืนยันทั้งหมดจะถูกปิดสถานะและบันทึกวันเวลายืนยัน</p>
               <p className="muted">รวม {storeReportConfirmIds.length} รายการของวันที่เลือก</p>
-              <label className="field-label">ชื่อผู้ตรวจสโตร์ *</label><select value={reportStoreCheckerName} onChange={(event) => setReportStoreCheckerName(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists.store || []), reportStoreCheckerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select>
+              <label className="field-label">ชื่อผู้ตรวจสโตร์ *</label><select value={reportStoreCheckerName} onChange={(event) => setReportStoreCheckerName(event.target.value)}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...storeStaffNames, reportStoreCheckerName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-4)" }}><button className="secondary" onClick={() => setShowStoreReportConfirm(false)}>กลับไปแก้ไข</button><button className="primary" disabled={!reportStoreCheckerName.trim()} onClick={confirmStoreReports}>ยืนยันบันทึก</button></div>
             </section>
           </div>
@@ -6761,8 +6768,8 @@ export default function App() {
                 <div><b>เลขที่ใบสั่งจอง:</b> {formatOrderBookingNumbers(workModal.order) || "ยังไม่ระบุ · เพิ่มได้จากการ์ดออเดอร์เชียงใหม่"}</div>
                 {workModal.role === "pack" && workModal.order.storeWorkDetails?.detail && <div style={{ background: "var(--c-info-bg)", padding: "var(--sp-4)", borderRadius: "6px", fontSize: "12px" }}><b>รายละเอียดจากสโตร์:</b> {workModal.order.storeWorkDetails.detail}</div>}
                 {workModal.takeOverStoreCheck && <div style={{ background: "var(--c-warn-bg-strong)", border: "1px solid var(--c-warn-border)", color: "var(--c-warn-deep)", borderRadius: "8px", padding: "var(--sp-4)", fontSize: "12px", fontWeight: 700 }}>สโตร์ยังไม่ได้ส่งออเดอร์เข้าห้องแพ็ค · การยืนยันครั้งนี้จะบันทึกว่าห้องแพ็คตรวจแทนสโตร์ และถ้าตรวจครบจะเข้าคิวคนขับทันที</div>}
-                <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(checkerLists[workModal.role] || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
-                <details style={{ border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-4) var(--sp-5)", background: "var(--c-surface-subtle)" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}><div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}>{(checkerLists[workModal.role] || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "var(--sp-2)", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).map(item => item === name ? next.trim() : item)); }}><Pencil size={15} className="i-inline" aria-hidden="true" /> </button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "var(--c-danger-dark)" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList(workModal.role, (checkerLists[workModal.role] || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "var(--sp-4)" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList(workModal.role, [...(checkerLists[workModal.role] || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details>
+                <label className="field-label">ชื่อผู้ตรวจสินค้า *</label><select value={workForm.checkerName} onChange={e => setWorkForm(p => ({ ...p, checkerName: e.target.value }))}><option value="">-- เลือกชื่อผู้ตรวจ --</option>{[...new Set([...(workModal.role === "store" ? storeStaffNames : checkerLists.pack || []), workForm.checkerName].filter(Boolean))].map(name => <option key={name} value={name}>{name}</option>)}</select>
+                {workModal.role === "pack" ? <details style={{ border: "1px solid var(--c-line)", borderRadius: "8px", padding: "var(--sp-4) var(--sp-5)", background: "var(--c-surface-subtle)" }}><summary style={{ cursor: "pointer", fontWeight: 700 }}>จัดการรายชื่อผู้ตรวจ</summary><div style={{ display: "grid", gap: "var(--sp-4)", marginTop: "var(--sp-5)" }}><div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}>{(checkerLists.pack || []).map(name => <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "var(--sp-2)", alignItems: "center" }}>{name}<button type="button" aria-label={`แก้ไข ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0 }} onClick={() => { const next = prompt("แก้ไขชื่อผู้ตรวจ", name); if (next?.trim()) saveCheckerList("pack", (checkerLists.pack || []).map(item => item === name ? next.trim() : item)); }}><Pencil size={15} className="i-inline" aria-hidden="true" /> </button><button type="button" aria-label={`ลบ ${name}`} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 0, color: "var(--c-danger-dark)" }} onClick={() => { if (confirm(`ลบชื่อ “${name}” หรือไม่?`)) saveCheckerList("pack", (checkerLists.pack || []).filter(item => item !== name)); }}>×</button></span>)}</div><div style={{ display: "flex", gap: "var(--sp-4)" }}><input value={newCheckerName} onChange={e => setNewCheckerName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const name = newCheckerName.trim(); if (name) { saveCheckerList("pack", [...(checkerLists.pack || []), name]); setNewCheckerName(""); } } }} placeholder="เพิ่มชื่อผู้ตรวจ" /><button type="button" className="secondary" onClick={() => { const name = newCheckerName.trim(); if (!name) return; saveCheckerList("pack", [...(checkerLists.pack || []), name]); setNewCheckerName(""); }}>+ เพิ่ม</button></div></div></details> : <p className="muted">รายชื่อผู้ตรวจสโตร์มาจาก ตั้งค่าสโตร์ &gt; พนักงานสโตร์</p>}
                 <label style={{ display: "flex", gap: "var(--sp-4)", alignItems: "center", background: "var(--c-surface-subtle)", border: "1px solid var(--c-line-strong)", borderRadius: "8px", padding: "var(--sp-5)", fontWeight: 700 }}><input type="checkbox" checked={workForm.checklist.verified} onChange={e => setWorkForm(p => ({ ...p, checklist: { verified: e.target.checked } }))} />ตรวจสอบออเดอร์แล้ว</label>
                 <label className="field-label">ผลตรวจสินค้า *</label><select value={workForm.checkResult} onChange={e => setWorkForm(p => ({ ...p, checkResult: e.target.value, missingNote: ["partial", "returned"].includes(e.target.value) ? p.missingNote : "" }))}><option value="complete">ครบ</option><option value="partial">ไม่ครบ / รอสินค้า</option>{workModal.role === "pack" && !skipsStoreCheck(workModal.order) && <option value="returned">ของผิด — ส่งกลับสโตร์ตรวจสอบ</option>}</select>
                 <label className="field-label">รายละเอียด</label><textarea value={workForm.detail} onChange={e => setWorkForm(p => ({ ...p, detail: e.target.value }))} placeholder="รายละเอียดสินค้า/การจัดเตรียม" rows={3} />
@@ -8058,10 +8065,10 @@ export default function App() {
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><h2><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> รายชื่อผู้ตรวจสอบ</h2><span>สโตร์ / ห้องแพ็ค</span></div>
-                  {["store", "pack"].map((role) => (
+                  <div className="panel-head"><h2><CheckCircle2 size={15} className="i-inline" aria-hidden="true" /> รายชื่อผู้ตรวจห้องแพ็ค</h2><span>จัดการจากระบบแพ็ค</span></div>
+                  {["pack"].map((role) => (
                     <div key={role} style={{ marginBottom: "var(--sp-6)" }}>
-                      <b>{role === "store" ? "สโตร์" : "ห้องแพ็ค"}</b>
+                      <b>ห้องแพ็ค</b>
                       <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", marginTop: "var(--sp-3)" }}>
                         {(checkerLists[role] || []).map((name) => (
                           <span key={name} className="status-chip" style={{ display: "inline-flex", gap: "var(--sp-2)", alignItems: "center" }}>
@@ -8074,7 +8081,7 @@ export default function App() {
                         <input
                           value={settingsNewCheckerName[role]}
                           onChange={(e) => setSettingsNewCheckerName((prev) => ({ ...prev, [role]: e.target.value }))}
-                          placeholder={`เพิ่มชื่อผู้ตรวจ${role === "store" ? "สโตร์" : "ห้องแพ็ค"}`}
+                          placeholder="เพิ่มชื่อผู้ตรวจห้องแพ็ค"
                         />
                         <button type="button" className="secondary" onClick={() => {
                           const name = settingsNewCheckerName[role].trim();

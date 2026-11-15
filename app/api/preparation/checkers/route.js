@@ -3,7 +3,6 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 export const runtime = "nodejs";
 
 const DEFAULT_CHECKERS = {
-  store: ["เล็ก", "ณัฐ", "สุภาพ", "ลืน", "โจ้", "สมนึก"],
   pack: ["กิต", "มาย", "ยุทธ", "หล้า", "มุก"]
 };
 
@@ -14,27 +13,24 @@ function cleanNames(value, fallback) {
 
 export async function GET(request) {
   try {
-    const { db } = await requireProfile(request, ["store", "pack", "admin"]);
+    const { db } = await requireProfile(request, ["pack", "admin"]);
     const snap = await db.collection("app_settings").doc("preparation_checkers").get();
     const data = snap.exists ? snap.data() : {};
-    return Response.json({ ok: true, data: { store: cleanNames(data.store, DEFAULT_CHECKERS.store), pack: cleanNames(data.pack, DEFAULT_CHECKERS.pack) } });
+    return Response.json({ ok: true, data: { pack: cleanNames(data.pack, DEFAULT_CHECKERS.pack) } });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function PUT(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["store", "pack", "admin"]);
+    const { profile, db } = await requireProfile(request, ["pack", "admin"]);
     const body = await request.json();
     const current = await db.collection("app_settings").doc("preparation_checkers").get();
     const saved = current.exists ? current.data() : {};
-    const canEditStore = profile.role === "store" || profile.role === "admin";
-    const canEditPack = profile.role === "pack" || profile.role === "admin";
     const data = {
-      store: canEditStore ? cleanNames(body?.store, cleanNames(saved.store, DEFAULT_CHECKERS.store)) : cleanNames(saved.store, DEFAULT_CHECKERS.store),
-      pack: canEditPack ? cleanNames(body?.pack, cleanNames(saved.pack, DEFAULT_CHECKERS.pack)) : cleanNames(saved.pack, DEFAULT_CHECKERS.pack),
+      pack: cleanNames(body?.pack, cleanNames(saved.pack, DEFAULT_CHECKERS.pack)),
       updatedAt: new Date().toISOString(), updatedBy: profile.name || profile.email, updatedByUid: profile.uid
     };
     await db.collection("app_settings").doc("preparation_checkers").set(data, { merge: true });
-    return Response.json({ ok: true, data: { store: data.store, pack: data.pack } });
+    return Response.json({ ok: true, data: { pack: data.pack } });
   } catch (error) { return errorResponse(error); }
 }

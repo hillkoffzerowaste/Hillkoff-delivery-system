@@ -10,26 +10,16 @@ vi.mock("../../lib/workflowAuth.js", () => ({
   errorResponse: (error) => Response.json({ ok: false, error: error.message }, { status: error.status || 500 })
 }));
 
-function usersDb(users, settings = null) {
+function usersDb(settings = null) {
   const calls = [];
   return {
     calls,
     collection: (name) => ({
       doc: () => ({ get: async () => ({ exists: Boolean(settings), data: () => settings }) }),
-      where: (field, op, value) => ({
-        limit: (n) => ({
-          get: async () => {
-            calls.push({ name, field, op, value, limit: n });
-            const rows = Object.entries(users).filter(([, data]) => data[field] === value).slice(0, n);
-            return { docs: rows.map(([id, data]) => ({ id, data: () => data })) };
-          }
-        })
-      })
+      where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) })
     })
   };
 }
-
-const user = (overrides) => ({ role: "store", email: "x@hillkoff.com", phone: "0812345678", phoneDigits: "0812345678", status: "approved", ...overrides });
 
 let route;
 const get = () => route.GET(new Request("http://localhost/api/store/staff", { headers: { Authorization: "Bearer test" } }));
@@ -37,46 +27,42 @@ const get = () => route.GET(new Request("http://localhost/api/store/staff", { he
 describe("store staff route", () => {
   beforeEach(async () => {
     state.role = "store";
-    state.db = usersDb({
-      u2: user({ name: "สโตร์สอง" }),
-      u1: user({ name: "สโตร์หนึ่ง" }),
-      u3: user({ name: "ปิดใช้งาน", active: false }),
-      u4: user({ name: "ถูกปฏิเสธ", status: "rejected" }),
-      u5: user({ name: "", email: "noname@hillkoff.com" }),
-      u6: user({ role: "pack", name: "ห้องแพ็ค" })
-    });
+    state.db = usersDb({ staff: [] });
     route = await import("../../app/api/store/staff/route.js");
   });
 
-  it("returns only active store users as uid and name, sorted by name", async () => {
+  it("returns only active staff configured in Store Settings, sorted by name", async () => {
+    state.db = usersDb({ staff: [
+      { id: "staff_2", name: "สโตร์สอง", active: true },
+      { id: "staff_1", name: "สโตร์หนึ่ง", active: true },
+      { id: "staff_3", name: "ปิดใช้งาน", active: false }
+    ] });
     const response = await get();
     expect(response.status).toBe(200);
     const { data } = await response.json();
-    // a user without a name falls back to the part of the email before "@" (its sort position depends on ICU collation)
-    expect(data).toContainEqual({ uid: "u5", name: "noname" });
-    expect(data.filter((person) => person.uid !== "u5")).toEqual([{ uid: "u2", name: "สโตร์สอง" }, { uid: "u1", name: "สโตร์หนึ่ง" }]);
-    expect(data).toHaveLength(3);
-    expect(state.db.calls).toEqual([{ name: "users", field: "role", op: "==", value: "store", limit: 101 }]);
+    expect(data).toEqual([{ uid: "staff_2", name: "สโตร์สอง" }, { uid: "staff_1", name: "สโตร์หนึ่ง" }]);
+    expect(state.db.calls).toEqual([]);
   });
 
-  it("includes configured staff names without granting login accounts and omits removed names", async () => {
-    state.db = usersDb({}, { staff: [{ id: "staff_1", name: "สมชาย", active: true }, { id: "staff_2", name: "อดีต", active: false }] });
+  it("omits inactive names", async () => {
+    state.db = usersDb({ staff: [{ id: "staff_1", name: "สมชาย", active: true }, { id: "staff_2", name: "อดีต", active: false }] });
     expect((await (await get()).json()).data).toEqual([{ uid: "staff_1", name: "สมชาย" }]);
   });
 
-  it("excludes the shared store label while retaining named staff", async () => {
-    state.db = usersDb({ generic: user({ name: " Store " }), named: user({ name: "พนักงานจริง" }) }, { staff: [{ id: "staff_1", name: "คนตรวจ", active: true }, { id: "staff_2", name: "store", active: true }] });
+  it("returns every configured name, including a name that resembles the shared account", async () => {
+    state.db = usersDb({ staff: [{ id: "staff_1", name: "คนตรวจ", active: true }, { id: "staff_2", name: "store", active: true }] });
     const { data } = await (await get()).json();
     expect(data).toHaveLength(2);
-    expect(data).toContainEqual({ uid: "named", name: "พนักงานจริง" });
     expect(data).toContainEqual({ uid: "staff_1", name: "คนตรวจ" });
+    expect(data).toContainEqual({ uid: "staff_2", name: "store" });
   });
 
-  it("never leaks email, phone or any other field", async () => {
+  it("returns only the configured uid and name", async () => {
+    state.db = usersDb({ staff: [{ id: "staff_1", name: "คนตรวจ", active: true, email: "secret@hillkoff.com", phone: "0812345678" }] });
     const text = await (await get()).text();
     expect(text).not.toContain("hillkoff.com");
     expect(text).not.toContain("0812345678");
-    expect(text).not.toContain("status");
+    expect(text).not.toContain("active");
   });
 
   it("allows admin and rejects other roles", async () => {
@@ -88,8 +74,4 @@ describe("store staff route", () => {
     }
   });
 
-  it("answers 422 when there are more store users than the cap", async () => {
-    state.db = usersDb(Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`u${i}`, user({ name: `คน ${i}` })])));
-    expect((await get()).status).toBe(422);
-  });
 });

@@ -5,7 +5,7 @@ import { Search, Trash2, TriangleAlert } from "lucide-react";
 import { bangkokDateKey } from "../../../lib/operationsReporting.js";
 import { isValidServiceDate } from "../../../lib/serviceDate.js";
 import { addDaysToDateKey, bangkokTimeHHmm, fmt, thaiDateLabel } from "../../../lib/storeFormat.js";
-import { documentPrefixes, getActiveBranches, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
+import { documentPrefixes, getActiveBranches, getActiveStoreStaff, lockedNumberPrefix, lockedNumberPrefixes, lockedRequestRefPrefixes, requestRefPrefixes, sampleDocumentNumber } from "../../../lib/storeSettings.js";
 import LockedNumberInput, { runningPart } from "./LockedNumberInput.jsx";
 import {
   restoreTransferDraft,
@@ -211,7 +211,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({ total: 0, complete: 0, open: 0, resolved: 0, incomplete: 0 });
   const [alerts, setAlerts] = useState({ count: 0, items: [] });
-  const [staff, setStaff] = useState([]);
+  const staff = useMemo(() => getActiveStoreStaff(settings), [settings]);
   const [drafts, setDrafts] = useState(() => [newDraft()]);
   const [view, setView] = useState("day");
   const [status, setStatus] = useState("all");
@@ -260,11 +260,6 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
 
   useEffect(() => { void loadDay(); }, [loadDay]);
   useEffect(() => { void loadAlerts(); }, [loadAlerts]);
-  useEffect(() => {
-    let cancelled = false;
-    request(apiFetch, "/api/store/staff").then((data) => { if (!cancelled) setStaff(Array.isArray(data) ? data : []); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [apiFetch]);
   useEffect(() => {
     try {
       const saved = restoreTransferDraft(JSON.parse(window.sessionStorage.getItem(TRANSFER_DRAFT_KEY) || "null"), bangkokDateKey());

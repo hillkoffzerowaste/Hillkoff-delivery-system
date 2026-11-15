@@ -77,7 +77,7 @@ describe("StoreTransferPanel", () => {
     expect(html).toContain('aria-label="เลขที่ใบโอน หัวเลข"');
   });
   it("renders the form, status chips and table headers", () => {
-    const html = render(settingsWith());
+    const html = render(settingsWith((s) => { s.staff = [{ id: "staff_1", name: "พนักงานจากตั้งค่าสโตร์", active: true }]; }));
     for (const text of ["เพิ่มรายการใบโอน", "เลขที่ใบโอน *", "อ้างอิงใบขอโอน", "ผู้จัดใบโอน *", "เลือกผู้จัด", "ยืนยันรายการ", "บันทึกร่าง", "+ เพิ่มรายการ", "ไม่มีรายการตามตัวกรองที่เลือก", "รายการใบโอน", "เลขที่ใบโอนรูปแบบ TR-0418"]) {
       expect(html).toContain(text);
     }
@@ -85,6 +85,7 @@ describe("StoreTransferPanel", () => {
     expect(html).toContain('aria-label="กรองตามสถานะ"');
     expect(html).toContain('aria-label="ค้นหาใบโอน"');
     expect(html).toContain("ต้นทาง → ปลายทาง");
+    expect(html).toContain("พนักงานจากตั้งค่าสโตร์");
     expect(html).not.toContain("ข้อมูลตัวอย่าง");
   });
 

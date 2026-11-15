@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import StoreSettingsPanel, { moveModule, patchBranchAt, saveStoreSettings, settingsSaveKey, unlockStoreSettings, validateBranchCodeChanges, validateNewBranch } from "../../app/components/store/StoreSettingsPanel.jsx";
-import { STORE_MODULE_IDS, getDefaultStoreSettings } from "../../lib/storeSettings.js";
+import { STORE_MODULE_IDS, getActiveStoreStaff, getDefaultStoreSettings } from "../../lib/storeSettings.js";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true }));
 const render = (props = {}) => renderToStaticMarkup(
@@ -190,5 +190,22 @@ describe("autosave key", () => {
   it("is null while the draft cannot be saved", () => {
     const base = getDefaultStoreSettings();
     expect(settingsSaveKey({ ...base, modules: base.modules.map((item, index) => (index ? item : { ...item, name: "" })) })).toBeNull();
+  });
+});
+
+describe("store staff source", () => {
+  it("returns only active staff from Store Settings for every store document picker", () => {
+    const settings = {
+      ...getDefaultStoreSettings(),
+      staff: [
+        { id: "staff_2", name: "พนักงานสอง", active: true },
+        { id: "staff_1", name: "พนักงานหนึ่ง", active: false },
+        { id: "staff_3", name: "พนักงานสาม", active: true }
+      ]
+    };
+    expect(getActiveStoreStaff(settings)).toEqual([
+      { uid: "staff_2", name: "พนักงานสอง" },
+      { uid: "staff_3", name: "พนักงานสาม" }
+    ]);
   });
 });
