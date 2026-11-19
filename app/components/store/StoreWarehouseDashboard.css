@@ -1,5 +1,41 @@
-/* Store warehouse dashboard: dark navy report look, scoped under .swd */
+/* Store warehouse dashboard, scoped under .swd. Light by default; data-theme="dark" switches the palette.
+   Every colour (including chart and branch colours used inline) is a variable so both themes stay readable. */
 .swd {
+  --swd-bg: #f4f7fb;
+  --swd-card: #ffffff;
+  --swd-card2: #f1f5f9;
+  --swd-line: var(--app-line, #b9dcdb);
+  --swd-text: var(--app-ink, #183d3c);
+  --swd-soft: #476b6a;
+  --swd-faint: #475569;
+  --swd-amber: #b45309;
+  --swd-accent: var(--c-brand-dark, #046662);
+  --swd-hover: var(--app-mint, #dcf2f1);
+  --swd-red: #991b1b;
+  --swd-orange: #92400e;
+  --swd-green: #065f46;
+  --swd-cyan: #155e75;
+  --swd-violet: #6d28d9;
+  --swd-blue: #1d4ed8;
+  --swd-b0: #155e75;
+  --swd-b1: #065f46;
+  --swd-b2: #6d28d9;
+  --swd-b3: #1d4ed8;
+  --swd-b4: #9d174d;
+  --swd-b5: #92400e;
+  --swd-b6: #9a3412;
+  --swd-b7: #475569;
+  --swd-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+  color-scheme: light;
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  color: var(--swd-text);
+  overflow: clip;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.swd[data-theme="dark"] {
   --swd-bg: #0a1220;
   --swd-card: #131f35;
   --swd-card2: #0e1a2d;
@@ -9,18 +45,27 @@
   --swd-faint: #8a9bbb;
   --swd-amber: #f59e0b;
   --swd-accent: #2563eb;
-  color-scheme: dark;
-  width: 100%;
-  max-width: 1200px;
-  margin-inline: auto;
-  min-width: 0;
+  --swd-hover: #18284a;
+  --swd-red: #f87171;
+  --swd-orange: #f59e0b;
+  --swd-green: #34d399;
+  --swd-cyan: #22d3ee;
+  --swd-violet: #a78bfa;
+  --swd-blue: #60a5fa;
+  --swd-b0: #22d3ee;
+  --swd-b1: #34d399;
+  --swd-b2: #a78bfa;
+  --swd-b3: #60a5fa;
+  --swd-b4: #f472b6;
+  --swd-b5: #fbbf24;
+  --swd-b6: #fb923c;
+  --swd-b7: #94a3b8;
+  --swd-shadow: none;
   background: var(--swd-bg);
-  color: var(--swd-text);
-  border-radius: 16px;
-  overflow: clip;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
+  color-scheme: dark;
 }
+/* Fill the page: the app panel around the dashboard loses its own padding and frame. */
+.panel:has(> .swd) { padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
 .swd *, .swd *::before, .swd *::after { box-sizing: border-box; }
 .swd h2, .swd h3, .swd h4, .swd p { margin: 0; }
 .swd button, .swd input, .swd select { font: inherit; }
@@ -33,7 +78,11 @@
 .swd-head p { font-size: 12px; color: var(--swd-soft); margin-top: 2px; }
 .swd-chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .swd-chip { border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--chip); background: color-mix(in srgb, var(--chip) 12%, transparent); border: 1px solid color-mix(in srgb, var(--chip) 45%, transparent); min-height: 32px; }
-.swd-chip[aria-pressed=true] { color: var(--swd-bg); background: var(--chip); }
+.swd-chip[aria-pressed=true] { color: #fff; background: var(--chip); }
+.swd[data-theme="dark"] .swd-chip[aria-pressed=true] { color: var(--swd-bg); }
+.swd-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.swd-theme { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--swd-line); background: var(--swd-card); color: var(--swd-soft); font-size: 12px; font-weight: 600; }
+.swd-theme:hover { color: var(--swd-text); border-color: var(--swd-soft); }
 
 .swd-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; padding: 0 20px 12px; }
 .swd-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-right: 6px; }
@@ -50,17 +99,17 @@
 
 .swd-body { padding: 18px 20px; display: grid; gap: 16px; min-width: 0; }
 .swd-legacy { background: #fff; border-radius: 12px; color: initial; color-scheme: light; }
-.swd-error { color: #fecaca; background: #f8717122; border: 1px solid #f8717166; border-radius: 10px; padding: 10px 12px; }
-.swd-error button { margin-left: 8px; border: 1px solid #f87171; background: transparent; color: #fecaca; border-radius: 6px; padding: 2px 10px; }
+.swd-error { color: var(--swd-red); background: color-mix(in srgb, var(--swd-red) 10%, transparent); border: 1px solid color-mix(in srgb, var(--swd-red) 40%, transparent); border-radius: 10px; padding: 10px 12px; }
+.swd-error button { margin-left: 8px; border: 1px solid var(--swd-red); background: transparent; color: var(--swd-red); border-radius: 6px; padding: 2px 10px; }
 .swd-loading { color: var(--swd-soft); padding: 24px; text-align: center; }
 
-.swd-card { background: var(--swd-card); border: 1px solid var(--swd-line); border-top: 1px solid var(--swd-line); border-radius: 16px; padding: 16px; min-width: 0; display: grid; gap: 10px; align-content: start; }
+.swd-card { background: var(--swd-card); border: 1px solid var(--swd-line); border-top: 1px solid var(--swd-line); border-radius: 16px; box-shadow: var(--swd-shadow); padding: 16px; min-width: 0; display: grid; gap: 10px; align-content: start; }
 .swd-card h4 { font-size: 13px; font-weight: 600; margin-top: 4px; }
 .swd-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .swd-kpis-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .swd-kpis-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .swd-kpi { border-top-width: 3px; border-top-style: solid; text-align: left; color: var(--swd-text); gap: 6px; font: inherit; }
-.swd-kpi.is-link:hover { background: #18284a; }
+.swd-kpi.is-link:hover { background: var(--swd-hover); }
 .swd-kpi-label { font-size: 12px; color: var(--swd-soft); }
 .swd-kpi strong { font-size: 26px; font-weight: 700; line-height: 1.1; }
 .swd-kpi strong small { font-size: 12px; font-weight: 400; color: var(--swd-faint); margin-left: 4px; }
@@ -69,7 +118,7 @@
 .swd-title { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
 .swd-title h3 { font-size: 17px; font-weight: 700; }
 .swd-title p { font-size: 12px; color: var(--swd-soft); }
-.swd-link { border: 1px solid #60a5fa66; background: #60a5fa1a; color: #93c5fd; border-radius: 8px; padding: 5px 12px; font-size: 12px; min-height: 32px; }
+.swd-link { border: 1px solid color-mix(in srgb, var(--swd-blue) 40%, transparent); background: color-mix(in srgb, var(--swd-blue) 10%, transparent); color: var(--swd-blue); border-radius: 8px; padding: 5px 12px; font-size: 12px; min-height: 32px; }
 .swd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .swd-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }

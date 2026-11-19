@@ -149,6 +149,12 @@ describe("StoreWarehouseDashboard helpers", () => {
     const direct = renderToStaticMarkup(<StoreWarehouseDashboard apiFetch={async () => new Response("{}")} settings={{}} />);
     expect(direct).toContain('aria-label="ช่วงเวลาสำเร็จรูป"');
   });
+
+  it("server-renders in light mode with an unpressed, consistently named dark-mode toggle", () => {
+    const html = renderToStaticMarkup(<StoreWarehouseDashboard apiFetch={async () => new Response("{}")} settings={{}} />);
+    expect(html).toContain('data-theme="light"');
+    expect(html).toMatch(/<button[^>]*class="swd-theme"[^>]*aria-label="โหมดมืด"[^>]*aria-pressed="false"/);
+  });
 });
 
 function createDb(collections, calls = []) {

@@ -1,15 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Moon, Sun } from "lucide-react";
 import { addDaysToDateKey, thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
 import { bangkokDateOf } from "../../../lib/storeDailyReport.js";
 import { customRange } from "../../../lib/storeOverview.js";
 import { WAREHOUSE_MAX_DAYS, percent } from "../../../lib/storeWarehouseDashboard.js";
 import "./StoreWarehouseDashboard.css";
 
+// Colours are CSS variables so the light (default) and dark themes each get a readable palette.
 // Branch colours avoid red, which always means "problem" on this page.
-const BRANCH_COLORS = ["#22D3EE", "#34D399", "#A78BFA", "#60A5FA", "#F472B6", "#FBBF24", "#FB923C", "#94A3B8"];
-const C = { red: "#F87171", amber: "#F59E0B", green: "#34D399", cyan: "#22D3EE", violet: "#A78BFA", blue: "#60A5FA", faint: "#8A9BBB" };
+const BRANCH_COLORS = Array.from({ length: 8 }, (_, i) => `var(--swd-b${i})`);
+const C = { red: "var(--swd-red)", amber: "var(--swd-orange)", green: "var(--swd-green)", cyan: "var(--swd-cyan)", violet: "var(--swd-violet)", blue: "var(--swd-blue)", faint: "var(--swd-faint)" };
+const tint = (color, percent) => `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+const THEME_KEY = "hk-store-dashboard-theme";
 // Beyond about two months daily bars become unreadable, so charts switch to one bar per month.
 const DAILY_MAX = 62;
 const LIST_LIMIT = 60;
@@ -85,7 +89,7 @@ function Kpi({ label, value, unit, sub, color, onClick }) {
 }
 
 function Badge({ children, color = C.faint }) {
-  return <span className="swd-badge" style={{ color, background: `${color}22`, borderColor: `${color}55` }}>{children}</span>;
+  return <span className="swd-badge" style={{ color, background: tint(color, 13), borderColor: tint(color, 33) }}>{children}</span>;
 }
 
 function Title({ title, sub, right }) {
@@ -101,7 +105,7 @@ function Empty({ children }) {
 }
 
 function Note({ children, color = C.amber }) {
-  return <div className="swd-note" style={{ background: `${color}14`, borderColor: `${color}55` }}>{children}</div>;
+  return <div className="swd-note" style={{ background: tint(color, 8), borderColor: tint(color, 33) }}>{children}</div>;
 }
 
 function Gauge({ value, color, label, sub }) {
@@ -111,8 +115,8 @@ function Gauge({ value, color, label, sub }) {
   return <div className="swd-gauge">
     <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label={`${label} ${value == null ? "ไม่มีข้อมูล" : `${value}%`}`}>
       <circle cx="60" cy="60" r={r} fill="none" stroke="var(--swd-line)" strokeWidth="10" />
-      {value != null && <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - shown / 100)} transform="rotate(-90 60 60)" />}
-      <text x="60" y="66" textAnchor="middle" fill={value == null ? "var(--swd-faint)" : color} fontSize="19" fontWeight="700">{value == null ? "—" : `${fmt(value, 1)}%`}</text>
+      {value != null && <circle cx="60" cy="60" r={r} fill="none" style={{ stroke: color }} strokeWidth="10" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - shown / 100)} transform="rotate(-90 60 60)" />}
+      <text x="60" y="66" textAnchor="middle" style={{ fill: value == null ? "var(--swd-faint)" : color }} fontSize="19" fontWeight="700">{value == null ? "—" : `${fmt(value, 1)}%`}</text>
     </svg>
     <span>{label}</span>
     {sub && <small>{sub}</small>}
@@ -171,7 +175,7 @@ function Donut({ parts, unit, label }) {
         const length = total ? (p.value / total) * c : 0;
         const start = offset;
         offset += length;
-        return length > 0 && <circle key={p.label} cx="100" cy="100" r={r} fill="none" stroke={p.color} strokeWidth="26" strokeDasharray={`${length} ${c - length}`} strokeDashoffset={-start} transform="rotate(-90 100 100)"><title>{`${p.label} ${fmt(p.value)} ${unit}`}</title></circle>;
+        return length > 0 && <circle key={p.label} cx="100" cy="100" r={r} fill="none" style={{ stroke: p.color }} strokeWidth="26" strokeDasharray={`${length} ${c - length}`} strokeDashoffset={-start} transform="rotate(-90 100 100)"><title>{`${p.label} ${fmt(p.value)} ${unit}`}</title></circle>;
       })}
       <text x="100" y="100" textAnchor="middle" fill="var(--swd-text)" fontSize="26" fontWeight="700">{fmt(total)}</text>
       <text x="100" y="124" textAnchor="middle" fill="var(--swd-soft)" fontSize="13">{unit}</text>
@@ -533,6 +537,19 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
   // The operations centre loads its own data; keep it mounted after the first visit so switching back does not re-read.
   const [opsOpened, setOpsOpened] = useState(false);
   const [sel, setSel] = useState("ALL");
+  // Light by default; the viewer's choice is remembered on this device only.
+  const [theme, setTheme] = useState("light");
+  useEffect(() => {
+    let saved = "";
+    try { saved = window.localStorage.getItem(THEME_KEY) || ""; } catch { saved = ""; }
+    if (saved === "dark") { const timer = setTimeout(() => setTheme("dark"), 0); return () => clearTimeout(timer); }
+    return undefined;
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try { window.localStorage.setItem(THEME_KEY, next); } catch { /* storage unavailable: keep the choice for this visit */ }
+  };
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -580,16 +597,19 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
   const all = !selected;
   const visible = all ? branches : [selected];
 
-  return <section className="swd" aria-label="รายงานแดชบอร์ดสโตร์">
+  return <section className="swd" data-theme={theme} aria-label="รายงานแดชบอร์ดสโตร์">
     <header className="swd-head">
       <div>
         <span className="swd-eyebrow">HILLKOFF · STORE</span>
         <h2>Hillkoff Store Dashboard</h2>
         <p>รายงานการทำงานสโตร์ / คลังสินค้า · {rangeTitle(range.from, range.to)}{busy ? " · กำลังโหลด…" : ""}{data?.generatedAt ? ` · อัปเดต ${new Date(data.generatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : ""}</p>
       </div>
-      <div className="swd-chips-row" role="group" aria-label="เลือกสาขา">
-        <button type="button" className="swd-chip" aria-pressed={all} style={{ "--chip": C.amber }} onClick={() => setSel("ALL")}>ทุกสาขา</button>
-        {branches.map((b) => <button type="button" key={b.code} className="swd-chip" aria-pressed={sel === b.code} style={{ "--chip": b.color }} onClick={() => setSel(b.code)}>{b.code} {b.name}</button>)}
+      <div className="swd-head-tools">
+        <button type="button" className="swd-theme" aria-label="โหมดมืด" aria-pressed={theme === "dark"} onClick={toggleTheme}>{theme === "dark" ? <Sun size={14} aria-hidden="true" /> : <Moon size={14} aria-hidden="true" />}{theme === "dark" ? "โหมดสว่าง" : "โหมดมืด"}</button>
+        <div className="swd-chips-row" role="group" aria-label="เลือกสาขา">
+          <button type="button" className="swd-chip" aria-pressed={all} style={{ "--chip": C.amber }} onClick={() => setSel("ALL")}>ทุกสาขา</button>
+          {branches.map((b) => <button type="button" key={b.code} className="swd-chip" aria-pressed={sel === b.code} style={{ "--chip": b.color }} onClick={() => setSel(b.code)}>{b.code} {b.name}</button>)}
+        </div>
       </div>
     </header>
 
