@@ -109,10 +109,10 @@ function TeamView({ data, onPick }) {
 function TeamLogs({ people }) {
   const logs = people.flatMap((p) => (p.logs || []).map((log) => ({ ...log, staffName: p.name }))).sort((a, b) => a.start.localeCompare(b.start));
   return <div className="sd-block">
-    <h3>บันทึกงานประจำวันของทีม · ใครทำอะไร ที่ไหน เมื่อไหร่ อย่างไร</h3>
+    <h3>บันทึกงานประจำวันของทีม · เวลา พนักงาน งานที่รับผิดชอบ สถานที่ปฏิบัติงาน ผลงาน / ปัญหาที่พบ</h3>
     {logs.length ? <div className="store-report-table-wrap sd-table-wrap">
       <table className="sd-table sd-table-logs" aria-label="บันทึกงานประจำวันของทีม">
-        <thead><tr><th scope="col">เวลา</th><th scope="col">พนักงาน</th><th scope="col">ทำอะไร</th><th scope="col">ที่ไหน</th><th scope="col">อย่างไร / รายละเอียด</th></tr></thead>
+        <thead><tr><th scope="col">เวลา</th><th scope="col">พนักงาน</th><th scope="col">งานที่รับผิดชอบ</th><th scope="col">สถานที่ปฏิบัติงาน</th><th scope="col">ผลงาน / ปัญหาที่พบ</th></tr></thead>
         <tbody>{logs.map((log) => <tr key={log.id}><td className="sd-strong">{workLogHours(log)}</td><th scope="row">{log.staffName}</th><td>{log.activity}</td><td>{log.location || "—"}</td><td className="sd-log-detail">{log.detail || "—"}</td></tr>)}</tbody>
       </table>
     </div> : <p className="muted">ยังไม่มีพนักงานลงบันทึกงานในวันนี้ · ให้พนักงานไปที่แท็บรายบุคคล คลิกชื่อตัวเอง แล้วลงงานที่ทำ</p>}
@@ -160,14 +160,14 @@ function WorkLogPanel({ apiFetch, person, date, today, onChanged }) {
   const field = (name) => ({ value: form[name], onChange: (e) => setForm({ ...form, [name]: e.target.value }) });
   return <div className="sd-block">
     <h3>บันทึกงานประจำวัน · {person.name}</h3>
-    <p className="muted">ลงสิ่งที่ทำเพิ่มจากเอกสารในระบบ: ทำอะไร ที่ไหน เวลาไหน และทำอย่างไร · ข้อมูลนี้รวมในรายงานทีม ข้อความ LINE และแดชบอร์ด</p>
+    <p className="muted">ลงงานเพิ่มจากเอกสารในระบบ: งานที่รับผิดชอบ สถานที่ปฏิบัติงาน เวลา และผลงาน / ปัญหาที่พบ · ข้อมูลนี้รวมในรายงานทีม ข้อความ LINE และแดชบอร์ด</p>
     {error && <p role="alert" className="sd-error">{error}</p>}
     {future ? <p className="sd-holiday">ยังไม่ถึงวันนี้ · งานล่วงหน้าให้ใส่ในปฏิทินส่วนตัวด้านล่าง</p> : <form className="sd-log-form" onSubmit={submit}>
       <label>เวลาเริ่ม<input type="time" required {...field("start")} /></label>
       <label>เวลาสิ้นสุด<input type="time" {...field("end")} /></label>
-      <label className="sd-log-wide">ทำอะไร<input required maxLength={WORK_LOG_LIMITS.activity} placeholder="เช่น จัดเรียงสินค้าเข้าชั้น" {...field("activity")} /></label>
-      <label className="sd-log-wide">ที่ไหน<input maxLength={WORK_LOG_LIMITS.location} placeholder="เช่น คลัง WH ชั้น 2" {...field("location")} /></label>
-      <label className="sd-log-full">อย่างไร / รายละเอียด<textarea maxLength={WORK_LOG_LIMITS.detail} placeholder="วิธีทำ ผลลัพธ์ หรือปัญหาที่พบ" {...field("detail")} /></label>
+      <label className="sd-log-wide">งานที่รับผิดชอบ<input required maxLength={WORK_LOG_LIMITS.activity} placeholder="เช่น จัดเรียงสินค้าเข้าชั้น" {...field("activity")} /></label>
+      <label className="sd-log-wide">สถานที่ปฏิบัติงาน<input maxLength={WORK_LOG_LIMITS.location} placeholder="เช่น คลัง WH ชั้น 2" {...field("location")} /></label>
+      <label className="sd-log-full">ผลงาน / ปัญหาที่พบ<textarea maxLength={WORK_LOG_LIMITS.detail} placeholder="ผลลัพธ์ของงาน หรือปัญหาที่พบ" {...field("detail")} /></label>
       <div className="sd-log-actions"><button type="submit" className="primary" disabled={busy}>{busy ? "กำลังบันทึก" : editing ? "บันทึกการแก้ไข" : "เพิ่มบันทึกงาน"}</button>{editing && <button type="button" className="secondary" disabled={busy} onClick={reset}>ยกเลิก</button>}</div>
     </form>}
     {person.logs?.length ? <ul className="sd-log-list">{person.logs.map((log) => <li key={log.id}>
