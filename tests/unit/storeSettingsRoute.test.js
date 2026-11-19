@@ -11,10 +11,10 @@ vi.mock("../../lib/workflowAuth.js", () => ({
   errorResponse: (error) => Response.json({ ok: false, error: error.message }, { status: error.status || 500 })
 }));
 
-function createDb({ settings, transfers = [], audits = [] } = {}) {
+function createDb({ settings, transfers = [], audits = [], claims = [], production = [] } = {}) {
   const docs = new Map();
   if (settings) docs.set("store_settings/default", settings);
-  const rows = { store_transfers: transfers, store_audits: audits };
+  const rows = { store_transfers: transfers, store_audits: audits, store_claims: claims, store_production: production };
   const writes = [];
   const db = {
     docs,
@@ -109,7 +109,7 @@ describe("store settings route", () => {
       const json = await response.json();
       expect(json.ok).toBe(true);
       expect(json.data.updatedAt).toBe("");
-      expect(json.data.settings.modules.map((m) => m.id)).toHaveLength(7);
+      expect(json.data.settings.modules.map((m) => m.id)).toHaveLength(9);
       expect(json.data.settings.branches).toEqual(getDefaultStoreSettings().branches);
     });
 
@@ -320,6 +320,15 @@ describe("store settings route", () => {
         state.db = createDb({ settings: savedSettings(), audits: [{ branchCode: "WH" }] });
         expect((await call("PUT", payload)).status).toBe(409);
         expect(state.db.docs.get("store_settings/default").branches[0].code).toBe("WH");
+      });
+
+      it("answers 409 when claim or production records reference the old code", async () => {
+        const payload = body();
+        payload.settings.branches[0].code = "NEW";
+        state.db = createDb({ settings: savedSettings(), claims: [{ branchCode: "WH" }] });
+        expect((await call("PUT", payload)).status).toBe(409);
+        state.db = createDb({ settings: savedSettings(), production: [{ branchCode: "WH" }] });
+        expect((await call("PUT", payload)).status).toBe(409);
       });
 
       it("lets a referenced branch be deactivated instead", async () => {

@@ -1,0 +1,77 @@
+/* Store claim / production entry pages (light, matches the other store record pages) */
+.srp { --srp-ink: #163b36; --srp-muted: #58726b; --srp-line: #c8ded8; --srp-soft: #edf6f3; --srp-teal: #0f766e; --srp-red: #b91c1c; color: var(--srp-ink); display: grid; gap: 16px; min-width: 0; max-width: 1120px; margin-inline: auto; font-size: 14px; }
+.srp *, .srp *::before, .srp *::after { box-sizing: border-box; }
+.srp h2, .srp h3, .srp p { margin: 0; }
+.srp button, .srp input, .srp select, .srp textarea { font: inherit; }
+.srp button { cursor: pointer; }
+.srp button:disabled { opacity: .55; cursor: not-allowed; }
+.srp button:focus-visible, .srp input:focus-visible, .srp select:focus-visible, .srp textarea:focus-visible { outline: 3px solid #54a99e; outline-offset: 2px; }
+.srp-head h2 { font-size: 24px; font-weight: 600; line-height: 1.35; }
+.srp-head p { color: var(--srp-muted); font-size: 13px; margin-top: 2px; }
+.srp-eyebrow { display: block; font-size: 11px; letter-spacing: 1.5px; color: var(--srp-teal); margin-bottom: 4px; }
+.srp-card { background: #fff; border: 1px solid var(--srp-line); border-radius: 12px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.srp-card h3 { font-size: 17px; font-weight: 600; }
+
+.srp-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.srp-kinds button { display: grid; gap: 2px; text-align: left; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--srp-line); background: #fff; color: var(--srp-ink); }
+.srp-kinds button small { color: var(--srp-muted); font-size: 12px; }
+.srp-kinds button[aria-pressed=true] { border-color: var(--srp-teal); background: var(--srp-soft); box-shadow: inset 0 0 0 1px var(--srp-teal); }
+
+.srp-modes, .srp-range { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.srp-modes button, .srp-range button { min-height: 38px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--srp-line); background: #fff; color: var(--srp-ink); }
+.srp-modes button[aria-pressed=true], .srp-range button[aria-pressed=true] { background: var(--srp-teal); border-color: var(--srp-teal); color: #fff; }
+.srp-range label { display: grid; gap: 2px; font-size: 12px; color: var(--srp-muted); }
+.srp-range input { min-height: 38px; }
+
+.srp-form { display: grid; gap: 14px; }
+.srp-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.srp-fields label { display: grid; gap: 4px; font-size: 13px; color: var(--srp-muted); }
+.srp-fields .srp-wide { grid-column: span 2; }
+.srp input, .srp select, .srp textarea { min-height: 38px; border: 1px solid var(--srp-line); border-radius: 8px; padding: 6px 10px; background: #fff; color: var(--srp-ink); width: 100%; }
+.srp textarea { font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical; }
+.srp-items { display: grid; gap: 8px; }
+.srp-items .srp-table input { min-height: 34px; padding: 4px 8px; }
+
+.srp-table-wrap { overflow-x: auto; border: 1px solid var(--srp-line); border-radius: 10px; }
+.srp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.srp-table th { text-align: left; font-weight: 600; background: var(--srp-soft); padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--srp-line); }
+.srp-table td { padding: 8px 10px; border-bottom: 1px solid #e3eeea; vertical-align: top; }
+.srp-table td small { display: block; color: var(--srp-muted); font-size: 12px; margin-top: 2px; }
+.srp-table .num { text-align: right; }
+.srp-table .nowrap { white-space: nowrap; }
+.srp-detail > td { background: #f7fbf9; }
+.srp-inner { margin-bottom: 6px; background: #fff; }
+
+.srp-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.srp-primary { min-height: 42px; padding: 8px 20px; border-radius: 8px; border: 0; background: var(--srp-teal); color: #fff; font-weight: 600; }
+.srp-secondary { min-height: 38px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--srp-line); background: #fff; color: var(--srp-ink); justify-self: start; }
+.srp-link { border: 0; background: none; padding: 0; color: var(--srp-teal); text-decoration: underline; min-height: 0; }
+.srp-danger-link { border: 0; background: none; padding: 0; color: var(--srp-red); text-decoration: underline; }
+.srp-danger { min-height: 34px; padding: 4px 10px; border-radius: 6px; border: 0; background: var(--srp-red); color: #fff; }
+.srp-icon { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--srp-line); background: #fff; color: var(--srp-red); font-size: 18px; line-height: 1; }
+.srp-delete { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.srp-delete input { width: 150px; min-height: 34px; }
+
+.srp-paste { display: grid; gap: 8px; }
+.srp-columns { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding-left: 0; list-style: none; counter-reset: col; }
+.srp-columns li { counter-increment: col; font-size: 12px; background: var(--srp-soft); border: 1px solid var(--srp-line); border-radius: 6px; padding: 2px 8px; }
+.srp-columns li::before { content: counter(col) ". "; color: var(--srp-muted); }
+.srp-preview { display: grid; gap: 10px; }
+.srp-details summary { cursor: pointer; color: var(--srp-teal); font-weight: 600; padding: 4px 0; }
+.srp-details[open] { display: grid; gap: 10px; }
+
+.srp-ok { color: var(--srp-teal); font-weight: 600; }
+.srp-bad { color: var(--srp-red); }
+.srp-errors { margin: 0; padding: 10px 12px 10px 28px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: var(--srp-red); font-size: 13px; }
+.srp-error { color: var(--srp-red); background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 12px; }
+.srp-message { color: var(--srp-teal); background: var(--srp-soft); border: 1px solid var(--srp-line); border-radius: 8px; padding: 8px 12px; }
+.srp-muted { color: var(--srp-muted); font-size: 13px; }
+.srp-empty { color: var(--srp-muted); text-align: center; border: 1px dashed var(--srp-line); border-radius: 10px; padding: 24px; }
+.srp-list-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.srp-list-head span { color: var(--srp-muted); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .srp-card { padding: 12px; }
+  .srp-kinds { grid-template-columns: minmax(0, 1fr); }
+  .srp-fields .srp-wide { grid-column: auto; }
+}

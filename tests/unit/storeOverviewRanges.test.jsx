@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import StoreOverviewPanel, { barLabel, barTitle, overviewQuery } from "../../app/components/store/StoreOverviewPanel.jsx";
+import { StoreOperationsCenter, barLabel, barTitle, overviewQuery } from "../../app/components/store/StoreOverviewPanel.jsx";
 import StorePlanningPanel from "../../app/components/store/StorePlanningPanel.jsx";
 import { buildStoreOverview, customRange, periodRange } from "../../lib/storeOverview.js";
 import { validateStorePlan } from "../../lib/storePlan.js";
@@ -64,7 +64,7 @@ describe("dashboard and calendar screens", () => {
   });
 
   it("offers every range and keeps all modules on one page", () => {
-    const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={async () => new Response("{}")} settings={{ modules: [] }} />);
+    const html = renderToStaticMarkup(<StoreOperationsCenter apiFetch={async () => new Response("{}")} settings={{ modules: [] }} />);
     ["วันนี้", "7 วัน", "เดือนนี้", "3 เดือน", "ทั้งปี", "กำหนดช่วงเอง"].forEach((label) => expect(html).toContain(`>${label}</button>`));
     ["กรองประเภทข้อมูล", "เคสและของค้าง", "คุณภาพการรับ", "รายบุคคล", "รายงานเดิม / LINE / บันทึกงาน"].forEach((text) => expect(html).toContain(text));
   });

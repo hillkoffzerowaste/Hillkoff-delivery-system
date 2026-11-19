@@ -1,5 +1,6 @@
 "use client";
 import StoreCasesPanel from "./components/store/StoreCasesPanel";
+import { StoreClaimsPanel, StoreProductionPanel } from "./components/store/StoreRecordsPanels";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getFirebaseAuth, getFirestoreDb, fb, fbLogout, onFirebaseAuthStateChanged, onFirebaseIdTokenChanged, signInAnon, signInWithGoogle, signInWithStaffCredentials, getFcmToken } from "../lib/firebaseClient";
@@ -99,7 +100,9 @@ import {
   UserCheck,
   Users,
   Wrench,
-  XCircle
+  XCircle,
+  Factory,
+  Undo2
 } from "lucide-react";
 
 const STRANDED_REASON_LABEL = Object.freeze({
@@ -229,6 +232,8 @@ const TAB_TITLES = {
   "store-audit": "Internal Audit · สโตร์",
   "store-overview": "รายงานแดชบอร์ด · สโตร์",
   "store-shortage": "เคสและสินค้าขาด · สโตร์",
+  "store-claims": "เคลมสินค้า · สโตร์",
+  "store-production": "การผลิตสินค้า · สโตร์",
   "store-settings": "ตั้งค่าสโตร์",
   "pack-work": "ออเดอร์เชียงใหม่/ใกล้เคียง · ห้องแพ็ค",
   "pack-pickup": "Grab/รับหน้าร้าน · ห้องแพ็ค",
@@ -255,6 +260,8 @@ const STORE_NAV_ICONS = {
   "store-transfer": ArrowLeftRight,
   "store-audit": ClipboardCheck,
   "store-shortage": ClipboardList,
+  "store-claims": Undo2,
+  "store-production": Factory,
   "store-overview": ChartNoAxesCombined
 };
 
@@ -6601,6 +6608,8 @@ export default function App() {
         )}
 
         {auth.role === "store" && displayTab === "store-shortage" && <section className="panel role-workspace ops-workspace"><StoreCasesPanel apiFetch={authenticatedApiFetch} settings={storeSettings} /></section>}
+        {auth.role === "store" && displayTab === "store-claims" && <section className="panel role-workspace ops-workspace"><StoreClaimsPanel apiFetch={authenticatedApiFetch} settings={storeSettings} title={getEnabledStoreModules(storeSettings).find((module) => module.id === "store-claims")?.name || "เคลมสินค้า"} /></section>}
+        {auth.role === "store" && displayTab === "store-production" && <section className="panel role-workspace ops-workspace"><StoreProductionPanel apiFetch={authenticatedApiFetch} settings={storeSettings} title={getEnabledStoreModules(storeSettings).find((module) => module.id === "store-production")?.name || "การผลิตสินค้า"} /></section>}
         {auth.role === "store" && displayTab === "store-overview" && (
           <section className="panel role-workspace ops-workspace">
             <StoreOverviewPanel apiFetch={authenticatedApiFetch} settings={storeSettings} onNavigate={selectAppTab} />

@@ -96,7 +96,9 @@ export async function PUT(request) {
         const references = await Promise.all([
           transaction.get(db.collection("store_transfers").where("fromBranchCode", "==", code).limit(1)),
           transaction.get(db.collection("store_transfers").where("toBranchCode", "==", code).limit(1)),
-          transaction.get(db.collection("store_audits").where("branchCode", "==", code).limit(1))
+          transaction.get(db.collection("store_audits").where("branchCode", "==", code).limit(1)),
+          transaction.get(db.collection("store_claims").where("branchCode", "==", code).limit(1)),
+          transaction.get(db.collection("store_production").where("branchCode", "==", code).limit(1))
         ]);
         if (references.some((snap) => snap.docs.length > 0)) {
           throw httpError(409, `สาขา ${code} มีเอกสารอ้างอิงแล้ว เปลี่ยนรหัสหรือลบไม่ได้ ให้ปิดใช้งานแทน`);

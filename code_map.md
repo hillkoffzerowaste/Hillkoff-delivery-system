@@ -92,6 +92,9 @@
 │   ├── storeTransfers.js             # validate/build ใบโอนสินค้า
 │   ├── storeAudit.js                 # validate/สรุป Internal Audit
 │   ├── storeOverview.js              # คำนวณรายงานแดชบอร์ดสโตร์
+│   ├── storeWarehouseDashboard.js    # รวมข้อมูลแดชบอร์ดสโตร์แบบใหม่ แยกรายสาขา (ใบโอน, Audit, ใบสั่งจอง, เคส, พนักงาน)
+│   ├── storeClaimsProduction.js      # ตรวจ/นำเข้า (วางจาก Excel) เอกสารเคลมได้-เคลมไม่ได้ และบันทึกการผลิต · 3 สาขาหลัก CP/HQ/MHD
+│   ├── storeRecordRoute.js           # helper ฝั่ง server ของ route เคลม/การผลิต
 │   ├── storeDailyReport.js           # รายงานประจำวัน/เดือน + ข้อความสรุป
 │   ├── storeRouteMigration.js        # classify/patch ย้าย store_route -> direct_pack
 │   ├── vehicleReport.js              # join usage+fuel+assessment+orders
@@ -372,6 +375,16 @@
 * **บทบาท:** Internal Audit (`store_audits` + `history`) — `GET`: `store|admin`; `POST`/`DELETE`: **store เท่านั้น**
 * **Flow:** `POST` ใน transaction — อ่าน settings, `store_document_counters`, จองเลขใน `store_document_registry`; `DELETE` เป็น soft delete + `history`
 * **Deps:** `lib/storeAudit`, `lib/storeSettings`
+
+#### 📄 `app/api/store/claims/route.js` · `production/route.js`
+* **บทบาท:** `store_claims` (เคลมได้ `claimable` / เคลมไม่ได้ `unclaimable`) และ `store_production` — `GET`: `store|admin` (`?from&to` ≤ 92 วัน); `POST`/`PATCH`/`DELETE`: **store เท่านั้น**
+* **Flow:** เคลม: doc id = `kind_encodeURIComponent(เลขที่)` ใน transaction, เลขซ้ำที่ยังไม่ลบถูกข้าม (`skipped`), ส่งได้ครั้งละ 1–50 เอกสาร (นำเข้าจาก Excel); การผลิต: id = `requestId_index` (retry ไม่สร้างซ้ำ); `PATCH` ต้องส่ง `baseUpdatedAt`; `DELETE` เป็น soft delete + เหตุผล + `history`
+* **Deps:** `lib/storeClaimsProduction`, `lib/storeRecordRoute` · UI `app/components/store/StoreRecordsPanels.jsx` (เมนู `store-claims`, `store-production`)
+
+#### 📄 `app/api/store/warehouse/route.js`
+* **บทบาท:** read-only `GET`: `store|admin` — ข้อมูลหน้าแดชบอร์ดสโตร์แบบใหม่ (`?from&to` ไม่เกิน 92 วัน) แยกรายสาขาจาก settings; ใบโอนนับที่สาขาต้นทาง, Audit/เคสตามสาขาที่บันทึก, ใบสั่งจอง/ออนไลน์และเคสของมันเป็นระดับสโตร์
+* **Flow:** single-field range query ของ `store_reports` (createdAt + serviceDate), `store_transfers`, `store_audits`, `store_work_logs` + `readStoreCases` + `store_settings/default` → `buildWarehouseDashboard`
+* **Deps:** `lib/storeWarehouseDashboard`, `lib/storeCasesStore`, `lib/storeDailyReport` · UI `app/components/store/StoreWarehouseDashboard.jsx` (default ของ `StoreOverviewPanel`; ศูนย์ปฏิบัติการเดิมอยู่แท็บสุดท้ายผ่าน `StoreOperationsCenter`)
 
 #### 📄 `app/api/store/overview/route.js` · `daily-report/route.js` · `staff/route.js`
 * **บทบาท:** read-only ทั้งหมด `GET`: `store|admin` — `overview` รายงานแดชบอร์ด (`lib/storeOverview`), `daily-report` รายงานประจำวัน/เดือน (`lib/storeDailyReport`), `staff` รายชื่อผู้ใช้ role store

@@ -59,4 +59,8 @@ describe("Firestore read policy", () => {
 it("keeps shortage tracking independent from active orders", () => {
   expect(needsActiveOrdersQuery("store-shortage")).toBe(false);
   expect(getOrdersSyncMode("store-shortage")).toBe("none");
+  for (const tab of ["store-claims", "store-production"]) {
+    expect(needsActiveOrdersQuery(tab)).toBe(false);
+    expect(getOrdersSyncMode(tab)).toBe("none");
+  }
 });

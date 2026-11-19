@@ -1,12 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import StoreOverviewPanel, { barHeights, branchWidths, chartScale, formatAccuracy, formatRate, formatResolveHours } from "../../app/components/store/StoreOverviewPanel.jsx";
+import { StoreOperationsCenter, barHeights, branchWidths, chartScale, formatAccuracy, formatRate, formatResolveHours } from "../../app/components/store/StoreOverviewPanel.jsx";
 
 const apiFetch = async () => new Response(JSON.stringify({ ok: true, data: null }));
 
-describe("StoreOverviewPanel", () => {
+describe("StoreOperationsCenter (inside the store dashboard)", () => {
   it("offers four operational views, one scope and lazy legacy tools", () => {
-    const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={apiFetch} settings={{ modules: [] }} onNavigate={() => {}} />);
+    const html = renderToStaticMarkup(<StoreOperationsCenter apiFetch={apiFetch} settings={{ modules: [] }} onNavigate={() => {}} />);
     ["ศูนย์ปฏิบัติการสโตร์", "ภาพรวมทีม", "รายบุคคล", "เคสและของค้าง", "คุณภาพการรับ", "รายงานเดิม / LINE / บันทึกงาน", "แผนงานและปฏิทิน"].forEach((label) => expect(html).toContain(label));
     expect(html).toContain('aria-label="ช่วงเวลา"');
     expect(html).toContain("กำลังรวบรวมเอกสารและเคส");
@@ -17,7 +17,7 @@ describe("StoreOverviewPanel", () => {
 
   it("keeps configured module labels on the operational scope filter", () => {
     const settings = { modules: [{ id: "store-transfer", name: "โอนของ" }, { id: "store-audit", name: "ตรวจสต็อก" }] };
-    const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={apiFetch} settings={settings} />);
+    const html = renderToStaticMarkup(<StoreOperationsCenter apiFetch={apiFetch} settings={settings} />);
     ["โอนของ", "ตรวจสต็อก", "ใบสั่งจอง", "ใบขายออนไลน์"].forEach((label) => expect(html).toContain(label));
   });
 });

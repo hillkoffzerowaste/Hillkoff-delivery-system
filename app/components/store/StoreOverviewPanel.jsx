@@ -8,6 +8,7 @@ import "./StoreOverviewPanel.css";
 import StoreDashboardCharts from "./StoreDashboardCharts.jsx";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
 import StoreOperationalDashboard from "./StoreOperationalDashboard.jsx";
+import StoreWarehouseDashboard from "./StoreWarehouseDashboard.jsx";
 import { LegacyStoreDailyReport } from "./StoreDailyReport.jsx";
 
 const REFRESH_MS = 900_000;
@@ -428,6 +429,12 @@ export function LegacyStoreOverviewPanel({ apiFetch, settings, onNavigate }) {
   );
 }
 
-export default function StoreOverviewPanel(props) {
+// The store dashboard opens on the warehouse report; the operations centre (team/people views,
+// planning calendar, legacy reports / LINE) stays one tab away inside it.
+export function StoreOperationsCenter(props) {
   return <StoreOperationalDashboard {...props} renderLegacy={() => <LegacyStoreDailyReport {...props} />} />;
+}
+
+export default function StoreOverviewPanel(props) {
+  return <StoreWarehouseDashboard {...props} renderOperations={() => <StoreOperationsCenter {...props} />} />;
 }

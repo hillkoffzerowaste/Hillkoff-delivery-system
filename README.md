@@ -224,7 +224,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | รถ/คนขับ | `vehicle_master`, `vehicle_usage_events`, `vehicle_odometer_audits`, `fuel_bills`, `driver_daily_assessments`, `driver_weekly_assessments`, `driver_locations`, `driver_delivery_sequences` |
 | ต่างจังหวัด | `outstation_label_settings`, `outstation_recipient_addresses` |
 | รายงาน | `store_reports` (+ `history`), `events`, `activity` |
-| สโตร์ | `store_settings` (doc `default`), `store_transfers` (+ `history`), `store_audits` (+ `history`), `store_plans`, `store_document_registry`, `store_document_counters` |
+| สโตร์ | `store_settings` (doc `default`), `store_transfers` (+ `history`), `store_audits` (+ `history`), `store_plans`, `store_claims` (เคลมได้ / เคลมไม่ได้), `store_production` (การผลิต), `store_document_registry`, `store_document_counters` |
 | ระบบ | `app_settings`, `audit_logs`, `notifications`, `push_tokens`, `line_webhook_events`, `chat_messages`, `chat_meta` |
 
 คอลเลกชัน `store_*` ใหม่ทั้งหมดเข้าถึงผ่าน Admin SDK ใน `app/api/store/**` เท่านั้น (Firestore Rules ปิด client read/write อยู่แล้ว จึงไม่ต้องแก้ `firestore.rules` / `firestore.indexes.json`)
