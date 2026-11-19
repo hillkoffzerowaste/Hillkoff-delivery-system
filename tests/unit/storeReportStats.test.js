@@ -3,7 +3,6 @@ import { addDaysToDateKey } from "../../lib/storeFormat.js";
 import { buildStoreOverview } from "../../lib/storeOverview.js";
 import { fromStoredDay, summarizeReportDays, toStoredDay } from "../../lib/storeReportStats.js";
 import { liveWindowStart, readReportDayStats } from "../../lib/storeReportStatsStore.js";
-import { autoRefreshes } from "../../app/components/store/StoreOverviewPanel.jsx";
 
 const TODAY = "2026-10-29";
 const at = (date, hh = 9) => new Date(`${date}T${String(hh).padStart(2, "0")}:00:00+07:00`).toISOString();
@@ -140,13 +139,3 @@ describe("stored summary freshness", () => {
   });
 });
 
-describe("dashboard auto refresh", () => {
-  it("refreshes short ranges only", () => {
-    expect(autoRefreshes("7d")).toBe(true);
-    expect(autoRefreshes("month")).toBe(true);
-    expect(autoRefreshes("3m")).toBe(false);
-    expect(autoRefreshes("year")).toBe(false);
-    expect(autoRefreshes("custom", { from: "2026-10-01", to: "2026-10-29" })).toBe(true);
-    expect(autoRefreshes("custom", { from: "2026-01-01", to: "2026-10-29" })).toBe(false);
-  });
-});

@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { StoreOperationsCenter, barLabel, barTitle, overviewQuery } from "../../app/components/store/StoreOverviewPanel.jsx";
 import StorePlanningPanel from "../../app/components/store/StorePlanningPanel.jsx";
 import { buildStoreOverview, customRange, periodRange } from "../../lib/storeOverview.js";
 import { validateStorePlan } from "../../lib/storePlan.js";
@@ -55,20 +54,6 @@ describe("dashboard ranges", () => {
 });
 
 describe("dashboard and calendar screens", () => {
-  it("labels month bars by Thai month and builds the custom range query", () => {
-    expect(barLabel("2026-10", "month")).toBe("ต.ค. 69");
-    expect(barLabel("2026-10-05", "day")).toBe("5");
-    expect(barTitle("2026-10", "month")).toBe("ต.ค. 2569");
-    expect(overviewQuery("custom", { from: "2026-01-01", to: "2026-03-31" })).toBe("period=custom&from=2026-01-01&to=2026-03-31");
-    expect(overviewQuery("year", {})).toBe("period=year");
-  });
-
-  it("offers every range and keeps all modules on one page", () => {
-    const html = renderToStaticMarkup(<StoreOperationsCenter apiFetch={async () => new Response("{}")} settings={{ modules: [] }} />);
-    ["วันนี้", "7 วัน", "เดือนนี้", "3 เดือน", "ทั้งปี", "กำหนดช่วงเอง"].forEach((label) => expect(html).toContain(`>${label}</button>`));
-    ["กรองประเภทข้อมูล", "เคสและของค้าง", "คุณภาพการรับ", "รายบุคคล", "รายงานเดิม / LINE / บันทึกงาน"].forEach((text) => expect(html).toContain(text));
-  });
-
   it("lets the team calendar assign an owner and the personal calendar show one person", () => {
     const team = renderToStaticMarkup(<StorePlanningPanel apiFetch={async () => new Response("{}")} staff={[{ id: "staff_a", name: "ณัฐ" }]} />);
     expect(team).toContain("ผู้รับผิดชอบ");

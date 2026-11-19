@@ -384,10 +384,10 @@
 #### 📄 `app/api/store/warehouse/route.js`
 * **บทบาท:** read-only `GET`: `store|admin` — ข้อมูลหน้าแดชบอร์ดสโตร์แบบใหม่ (`?from&to` ไม่เกิน 92 วัน) แยกรายสาขาจาก settings; ใบโอนนับที่สาขาต้นทาง, Audit/เคสตามสาขาที่บันทึก, ใบสั่งจอง/ออนไลน์และเคสของมันเป็นระดับสโตร์
 * **Flow:** single-field range query ของ `store_reports` (createdAt + serviceDate), `store_transfers`, `store_audits`, `store_work_logs` + `readStoreCases` + `store_settings/default` → `buildWarehouseDashboard`
-* **Deps:** `lib/storeWarehouseDashboard`, `lib/storeCasesStore`, `lib/storeDailyReport` · UI `app/components/store/StoreWarehouseDashboard.jsx` (default ของ `StoreOverviewPanel`; ศูนย์ปฏิบัติการเดิมอยู่แท็บสุดท้ายผ่าน `StoreOperationsCenter`)
+* **Deps:** `lib/storeWarehouseDashboard`, `lib/storeCasesStore`, `lib/storeDailyReport` · UI `app/components/store/StoreWarehouseDashboard.jsx` (default ของ `StoreOverviewPanel`; แท็บแผนงานใช้ `StorePlanningPanel`)
 
-#### 📄 `app/api/store/overview/route.js` · `daily-report/route.js` · `staff/route.js`
-* **บทบาท:** read-only ทั้งหมด `GET`: `store|admin` — `overview` รายงานแดชบอร์ด (`lib/storeOverview`), `daily-report` รายงานประจำวัน/เดือน (`lib/storeDailyReport`), `staff` รายชื่อผู้ใช้ role store
+#### 📄 `app/api/store/daily-report/route.js` · `staff/route.js`
+* **บทบาท:** read-only ทั้งหมด `GET`: `store|admin` — `daily-report` รายงานประจำวัน/เดือน (`?date=` / `?month=`, `lib/storeDailyReport`), `staff` รายชื่อผู้ใช้ role store
 
 ### 4.6 Outstation (ต่างจังหวัด)
 

@@ -6,6 +6,14 @@ import { thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
 import "./StorePlanningPanel.css";
 const weekdays=["อา.","จ.","อ.","พ.","พฤ.","ศ.","ส."];
 const TEAM="team";
+export async function readPlanningData(apiFetch, month, ownerId) {
+ const urls=[`/api/store/plans?month=${encodeURIComponent(month)}`];
+ if(ownerId)urls.push(`/api/store/work-logs?month=${encodeURIComponent(month)}&staffId=${encodeURIComponent(ownerId)}`);
+ const bodies=await Promise.all(urls.map(async(url)=>{const response=await apiFetch(url);const body=await response.json();if(!response.ok||!body.ok)throw new Error(body.error||"โหลดแผนงานและบันทึกงานไม่สำเร็จ");return body.data;}));
+ const counts=(bodies[1]?.items||[]).reduce((acc,x)=>({...acc,[x.date]:(acc[x.date]||0)+1}),{});
+ return {items:bodies[0].items,counts};
+}
+
 // owner = { id, name } shows one person's calendar (plans + work-log counts); without it the panel is the shared team calendar.
 // date / onSelectDate let a parent drive the selected day; bump refreshKey to reload after outside changes; form.date "" means "follow the selected day".
 export default function StorePlanningPanel({apiFetch,staff=[],owner=null,date:controlledDate="",onSelectDate,refreshKey=0}) {
@@ -14,13 +22,11 @@ export default function StorePlanningPanel({apiFetch,staff=[],owner=null,date:co
  const [ownMonth,setOwnMonth]=useState(()=>today.slice(0,7));const month=controlledDate?controlledDate.slice(0,7):ownMonth;
  const [items,setItems]=useState([]);const [logCounts,setLogCounts]=useState({});const [filter,setFilter]=useState("all");
  const blankForm=()=>({title:"",details:"",scope:"daily",date:"",ownerId:owner?.id||""});
- const [form,setForm]=useState(blankForm); const [editing,setEditing]=useState(null); const [error,setError]=useState("");const [loading,setLoading]=useState(false);const [busy,setBusy]=useState(false);const inFlight=useRef(false);const generation=useRef(0);
+ const [form,setForm]=useState(blankForm); const [editing,setEditing]=useState(null); const [error,setError]=useState("");const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const inFlight=useRef(false);const generation=useRef(0);
  const ownerId=owner?.id||"";
- const load=useCallback(async()=>{const id=++generation.current;setLoading(true);try{
-  const logsRequest=ownerId?apiFetch(`/api/store/work-logs?month=${encodeURIComponent(month)}&staffId=${encodeURIComponent(ownerId)}`):null;
-  const r=await apiFetch(`/api/store/plans?month=${encodeURIComponent(month)}`);const body=await r.json();if(!r.ok||!body.ok)throw new Error(body.error||"โหลดแผนงานไม่สำเร็จ");
-  let counts={};if(logsRequest){const lr=await logsRequest;const logs=await lr.json();if(lr.ok&&logs.ok)counts=logs.data.items.reduce((acc,x)=>({...acc,[x.date]:(acc[x.date]||0)+1}),{});}
-  if(id===generation.current){setItems(body.data.items);setLogCounts(counts);setError("");}
+ const load=useCallback(async()=>{const id=++generation.current;setLoading(true);setItems([]);setLogCounts({});setError("");try{
+  const data=await readPlanningData(apiFetch,month,ownerId);
+  if(id===generation.current){setItems(data.items);setLogCounts(data.counts);}
  }catch(e){if(id===generation.current)setError(e.message||"โหลดแผนงานไม่สำเร็จ");}finally{if(id===generation.current)setLoading(false);}},[apiFetch,month,ownerId]);
  useEffect(()=>{const timer=setTimeout(()=>void load(),0);return()=>{clearTimeout(timer);generation.current+=1;};},[load,refreshKey]);
  const selectDate=(day)=>{if(onSelectDate)onSelectDate(day);else setOwnDate(day);};
@@ -35,10 +41,10 @@ export default function StorePlanningPanel({apiFetch,staff=[],owner=null,date:co
  const monthly=visible.filter(x=>x.scope==="monthly");const daily=visible.filter(x=>x.scope==="daily"&&x.date===date);
  const dayCount=(day)=>visible.filter(x=>x.scope==="daily"&&x.date===day).length;
  const ownerLabel=(item)=>item.ownerName?`ผู้รับผิดชอบ ${item.ownerName}`:"แผนทีม";
- const list=(rows)=>rows.length?<ul className="sp-list">{rows.map(item=><li key={item.id} className={item.status==="done"?"is-done":undefined}><div><b>{item.title}</b>{item.details&&<p>{item.details}</p>}<small>{item.status==="done"?"เสร็จแล้ว":"วางแผน"} · {ownerId?`บันทึกโดย ${item.createdBy||"สโตร์"}`:ownerLabel(item)}</small></div><div className="sp-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>changeStatus(item)}>{item.status==="done"?"เปิดอีกครั้ง":"ทำเสร็จ"}</button><button type="button" className="secondary" disabled={busy} onClick={()=>edit(item)}>แก้ไข</button><button type="button" className="secondary danger" disabled={busy} onClick={()=>remove(item)}>ลบ</button></div></li>)}</ul>:<p className="muted">ยังไม่มีแผนงาน</p>;
+ const list=(rows)=>loading||error?null:rows.length?<ul className="sp-list">{rows.map(item=><li key={item.id} className={item.status==="done"?"is-done":undefined}><div><b>{item.title}</b>{item.details&&<p>{item.details}</p>}<small>{item.status==="done"?"เสร็จแล้ว":"วางแผน"} · {ownerId?`บันทึกโดย ${item.createdBy||"สโตร์"}`:ownerLabel(item)}</small></div><div className="sp-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>changeStatus(item)}>{item.status==="done"?"เปิดอีกครั้ง":"ทำเสร็จ"}</button><button type="button" className="secondary" disabled={busy} onClick={()=>edit(item)}>แก้ไข</button><button type="button" className="secondary danger" disabled={busy} onClick={()=>remove(item)}>ลบ</button></div></li>)}</ul>:<p className="muted">ยังไม่มีแผนงาน</p>;
  const formDate=form.date||date;
  return <section className="sp-workspace" aria-label={ownerId?`ปฏิทินส่วนตัว ${owner.name}`:"แผนงานสโตร์"}><div className="sp-heading"><div><h2>{ownerId?`ปฏิทินส่วนตัว · ${owner.name}`:"ปฏิทินแผนงาน"}</h2><p className="muted">{ownerId?"แผนงานของตัวเองรายวันและรายเดือน · ตัวเลขในวันคือแผนงานและบันทึกงานที่ลงไว้ · กดวันเพื่อดูงานของวันนั้น":"วางแผนร่วมกันสำหรับสโตร์รายวันและรายเดือน · ระบุผู้รับผิดชอบเพื่อให้แผนขึ้นในปฏิทินส่วนตัว"}</p></div><div className="sp-tools">{!ownerId&&staff.length>0&&<label>ดูแผนของ<select aria-label="ดูแผนของ" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">ทุกคน</option><option value={TEAM}>แผนทีม</option>{staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}<label>เดือน <input aria-label="เดือนแผนงาน" type="month" value={month} onChange={e=>changeMonth(e.target.value)} /></label></div></div>
- {error&&<p className="so-message is-error" role="alert">{error}</p>}{loading&&<p role="status" className="muted">กำลังโหลดแผนงาน...</p>}
+ {error&&<p className="so-message is-error" role="alert">{error} <button type="button" onClick={load} disabled={loading}>ลองอีกครั้ง</button></p>}{loading&&<p role="status" className="muted">กำลังโหลดแผนงาน...</p>}
  <div className="sp-grid"><section className="so-card"><h3>{thaiMonthLabel(month)}</h3><div className="sp-calendar" role="grid" aria-label={ownerId?"ปฏิทินส่วนตัว":"ปฏิทินแผนงาน"}>{weekdays.map(x=><span className="sp-weekday" key={x}>{x}</span>)}{calendarDays(month).map((day,index)=>day?<button type="button" key={day} className={`sp-day${day===date?" is-selected":""}${day===today?" is-today":""}`} aria-label={thaiDateLabel(day)} aria-pressed={day===date} onClick={()=>selectDate(day)}><span>{Number(day.slice(8))}</span>{dayCount(day)>0&&<small>{dayCount(day)} แผน</small>}{logCounts[day]>0&&<small className="sp-log-count">{logCounts[day]} บันทึก</small>}</button>:<span key={`blank-${index}`} />)}</div></section>
  <section className="so-card"><h3>{editing?"แก้ไขแผนงาน":"เพิ่มแผนงาน"}</h3><form className="sp-form" onSubmit={submit}><label>ประเภท<select value={form.scope} onChange={e=>setForm({...form,scope:e.target.value})}><option value="daily">แผนรายวัน</option><option value="monthly">แผนรายเดือน</option></select></label><label>{form.scope==="monthly"?"เดือน":"วันที่"}<input required type={form.scope==="monthly"?"month":"date"} value={form.scope==="monthly"?formDate.slice(0,7):formDate} onChange={e=>setForm({...form,date:form.scope==="monthly"?`${e.target.value}-01`:e.target.value})}/></label>{!ownerId&&<label>ผู้รับผิดชอบ<select value={form.ownerId} onChange={e=>setForm({...form,ownerId:e.target.value})}><option value="">ทั้งทีม (แผนทีม)</option>{staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}<label>งานที่วางแผน<input required maxLength={160} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><label>รายละเอียด<textarea maxLength={1000} value={form.details} onChange={e=>setForm({...form,details:e.target.value})}/></label><div className="sp-actions"><button type="submit" className="primary" disabled={busy}>{busy?"กำลังบันทึก":editing?"บันทึกการแก้ไข":"เพิ่มแผนงาน"}</button>{editing&&<button type="button" className="secondary" disabled={busy} onClick={reset}>ยกเลิก</button>}</div></form></section></div>
  <div className="sp-grid"><section className="so-card"><h3>แผนรายวัน · {thaiDateLabel(date)}</h3>{list(daily)}</section><section className="so-card"><h3>แผนรายเดือน · {thaiMonthLabel(month)}</h3>{list(monthly)}</section></div></section>;

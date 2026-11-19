@@ -10,6 +10,14 @@ const fmt = (n, d = 0) => (n == null || !Number.isFinite(Number(n)) ? "—" : Nu
 const money = (n) => fmt(n, 2);
 const shortDate = (key) => { const [, d, m, y] = thaiDateLabel(key).split(" "); return d ? `${d} ${m} ${String(y).slice(2)}` : key; };
 const newRequestId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+export function productionSalesLabel(rows) {
+  const values = rows.flatMap((row) => row.items || []);
+  const known = values.filter((item) => item.sold != null);
+  if (!known.length) return "—";
+  const total = known.reduce((sum, item) => sum + Number(item.sold), 0);
+  return `${fmt(total)}${known.length < values.length ? " (ยังไม่ครบ)" : ""}`;
+}
+
 const activeBranches = (settings) => storeMainBranches(settings?.branches);
 
 async function callApi(apiFetch, url, method, body) {
@@ -58,7 +66,7 @@ function ItemsEditor({ items, setItems, columns, computed }) {
 
 function PasteBox({ columns, value, setValue, onCheck, hint }) {
   return <div className="srp-paste">
-    <p>คัดลอกแถวจาก Excel / รายงาน ERP แล้ววางในช่องนี้ (แถวหัวตารางข้ามให้อัตโนมัติ) · ลำดับคอลัมน์:</p>
+    <p>คัดลอกแถวจาก Excel / รายงาน ERP แล้ววางในช่องนี้ (แถวหัวตารางที่ตรงกับชื่อคอลัมน์ด้านล่างข้ามให้อัตโนมัติ · หัวตารางแบบอื่นให้ลบออกก่อนวาง) · ลำดับคอลัมน์:</p>
     <ol className="srp-columns">{columns.map((c) => <li key={c}>{c}</li>)}</ol>
     {hint && <p className="srp-muted">{hint}</p>}
     <textarea aria-label="วางข้อมูลจาก Excel" rows={7} value={value} onChange={(e) => setValue(e.target.value)} placeholder="วางข้อมูลที่นี่ (Ctrl+V)" />
@@ -85,7 +93,7 @@ function DeleteButton({ label, onDelete }) {
 const emptyClaimForm = (kind, today) => ({ kind, documentNumber: "", serviceDate: today, branchCode: "", reason: "", requester: "", supplier: "", note: "", items: [{ rowId: newRequestId() }] });
 
 /* ============================== CLAIMS ============================== */
-export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมสินค้า" }) {
+export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมสินค้า", showHeading = true }) {
   const [today] = useState(() => bangkokDateOf(new Date().toISOString()));
   const { range, setRange, presets } = useRange(today);
   const [kind, setKind] = useState("unclaimable");
@@ -95,6 +103,7 @@ export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมส�
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [form, setForm] = useState(() => emptyClaimForm("unclaimable", today));
   const [editing, setEditing] = useState(null);
   const [paste, setPaste] = useState("");
@@ -107,10 +116,12 @@ export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมส�
   const load = useCallback(async () => {
     const id = ++generation.current;
     setBusy(true);
+    setLoadError("");
+    setRows([]);
     try {
       const data = await callApi(apiFetch, `/api/store/claims?${new URLSearchParams(range)}`, "GET");
-      if (id === generation.current) { setRows(data.items || []); setError(""); }
-    } catch (e) { if (id === generation.current) setError(e.message); } finally { if (id === generation.current) setBusy(false); }
+      if (id === generation.current) { setRows(data.items || []); setLoadError(""); }
+    } catch (e) { if (id === generation.current) setLoadError(e.message); } finally { if (id === generation.current) setBusy(false); }
   }, [apiFetch, range]);
   useEffect(() => { const t = setTimeout(() => { void load(); }, 0); return () => clearTimeout(t); }, [load]);
 
@@ -170,7 +181,7 @@ export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมส�
   const branchName = (code) => branches.find((b) => b.code === code)?.name || code || "—";
 
   return <section className="srp" aria-label={title}>
-    <header className="srp-head"><div><span className="srp-eyebrow">STORE · CLAIMS</span><h2>{title}</h2><p>บันทึกสินค้าเคลมได้ (ส่งคืน/ลดหนี้) และเคลมไม่ได้ (เบิกออก/ตัดจ่าย) เพื่อแสดงในรายงานแดชบอร์ดสโตร์</p></div></header>
+    <header className="srp-head"><div>{showHeading && <h2>{title}</h2>}<p>บันทึกสินค้าเคลมได้ (ส่งคืน/ลดหนี้) และเคลมไม่ได้ (เบิกออก/ตัดจ่าย) เพื่อแสดงในรายงานแดชบอร์ดสโตร์</p></div></header>
     <div className="srp-kinds" role="group" aria-label="ประเภทเคลม">{Object.entries(CLAIM_KINDS).map(([id, k]) => <button type="button" key={id} aria-pressed={kind === id} onClick={() => switchKind(id)}><b>{k.label}</b><small>{k.detail}</small></button>)}</div>
 
     <div className="srp-card">
@@ -204,9 +215,9 @@ export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมส�
     </div>
 
     <div className="srp-card">
-      <div className="srp-list-head"><h3>{meta.label} · รายการที่บันทึก</h3><span>{list.length} เอกสาร · {fmt(totals.qty)} ชิ้น · ฿{money(totals.amount)}</span></div>
+      <div className="srp-list-head"><h3>{meta.label} · รายการที่บันทึก</h3><span>{busy || loadError ? "ข้อมูลยังไม่พร้อมใช้งาน" : `${list.length} เอกสาร · ${fmt(totals.qty)} ชิ้น · ฿${money(totals.amount)}`}</span></div>
       <RangeBar range={range} setRange={setRange} presets={presets} busy={busy} onRefresh={load} />
-      {busy && !rows.length ? <p className="srp-muted" role="status">กำลังโหลด…</p> : !list.length ? <p className="srp-empty">ยังไม่มีเอกสาร{meta.label}ในช่วงนี้</p> :
+      {loadError ? <p role="alert" className="srp-error">{loadError} <button type="button" onClick={load}>ลองอีกครั้ง</button></p> : busy ? <p className="srp-muted" role="status">กำลังโหลด…</p> : !list.length ? <p className="srp-empty">ยังไม่มีเอกสาร{meta.label}ในช่วงนี้</p> :
         <div className="srp-table-wrap"><table className="srp-table"><thead><tr><th>วันที่</th><th>เลขที่</th><th>สาขา</th><th>{kind === "unclaimable" ? "สาเหตุ / ผู้เบิก" : "ผู้ขาย"}</th><th className="num">รายการ</th><th className="num">จำนวน</th><th className="num">มูลค่า ฿</th><th>จัดการ</th></tr></thead>
           <tbody>{list.map((row) => <Fragment key={row.id}>
             <tr><td className="nowrap">{shortDate(row.serviceDate)}</td><td className="nowrap"><button type="button" className="srp-link" aria-expanded={open === row.id} onClick={() => setOpen(open === row.id ? "" : row.id)}>{row.documentNumber}</button></td><td>{row.branchCode ? branchName(row.branchCode) : "—"}</td><td>{kind === "unclaimable" ? <>{row.reason}{row.requester && <small>{row.requester}</small>}</> : row.supplier || "—"}{row.note && <small>{row.note}</small>}</td><td className="num">{row.itemCount}</td><td className="num">{fmt(row.totalQty)}</td><td className="num">{money(row.totalAmount)}</td>
@@ -220,7 +231,7 @@ export function StoreClaimsPanel({ apiFetch, settings, title = "เคลมส�
 /* ============================== PRODUCTION ============================== */
 const emptyProduction = (today) => ({ serviceDate: today, branchCode: "", documentNumber: "", note: "", items: [{ rowId: newRequestId() }] });
 
-export function StoreProductionPanel({ apiFetch, settings, title = "การผลิตสินค้า" }) {
+export function StoreProductionPanel({ apiFetch, settings, title = "การผลิตสินค้า", showHeading = true }) {
   const [today] = useState(() => bangkokDateOf(new Date().toISOString()));
   const { range, setRange, presets } = useRange(today);
   const [rows, setRows] = useState([]);
@@ -228,6 +239,7 @@ export function StoreProductionPanel({ apiFetch, settings, title = "การผ
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [form, setForm] = useState(() => emptyProduction(today));
   const [editing, setEditing] = useState(null);
   const [paste, setPaste] = useState("");
@@ -241,10 +253,12 @@ export function StoreProductionPanel({ apiFetch, settings, title = "การผ
   const load = useCallback(async () => {
     const id = ++generation.current;
     setBusy(true);
+    setLoadError("");
+    setRows([]);
     try {
       const data = await callApi(apiFetch, `/api/store/production?${new URLSearchParams(range)}`, "GET");
-      if (id === generation.current) { setRows(data.items || []); setError(""); }
-    } catch (e) { if (id === generation.current) setError(e.message); } finally { if (id === generation.current) setBusy(false); }
+      if (id === generation.current) { setRows(data.items || []); setLoadError(""); }
+    } catch (e) { if (id === generation.current) setLoadError(e.message); } finally { if (id === generation.current) setBusy(false); }
   }, [apiFetch, range]);
   useEffect(() => { const t = setTimeout(() => { void load(); }, 0); return () => clearTimeout(t); }, [load]);
 
@@ -303,7 +317,7 @@ export function StoreProductionPanel({ apiFetch, settings, title = "การผ
   const branchName = (code) => branches.find((b) => b.code === code)?.name || code;
 
   return <section className="srp" aria-label={title}>
-    <header className="srp-head"><div><span className="srp-eyebrow">STORE · PRODUCTION</span><h2>{title}</h2><p>บันทึกจำนวนผลิตต่อสาขา (และยอดขายถ้ามี) เพื่อแสดงในรายงานแดชบอร์ดสโตร์</p></div></header>
+    <header className="srp-head"><div>{showHeading && <h2>{title}</h2>}<p>บันทึกจำนวนผลิตต่อสาขา (และยอดขายถ้ามี) เพื่อแสดงในรายงานแดชบอร์ดสโตร์</p></div></header>
     <div className="srp-card">
       <h3>{editing ? "แก้ไขรายการผลิต" : "บันทึกการผลิต"}</h3>
       <form onSubmit={save} className="srp-form">
@@ -318,15 +332,15 @@ export function StoreProductionPanel({ apiFetch, settings, title = "การผ
           <PasteBox columns={PRODUCTION_COLUMNS} value={paste} setValue={setPaste} onCheck={fillFromPaste} hint="ระบบจะเติมรายการลงในฟอร์มด้านบนให้ตรวจก่อนบันทึก" />
           <Errors errors={pasteErrors} />
         </details>
-        <div className="srp-actions"><button type="submit" className="srp-primary" disabled={saving}>{saving ? "กำลังบันทึก…" : editing ? "บันทึกการแก้ไข" : "บันทึกการผลิต"}</button>{editing && <button type="button" className="srp-secondary" onClick={() => { setEditing(null); changeForm(emptyProduction(today)); }}>ยกเลิกแก้ไข</button>}</div>
+        <div className="srp-actions"><button type="submit" className="srp-primary" disabled={saving || (!editing && (busy || Boolean(loadError)))}>{saving ? "กำลังบันทึก…" : editing ? "บันทึกการแก้ไข" : "บันทึกการผลิต"}</button>{editing && <button type="button" className="srp-secondary" onClick={() => { setEditing(null); changeForm(emptyProduction(today)); }}>ยกเลิกแก้ไข</button>}</div>
       </form>
       {error && <p className="srp-error" role="alert">{error}</p>}
       {message && <p className="srp-message" role="status">{message}</p>}
     </div>
     <div className="srp-card">
-      <div className="srp-list-head"><h3>รายการผลิตที่บันทึก</h3><span>{rows.length} รายการ · ผลิต {fmt(totals.qty)} · ขาย {fmt(totals.sold)}</span></div>
+      <div className="srp-list-head"><h3>รายการผลิตที่บันทึก</h3><span>{busy || loadError ? "ข้อมูลยังไม่พร้อมใช้งาน" : `${rows.length} รายการ · ผลิต ${fmt(totals.qty)} · ขาย ${productionSalesLabel(rows)}`}</span></div>
       <RangeBar range={range} setRange={setRange} presets={presets} busy={busy} onRefresh={load} />
-      {busy && !rows.length ? <p className="srp-muted" role="status">กำลังโหลด…</p> : !rows.length ? <p className="srp-empty">ยังไม่มีรายการผลิตในช่วงนี้</p> :
+      {loadError ? <p role="alert" className="srp-error">{loadError} <button type="button" onClick={load}>ลองอีกครั้ง</button></p> : busy ? <p className="srp-muted" role="status">กำลังโหลด…</p> : !rows.length ? <p className="srp-empty">ยังไม่มีรายการผลิตในช่วงนี้</p> :
         <div className="srp-table-wrap"><table className="srp-table"><thead><tr><th>วันที่</th><th>สาขา</th><th>เอกสาร</th><th className="num">SKU</th><th className="num">ผลิต</th><th className="num">ขาย</th><th>จัดการ</th></tr></thead>
           <tbody>{rows.map((row) => <Fragment key={row.id}>
             <tr><td className="nowrap"><button type="button" className="srp-link" aria-expanded={open === row.id} onClick={() => setOpen(open === row.id ? "" : row.id)}>{shortDate(row.serviceDate)}</button></td><td>{row.branchCode} {branchName(row.branchCode)}</td><td>{row.documentNumber || "—"}{row.note && <small>{row.note}</small>}</td><td className="num">{row.itemCount}</td><td className="num">{fmt(row.totalQty)}</td><td className="num">{row.totalSold == null ? "—" : fmt(row.totalSold)}</td>

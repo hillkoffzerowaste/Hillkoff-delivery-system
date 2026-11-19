@@ -142,7 +142,8 @@ describe("StoreWarehouseDashboard helpers", () => {
 
   it("renders the new dashboard by default with branch chips, tabs and a loading state", () => {
     const html = renderToStaticMarkup(<StoreOverviewPanel apiFetch={async () => new Response("{}")} settings={{ modules: [] }} />);
-    expect(html).toContain("Hillkoff Store Dashboard");
+    expect(html).toContain("รายงานแดชบอร์ดสโตร์");
+    expect(html).not.toContain("ศูนย์ปฏิบัติการ");
     WAREHOUSE_TABS.forEach(([, label]) => expect(html).toContain(label));
     expect(html).toContain("ทุกสาขา");
     expect(html).toContain("กำลังรวบรวมข้อมูล");

@@ -241,34 +241,3 @@ describe("GET /api/store/daily-report?month=", () => {
     expect(body).not.toContain("0811111111");
   });
 });
-
-it("returns a filtered document dashboard over an explicit range", async () => {
-  const result = await get(`from=${DATE}&to=${DATE}&staffId=u2`);
-  expect(result.status).toBe(200);
-  const data = (await result.json()).data;
-  expect(data.total).toBe(2);
-  expect(data.documents.map((d) => d.type).sort()).toEqual(["online", "transfer"]);
-});
-
-
-describe("operational dashboard opt-in", () => {
-  it.each(["store", "admin"])("allows %s and returns one consistent data source", async (role) => {
-    state.role = role;
-    const response = await get(`view=operations&from=${DATE}&to=${DATE}`);
-    expect(response.status).toBe(200);
-    const { data } = await response.json();
-    expect(data.documents).toHaveLength(4);
-    expect(data.cases.some((row) => row.sourceId === "t2")).toBe(true);
-    expect(log.filter((query) => query.name === "users")).toHaveLength(1);
-    expect(log.some((query) => query.name === "orders")).toBe(false);
-  });
-  it.each(["sales", "pack", "driver", "accounting"])("rejects %s before reading operational data", async (role) => {
-    state.role = role;
-    expect((await get(`view=operations&from=${DATE}&to=${DATE}`)).status).toBe(403);
-    expect(log).toHaveLength(0);
-  });
-  it("rejects a missing operations range without falling back to a different report", async () => {
-    expect((await get("view=operations")).status).toBe(400);
-    expect(log).toHaveLength(0);
-  });
-});

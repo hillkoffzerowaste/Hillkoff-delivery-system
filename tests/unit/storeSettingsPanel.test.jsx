@@ -29,7 +29,7 @@ describe("editing branch codes", () => {
 describe("StoreSettingsPanel lock screen", () => {
   it("shows only the PIN prompt while pin is empty", () => {
     const html = render();
-    expect(html).toContain("ตั้งค่าสโตร์ · ใส่รหัส PIN เพื่อเข้าใช้งาน");
+    expect(html).toContain("ปลดล็อกการตั้งค่า · ใส่รหัส PIN เพื่อเข้าใช้งาน");
     expect(html).toContain("ปลดล็อก");
     expect(html).toContain('type="password"');
     expect(html).toContain('inputMode="numeric"');
@@ -45,7 +45,7 @@ describe("StoreSettingsPanel unlocked", () => {
 
   it("renders the header, the three tabs and the save controls", () => {
     expect(html).toContain("ตั้งค่าสโตร์");
-    expect(html).toContain("STORE SETTINGS");
+    expect(html).not.toContain("STORE SETTINGS");
     for (const label of ["โมดูล", "สาขา", "หัวเอกสารและรูปแบบ"]) expect(html).toContain(`>${label}</button>`);
     expect(html).toContain("บันทึกตอนนี้");
     expect(html).toContain("ยกเลิกการเปลี่ยนแปลง");

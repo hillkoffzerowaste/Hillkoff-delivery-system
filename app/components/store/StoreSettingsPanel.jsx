@@ -166,7 +166,7 @@ function PinGate({ apiFetch, onPinChange }) {
 
   return (
     <section className="panel ss-panel-lock">
-      <h2>ตั้งค่าสโตร์ · ใส่รหัส PIN เพื่อเข้าใช้งาน</h2>
+      <h2>ปลดล็อกการตั้งค่า · ใส่รหัส PIN เพื่อเข้าใช้งาน</h2>
       <form className="ss-panel-lock-form" onSubmit={submit}>
         <input
           type="password"
@@ -183,12 +183,12 @@ function PinGate({ apiFetch, onPinChange }) {
   );
 }
 
-export default function StoreSettingsPanel({ apiFetch, settings, updatedAt, pin, onPinChange, onSaved }) {
+export default function StoreSettingsPanel({ apiFetch, settings, updatedAt, pin, onPinChange, onSaved, showHeading = true }) {
   if (!pin) return <PinGate apiFetch={apiFetch} onPinChange={onPinChange} />;
-  return <SettingsEditor apiFetch={apiFetch} settings={settings} updatedAt={updatedAt} pin={pin} onPinChange={onPinChange} onSaved={onSaved} />;
+  return <SettingsEditor showHeading={showHeading} apiFetch={apiFetch} settings={settings} updatedAt={updatedAt} pin={pin} onPinChange={onPinChange} onSaved={onSaved} />;
 }
 
-function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSaved }) {
+function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSaved, showHeading = true }) {
   const settingsKey = JSON.stringify(settings);
   const savedKey = useMemo(() => settingsSaveKey(JSON.parse(settingsKey)), [settingsKey]);
   const [draft, setDraft] = useState(() => clone(settings));
@@ -329,8 +329,7 @@ function SettingsEditor({ apiFetch, settings, updatedAt, pin, onPinChange, onSav
     <div className="ss-panel">
       <header className="store-report-header ss-panel-header">
         <div>
-          <span className="store-report-eyebrow">STORE SETTINGS</span>
-          <h2>ตั้งค่าสโตร์</h2>
+          {showHeading && <h2>ตั้งค่าสโตร์</h2>}
           <p>จัดการโมดูล สาขา พนักงาน หัวเอกสาร และรูปแบบเลขที่เอกสาร</p>
         </div>
         <div className="ss-panel-actions">

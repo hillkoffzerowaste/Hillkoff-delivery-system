@@ -197,7 +197,7 @@ function TransferFields({ row, onChange, branches, staff, fields, sample, idPref
   );
 }
 
-export default function StoreTransferPanel({ apiFetch, settings, profile, onUnresolvedChange, onNavigate }) {
+export default function StoreTransferPanel({ apiFetch, settings, profile, onUnresolvedChange, onNavigate, showHeading = true }) {
   const cfg = settings?.documents?.transfer;
   const fields = useMemo(() => fieldMap(settings), [settings]);
   const branches = useMemo(() => getActiveBranches(settings), [settings]);
@@ -221,7 +221,8 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
   const [panel, setPanel] = useState(null);
   const [busy, setBusy] = useState("");
   const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(false);
+  // True until the first list arrives, so an unloaded list never reads as "no documents".
+  const [loading, setLoading] = useState(true);
   const busyRef = useRef(false);
   const loadSeq = useRef(0);
   const notifyRef = useRef(onUnresolvedChange);
@@ -408,8 +409,7 @@ export default function StoreTransferPanel({ apiFetch, settings, profile, onUnre
     <div className="store-report-workspace st-workspace">
       <header className="store-report-header">
         <div>
-          <span className="store-report-eyebrow">STORE OPERATIONS · โมดูลเสริม</span>
-          <h2>{title}</h2>
+          {showHeading && <h2>{title}</h2>}
           <p>บันทึกใบโอนระหว่างสาขา อ้างอิงใบขอโอน และติดตามกรณีสินค้าไม่ครบจนแก้ไขเสร็จ</p>
         </div>
         <div className="store-report-header-tools">

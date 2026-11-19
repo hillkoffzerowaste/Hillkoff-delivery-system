@@ -28,7 +28,7 @@ async function readJson(response) {
 
 const accuracyText = (summary) => pct(summary.match, summary.total);
 
-export default function StoreAuditPanel({ apiFetch, settings, profile }) {
+export default function StoreAuditPanel({ apiFetch, settings, profile, showHeading = true }) {
   const cfg = settings?.documents?.audit;
   const fields = useMemo(() => {
     const byId = new Map((cfg?.fields || []).map((field) => [field.id, field]));
@@ -45,6 +45,8 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
   const [items, setItems] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [reloadTick, setReloadTick] = useState(0);
+  // Which date/reload the list belongs to: until it matches, the table says "loading", not "no documents".
+  const [loadedFor, setLoadedFor] = useState("");
   const [avgMode, setAvgMode] = useState("active");
   const [form, setForm] = useState(() => emptyForm());
   const [autoNo, setAutoNo] = useState("");
@@ -91,6 +93,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
         if (!response.ok || !json.ok) throw new Error(json.error || "โหลดข้อมูลตรวจนับไม่สำเร็จ");
         setItems(json.data?.items || []);
         setLoadError("");
+        setLoadedFor(`${date}|${reloadTick}`);
       } catch (error) {
         if (!cancelled) setLoadError(error.message || "โหลดข้อมูลตรวจนับไม่สำเร็จ");
       }
@@ -238,8 +241,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
     <div className="sa-root">
       <header className="store-report-header sa-header">
         <div>
-          <span className="store-report-eyebrow">STORE OPERATIONS · โมดูลเสริม</span>
-          <h2>Internal Audit สินค้า</h2>
+          {showHeading && <h2>Internal Audit สินค้า</h2>}
           <p>บันทึกผลตรวจนับสต็อกตามเลขที่เอกสาร เทียบสินค้าตรง / ไม่ตรงกับระบบ และสรุปจำนวนตรวจนับต่อวัน</p>
         </div>
         <label className="sa-field sa-date">
@@ -373,7 +375,7 @@ export default function StoreAuditPanel({ apiFetch, settings, profile }) {
             </thead>
             <tbody>
               {dayItems.length === 0 && (
-                <tr><td colSpan={9} className="sa-empty">ยังไม่มีเอกสารตรวจนับ{dayWord}</td></tr>
+                <tr><td colSpan={9} className="sa-empty">{loadError ? "โหลดเอกสารตรวจนับไม่สำเร็จ" : loadedFor !== `${date}|${reloadTick}` ? "กำลังโหลด…" : `ยังไม่มีเอกสารตรวจนับ${dayWord}`}</td></tr>
               )}
               {dayItems.map((audit) => {
                 const bad = audit.mismatch > 0;

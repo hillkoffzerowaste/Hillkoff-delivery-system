@@ -39,14 +39,26 @@ export async function POST(request) {
     const now = new Date().toISOString();
     const created = await db.runTransaction(async (tx) => {
       const refs = values.map((_, index) => db.collection(STORE_PRODUCTION_COLLECTION).doc(`${requestId}_${index}`));
-      const snaps = await Promise.all(refs.map((ref) => tx.get(ref)));
+      const first = await tx.get(refs[0]);
+      const conflict = () => fail("คำขอนี้ถูกใช้บันทึกข้อมูลอื่นไปแล้ว กรุณาโหลดหน้าใหม่แล้วบันทึกอีกครั้ง", 409);
+      if (first.exists) {
+        const storedCount = first.data().requestRecordCount;
+        if (storedCount !== undefined && storedCount !== values.length) throw conflict();
+        if (storedCount === undefined) {
+          // Older saves predate batch metadata; inspect their bounded ID range before accepting a retry.
+          const remaining = await Promise.all(Array.from({ length: RECORDS_PER_SAVE - 1 }, (_, i) => tx.get(db.collection(STORE_PRODUCTION_COLLECTION).doc(`${requestId}_${i + 1}`))));
+          if (remaining.some((snap, i) => snap.exists !== (i + 1 < values.length))) throw conflict();
+        }
+      }
+      const snaps = [first, ...await Promise.all(refs.slice(1).map((ref) => tx.get(ref)))];
       return values.map((value, index) => {
         if (snaps[index].exists) {
           const stored = snaps[index].data();
-          if (!sameProductionRecord(stored, value)) throw fail("คำขอนี้ถูกใช้บันทึกข้อมูลอื่นไปแล้ว กรุณาโหลดหน้าใหม่แล้วบันทึกอีกครั้ง", 409);
+          if (stored.deletedAt || !sameProductionRecord(stored, value)) throw conflict();
           return publicRecord({ ...stored, id: refs[index].id });
         }
-        const doc = { ...value, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email || "", createdByUid: profile.uid, deletedAt: "", history: [recordHistory("created", profile, now)] };
+        if (first.exists) throw conflict();
+        const doc = { ...value, requestRecordCount: values.length, createdAt: now, updatedAt: now, createdBy: profile.name || profile.email || "", createdByUid: profile.uid, deletedAt: "", history: [recordHistory("created", profile, now)] };
         tx.set(refs[index], doc);
         return publicRecord({ ...doc, id: refs[index].id });
       });

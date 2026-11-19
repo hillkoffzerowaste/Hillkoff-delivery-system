@@ -6,6 +6,8 @@ import { addDaysToDateKey, thaiDateLabel, thaiMonthLabel } from "../../../lib/st
 import { bangkokDateOf } from "../../../lib/storeDailyReport.js";
 import { customRange } from "../../../lib/storeOverview.js";
 import { WAREHOUSE_MAX_DAYS, percent } from "../../../lib/storeWarehouseDashboard.js";
+import { getActiveStoreStaff } from "../../../lib/storeSettings.js";
+import StorePlanningPanel from "./StorePlanningPanel.jsx";
 import "./StoreWarehouseDashboard.css";
 
 // Colours are CSS variables so the light (default) and dark themes each get a readable palette.
@@ -28,8 +30,9 @@ export const WAREHOUSE_TABS = [
   ["production", "การผลิต"],
   ["audit", "Internal Audit"],
   ["staff", "พนักงาน"],
-  ["operations", "ศูนย์ปฏิบัติการ"]
+  ["planning", "แผนงาน"]
 ];
+const CASE_CATEGORIES = { shortage: "สินค้าขาด", wrong: "สินค้าผิด", damaged: "เสียหาย", document: "เอกสาร", unknown: "ยังไม่ระบุประเภท" };
 
 export const fmt = (n, digits = 0) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toLocaleString("th-TH", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
 const pctText = (value) => (value == null ? "—" : `${value}%`);
@@ -425,7 +428,7 @@ function ProductionPanel({ b }) {
       <HBars rows={chart} label={`การผลิต ${b.name}`} />
       <Legend items={[[b.color, "จำนวนผลิต"], [C.green, "ยอดขาย"]]} />
       <Table label={`รายการผลิต ${b.name}`} min={420}><thead><tr><th>รหัส</th><th>สินค้า</th><th className="num">ผลิต</th><th className="num">ขาย</th></tr></thead>
-        <tbody>{p.items.map((item) => <tr key={`${item.code}|${item.name}`}><td className="nowrap">{item.code || "—"}</td><td>{item.name}{item.unit && <small>{item.unit}</small>}</td><td className="num">{fmt(item.qty)}</td><td className="num">{item.sold === null ? "—" : fmt(item.sold)}</td></tr>)}</tbody></Table>
+        <tbody>{p.items.map((item) => <tr key={`${item.code}|${item.name}|${item.unit}`}><td className="nowrap">{item.code || "—"}</td><td>{item.name}{item.unit && <small>{item.unit}</small>}</td><td className="num">{fmt(item.qty)}</td><td className="num">{item.sold === null ? "—" : fmt(item.sold)}</td></tr>)}</tbody></Table>
     </>}
   </Card>;
 }
@@ -448,6 +451,18 @@ function Production({ data, visible, go }) {
   </>;
 }
 
+function CaseTypes({ data, codes, all }) {
+  const open = (data.cases.openCases || []).filter((row) => inScope(row, codes, all));
+  if (!open.length) return null;
+  const count = (key) => { const map = new Map(); open.forEach((row) => { const k = key(row); map.set(k, (map.get(k) || 0) + 1); }); return [...map].sort((a, b) => b[1] - a[1]); };
+  const types = count((row) => CASE_CATEGORIES[row.category] || row.category);
+  const causes = count((row) => row.cause || "ยังไม่ระบุสาเหตุ").slice(0, 6);
+  return <div className="swd-grid swd-grid-2">
+    <Card label="ประเภทปัญหาของเคสค้าง"><Title title="ประเภทปัญหาของเคสค้าง" sub={`${fmt(open.length)} เคส`} /><HBars label="ประเภทปัญหา" rows={types.map(([label, n]) => ({ label, parts: [{ label: "เคส", value: n, color: C.amber }] }))} /></Card>
+    <Card label="สาเหตุที่พบบ่อย"><Title title="สาเหตุที่พบบ่อย" /><HBars label="สาเหตุ" rows={causes.map(([label, n]) => ({ label, parts: [{ label: "เคส", value: n, color: C.violet }] }))} /></Card>
+  </div>;
+}
+
 function Shortage({ data, visible, go, all }) {
   const codes = new Set(visible.map((b) => b.code));
   const rows = data.cases.shortages.filter((s) => inScope(s, codes, all));
@@ -463,6 +478,7 @@ function Shortage({ data, visible, go, all }) {
       <Kpi label="ไม่มีกำหนดเข้า" value={fmt(rows.filter((s) => !s.eta).length)} unit="รายการ" color={C.red} />
       <Kpi label="ค้างนานสุด / เฉลี่ย" value={withDays.length ? fmt(Math.max(...withDays.map((s) => s.days))) : "—"} unit="วัน" sub={avg == null ? "ยังไม่ทราบวันเปิดเคส" : `เฉลี่ย ${fmt(avg)} วัน`} color={C.cyan} />
     </div>
+    <CaseTypes data={data} codes={codes} all={all} />
     {data.cases.withoutLines > 0 && <Note color={C.cyan}>มีเคสค้าง {fmt(data.cases.withoutLines)} เคส (ทุกสาขา) ที่ยังไม่ระบุรายการสินค้า จึงยังไม่อยู่ในตารางนี้ · เติมรายการได้ที่ทะเบียนเคส</Note>}
     {rows.length === 0 ? <Empty>ไม่มีสินค้าค้างที่ระบุรายการในสาขาที่เลือก</Empty> :
       <Table label="สินค้าค้างรับ" min={900}><thead><tr><th>#</th><th>รหัส</th><th>ชื่อสินค้า</th><th>เอกสารต้นทาง</th><th>สาขา</th><th>เปิดเคส</th><th>PO / ผู้ขาย</th><th>กำหนดเข้า</th><th className="num">ค้าง</th><th className="num">วัน</th><th>สถานะ</th></tr></thead>
@@ -528,14 +544,14 @@ function Staff({ data }) {
   </>;
 }
 
-export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate, renderOperations }) {
+export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate, showHeading = true }) {
   const [today] = useState(() => bangkokDateOf(new Date().toISOString()));
   const presets = rangePresets(today);
   const [range, setRange] = useState(() => ({ from: presets[2][2], to: today }));
   const [draft, setDraft] = useState(range);
   const [tab, setTab] = useState("overview");
-  // The operations centre loads its own data; keep it mounted after the first visit so switching back does not re-read.
-  const [opsOpened, setOpsOpened] = useState(false);
+  // The team calendar loads its own data; keep it mounted after the first visit so switching back does not re-read.
+  const [planningOpened, setPlanningOpened] = useState(false);
   const [sel, setSel] = useState("ALL");
   // Light by default; the viewer's choice is remembered on this device only.
   const [theme, setTheme] = useState("light");
@@ -584,14 +600,14 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
   const submitCustom = (event) => {
     event.preventDefault();
     const picked = customRange(draft.from, draft.to);
-    if (!picked || picked.dates.length > WAREHOUSE_MAX_DAYS) { setError(`ช่วงวันที่ไม่ถูกต้อง หรือเกิน ${WAREHOUSE_MAX_DAYS} วัน · ช่วงยาวกว่านี้ดูที่รายงานเดิมในแท็บศูนย์ปฏิบัติการ`); return; }
+    if (!picked || picked.dates.length > WAREHOUSE_MAX_DAYS) { setError(`ช่วงวันที่ไม่ถูกต้อง หรือเกิน ${WAREHOUSE_MAX_DAYS} วัน · ช่วงยาวกว่านี้ดูรายเดือนได้ที่เมนูรายงานประจำวัน`); return; }
     applyRange({ ...draft });
   };
   const moduleName = (id, fallback) => settings?.modules?.find((m) => m.id === id)?.name || fallback;
   const go = (target) => (WAREHOUSE_TABS.some(([id]) => id === target) ? setTab(target) : onNavigate?.(target));
 
   const branches = (data?.branches || []).map((b, i) => ({ ...b, color: BRANCH_COLORS[i % BRANCH_COLORS.length] }));
-  const shown = data ? { ...data, branches } : null;
+  const shown = data && !busy && !error ? { ...data, branches } : null;
   // A chip that disappears with a new range falls back to every branch.
   const selected = branches.find((b) => b.code === sel);
   const all = !selected;
@@ -600,8 +616,7 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
   return <section className="swd" data-theme={theme} aria-label="รายงานแดชบอร์ดสโตร์">
     <header className="swd-head">
       <div>
-        <span className="swd-eyebrow">HILLKOFF · STORE</span>
-        <h2>Hillkoff Store Dashboard</h2>
+        {showHeading && <h2>รายงานแดชบอร์ดสโตร์</h2>}
         <p>รายงานการทำงานสโตร์ / คลังสินค้า · {rangeTitle(range.from, range.to)}{busy ? " · กำลังโหลด…" : ""}{data?.generatedAt ? ` · อัปเดต ${new Date(data.generatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : ""}</p>
       </div>
       <div className="swd-head-tools">
@@ -613,7 +628,7 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
       </div>
     </header>
 
-    {tab !== "operations" && <form className="swd-range" onSubmit={submitCustom} aria-label="ช่วงเวลา">
+    {tab !== "planning" && <form className="swd-range" onSubmit={submitCustom} aria-label="ช่วงเวลา">
       <div className="swd-presets" role="group" aria-label="ช่วงเวลาสำเร็จรูป">{presets.map(([id, label, from, to]) => <button type="button" key={id} aria-pressed={range.from === from && range.to === to} onClick={() => applyRange({ from, to })}>{label}</button>)}</div>
       <label>ตั้งแต่<input type="date" required value={draft.from} max={today} onChange={(e) => setDraft({ ...draft, from: e.target.value })} /></label>
       <label>ถึง<input type="date" required value={draft.to} max={today} onChange={(e) => setDraft({ ...draft, to: e.target.value })} /></label>
@@ -621,13 +636,13 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
       <button type="button" onClick={load} disabled={busy}>{busy ? "กำลังโหลด…" : "รีเฟรช"}</button>
     </form>}
 
-    <nav className="swd-tabs" aria-label="หมวดรายงาน">{WAREHOUSE_TABS.map(([id, label]) => <button type="button" key={id} aria-pressed={tab === id} onClick={() => { if (id === "operations") setOpsOpened(true); setTab(id); }}>{label}</button>)}</nav>
+    <nav className="swd-tabs" aria-label="หมวดรายงาน">{WAREHOUSE_TABS.map(([id, label]) => <button type="button" key={id} aria-pressed={tab === id} onClick={() => { if (id === "planning") setPlanningOpened(true); setTab(id); }}>{label}</button>)}</nav>
 
     <div className="swd-body" aria-busy={busy}>
-      {opsOpened && <div className="swd-legacy" hidden={tab !== "operations"}>{renderOperations?.()}</div>}
-      {tab !== "operations" && <>
+      {planningOpened && <div className="swd-legacy" hidden={tab !== "planning"}><StorePlanningPanel apiFetch={apiFetch} staff={getActiveStoreStaff(settings).map((person) => ({ id: person.uid, name: person.name }))} /></div>}
+      {tab !== "planning" && <>
         {error && <p className="swd-error" role="alert">{error} <button type="button" onClick={load}>ลองอีกครั้ง</button></p>}
-        {busy && !data && <p className="swd-loading" role="status">กำลังรวบรวมข้อมูลใบโอน Audit ใบสั่งจอง และเคส…</p>}
+        {busy && <p className="swd-loading" role="status">กำลังรวบรวมข้อมูลใบโอน Audit ใบสั่งจอง และเคส…</p>}
         {shown && <>
           {tab === "overview" && <Overview data={shown} visible={visible} go={go} all={all} />}
           {tab === "transfers" && <Transfers data={shown} visible={visible} go={go} />}

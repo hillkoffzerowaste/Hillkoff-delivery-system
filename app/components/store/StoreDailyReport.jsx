@@ -6,7 +6,6 @@ import { bangkokMonthRange, fmt, lastNDates, pct, thaiDateLabel, thaiMonthLabel 
 import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText, unattributedText } from "../../../lib/storeDailyReport.js";
 import { WORK_LOG_LIMITS, validateWorkLog, workLogHours } from "../../../lib/storeWorkLog.js";
 import { DUTY_LIMITS, dutyText, validateDuty } from "../../../lib/storeDuty.js";
-import StoreOperationalDashboard from "./StoreOperationalDashboard.jsx";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
 import "./StoreDailyReport.css";
 
@@ -307,7 +306,7 @@ function MonthView({ data }) {
   </section>;
 }
 
-export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์ WH" }) {
+export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์ WH", showHeading = true }) {
   const [today] = useState(bangkokToday);
   const [tab, setTab] = useState("team");
   const [date, setDate] = useState(today);
@@ -349,6 +348,8 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
     return () => clearInterval(interval);
   }, [load]);
 
+  // A failed refresh keeps the last good data on screen (with the error and a retry above it), so a
+  // work log being typed in the personal view is never unmounted by a brief network drop.
   const dayData = cache[`date:${date}`];
   const monthData = cache[`month:${month}`];
   const active = kind === "month" ? monthData : dayData;
@@ -388,8 +389,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
   return <div className="sd-workspace">
     <header className="store-report-header sd-header">
       <div>
-        <span className="store-report-eyebrow">DAILY STORE REPORT</span>
-        <h2>รายงานการขับเคลื่อนประจำวัน</h2>
+        {showHeading && <><span className="store-report-eyebrow">DAILY STORE REPORT</span><h2>รายงานการขับเคลื่อนประจำวัน</h2></>}
         <p>สรุปงานทั้งหมดของ{storeLabel} จากประวัติงานรายวัน · คัดลอกส่งกลุ่ม LINE ได้ · ดูย้อนหลังรายคนและวัดผลรายเดือน</p>
       </div>
       <div className="sd-tools">
@@ -404,7 +404,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
     </div>
     <p className="sd-note">ใบสั่งจองและใบขายออนไลน์แยกตามผู้ตรวจสโตร์ล่าสุดที่ระบุในเอกสาร · ใบโอนแยกตามผู้จัด · ช่วงเวลาเป็นเวลาที่ระบบบันทึกรายการ</p>
 
-    {error && <p role="alert" className="sd-error">{error}</p>}
+    {error && <p role="alert" className="sd-error">{error} <button type="button" onClick={() => load(true)} disabled={busy}>ลองอีกครั้ง</button></p>}
     {kind === "date" && dayData?.ordersCapped && <p role="status" className="sd-error">ข้อมูลตรวจออเดอร์มีจำนวนมาก จึงไม่แสดงรายการตรวจออเดอร์ในรายงานนี้</p>}
     {kind === "date" && dayData?.openIssuesCapped && <p role="status" className="sd-error">รายการใบโอนค้างมีจำนวนมาก รายการที่แสดงอาจไม่ครบ</p>}
     {loading && <p role="status" className="muted">กำลังโหลดรายงาน...</p>}
@@ -427,5 +427,5 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
 }
 
 export default function StoreDailyReport(props) {
-  return <StoreOperationalDashboard {...props} renderLegacy={() => <LegacyStoreDailyReport {...props} />} />;
+  return <LegacyStoreDailyReport {...props} />;
 }

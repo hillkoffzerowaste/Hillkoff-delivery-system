@@ -4,11 +4,8 @@
 
 Internal use only — Hillkoff Local Delivery
 
-ศูนย์ปฏิบัติการสโตร์ใช้ `GET /api/store/daily-report?view=operations&from=YYYY-MM-DD&to=YYYY-MM-DD` สำหรับ role `store` / `admin` โดยอ่านชุดข้อมูลร่วมครั้งเดียวสำหรับกราฟและ drill-down ภาพรวมทีม/รายบุคคล/เคส/คุณภาพ ทุกส่วนของวงและ legend เปิดรายการจริงในขอบเขตคน สาขา และประเภทเดียวกัน เอกสารนับเป็น **เอกสาร** ตาม `serviceDate` (รายงานเก่าที่ไม่มีวันปฏิบัติงานใช้วันสร้างในเวลาไทย) ใบสั่งจองและออนไลน์ต้องยืนยันแล้วและใช้ผู้ตรวจสโตร์ ใบโอนใช้ผู้จัด Audit ใช้ผู้ตรวจ ผู้ที่ระบุไม่ได้แสดงแยก ไม่อนุมานว่าเป็นพนักงานคนใด
+รายงานแดชบอร์ดสโตร์ (เมนู `store-overview`) ใช้ `GET /api/store/warehouse?from=YYYY-MM-DD&to=YYYY-MM-DD` (ไม่เกิน 92 วัน) สำหรับ role `store` / `admin`: ภาพรวม ใบโอน ใบสั่งจอง/ออนไลน์ เคลม สินค้าขาด/เคส การผลิต Internal Audit พนักงาน และแผนงานทีม แยก 3 สาขาหลัก · รายงานประจำวัน / ข้อความ LINE / บันทึกงานอยู่ที่เมนูรายงานประจำวัน (`GET /api/store/daily-report?date=` หรือ `?month=`)
 
-วงเคสเป็นชุด **เคสเกิดในช่วง** ตามวันสร้างเคสในเวลาไทย แต่แสดงสถานะปัจจุบัน ส่วนเคสค้างสะสมและสินค้าค้างอ่านทุกวัน กิจกรรมปิดนับแต่ละเหตุการณ์ `history` ตามผู้ลงมือและวันปิดจริง รวมปิดซ้ำหลังเปิดใหม่ จึงไม่ใช่คะแนนของเจ้าของเคส รับครบ (`fulfilled`) แยกจากยกเลิก ข้อยกเว้น และไม่ระบุ วงการรับสินค้านับ **รายการสินค้าในเคสเกิดในช่วง** แบ่งรับครบ/รับบางส่วน/ยังไม่รับ/ยุติด้วยยกเลิก ไม่รวมจำนวนข้ามสินค้าและหน่วย รายการไม่มีจำนวนเพียงพอแยกเป็นจำนวนเคสไม่ทราบข้อมูลนอกวง การจัดสรร PO และ ETA เป็นข้อมูลติดตามที่บันทึก ไม่ถือว่าได้รับสินค้าแล้ว
-
-รายงานย้อนหลังไม่ใช่ภาพ ณ สิ้นวัน และเคสเดิมที่ปิดก่อนเริ่มทะเบียนอาจไม่ครบ กราฟจึงไม่ใช้ยอดนี้เป็น stock availability หรือชั่วโมงทำงาน หาก query เกินขีดจำกัด ระบบตอบ `422` แทนยอดบางส่วน รายงานเดิม/ข้อความ LINE/บันทึกงาน และแผนงานเปิดจากปุ่มเครื่องมือแล้วจึง mount โมดูลเดิม ไม่โหลด dashboard ซ้อนกัน การแก้ข้อมูลยังใช้ API เดิมทั้งหมด ไม่มี migration, rules หรือ indexes เพิ่ม
 
 ---
 
@@ -195,7 +192,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 - `/api/store/settings` — `GET` (store|pack|admin) อ่านการตั้งค่า · `POST` (store|admin) ตรวจ PIN · `PUT` (store|admin) บันทึกการตั้งค่า (ต้องส่ง PIN, optimistic concurrency ด้วย `baseUpdatedAt`)
 - `/api/store/transfers` — ใบโอนสินค้า: `GET` (store|admin) · `POST`/`PATCH` (resolve, reopen)/`PUT`/`DELETE` (store เท่านั้น)
 - `/api/store/audits` — Internal Audit: `GET` (store|admin) · `POST`/`DELETE` (store เท่านั้น)
-- `GET /api/store/overview` · `GET /api/store/daily-report` — รายงานแดชบอร์ด / รายงานประจำวัน (store|admin)
+- `GET /api/store/warehouse` · `GET /api/store/daily-report` — รายงานแดชบอร์ด / รายงานประจำวัน (store|admin)
 - `/api/store/plans` — แผนงานรายวัน/รายเดือน: `GET` (store|admin), `POST`/`PATCH`/`DELETE` (store เท่านั้น); แก้ไขด้วย optimistic concurrency และลบแบบ soft delete
 - `GET /api/store/staff` — รายชื่อพนักงานสโตร์ (store|admin)
 - `POST /api/line/push` · `POST /api/line/webhook` (ตรวจ LINE signature)
