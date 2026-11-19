@@ -14,7 +14,7 @@ const PACK_STATUSES = ["working", "checked", "partial", "waiting", "returned"];
 
 export async function PATCH(request) {
   try {
-    const { profile, db } = await requireProfile(request, ["sales", "store", "pack", "storefront", "driver", "admin"]);
+    const { profile, db } = await requireProfile(request, ["sales", "store", "pack", "driver", "admin"]);
     const body = await request.json();
     const orderId = String(body?.orderId || "");
     const action = String(body?.action || "");
@@ -302,12 +302,7 @@ export async function PATCH(request) {
           Object.assign(patch, buildDriverQueuePolicyPatch(now), { queuedBy: profile.name || profile.email });
           Object.assign(history, { driverQueue: "queued_automatically" });
         } else {
-          patch.queueStatus = ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) ? "grab_ready" : order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
-        }
-        if (["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) && body.packStatus === "checked") {
-          patch.status = order.deliveryMethod === "customer_pickup" ? "แพ็คเสร็จ · รอลูกค้ารับหน้าร้าน" : "แพ็คเสร็จ · รอ Grab รับสินค้า";
-          patch.grabReadyAt = now;
-          patch.grabReadyBy = profile.name || profile.email;
+          patch.queueStatus = order.deliveryMethod === "outstation" ? "outstation_ready" : "ready";
         }
         if (order.deliveryMethod === "outstation" && body.packStatus === "checked") {
           patch.storeStatus = "checked";
@@ -327,24 +322,12 @@ export async function PATCH(request) {
           patch.reworkStatus = "waiting_pack";
         }
       }
-    } else if (["sales", "admin", "storefront"].includes(profile.role) && ["grab_pickup_legacy_close", "storefront_legacy_close"].includes(action)) {
-      const serviceDate = String(order.serviceDate || order.createdAt || "").slice(0, 10);
-      if (profile.role === "storefront" && (!serviceDate || serviceDate >= bangkokDateKey(now) || !["grab_pickup", "customer_pickup"].includes(order.deliveryMethod))) {
-        throw Object.assign(new Error("Legacy close is limited to historical storefront pickup orders"), { status: 409 });
-      }
-      if (order.queueStatus === "grab_picked_up") throw Object.assign(new Error("Order already closed"), { status: 409 });
-      patch.queueStatus = "grab_picked_up"; patch.status = order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับสินค้าแล้ว" : "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
-      Object.assign(history, { result: "legacy_handover_closed", note: "ปิดงานย้อนหลังตามการยืนยันว่าจัดส่งสินค้าแล้ว" });
-    } else if (["sales", "admin", "storefront"].includes(profile.role) && action === "grab_pickup") {
-      if (!["grab_pickup", "customer_pickup"].includes(order.deliveryMethod) || order.queueStatus !== "grab_ready" || !["checked", "partial"].includes(order.packStatus)) {
-        throw Object.assign(new Error("Grab pickup order is not ready"), { status: 409 });
-      }
-      patch.queueStatus = "grab_picked_up"; patch.status = order.deliveryMethod === "customer_pickup" ? "ลูกค้ารับสินค้าแล้ว" : "Grab รับสินค้าแล้ว"; patch.grabPickedUpAt = now; patch.grabPickedUpBy = profile.name || profile.email;
     } else if (["sales", "admin"].includes(profile.role) && action === "queue") {
       const storeOk = order.workflowType === "direct_pack" || ["checked", "partial"].includes(order.storeStatus);
       const packOk = ["checked", "partial"].includes(order.packStatus);
       if (!storeOk || !packOk) throw Object.assign(new Error("Order is not ready for driver queue"), { status: 409 });
       if (order.reworkRequired) throw Object.assign(new Error("Order rework must be resolved before driver queue"), { status: 409 });
+      // ออเดอร์ Grab/รับหน้าร้านเก่ายังค้างอยู่ในระบบ จึงยังกันไม่ให้เข้าคิวคนขับ
       if (["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod)) throw Object.assign(new Error("Pickup and outstation orders do not enter the driver queue"), { status: 409 });
       Object.assign(patch, buildDriverQueuePolicyPatch(now), { queuedBy: profile.name || profile.email });
     } else if (["sales", "admin"].includes(profile.role) && action === "complaint_resolve") {

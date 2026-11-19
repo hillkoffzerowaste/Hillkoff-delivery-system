@@ -29,8 +29,12 @@ describe("preparation route UI in app/page.jsx", () => {
     expect(pageSource).not.toContain('"ผ่านสโตร์ก่อน" : "ส่งตรงห้องแพ็ค');
   });
 
-  it("hides the store part of the pack pickup chip for skipped store status", () => {
-    expect(pageSource).toContain('{order.storeStatus !== "skipped" && <> · สโตร์:');
+  it("has no Grab / customer pickup or storefront screens left, only history labels", () => {
+    for (const removed of ["pack-pickup", "storefront-pickup", "salesPickupOrders", "packPickupOrders", '<option value="grab_pickup">', '<option value="customer_pickup">']) {
+      expect(pageSource).not.toContain(removed);
+    }
+    expect(pageSource).not.toContain("storefront");
+    expect(pageSource).toContain('grab_pickup: "Grab รับที่ร้าน"');
   });
 
   it("only renders the pack store-checking strip when there are orders and drops return-to-store", () => {

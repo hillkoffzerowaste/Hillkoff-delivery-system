@@ -115,7 +115,10 @@ export async function POST(request) {
     if (!bookingMonthKey(bookingMonth)) return Response.json({ ok: false, error: "Invalid booking month" }, { status: 400 });
     const orderRef = db.collection("orders").doc(orderId);
     const bookingRefs = bookingNumbers.map((value) => ({ bookingNumber: value, ref: db.collection("booking_month_registry").doc(bookingRegistryId(bookingMonth, value)) }));
-    const deliveryMethod = ["grab_pickup", "customer_pickup", "outstation"].includes(order.deliveryMethod) ? order.deliveryMethod : "company_driver";
+    if (["grab_pickup", "customer_pickup"].includes(order.deliveryMethod)) {
+      return Response.json({ ok: false, error: "ระบบไม่รองรับออเดอร์ Grab / ลูกค้ารับหน้าร้านแล้ว กรุณาเลือกคนขับบริษัทหรือต่างจังหวัด" }, { status: 400 });
+    }
+    const deliveryMethod = order.deliveryMethod === "outstation" ? "outstation" : "company_driver";
     const preparation = initialPreparationStatuses(deliveryMethod, order.workflowType);
     const workflowType = preparation.workflowType;
     const storeAssistEntry = profile.role === "store";

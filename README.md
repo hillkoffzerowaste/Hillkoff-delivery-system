@@ -36,7 +36,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 | --- | --- | --- |
 | **sales** | เปิด/แก้ออเดอร์, จัดคิวคนขับ, งานต่างจังหวัด, รอบส่งเชียงใหม่, รายงาน | `sales`, `sales-outstation`, `dispatch`, `chiangmai`, `reports`, `driver-sop-report`, `driver-ratings` |
 | **store** | ใบสั่งจอง, ใบขายออนไลน์, รายงานประจำวัน, ใบโอนสินค้า, Internal Audit, รายงานแดชบอร์ด, ตั้งค่าสโตร์ (เมนูตั้งค่าได้ ดูด้านล่าง) | `store-booking`, `store-online`, `store-dashboard`, `store-transfer`, `store-audit`, `store-overview`, `store-settings` |
-| **pack** | แพ็คของ, งานจอง, รับหน้าร้าน, ออนไลน์, ต่างจังหวัด | `pack-dashboard`, `pack-work`, `pack-booking`, `pack-pickup`, `pack-online`, `pack-outstation` |
+| **pack** | แพ็คของ, งานจอง, ออนไลน์, ต่างจังหวัด | `pack-dashboard`, `pack-work`, `pack-booking`, `pack-online`, `pack-outstation` |
 | **driver** | รับงาน/เช็กอิน/ส่งสำเร็จ, SOP ตรวจรถรายวัน, บันทึกเลขไมล์+น้ำมัน, งานเตรียมของ | `driver-dashboard`, `driver`, `driver-prep`, `driver-sop`, `driver-vehicle` |
 | **admin** | ตั้งค่าระบบ, จัดการผู้ใช้, reset orders, backup/restore | `settings` + Admin APIs |
 | **accounting** | ดูรายงานรถ/น้ำมันเท่านั้น (report-only, ไม่มีสิทธิ์แตะ Firestore ตรง) | `reports` (vehicle report) |
@@ -61,6 +61,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 - รายชื่อผู้ตรวจสโตร์ไม่ใช้การตั้งค่าจากฝ่ายขาย/`app_settings/preparation_checkers` แล้ว; เอกสารใหม่ต้องเลือกจากพนักงานที่ยังใช้งานอยู่ในหน้าตั้งค่าสโตร์ ส่วนรายชื่อผู้ตรวจห้องแพ็คยังตั้งค่าแยกได้
 - ตั้งค่าหัวเอกสารรวมและข้อมูลบริษัท/ที่อยู่/ภาษี/โทรศัพท์แยกสาขาได้ และดูตัวอย่างหัวเอกสารในหน้าตั้งค่า ระบบยังไม่มีหน้าพิมพ์ใบเสร็จหรือใบกำกับภาษี
 - สโตร์ไม่มีแท็บรอบเชียงใหม่ / Grab-pickup อีกแล้ว (เดิม `store-work`, `store-pickup`, `store-chiangmai-track`)
+- เลิกใช้งาน Grab / ลูกค้ารับหน้าร้านแล้ว: ไม่มี role `storefront` (บัญชีเดิมล็อกอินไม่ได้), ไม่มีแท็บ `pack-pickup` / `storefront-pickup`, ไม่มี `/api/orders/storefront`, และ `/api/orders/create` ปฏิเสธ `grab_pickup` / `customer_pickup` — ออเดอร์เก่ายังแสดงและนับในรายงานย้อนหลังตามเดิม
 - PIN ตั้งค่าสโตร์มีค่า default ในโค้ด (เก็บเป็น hash) — override ได้ด้วย env `STORE_SETTINGS_PIN` (ไม่ต้องใส่ถ้าใช้ค่า default)
 
 ### หน้าสาธารณะ (ไม่ต้องล็อกอิน)
@@ -95,7 +96,7 @@ Firebase project: `hillkoff-delivery` (ดู `.firebaserc`)
 
 สถานะกลางของ workflow (`WORKFLOW_STATUS_META`): `pending`, `blocked`, `working`, `waiting`, `partial`, `returned`, `checked`, `skipped`, `draft`, `saved`
 
-**ประเภทงาน**: งานในเมือง (dispatch ปกติ) · งานจอง (booking) · รับหน้าร้าน (pickup) · ออเดอร์ออนไลน์ (online) · งานต่างจังหวัด (outstation) · รอบส่งเชียงใหม่ (chiangmai rounds) · งานวิ่ง (route tasks)
+**ประเภทงาน**: งานในเมือง (dispatch ปกติ) · งานจอง (booking) · ออเดอร์ออนไลน์ (online) · งานต่างจังหวัด (outstation) · รอบส่งเชียงใหม่ (chiangmai rounds) · งานวิ่ง (route tasks)
 
 ---
 

@@ -5,6 +5,8 @@ import { isStoreReportVisibleToRole } from "../../../lib/preparationWorkflow";
 export const runtime = "nodejs";
 const MAX_ROWS = 50000;
 const PAGE_SIZE = 1000;
+// Every document written from these dates on carries serviceDate (orders: 2026-05-28, store reports: 2026-07-15).
+const SERVICE_DATE_SINCE = { orders: "2026-06-01", store_reports: "2026-07-16" };
 const FIELDS = ["serviceDate", "createdAt", "updatedAt", "workflowType", "storeStatus", "packStatus", "queueStatus", "bookingNumber", "customerName", "workflowHistory", "activity", "returnedToStoreAt", "returnReason", "storePackerName", "storeCheckerName", "packCheckerName", "orderEntrySource", "type", "status", "deletedAt", "confirmedAt"];
 
 export async function GET(request) {
@@ -17,8 +19,10 @@ export async function GET(request) {
     const end = new Date(Date.parse(`${period.to}T00:00:00+07:00`) + 86400000).toISOString();
     const readCollection = async (collection) => {
       // Read by work date and event update date so older jobs with activity in the period remain visible.
+      // createdAt is read only for periods reaching back to documents that may predate serviceDate.
+      const fields = period.from < SERVICE_DATE_SINCE[collection] ? ["serviceDate", "createdAt", "updatedAt"] : ["serviceDate", "updatedAt"];
       const rows = new Map();
-      await Promise.all(["serviceDate", "createdAt", "updatedAt"].map(async (field) => {
+      await Promise.all(fields.map(async (field) => {
         const dateField = field === "serviceDate";
         const query = db.collection(collection).where(field, ">=", dateField ? period.from : start)
           .where(field, dateField ? "<=" : "<", dateField ? period.to : end)

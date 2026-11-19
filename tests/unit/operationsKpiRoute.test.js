@@ -63,6 +63,12 @@ describe("operations KPI range API", () => {
     expect(json.reports.map((row) => row.id)).toEqual(["booking"]);
   });
 
+  it("skips the creation-date read for periods after every document carries a work date", async () => {
+    state.db = database({ orders: [{ id: "recent", serviceDate: "2026-11-02", createdAt: "2026-11-02T03:00:00.000Z" }, { id: "noWorkDate", createdAt: "2026-11-02T03:00:00.000Z" }] });
+    const json = await (await GET(request("2026-11-01", "2026-11-30"))).json();
+    expect(json.orders.map((row) => row.id)).toEqual(["recent"]);
+  });
+
   it("fails explicitly instead of returning an incomplete annual total", async () => {
     state.db = database({}, true);
     expect((await GET(request())).status).toBe(422);

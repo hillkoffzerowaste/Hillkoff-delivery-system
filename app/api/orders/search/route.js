@@ -13,7 +13,6 @@ function clean(value, max = 200) {
 
 function matchesScope(order, scope) {
   if (!order?.workflowType) return false;
-  if (scope === "store_pickup") return ["grab_pickup", "customer_pickup"].includes(order.deliveryMethod);
   return scope !== "outstation" || isOutstationOrder(order);
 }
 
@@ -31,7 +30,7 @@ export async function GET(request) {
       return Response.json({ ok: true, data: { id: snap.id, ...snap.data(), activity: activity.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } });
     }
     const scope = clean(params.get("scope"), 40);
-    if (scope && !["store_pickup", "outstation"].includes(scope)) return Response.json({ ok: false, error: "Invalid search scope" }, { status: 400 });
+    if (scope && scope !== "outstation") return Response.json({ ok: false, error: "Invalid search scope" }, { status: 400 });
     const rawQuery = clean(params.get("q"));
     const queryText = rawQuery.toLowerCase();
     if (queryText.length < 2) return Response.json({ ok: false, error: "Enter at least 2 characters" }, { status: 400 });

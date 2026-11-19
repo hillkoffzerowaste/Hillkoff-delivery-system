@@ -147,20 +147,20 @@ describe("sales order preparation workflow", () => {
     )).toMatchObject({ ok: false });
   });
 
-  it("sends Grab and customer pickup targets straight to the packing room", () => {
-    expect(buildReroutePatch(
-      { deliveryMethod: "company_driver", workflowType: "direct_pack", queueStatus: "preparing" },
-      { deliveryMethod: "grab_pickup" },
-      { role: "sales", uid: "sales-1", name: "Sales One" },
-      "ลูกค้าขอรับผ่าน Grab",
-      "2026-07-29T02:00:00.000Z"
-    ).patch).toMatchObject({
-      deliveryMethod: "grab_pickup",
+  it("no longer reroutes to Grab or customer pickup, but still rescues a stranded grab_ready order", () => {
+    const sales = { role: "sales", uid: "sales-1", name: "Sales One" };
+    const at = "2026-07-29T02:00:00.000Z";
+    for (const deliveryMethod of ["grab_pickup", "customer_pickup"]) {
+      expect(canRerouteOrder({ deliveryMethod: "company_driver", workflowType: "direct_pack", queueStatus: "preparing" }, { deliveryMethod }))
+        .toMatchObject({ ok: false, reason: "Invalid reroute delivery method" });
+    }
+    const stranded = { deliveryMethod: "grab_pickup", workflowType: "direct_pack", queueStatus: "grab_ready", packStatus: "checked", grabReadyAt: "2026-10-01T02:00:00.000Z" };
+    expect(buildReroutePatch(stranded, { deliveryMethod: "company_driver" }, sales, "ปิดบริการ Grab", at).patch).toMatchObject({
+      deliveryMethod: "company_driver",
       workflowType: "direct_pack",
-      storeStatus: "skipped",
       packStatus: "pending",
       queueStatus: "preparing",
-      shippingCarrier: ""
+      grabReadyAt: ""
     });
   });
 
@@ -171,9 +171,6 @@ describe("sales order preparation workflow", () => {
     const result = buildReroutePatch(legacy, { deliveryMethod: "company_driver", workflowType: "store_route" }, sales, "ย้ายเข้าห้องแพ็ค", at);
     expect(result.patch).toMatchObject({ workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending" });
     expect(canRerouteOrder(legacy, { deliveryMethod: "company_driver", workflowType: "direct_pack" })).toMatchObject({ ok: true });
-    for (const deliveryMethod of ["grab_pickup", "customer_pickup"]) {
-      expect(buildReroutePatch(legacy, { deliveryMethod, workflowType: "store_route" }, sales, "เปลี่ยน", at).patch.workflowType).toBe("direct_pack");
-    }
     expect(buildReroutePatch(legacy, { deliveryMethod: "outstation", workflowType: "store_route", shippingCarrier: "Flash" }, sales, "ต่างจังหวัด", at).patch.workflowType).toBe("direct_pack");
   });
 
@@ -183,7 +180,7 @@ describe("sales order preparation workflow", () => {
     const at = "2026-07-29T02:00:00.000Z";
     expect(buildReroutePatch(base, { deliveryMethod: "company_driver", workflowType: "direct_driver" }, sales, "ด่วน", at).patch)
       .toMatchObject({ workflowType: "direct_driver", storeStatus: "skipped", packStatus: "skipped", queueStatus: "queued" });
-    expect(buildReroutePatch(base, { deliveryMethod: "grab_pickup", workflowType: "direct_driver" }, sales, "grab", at).patch.workflowType).toBe("direct_pack");
+    expect(buildReroutePatch(base, { deliveryMethod: "outstation", workflowType: "direct_driver", shippingCarrier: "Flash" }, sales, "ต่างจังหวัด", at).patch.workflowType).toBe("direct_pack");
   });
 
   it("keeps a completed sales order visible while it waits for dispatch across multiple days", () => {

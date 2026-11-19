@@ -160,14 +160,14 @@
     * accounting → `driver-sop-report` (report-only)
     * driver → `driver`, `driver-prep`, `driver-vehicle`, `driver-sop`, `driver-dashboard`
     * store → `store-booking`, `store-online`, `store-dashboard` (รายงานประจำวัน), `store-transfer`, `store-audit`, `store-overview`, `store-settings` — เมนูเปิด/ปิดได้จาก `store_settings/default` (`store-booking`/`store-online` ปิดไม่ได้; tab ที่ปิดจะ fallback ไป `getFirstEnabledStoreTab`); สโตร์ไม่มีแท็บเชียงใหม่/Grab-pickup แล้ว
-    * pack → `pack-work`, `pack-pickup`, `pack-outstation`, `pack-booking`, `pack-online`, `pack-dashboard`
+    * pack → `pack-work`, `pack-outstation`, `pack-booking`, `pack-online`, `pack-dashboard`
   * `authenticatedApiFetch` (useCallback) ห่อ `lib/authenticatedFetch` → ส่งต่อเป็น prop `apiFetch` ให้ทุก component
 * **Realtime (`onSnapshot`, ใน effect ที่ล็อกด้วย auth):**
   * `orders` — driver: `driverId == did` + `lastDeliveryDriverId == did` + งานว่าง `queueStatus == "queued"`; staff: recent by `updatedAt` + `queueStatus in [preparing, ready, queued]` โดยเพดานมาจาก `lib/firestoreReadPolicy`
   * `route_tasks` — กรองตามคนขับ หรือทั้งหมดสำหรับ staff
   * `customers`, `driver_locations` (เฉพาะ non-driver), `chat_messages`
 * **Actions แยกตามงาน:**
-  * **ออเดอร์/ฝ่ายขาย** — `createOrder`, `confirmOrder` (`/api/orders/create`), `deleteOrder`, `updateOrder`, `assignDriver`, `resetAllOrders`, `resolveComplaint` (`/api/orders/workflow`), ค้นประวัติ `searchChiangmaiHistory` / `searchPickupHistory` / `searchOutstationHistory` / `openChiangmaiHistoryOrder` (`/api/orders/search`)
+  * **ออเดอร์/ฝ่ายขาย** — `createOrder`, `confirmOrder` (`/api/orders/create`), `deleteOrder`, `updateOrder`, `assignDriver`, `resetAllOrders`, `resolveComplaint` (`/api/orders/workflow`), ค้นประวัติ `searchChiangmaiHistory` / `searchOutstationHistory` / `openChiangmaiHistoryOrder` (`/api/orders/search`)
   * **ลูกค้า** — `saveCustomer` / `updateCustomer` (`/api/customers/upsert`), `deleteCustomer`, `loadAllHistoricalCustomers`, `loadCustomerOrderHistory`
   * **store/pack workflow** — `updatePreparationWorkflow` (`/api/orders/workflow`), `openWorkModal`, `validateWorkModal`, `confirmWorkModal`, `shareWorkToLine`, `captureWorkPhoto` / `removeWorkPhoto` / `clearWorkPhotos`, `archivePackOrder`, `loadCheckerLists` / `saveCheckerList`
   * **รายงานสโตร์** — `fetchStoreReports`, `saveStoreReports`, `addStoreDraftRow`, `saveStoreDrafts`, `startStoreReportConfirmation`, `confirmStoreReports`, `saveEditedStoreReport`, `openStoreReportDetail`, `deleteStoreReport`, `resubmitStoreReport`, `updateReportPackStatus`, `confirmSelectedPackReports`, `captureReportPhoto`, `shareReportToLine`; KPI — `buildStoreSummary`, `buildPackSummary`, `kpiActivitySummary`, `buildKpiActivityRows`, `reportToKpiOrder`, `comparisonLine`, `projectedEndOfDay`, `copyStoreSummary`, `shareStoreSummary`
@@ -286,7 +286,7 @@
   * `order.id` ต้องตรง `/^[A-Za-z0-9._-]{1,120}$/`
   * เลขใบสั่งจอง: dedupe, ≤ 20 เลข, ทุกเลขต้องตรง `BOOKING_NUMBER_PATTERN` (`PREFIX-1234`)
   * ลูกค้าต้องมีอยู่ใน `customers/{id}` หรือ `customer_search/{id}` (`resolveCustomerRecord`) — ไม่มี → 404, ไม่มีชื่อ → 409; `boxes` ≤ 10,000, `cod` ≤ 1e9, `serviceDate` ผ่าน `validDateKey` (default = วันนี้ Bangkok)
-  * `deliveryMethod` ∈ `grab_pickup | customer_pickup | outstation` มิฉะนั้น `company_driver` → `initialPreparationStatuses` กำหนด `workflowType`, `status`, `storeStatus`, `packStatus`, `queueStatus`, `urgentDelivery`; `resolveOptionalChiangmaiRound` + `resolveNextRoundDate` เติมรอบเชียงใหม่
+  * `deliveryMethod` = `outstation` มิฉะนั้น `company_driver`; `grab_pickup` / `customer_pickup` ถูกปฏิเสธด้วย 400 (เลิกใช้แล้ว) → `initialPreparationStatuses` กำหนด `workflowType`, `status`, `storeStatus`, `packStatus`, `queueStatus`, `urgentDelivery`; `resolveOptionalChiangmaiRound` + `resolveNextRoundDate` เติมรอบเชียงใหม่
   * **Transaction:** ถ้า `orders/{id}` มีอยู่แล้วและ `createdByUid`+`customerId`+`bookingNumber` ตรงกัน → คืน `alreadyExists: true` (replay ปลอดภัย) ไม่ตรง → 409; ทุก `booking_month_registry/{bookingRegistryId}` ต้องว่าง (ชนกัน → `bookingConflictMessage`); แล้ว create order + `activity` แรก + upsert `customer_search` + registry ต่อเลข
   * **หลัง commit:** `syncDeliveryOrderToSheet`; ถ้า `queueStatus === "queued"` ส่ง FCM multicast ไป `push_tokens` where `role == "driver"` (limit 500) พร้อมลบ token เสีย; `pushLineText(buildLineMessage(...))` แล้ว log ลง `notifications`
 * **Deps:** `lib/workflowAuth`, `lib/lineOa`, `lib/deliverySheetSync`, `lib/customerSearchIndex`, `lib/bookingRegistry`, `lib/preparationWorkflow`, `lib/firebaseAdmin`
@@ -298,8 +298,8 @@
   * **driver** — `driver_cancel` (ต้องเป็น `driverId` ตัวเอง, จาก `กำลังส่ง|กำลังจัดส่ง` เท่านั้น, ต้องมีเหตุผล → คืนเข้าคิว + `complaintStatus: "open"`), `driver_rework` (ต้อง `deliveryCompleteness === "incomplete"` + `driverNote`, ใช้ `driverReworkPatch`, จำกัด `podPhotoCount` 0–5), `driver_complete` (ตั้ง `ส่งสำเร็จ`/`completed`, `deliveredAt`, เพิ่ม `deliveryAttemptNumber`, บันทึก `lastDeliveryDriverId/Name/At`, `sharedToLine: true`, merge `resolveDeliveryVehicleSnapshot`)
   * **เส้นทางเข้าห้องแพ็ค:** ออเดอร์ใหม่ / reroute / `driver_rework` ตั้ง `workflowType: "direct_pack"` โดยตรง (สโตร์เลิกรับงานจัดเตรียม); `store_route` เหลือเป็นข้อมูลเก่าที่ยังอ่านได้ และ `driverReworkPatch` แปลงเป็น `direct_pack` — ย้ายของค้างด้วย `scripts/migrate-store-route-to-pack.mjs`; ห้องแพ็คยังยืนยันรายงาน `store_reports` (ใบสั่งจอง/ใบขายออนไลน์) ผ่าน `/api/store/reports`
   * **store** — `store_update` (legacy สำหรับออเดอร์ `store_route` เก่า): `storeStatus` ∈ `working|checked|partial|waiting|returned`, ต้องมีชื่อผู้ตรวจเมื่อ `checked|partial|waiting`; แก้เลขใบสั่งจองจะจอง/ปล่อย `booking_month_registry` (409 เมื่อชน); เขียน `storeWorkDetails`; ส่งต่อ `packStatus` และดัน rework เป็น `waiting_pack`
-  * **pack** — `pack_update`: ต้องผ่านสโตร์ก่อน (`direct_pack` หรือสโตร์ `checked|partial`) ไม่งั้น 409; เมื่อ `checked|partial` ตั้ง `queueStatus` เป็น `grab_ready` / `outstation_ready` / `ready` ตาม `deliveryMethod`; `returned` ส่งกลับสโตร์ (ห้ามใน `direct_pack` และ `outstation`); `pack_archive` ต้องมีเหตุผล และห้ามเมื่อเข้าคิว/มีคนขับแล้ว
-  * **sales/admin** — `grab_pickup` (ต้อง `queueStatus === "grab_ready"`), `queue` (สโตร์+แพ็ค `checked|partial`, ไม่มี rework ค้าง, ไม่ใช่ pickup/outstation), `complaint_resolve`
+  * **pack** — `pack_update`: ต้องผ่านสโตร์ก่อน (`direct_pack` หรือสโตร์ `checked|partial`) ไม่งั้น 409; เมื่อ `checked|partial` ตั้ง `queueStatus` เป็น `outstation_ready` / `ready` ตาม `deliveryMethod`; `returned` ส่งกลับสโตร์ (ห้ามใน `direct_pack` และ `outstation`); `pack_archive` ต้องมีเหตุผล และห้ามเมื่อเข้าคิว/มีคนขับแล้ว
+  * **sales/admin** — `queue` (สโตร์+แพ็ค `checked|partial`, ไม่มี rework ค้าง, ไม่ใช่ pickup/outstation), `complaint_resolve`
   * **Commit แบบ optimistic concurrency:** `batch.update(ref, patch, { lastUpdateTime: snap.updateTime })` + `activity` doc + booking registry; Firestore error 9/10 → 409 `"Order changed concurrently"`; แล้ว `syncDeliveryOrderToSheet` (ไม่ fatal) และเมื่อ `action === "queue"` ส่ง FCM ไปคนขับ
 * **Deps:** `lib/workflowAuth`, `lib/deliverySheetSync`, `lib/bookingRegistry`, `lib/preparationWorkflow`, `lib/operationsReporting`, `lib/firebaseAdmin`
 
@@ -309,7 +309,7 @@
 
 #### 📄 `app/api/orders/search/route.js`
 * **บทบาท:** ค้นออเดอร์ตาม id หรือข้อความ — `sales`, `store`, `pack`, `admin`
-* **Flow:** `?id=` คืน order + `activity` (order by `at asc`, limit 1000); `?q=` ≥ 2 ตัวอักษร, `?scope=` รับเฉพาะ `store_pickup` / `outstation`; ไล่หน้า `orders` order by `updatedAt desc` ทีละ 500 (`startAfter`) ถึง `MAX_SCANNED_ORDERS = 5000`, match กับ haystack (id, เลขใบสั่งจอง, ชื่อ/เบอร์ลูกค้า, โซน, ที่อยู่, note, status ทั้ง 3 ชั้น), หยุดที่ `MAX_SEARCH_RESULTS = 100`
+* **Flow:** `?id=` คืน order + `activity` (order by `at asc`, limit 1000); `?q=` ≥ 2 ตัวอักษร, `?scope=` รับเฉพาะ `outstation`; ไล่หน้า `orders` order by `updatedAt desc` ทีละ 500 (`startAfter`) ถึง `MAX_SCANNED_ORDERS = 5000`, match กับ haystack (id, เลขใบสั่งจอง, ชื่อ/เบอร์ลูกค้า, โซน, ที่อยู่, note, status ทั้ง 3 ชั้น), หยุดที่ `MAX_SEARCH_RESULTS = 100`
 
 #### 📄 `app/api/orders/dispatch-dashboard/route.js`
 * **บทบาท:** รวมข้อมูล dashboard จัดคิวของวันที่เลือก — `sales`, `admin`
@@ -825,7 +825,7 @@ store_reports: packStatus ASC,           createdAt DESC
 | `dashboardLayout.test.js` | สแกน source ยืนยันว่าการ์ดสรุป 5 ช่องแบบเก่าไม่เหลืออยู่หน้าใด |
 | `dispatchDashboard.test.js` | กรองตามวันที่สร้าง, 8 cards + driver loads, ออเดอร์ต่างจังหวัดหลุดจากคิวเมื่อ pack-ready, การ์ดเชียงใหม่นับเฉพาะรถบริษัท, ขอบเขต read plan |
 | `operationsComponents.test.jsx` | SSR ของ `DispatchDashboard` และ `VehicleInspectionReport`, label การ์ดวันนี้ vs วันก่อน |
-| `operationsReporting.test.js` | วันทำการแบบ Bangkok, 3 การ์ด dispatch, ตัด Grab/pickup, ไม่เดารถเมื่อวันนั้นมีหลายคัน, read ถูกจำกัดตามช่วงวัน |
+| `operationsReporting.test.js` | วันทำการแบบ Bangkok, 3 การ์ด dispatch, ตัด Grab/pickup (ออเดอร์เก่า), ไม่เดารถเมื่อวันนั้นมีหลายคัน, read ถูกจำกัดตามช่วงวัน |
 | `orderReview.test.js` | payload/URL ของ QR รีวิวที่มี version, เงื่อนไขรีวิวได้, normalize rating 1–5, aggregation รีวิวล่าสุดต่อออเดอร์ |
 | `orderReviewQr.test.jsx` | `OrderReviewQrCode` render payload ที่ผูกกับออเดอร์เดียว |
 | `orderReviewRoute.test.js` | API รีวิวสาธารณะ GET/POST: ไม่หลุดข้อมูลลูกค้า, ปฏิเสธก่อนส่งของ, mirror รีวิวล่าสุด, รีวิวที่แก้แล้วแทนของเดิม |

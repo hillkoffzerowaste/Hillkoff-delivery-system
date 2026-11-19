@@ -53,15 +53,6 @@ async function patchOrder(orderId, body) {
   }));
 }
 
-async function handOver(orderId) {
-  const { PATCH } = await import("../../app/api/orders/workflow/route.js");
-  return PATCH(new Request("http://localhost/api/orders/workflow", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer test" },
-    body: JSON.stringify({ orderId, action: "grab_pickup" })
-  }));
-}
-
 describe("pack confirmation driver queue workflow", () => {
   beforeEach(() => {
     state.role = "pack";
@@ -70,11 +61,6 @@ describe("pack confirmation driver queue workflow", () => {
       DRIVER: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", status: "รอจัดเตรียมสินค้า", workflowHistory: [] },
       ROUND: { deliveryMethod: "company_driver", workflowType: "direct_pack", packStatus: "pending", queueStatus: "preparing", chiangmaiRoundCode: "tuesday", workflowHistory: [] },
       STORE_PENDING: { deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "working", packStatus: "blocked", queueStatus: "preparing", status: "กำลังตรวจสินค้า", workflowHistory: [] },
-      READY_PICKUP: { deliveryMethod: "grab_pickup", packStatus: "checked", queueStatus: "grab_ready", status: "แพ็คเสร็จ · รอ Grab รับสินค้า", workflowHistory: [] },
-      PACK_WORKING: { deliveryMethod: "grab_pickup", packStatus: "working", queueStatus: "grab_ready", status: "กำลังแพ็ค", workflowHistory: [] },
-      DRIVER_PICKUP: { deliveryMethod: "company_driver", packStatus: "checked", queueStatus: "grab_ready", status: "ห้ามมอบ", workflowHistory: [] },
-      CUSTOMER_DIRECT: { deliveryMethod: "customer_pickup", workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending", queueStatus: "preparing", workflowHistory: [] },
-      GRAB_DIRECT: { deliveryMethod: "grab_pickup", workflowType: "direct_pack", storeStatus: "skipped", packStatus: "pending", queueStatus: "preparing", workflowHistory: [] },
       LEGACY_REWORK: {
         deliveryMethod: "company_driver", workflowType: "store_route", storeStatus: "checked", packStatus: "checked", queueStatus: "queued", status: "กำลังส่ง", driverId: "d1",
         ...driverReworkPatch({ workflowType: "store_route", driverId: "d1" }, { name: "คนขับ", driverId: "d1" }, "ของไม่ครบ"), workflowHistory: []
@@ -134,50 +120,21 @@ describe("pack confirmation driver queue workflow", () => {
     expect(state.db.orders.get("STORE_PENDING").packStatus).toBe("blocked");
   });
 
-  it("lets storefront staff hand over only a pack-ready pickup order", async () => {
-    state.role = "storefront";
-    state.name = "หน้าร้านหนึ่ง";
+  it.each(["grab_pickup", "grab_pickup_legacy_close", "storefront_legacy_close"])("no longer supports the retired %s action", async (action) => {
+    state.role = "sales";
+    state.db = createDb({ OLD: { deliveryMethod: "grab_pickup", packStatus: "checked", queueStatus: "grab_ready", workflowHistory: [] } });
+    const { PATCH } = await import("../../app/api/orders/workflow/route.js");
+    const response = await PATCH(new Request("http://localhost/api/orders/workflow", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test" },
+      body: JSON.stringify({ orderId: "OLD", action })
+    }));
 
-    const response = await handOver("READY_PICKUP");
-
-    expect(response.status).toBe(200);
-    expect(state.db.orders.get("READY_PICKUP")).toMatchObject({
-      queueStatus: "grab_picked_up",
-      status: "Grab รับสินค้าแล้ว",
-      grabPickedUpBy: "หน้าร้านหนึ่ง"
-    });
-    expect(state.db.activity).toContainEqual(expect.objectContaining({ action: "grab_pickup", role: "storefront" }));
+    expect(response.status).toBe(403);
+    expect(state.db.orders.get("OLD").queueStatus).toBe("grab_ready");
   });
 
-  it.each(["PACK_WORKING", "DRIVER_PICKUP"])("rejects storefront handover when %s is not eligible", async (orderId) => {
-    state.role = "storefront";
-
-    const response = await handOver(orderId);
-
-    expect(response.status).toBe(409);
-    expect(state.db.orders.get(orderId).queueStatus).toBe("grab_ready");
-  });
-
-  it("confirms a direct-pack customer pickup without any store check", async () => {
-    const response = await patchOrder("CUSTOMER_DIRECT", { packStatus: "checked", packCheckerName: "ผู้แพ็คหนึ่ง" });
-
-    expect(response.status).toBe(200);
-    expect(state.db.orders.get("CUSTOMER_DIRECT")).toMatchObject({
-      packStatus: "checked",
-      queueStatus: "grab_ready",
-      status: "แพ็คเสร็จ · รอลูกค้ารับหน้าร้าน",
-      grabReadyBy: "ผู้แพ็คหนึ่ง"
-    });
-  });
-
-  it("confirms a direct-pack Grab pickup without any store check", async () => {
-    const response = await patchOrder("GRAB_DIRECT", { packStatus: "checked", packCheckerName: "ผู้แพ็คหนึ่ง" });
-
-    expect(response.status).toBe(200);
-    expect(state.db.orders.get("GRAB_DIRECT")).toMatchObject({ queueStatus: "grab_ready", status: "แพ็คเสร็จ · รอ Grab รับสินค้า" });
-  });
-
-  it.each(["DRIVER", "STORE_PENDING", "GRAB_DIRECT"])("rejects sending %s back to the store", async (orderId) => {
+  it.each(["DRIVER", "STORE_PENDING"])("rejects sending %s back to the store", async (orderId) => {
     const before = state.db.orders.get(orderId);
     const response = await patchOrder(orderId, { packStatus: "returned", packCheckerName: "ผู้แพ็คหนึ่ง", packFromStore: true });
 
