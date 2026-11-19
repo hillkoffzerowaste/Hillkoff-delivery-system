@@ -322,11 +322,12 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
   const value = kind === "month" ? month : date;
   const key = `${kind}:${value}`;
 
-  const load = useCallback(async (force) => {
+  // fresh: the person asked for new numbers (refresh, retry, after a save), so skip the server's short cache.
+  const load = useCallback(async (force, fresh = false) => {
     if (!force && cache[key]) return;
     setBusy(true);
     try {
-      const res = await apiFetch(`/api/store/daily-report?${kind}=${encodeURIComponent(value)}`);
+      const res = await apiFetch(`/api/store/daily-report?${kind}=${encodeURIComponent(value)}${fresh ? "&fresh=1" : ""}`);
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "โหลดรายงานไม่สำเร็จ");
       setCache((current) => ({ ...current, [key]: json.data }));
@@ -379,7 +380,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
   const pickPerson = (uid) => { setPersonUid(uid); setToast(null); };
   const openPerson = (uid) => { setPersonUid(uid); setTab("person"); setToast(null); };
   const pickDate = choose(setDate);
-  const logsChanged = () => { setLogVersion((n) => n + 1); void load(true); };
+  const logsChanged = () => { setLogVersion((n) => n + 1); void load(true, true); };
 
   async function copy() {
     const ok = await copyText(line.text);
@@ -397,7 +398,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
       <div className="sd-tools">
         {tab !== "month" && <><label>วันที่<select value={date} onChange={(e) => pickDate(e.target.value)}>{dateOptions.map((d) => <option key={d} value={d}>{thaiDateLabel(d)}{d === today ? " (วันนี้)" : ""}</option>)}</select></label><label>เลือกวันที่ย้อนหลัง<input type="date" value={date} max={today} onChange={(e) => { if (e.target.value) pickDate(e.target.value); }} /></label></>}
         {tab === "month" && <label>เดือน<select value={month} onChange={(e) => { setMonth(e.target.value); setToast(null); }}>{monthOptions.map((m) => <option key={m} value={m}>{thaiMonthLabel(m, { endDay: monthEndDay(m, today) })}</option>)}</select></label>}
-        <button type="button" className="secondary" onClick={() => load(true)} disabled={busy}><RefreshCw size={16} /> {busy ? "กำลังโหลด" : "รีเฟรช"}</button>
+        <button type="button" className="secondary" onClick={() => load(true, true)} disabled={busy}><RefreshCw size={16} /> {busy ? "กำลังโหลด" : "รีเฟรช"}</button>
       </div>
     </header>
 
@@ -406,7 +407,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
     </div>
     <p className="sd-note">ใบสั่งจองและใบขายออนไลน์แยกตามผู้ตรวจสโตร์ล่าสุดที่ระบุในเอกสาร · ใบโอนแยกตามผู้จัด · ช่วงเวลาเป็นเวลาที่ระบบบันทึกรายการ</p>
 
-    {error && <p role="alert" className="sd-error">{error} <button type="button" onClick={() => load(true)} disabled={busy}>ลองอีกครั้ง</button></p>}
+    {error && <p role="alert" className="sd-error">{error} <button type="button" onClick={() => load(true, true)} disabled={busy}>ลองอีกครั้ง</button></p>}
     {kind === "date" && dayData?.ordersCapped && <p role="status" className="sd-error">ข้อมูลตรวจออเดอร์มีจำนวนมาก จึงไม่แสดงรายการตรวจออเดอร์ในรายงานนี้</p>}
     {kind === "date" && dayData?.openIssuesCapped && <p role="status" className="sd-error">รายการใบโอนค้างมีจำนวนมาก รายการที่แสดงอาจไม่ครบ</p>}
     {loading && <p role="status" className="muted">กำลังโหลดรายงาน...</p>}

@@ -4,6 +4,9 @@ import { customRange } from "../../../../lib/storeOverview.js";
 import { readStoreRoster } from "../../../../lib/storeRoster.js";
 import { readStoreCases } from "../../../../lib/storeCasesStore.js";
 import { readStoreReportsByDate } from "../../../../lib/storeReportRead.js";
+import { cachedRead } from "../../../../lib/serverCache.js";
+// People opening the same range within two minutes share one read; the refresh button sends fresh=1.
+const CACHE_MS = 120_000;
 import { normalizeStoreSettings } from "../../../../lib/storeSettings.js";
 import { WAREHOUSE_MAX_DAYS, buildWarehouseDashboard } from "../../../../lib/storeWarehouseDashboard.js";
 import { STORE_CLAIMS_COLLECTION, STORE_PRODUCTION_COLLECTION, storeMainBranches } from "../../../../lib/storeClaimsProduction.js";
@@ -39,6 +42,7 @@ export async function GET(request) {
     const { from, to } = range;
     const long = range.dates.length > LONG_RANGE_DAYS;
     const cap = long ? LONG_CAPS.reports : DAILY_REPORT_LIMITS.monthReports;
+    const data = await cachedRead(`warehouse:${from}:${to}:${today}`, CACHE_MS, async () => {
     const [roster, settingsSnap, reports, transfers, audits, workLogs, cases, claims, production] = await Promise.all([
       readStoreRoster(db),
       db.collection("store_settings").doc("default").get(),
@@ -54,7 +58,8 @@ export async function GET(request) {
     // Cards and chips cover the store's main branches only (CP / HQ / MHD).
     const branchList = storeMainBranches(settings.branches).map((branch) => ({ code: branch.code, name: branch.name }));
     const branchNames = Object.fromEntries(settings.branches.map((branch) => [branch.code, branch.name]));
-    const data = buildWarehouseDashboard({ from, to, today, branchList, branchNames, roster, reports, transfers, audits, cases, workLogs, claims, production });
+    return buildWarehouseDashboard({ from, to, today, branchList, branchNames, roster, reports, transfers, audits, cases, workLogs, claims, production });
+    }, { fresh: params.get("fresh") === "1" });
     return Response.json({ ok: true, data });
   } catch (error) {
     return errorResponse(error);

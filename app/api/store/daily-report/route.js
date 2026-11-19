@@ -3,6 +3,9 @@ import { addDaysToDateKey, bangkokDayRange, bangkokMonthRange, bangkokRangeIso }
 import { DAILY_REPORT_LIMITS, bangkokDateOf, buildDailyReport, buildMonthReport } from "../../../../lib/storeDailyReport";
 import { readStaffRoles, readStoreRoster } from "../../../../lib/storeRoster";
 import { readStoreReportsByDate } from "../../../../lib/storeReportRead.js";
+import { cachedRead } from "../../../../lib/serverCache.js";
+// Store staff watching the same day/month share one read for two minutes; fresh=1 (refresh, after a save) re-reads.
+const CACHE_MS = 120_000;
 // Month totals only count who confirmed what and when; the day view also needs details for its timeline.
 const MONTH_REPORT_FIELDS = ["type", "status", "serviceDate", "createdAt", "deletedAt", "confirmedAt", "storeCheckerName"];
 
@@ -87,16 +90,20 @@ export async function GET(request) {
   try {
     const { db } = await requireProfile(request, ["store", "admin"]);
     const params = new URL(request.url).searchParams;
+    const fresh = params.get("fresh") === "1";
     if (params.has("month")) {
       const month = params.get("month");
       if (!bangkokMonthRange(month)) return fail("เดือนไม่ถูกต้อง", 400);
-      const { month: key, rangeLabel, people, unattributed } = await readMonth(db, month);
-      return Response.json({ ok: true, data: { month: key, rangeLabel, people, unattributed, generatedAt: new Date().toISOString() } });
+      const data = await cachedRead(`daily-report:month:${month}`, CACHE_MS, async () => {
+        const { month: key, rangeLabel, people, unattributed } = await readMonth(db, month);
+        return { month: key, rangeLabel, people, unattributed, generatedAt: new Date().toISOString() };
+      }, { fresh });
+      return Response.json({ ok: true, data });
     }
     const date = params.get("date");
     if (!bangkokDayRange(date)) return fail("วันที่ไม่ถูกต้อง", 400);
-    const report = await readDay(db, date);
-    return Response.json({ ok: true, data: { ...report, generatedAt: new Date().toISOString() } });
+    const data = await cachedRead(`daily-report:date:${date}:${bangkokDateOf(new Date().toISOString())}`, CACHE_MS, async () => ({ ...(await readDay(db, date)), generatedAt: new Date().toISOString() }), { fresh });
+    return Response.json({ ok: true, data });
   } catch (error) {
     return errorResponse(error);
   }

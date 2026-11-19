@@ -571,14 +571,15 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
   const [error, setError] = useState("");
   const generation = useRef(0);
 
-  const load = useCallback(async () => {
+  // fresh: the refresh/retry buttons skip the server's two-minute shared cache.
+  const load = useCallback(async (fresh = false) => {
     const id = ++generation.current;
     setBusy(true);
     setError("");
     // Never show figures of another range under this range's heading (while loading or after an error).
     setData((prev) => (prev && prev.from === range.from && prev.to === range.to ? prev : null));
     try {
-      const res = await apiFetch(`/api/store/warehouse?${new URLSearchParams(range)}`);
+      const res = await apiFetch(`/api/store/warehouse?${new URLSearchParams(fresh === true ? { ...range, fresh: "1" } : range)}`);
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) throw new Error(json.error || "โหลดรายงานไม่สำเร็จ");
       if (id === generation.current) setData(json.data);
@@ -633,7 +634,7 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
       <label>ตั้งแต่<input type="date" required value={draft.from} max={today} onChange={(e) => setDraft({ ...draft, from: e.target.value })} /></label>
       <label>ถึง<input type="date" required value={draft.to} max={today} onChange={(e) => setDraft({ ...draft, to: e.target.value })} /></label>
       <button type="submit">กำหนดช่วงเอง</button>
-      <button type="button" onClick={load} disabled={busy}>{busy ? "กำลังโหลด…" : "รีเฟรช"}</button>
+      <button type="button" onClick={() => load(true)} disabled={busy}>{busy ? "กำลังโหลด…" : "รีเฟรช"}</button>
     </form>}
 
     <nav className="swd-tabs" aria-label="หมวดรายงาน">{WAREHOUSE_TABS.map(([id, label]) => <button type="button" key={id} aria-pressed={tab === id} onClick={() => { if (id === "planning") setPlanningOpened(true); setTab(id); }}>{label}</button>)}</nav>
@@ -641,7 +642,7 @@ export default function StoreWarehouseDashboard({ apiFetch, settings, onNavigate
     <div className="swd-body" aria-busy={busy}>
       {planningOpened && <div className="swd-legacy" hidden={tab !== "planning"}><StorePlanningPanel apiFetch={apiFetch} staff={getActiveStoreStaff(settings).map((person) => ({ id: person.uid, name: person.name }))} /></div>}
       {tab !== "planning" && <>
-        {error && <p className="swd-error" role="alert">{error} <button type="button" onClick={load}>ลองอีกครั้ง</button></p>}
+        {error && <p className="swd-error" role="alert">{error} <button type="button" onClick={() => load(true)}>ลองอีกครั้ง</button></p>}
         {busy && <p className="swd-loading" role="status">กำลังรวบรวมข้อมูลใบโอน Audit ใบสั่งจอง และเคส…</p>}
         {shown && <>
           {tab === "overview" && <Overview data={shown} visible={visible} go={go} all={all} />}

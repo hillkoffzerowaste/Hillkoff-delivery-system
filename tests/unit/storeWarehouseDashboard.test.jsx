@@ -1,3 +1,4 @@
+import { resetCachedReads } from "../../lib/serverCache.js";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildWarehouseDashboard, percent } from "../../lib/storeWarehouseDashboard.js";
@@ -191,6 +192,7 @@ function createDb(collections, calls = []) {
 describe("GET /api/store/warehouse", () => {
   const request = (query = "") => new Request(`http://localhost/api/store/warehouse${query}`);
   beforeEach(() => {
+    resetCachedReads();
     state.role = "store";
     state.db = createDb({
       store_transfers: transfers.map((data) => ({ id: data.id, data })),

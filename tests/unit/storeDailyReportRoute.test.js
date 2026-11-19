@@ -1,3 +1,4 @@
+import { resetCachedReads } from "../../lib/serverCache.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ db: null, role: "store" }));
@@ -66,6 +67,7 @@ function sampleData() {
 
 let log;
 beforeEach(() => {
+    resetCachedReads();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(at(DATE, "15:00")));
   state.role = "store";
