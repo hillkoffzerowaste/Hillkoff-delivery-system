@@ -143,9 +143,9 @@ describe("GET /api/store/daily-report?date=", () => {
       if (query.order.length) expect(query.order).toEqual([[...fields][0]]);
     });
     const byName = (name) => log.filter((query) => query.name === name);
-    expect(byName("store_reports")).toHaveLength(2);
-    expect(byName("store_reports")[0]).toMatchObject({ order: ["createdAt"], max: 1501 });
-    expect(byName("store_reports")[1]).toMatchObject({ order: ["serviceDate"], max: 1501 });
+    // Reports from 2026-07-16 on all carry serviceDate: one range query, not a second one by createdAt.
+    expect(byName("store_reports")).toHaveLength(1);
+    expect(byName("store_reports")[0]).toMatchObject({ order: ["serviceDate"], max: 1501 });
     expect(byName("store_transfers").map((q) => q.wheres[0][0]).sort()).toEqual(["issueState", "resolvedServiceDate", "serviceDate"]);
     expect(byName("store_audits")[0]).toMatchObject({ order: ["serviceDate"], max: 1001 });
     expect(byName("orders")).toHaveLength(1);
@@ -229,7 +229,7 @@ describe("GET /api/store/daily-report?month=", () => {
   });
 
   it("returns 422 when the month has too many reports", async () => {
-    const big = Object.fromEntries(Array.from({ length: 6001 }, (_, i) => [`x${i}`, { createdAt: at(DATE, "09:00") }]));
+    const big = Object.fromEntries(Array.from({ length: 6001 }, (_, i) => [`x${i}`, { serviceDate: DATE, createdAt: at(DATE, "09:00") }]));
     state.db = createDb({ ...sampleData(), store_reports: big }, log);
     const response = await get("month=2026-10");
     expect(response.status).toBe(422);

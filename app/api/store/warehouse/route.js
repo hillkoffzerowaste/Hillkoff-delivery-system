@@ -1,9 +1,9 @@
 import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
-import { bangkokRangeIso } from "../../../../lib/storeFormat.js";
 import { DAILY_REPORT_LIMITS, bangkokDateOf } from "../../../../lib/storeDailyReport.js";
 import { customRange } from "../../../../lib/storeOverview.js";
 import { readStoreRoster } from "../../../../lib/storeRoster.js";
 import { readStoreCases } from "../../../../lib/storeCasesStore.js";
+import { readStoreReportsByDate } from "../../../../lib/storeReportRead.js";
 import { normalizeStoreSettings } from "../../../../lib/storeSettings.js";
 import { WAREHOUSE_MAX_DAYS, buildWarehouseDashboard } from "../../../../lib/storeWarehouseDashboard.js";
 import { STORE_CLAIMS_COLLECTION, STORE_PRODUCTION_COLLECTION, storeMainBranches } from "../../../../lib/storeClaimsProduction.js";
@@ -37,14 +37,12 @@ export async function GET(request) {
     const range = customRange(params.get("from") || `${today.slice(0, 7)}-01`, params.get("to") || today);
     if (!range || range.dates.length > WAREHOUSE_MAX_DAYS) return Response.json({ ok: false, error: `ช่วงวันที่ไม่ถูกต้อง หรือเกิน ${WAREHOUSE_MAX_DAYS} วัน` }, { status: 400 });
     const { from, to } = range;
-    const bounds = bangkokRangeIso(from, to);
     const long = range.dates.length > LONG_RANGE_DAYS;
     const cap = long ? LONG_CAPS.reports : DAILY_REPORT_LIMITS.monthReports;
-    const [roster, settingsSnap, byCreated, byService, transfers, audits, workLogs, cases, claims, production] = await Promise.all([
+    const [roster, settingsSnap, reports, transfers, audits, workLogs, cases, claims, production] = await Promise.all([
       readStoreRoster(db),
       db.collection("store_settings").doc("default").get(),
-      readCapped(between(db, "store_reports", "createdAt", bounds.start, bounds.endExclusive, true).select(...REPORT_FIELDS), cap),
-      readCapped(between(db, "store_reports", "serviceDate", from, to).select(...REPORT_FIELDS), cap),
+      readStoreReportsByDate(db, { from, to, cap, fields: REPORT_FIELDS }),
       readCapped(between(db, "store_transfers", "serviceDate", from, to), long ? LONG_CAPS.transfers : DAILY_REPORT_LIMITS.monthTransfers),
       readCapped(between(db, "store_audits", "serviceDate", from, to), long ? LONG_CAPS.audits : DAILY_REPORT_LIMITS.monthAudits),
       readCapped(between(db, "store_work_logs", "date", from, to), WORK_LOG_LIMIT),
@@ -52,8 +50,6 @@ export async function GET(request) {
       readCapped(between(db, STORE_CLAIMS_COLLECTION, "serviceDate", from, to).select(...CLAIM_FIELDS), RECORD_CAP),
       readCapped(between(db, STORE_PRODUCTION_COLLECTION, "serviceDate", from, to).select(...PRODUCTION_FIELDS), RECORD_CAP)
     ]);
-    const reports = [...new Map([...byCreated, ...byService].map((row) => [row.id, row])).values()];
-    if (reports.length > cap) throw Object.assign(new Error(TOO_MANY), { status: 422 });
     const settings = normalizeStoreSettings(settingsSnap.exists ? settingsSnap.data() : undefined);
     // Cards and chips cover the store's main branches only (CP / HQ / MHD).
     const branchList = storeMainBranches(settings.branches).map((branch) => ({ code: branch.code, name: branch.name }));

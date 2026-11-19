@@ -344,9 +344,11 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
   }, [load]);
 
   useEffect(() => {
+    // Only today's numbers move; past days and months refresh on the button, saving repeated reads.
+    if (kind !== "date" || value !== today) return undefined;
     const interval = setInterval(() => { if (document.visibilityState === "visible") void load(true); }, REFRESH_MS);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [load, kind, value, today]);
 
   // A failed refresh keeps the last good data on screen (with the error and a retry above it), so a
   // work log being typed in the personal view is never unmounted by a brief network drop.

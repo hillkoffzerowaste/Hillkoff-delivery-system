@@ -2,6 +2,9 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { addDaysToDateKey, bangkokDayRange, bangkokMonthRange, bangkokRangeIso } from "../../../../lib/storeFormat";
 import { DAILY_REPORT_LIMITS, bangkokDateOf, buildDailyReport, buildMonthReport } from "../../../../lib/storeDailyReport";
 import { readStaffRoles, readStoreRoster } from "../../../../lib/storeRoster";
+import { readStoreReportsByDate } from "../../../../lib/storeReportRead.js";
+// Month totals only count who confirmed what and when; the day view also needs details for its timeline.
+const MONTH_REPORT_FIELDS = ["type", "status", "serviceDate", "createdAt", "deletedAt", "confirmedAt", "storeCheckerName"];
 
 export const runtime = "nodejs";
 
@@ -27,23 +30,16 @@ function rangeQuery(db, collection, field, from, to, { exclusiveEnd = false } = 
   return db.collection(collection).where(field, ">=", from).where(field, exclusiveEnd ? "<" : "<=", to).orderBy(field);
 }
 
-async function readReports(db, from, to, bounds, cap) {
-  const [byCreated, byService] = await Promise.all([
-    readCapped(rangeQuery(db, "store_reports", "createdAt", bounds.start, bounds.endExclusive, { exclusiveEnd: true }), cap),
-    readCapped(rangeQuery(db, "store_reports", "serviceDate", from, to), cap)
-  ]);
-  const rows = [...new Map([...byCreated, ...byService].map((item) => [item.id, item])).values()];
-  if (rows.length > cap) throw Object.assign(new Error(OVER_LIMIT_MESSAGE), { status: 422 });
-  return rows;
+async function readReports(db, from, to, cap, fields = null) {
+  return readStoreReportsByDate(db, { from, to, cap, fields });
 }
 
 async function readDay(db, date) {
   const weekFrom = addDaysToDateKey(date, -6);
-  const week = bangkokRangeIso(weekFrom, date);
   const day = bangkokDayRange(date);
   const [roster, weekReports, weekTransfers, transfersResolved, openTransfers, weekAudits, orders, workLogs, staffRoles, duties] = await Promise.all([
     readStoreRoster(db),
-    readReports(db, weekFrom, date, week, DAILY_REPORT_LIMITS.reports),
+    readReports(db, weekFrom, date, DAILY_REPORT_LIMITS.reports),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
     readCapped(rangeQuery(db, "store_transfers", "resolvedServiceDate", weekFrom, date), DAILY_REPORT_LIMITS.transfers),
     readOptional(db.collection("store_transfers").where("issueState", "==", "open"), DAILY_REPORT_LIMITS.openIssues),
@@ -75,12 +71,11 @@ async function readDay(db, date) {
 
 async function readMonth(db, month) {
   const range = bangkokMonthRange(month);
-  const bounds = bangkokRangeIso(range.from, range.to);
   const today = bangkokDateOf(new Date().toISOString());
   const endDay = today.startsWith(`${month}-`) ? Number(today.slice(8, 10)) : Number(range.to.slice(8, 10));
   const [roster, reports, transfers, audits, workLogs] = await Promise.all([
     readStoreRoster(db),
-    readReports(db, range.from, range.to, bounds, DAILY_REPORT_LIMITS.monthReports),
+    readReports(db, range.from, range.to, DAILY_REPORT_LIMITS.monthReports, MONTH_REPORT_FIELDS),
     readCapped(rangeQuery(db, "store_transfers", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthTransfers),
     readCapped(rangeQuery(db, "store_audits", "serviceDate", range.from, range.to), DAILY_REPORT_LIMITS.monthAudits),
     readCapped(rangeQuery(db, "store_work_logs", "date", range.from, range.to), WORK_LOG_LIMIT)

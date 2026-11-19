@@ -1436,13 +1436,17 @@ export default function App() {
 	    // eslint-disable-next-line react-hooks/exhaustive-deps
 	  }, [fbAuthReady, state.auth?.token, state.auth?.role, state.auth?.driverId, driverId, ordersSyncMode, needsActiveOrders, shouldSyncRouteTasks, needsDriverLocations, needsDriverAssessments, ordersLimit, todayServiceDate, isPageVisible]);
 
+  // Storefront reads only the day it shows (today, or the picked history date). The whole history
+  // ("all days") loads once on request instead of being polled. Polling pauses while the page is hidden.
+  const storefrontReadDate = storefrontShowHistory ? storefrontDateFilter : todayServiceDate;
   useEffect(() => {
     if (state.auth?.role !== "storefront" || !state.auth?.token) return undefined;
     let cancelled = false;
     const load = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       try {
         const token = await refreshAuthToken(true);
-        const response = await fetch("/api/orders/storefront", { headers: { Authorization: `Bearer ${token}` } });
+        const response = await fetch(`/api/orders/storefront${storefrontReadDate ? `?date=${encodeURIComponent(storefrontReadDate)}` : ""}`, { headers: { Authorization: `Bearer ${token}` } });
         const json = await response.json();
         if (!response.ok || !json?.ok) throw new Error(json?.error || `HTTP ${response.status}`);
         if (!cancelled) {
@@ -1454,10 +1458,13 @@ export default function App() {
       }
     };
     load();
-    const timer = setInterval(load, 15_000);
-    return () => { cancelled = true; clearInterval(timer); };
+    // Only today's board changes while staff watch it; a history day or "all days" loads once.
+    const timer = storefrontReadDate === todayServiceDate ? setInterval(load, 30_000) : null;
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { cancelled = true; if (timer) clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.auth?.role, state.auth?.token]);
+  }, [state.auth?.role, state.auth?.token, storefrontReadDate, todayServiceDate]);
 
   // Chat has its own lifecycle so opening/closing it cannot restart the larger
   // orders and route listeners above.
