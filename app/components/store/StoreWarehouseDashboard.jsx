@@ -8,6 +8,7 @@ import { customRange } from "../../../lib/storeOverview.js";
 import { WAREHOUSE_MAX_DAYS, percent } from "../../../lib/storeWarehouseDashboard.js";
 import { getActiveStoreStaff } from "../../../lib/storeSettings.js";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
+import StorePackQuality from "./StorePackQuality.jsx";
 import "./StoreWarehouseDashboard.css";
 
 // Colours are CSS variables so the light (default) and dark themes each get a readable palette.
@@ -235,6 +236,7 @@ function Overview({ data, visible, go, all }) {
       <Kpi label="เคลมไม่ได้" value={`฿${fmt(badAmount)}`} sub={`${fmt(sum((b) => b.claims.qty))} ชิ้น · ${fmt(sum((b) => b.claims.docs))} ใบ`} color={C.red} onClick={() => go("claims")} />
     </div>
 
+    {r.quality?.documents > 0 && <Card label="ประวัติปัญหาห้องแพ็ค"><StorePackQuality quality={r.quality} compact onOpen={() => go("orders")} /></Card>}
     <Title title="เปรียบเทียบรายสาขา" sub="ใบโอนนับที่สาขาต้นทาง · ไม่ครบแจ้งโดยสาขาปลายทาง · Audit และเคสตามสาขาที่บันทึก" />
     <div className="swd-grid swd-grid-3">
       {visible.map((b) => {
@@ -337,6 +339,7 @@ function Orders({ data, go, moduleName }) {
   const onlineName = moduleName("store-online", "ใบขายออนไลน์");
   return <>
     <Title title={`งานจัดสินค้า (${bookingName} / ${onlineName})`} right={<Badge color={C.amber}>ระดับสโตร์ · ไม่แยกสาขา</Badge>} />
+    {r.quality?.documents > 0 && <Card label="ประวัติปัญหาห้องแพ็ค"><StorePackQuality quality={r.quality} /></Card>}
     <div className="swd-kpis swd-kpis-4">
       <Kpi label="งานทั้งหมด" value={fmt(r.total)} unit="รายการ" color={C.violet} />
       <Kpi label="ห้องแพ็คตรวจครบ" value={fmt(checked)} unit="รายการ" sub={pctText(percent(checked, r.total))} color={C.green} />

@@ -3,7 +3,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, canReleaseStoreReportReservation, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
 import { getPackHistoryMonthBounds } from "../../../../lib/packReportHistory";
-import { isClosedByStore } from "../../../../lib/storeReportStats";
+import { isClosedByStore, packProblemEvents, PROBLEM_PACK_EVENTS } from "../../../../lib/storeReportStats";
 
 export const runtime = "nodejs";
 
@@ -49,8 +49,9 @@ function utcRangeForBangkokDate(date) {
 function reportLog(ref, event, profile, now, before = null, after = null, reason = "", checkerName = "") {
   const compact = (value) => {
     if (!value || typeof value !== "object") return value;
-    const { workflowHistory, ...rest } = value;
+    const { workflowHistory, packIssueHistory, ...rest } = value;
     void workflowHistory;
+    void packIssueHistory;
     return rest;
   };
   return {
@@ -96,6 +97,10 @@ async function readReportCaseUpdate(transaction, db, ref, item, patch, profile, 
     throw Object.assign(new Error("Report changed; refresh before trying again"), { status: 409 });
   }
   const canonical = await readSourceCase(transaction, db, item.type, ref.id);
+  const evidence = packProblemEvents({ ...item, workflowHistory: [...(item.workflowHistory || []), ...(patch.workflowHistory || [])] });
+  // Keep the first evidence permanently and recent results for reports. Full immutable events live
+  // in the history subcollection; this projection must not grow towards Firestore's document limit.
+  if (evidence.length) patch.packIssueHistory = evidence.length > 20 ? [evidence[0], ...evidence.slice(-19)] : evidence;
   patch.updatedAt = sourceMutationVersion(item, now);
   const sourceChanges = { ...patch };
   if (!patch.packUpdatedAt) {
@@ -444,6 +449,7 @@ export async function PATCH(request) {
       if (needsReason && !reason) return Response.json({ ok: false, error: packStatus === "wrong" ? "กรุณาระบุว่าจัดสินค้าผิดอะไร" : "Provide return reason" }, { status: 400 });
       const patch = { packStatus, packAutoConfirmed: false, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: needsReason ? reason : "", status: needsReason ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
       patch.workflowHistory = appendReportHistory(item, reportKpiEvent(`pack_${packStatus}`, profile, now, { ...item, ...patch }, reason, checkerName));
+      if (PROBLEM_PACK_EVENTS.includes(`pack_${packStatus}`)) patch.workflowHistory[patch.workflowHistory.length - 1].storeCheckerName = item.storeCheckerName || "";
       await commitReportChanges(db, [{ ref, item, patch, event: `pack_${packStatus}`, reason, checkerName }], profile, now);
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
     }

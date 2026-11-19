@@ -1,0 +1,14 @@
+.spq { color: var(--swd-text, var(--c-text)); min-width: 0; display: grid; gap: 12px; }
+.spq h3, .spq p { margin: 0; }
+.spq h3 { font-size: 17px; }
+.spq-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.spq-counts { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; }
+.spq-counts b { font-size: 19px; padding-inline: 4px; }
+.spq-caption { font-size: 12px; color: var(--swd-soft, var(--c-text-muted)); }
+.spq-search { display: grid; gap: 4px; max-width: 400px; font-size: 12px; }
+.spq input, .spq button { border: 1px solid var(--swd-line, var(--c-brand-border)); background: var(--swd-card, var(--c-surface, #fff)); color: inherit; border-radius: 8px; padding: 8px 12px; }
+.spq button { width: fit-content; cursor: pointer; min-height: 36px; font: inherit; font-size: 13px; }
+.spq input:focus-visible, .spq button:focus-visible, .spq summary:focus-visible { outline: 2px solid var(--swd-accent, var(--c-brand)); outline-offset: 3px; }
+.spq-document { border-top: 1px solid var(--swd-line, var(--c-brand-border)); padding-block: 12px; overflow-wrap: anywhere; display: block; }
+.spq-document summary { cursor: pointer; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.spq-document > p { margin-top: 8px; font-size: 13px; line-height: 1.7; }

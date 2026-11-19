@@ -82,6 +82,18 @@ async function get(query) {
 }
 
 describe("GET /api/store/daily-report roles and validation", () => {
+  it("reports corrections to older documents today without adding them to today's document workload", async () => {
+    const data = sampleData();
+    data.store_reports.old = { ...data.store_reports.old, status: "saved", packStatus: "pending", bookingNumber: "CSP-1023", updatedAt: at(DATE, "13:57"), workflowHistory: [
+      { action: "pack_returned", at: at("2026-10-01", "12:01"), checkerName: "ผู้ตรวจแพ็ค", reason: "จัดสินค้าผิด" },
+      { action: "store_resubmitted", at: at(DATE, "13:57"), checkerName: "ผู้แก้" }
+    ] };
+    state.db = createDb(data, log);
+    const { data: result } = await (await get(`date=${DATE}`)).json();
+    expect(result.packQuality).toMatchObject({ documents: 1, awaitingRecheck: 1, open: 0, resolved: 0 });
+    expect(result.packQuality.items[0].number).toBe("CSP-1023");
+    expect(result.team.booking).toBe(1);
+  });
   it("includes configured active staff and retains former staff with recorded work", async () => {
     const data = sampleData();
     data.store_settings = { default: { staff: [{ id: "staff_1", name: "สมชาย", active: false }, { id: "staff_2", name: "สมหญิง", active: true }] } };
@@ -145,9 +157,11 @@ describe("GET /api/store/daily-report?date=", () => {
       if (query.order.length) expect(query.order).toEqual([[...fields][0]]);
     });
     const byName = (name) => log.filter((query) => query.name === name);
-    // Reports from 2026-07-16 on all carry serviceDate: one range query, not a second one by createdAt.
-    expect(byName("store_reports")).toHaveLength(1);
+    // Workload uses serviceDate; one bounded updatedAt query includes corrections to older documents.
+    expect(byName("store_reports")).toHaveLength(2);
     expect(byName("store_reports")[0]).toMatchObject({ order: ["serviceDate"], max: 1501 });
+    expect(byName("store_reports")[1]).toMatchObject({ order: ["updatedAt"], max: 1501 });
+    expect(byName("store_reports")[1].selected).toContain("packIssueHistory");
     expect(byName("store_transfers").map((q) => q.wheres[0][0]).sort()).toEqual(["issueState", "resolvedServiceDate", "serviceDate"]);
     expect(byName("store_audits")[0]).toMatchObject({ order: ["serviceDate"], max: 1001 });
     expect(byName("orders")).toHaveLength(1);

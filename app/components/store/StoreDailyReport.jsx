@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { bangkokMonthRange, fmt, lastNDates, pct, thaiDateLabel, thaiMonthLabel } from "../../../lib/storeFormat.js";
 import { TIMELINE_TAGS, hoursOf, jobsOf, monthText, personText, teamText, unattributedText } from "../../../lib/storeDailyReport.js";
+import StorePackQuality from "./StorePackQuality.jsx";
 import { WORK_LOG_LIMITS, validateWorkLog, workLogHours } from "../../../lib/storeWorkLog.js";
 import { DUTY_LIMITS, dutyText, validateDuty } from "../../../lib/storeDuty.js";
 import StorePlanningPanel from "./StorePlanningPanel.jsx";
@@ -366,7 +367,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
   const dateLabel = thaiDateLabel(date);
 
   let line = { title: "", text: "" };
-  if (tab === "team" && dayData) line = { title: `ทั้งทีม ${dateLabel}`, text: teamText({ dateKey: date, rows: dayData.people, openIssues: dayData.openIssues, unattributed: dayData.unattributed, storeLabel }) };
+  if (tab === "team" && dayData) line = { title: `ทั้งทีม ${dateLabel}`, text: teamText({ dateKey: date, rows: dayData.people, openIssues: dayData.openIssues, unattributed: dayData.unattributed, packQuality: dayData.packQuality, storeLabel }) };
   if (tab === "person" && dayData && person) line = { title: `${person.name} ${dateLabel}`, text: personText({ dateKey: date, person, storeLabel }) };
   if (tab === "month" && monthData) line = { title: `สรุปรายเดือน ${thaiMonthLabel(month)}`, text: monthText({ rangeLabel: monthData.rangeLabel, rows: monthData.people, unattributed: monthData.unattributed, storeLabel }) };
   if (line.text) line.text += "\nหมายเหตุ: ใบสั่งจองและออนไลน์นับตามผู้ตรวจสโตร์ล่าสุด · ใบโอนนับตามผู้จัด · เวลาเป็นเวลาบันทึกรายการ";
@@ -412,6 +413,7 @@ export function LegacyStoreDailyReport({ apiFetch, storeLabel = "สโตร์
     {kind === "date" && dayData?.openIssuesCapped && <p role="status" className="sd-error">รายการใบโอนค้างมีจำนวนมาก รายการที่แสดงอาจไม่ครบ</p>}
     {loading && <p role="status" className="muted">กำลังโหลดรายงาน...</p>}
     {tab === "team" && dayData && <TeamView data={dayData} onPick={openPerson} />}
+    {tab === "team" && dayData && <StorePackQuality quality={dayData.packQuality} daily />}
     {tab === "person" && dayData && <PersonView data={dayData} person={person} dateLabel={dateLabel} today={today} onPickPerson={pickPerson} onPickDate={pickDate} apiFetch={apiFetch} onLogsChanged={logsChanged} logVersion={logVersion} />}
     {tab === "month" && monthData && <MonthView data={monthData} />}
 

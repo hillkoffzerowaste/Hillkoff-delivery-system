@@ -93,6 +93,35 @@ describe("pack reports wrongly picked goods", () => {
     expect(res.status).toBe(200);
     expect(state.db.data.get("store_reports/r1")).toMatchObject({ packStatus: "pending", status: "saved", returnReason: "" });
   });
+
+  it("preserves first and recent evidence with original checker through correction and another problem", async () => {
+    const { PATCH } = await import("../../app/api/store/reports/route.js");
+    for (let i = 0; i < 22; i += 1) {
+      const res = await PATCH(patchReq({ id: "r1", packStatus: "wrong", checkerName: "ณัฐ", reason: `ผิดรส ${i}` }));
+      expect(res.status).toBe(200);
+    }
+    state.role = "store";
+    expect((await PATCH(patchReq({ action: "resubmit", id: "r1", checkerName: "ผู้แก้" }))).status).toBe(200);
+    const saved = state.db.data.get("store_reports/r1");
+    expect(saved.packIssueHistory).toHaveLength(20);
+    expect(saved.packIssueHistory[0]).toMatchObject({ reason: "ผิดรส 0", storeCheckerName: "เล็ก" });
+    expect(saved.packIssueHistory.at(-1)).toMatchObject({ reason: "ผิดรส 21", storeCheckerName: "เล็ก" });
+    expect([...state.db.data.keys()].filter((key) => key.startsWith("store_reports/r1/history/"))).toHaveLength(23);
+    for (const [path, event] of state.db.data) {
+      if (path.startsWith("store_reports/r1/history/")) {
+        expect(event.after.packIssueHistory).toBeUndefined();
+        expect(event.before?.packIssueHistory).toBeUndefined();
+      }
+    }
+  });
+  it("retains a known legacy problem before checking it complete without inventing its timestamp", async () => {
+    state.db = createDb({ "store_reports/r1": report({ packStatus: "partial", status: "partial" }), "store_jobs/pack_auto_check": { lastRunDate: "2999-01-01" } });
+    const { PATCH } = await import("../../app/api/store/reports/route.js");
+    expect((await PATCH(patchReq({ id: "r1", packStatus: "checked", checkerName: "ณัฐ" }))).status).toBe(200);
+    const saved = state.db.data.get("store_reports/r1");
+    expect(saved.packIssueHistory[0]).toMatchObject({ action: "pack_partial", at: "", checkerName: "" });
+    expect(buildWarehouseDashboard({ from: "2026-11-18", to: "2026-11-18", reports: [{ id: "r1", ...saved }] }).reports.quality).toMatchObject({ documents: 1, resolved: 1 });
+  });
 });
 
 describe("pending reports count as complete once the day they were sent to pack has passed", () => {
