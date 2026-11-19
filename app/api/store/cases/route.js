@@ -61,7 +61,8 @@ export async function POST(request) {
       tx.set(ref, item);
       if (value.sourceType === "transfer") tx.update(sourceRef, { issueState: closed ? "resolved" : "open", receipt: "incomplete", resolution: closed && !closureEvent && source.resolution ? source.resolution : closed ? { at: item.resolvedAt, text: value.closureReason || "รับสินค้าครบจากทะเบียนเคส", byUid: profile.uid, byName: profile.name || "" } : null, resolvedServiceDate: closed ? bangkokDateOf(item.resolvedAt) : "", updatedAt: sourceMutationVersion(source, actualNow), updatedByUid: profile.uid });
       // Source facts (counts, receipt workflows) remain intact; compatibility readers use this status projection.
-      else tx.update(sourceRef, { caseStatus: status, caseClosure: value.closure, caseId: ref.id, caseUpdatedAt: now });
+      // updatedAt lets stored daily summaries notice that the store closed (or reopened) the case.
+      else tx.update(sourceRef, { caseStatus: status, caseClosure: value.closure, caseId: ref.id, caseUpdatedAt: now, updatedAt: sourceMutationVersion(source, actualNow) });
       return { id: ref.id, ...item };
     });
     return Response.json({ ok: true, data: result });

@@ -18,7 +18,7 @@ const RECORD_CAP = 3000;
 const CLAIM_FIELDS = ["kind", "documentNumber", "serviceDate", "branchCode", "reason", "requester", "supplier", "items", "totalQty", "totalAmount", "deletedAt"];
 const PRODUCTION_FIELDS = ["serviceDate", "branchCode", "items", "deletedAt"];
 const TOO_MANY = "ข้อมูลมากเกินขีดจำกัด กรุณาเลือกช่วงให้สั้นลง";
-const REPORT_FIELDS = ["type", "status", "packStatus", "createdAt", "deletedAt", "serviceDate", "confirmedAt", "storeCheckerName"];
+const REPORT_FIELDS = ["type", "status", "packStatus", "packUpdatedAt", "caseStatus", "caseUpdatedAt", "packAutoConfirmed", "createdAt", "deletedAt", "serviceDate", "confirmedAt", "storeCheckerName"];
 
 // Every query is single-field (range + orderBy on the same field) so no composite index is needed.
 async function readCapped(query, cap) {

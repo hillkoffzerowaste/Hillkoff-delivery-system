@@ -71,7 +71,7 @@ describe("buildWarehouseDashboard", () => {
   it("summarises booking/online work at store level without drafts", () => {
     const { reports: r } = build();
     expect(r).toMatchObject({ total: 3, booking: 1, online: 2, removed: 1, activeDays: 2, perDay: 2 });
-    expect(Object.fromEntries(r.statuses.map((s) => [s.id, s.count]))).toEqual({ pending: 0, checked: 1, shortage: 1, returned: 1 });
+    expect(Object.fromEntries(r.statuses.map((s) => [s.id, s.count]))).toEqual({ pending: 0, checked: 1, shortage: 1, returned: 1, wrong: 0, autoChecked: 0, closedByStore: 0 });
     expect(r.checkers[0]).toEqual({ name: "เล็ก", booking: 1, online: 1 });
   });
 

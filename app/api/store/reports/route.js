@@ -3,6 +3,7 @@ import { errorResponse, requireProfile } from "../../../../lib/workflowAuth";
 import { BOOKING_NUMBER_PATTERN, bookingConflictMessage, bookingRegistryId, bookingRegistryRecord, canReleaseStoreReportReservation, isOrderRegistrySource, normalizeBookingNumber } from "../../../../lib/bookingRegistry";
 import { isStoreReportVisibleToRole } from "../../../../lib/preparationWorkflow";
 import { getPackHistoryMonthBounds } from "../../../../lib/packReportHistory";
+import { isClosedByStore } from "../../../../lib/storeReportStats";
 
 export const runtime = "nodejs";
 
@@ -70,6 +71,8 @@ function reportKpiEvent(event, profile, now, after = {}, reason = "", checkerNam
     checkerName: clean(checkerName, 160)
   };
   if (event === "pack_returned") Object.assign(row, { result: "returned", toStatus: "returned" });
+  if (event === "pack_wrong") Object.assign(row, { result: "wrong", toStatus: "wrong" });
+  if (event === "pack_auto_checked") Object.assign(row, { result: "auto_checked", toStatus: "checked", role: "system" });
   return row;
 }
 
@@ -117,9 +120,103 @@ async function commitReportChanges(db, changes, profile, now) {
   });
 }
 
+// ห้องแพ็คไม่ได้ตรวจภายในวันที่สโตร์ส่งตรวจ = ระบบถือว่าครบหลังเที่ยงคืน (เวลาไทย) รวมใบที่ส่งตรวจใหม่หลังแก้ปัญหา.
+// ไม่มี cron ในระบบ จึงทำตอนมีคนเปิดรายการครั้งแรกของวัน · ใช้เฉพาะใบที่สร้างตั้งแต่วันเริ่มใช้ (ใบเก่าที่ค้างไม่ถูกแตะ)
+export const AUTO_CHECK_JOB = { collection: "store_jobs", doc: "pack_auto_check" };
+export const AUTO_CHECK_SINCE = "2026-11-19";
+export const AUTO_CHECK_PAGE = 200;
+const AUTO_CHECK_CHUNK = 10;
+const AUTO_CHECK_BUDGET_MS = 4000;
+const AUTO_CHECK_ACTOR = { uid: "system:pack-auto-check", name: "ระบบ (ผ่านวัน ห้องแพ็คไม่ได้ตรวจ)" };
+let autoCheckDoneFor = "";
+
+// The day the store last sent the report to pack: a resubmission after a pack problem restarts the day.
+export function sentToPackDay(item) {
+  return bangkokDateKey(item?.resubmittedAt || item?.confirmedAt || item?.createdAt);
+}
+
+export function isAutoCheckDue(item, today) {
+  if (!item || item.deletedAt || !REPORT_TYPES.includes(item.type) || !item.confirmedAt) return false;
+  if (item.packStatus !== "pending" || item.status !== "saved") return false;
+  if (bangkokDateKey(item.createdAt) < AUTO_CHECK_SINCE) return false;
+  const sent = sentToPackDay(item);
+  return Boolean(sent) && sent < today;
+}
+
+function autoCheckChange(doc, now) {
+  const item = doc.data();
+  const patch = { packStatus: "checked", packAutoConfirmed: true, packUpdatedAt: now, packUpdatedBy: AUTO_CHECK_ACTOR.name, packCheckerName: "", returnReason: "", status: "saved", updatedAt: now };
+  patch.workflowHistory = appendReportHistory(item, reportKpiEvent("pack_auto_checked", AUTO_CHECK_ACTOR, now, { ...item, ...patch }));
+  return { ref: doc.ref, item, patch, event: "pack_auto_checked", reason: "ผ่านวันที่ส่งตรวจแล้วห้องแพ็คไม่ได้ตรวจ ระบบถือว่าครบ" };
+}
+
+async function commitAutoChecks(db, docs, now) {
+  let checked = 0;
+  let failed = 0;
+  for (let i = 0; i < docs.length; i += AUTO_CHECK_CHUNK) {
+    const chunk = docs.slice(i, i + AUTO_CHECK_CHUNK);
+    try {
+      await commitReportChanges(db, chunk.map((doc) => autoCheckChange(doc, now)), AUTO_CHECK_ACTOR, now);
+      checked += chunk.length;
+    } catch {
+      // One report (changed meanwhile, or a case with goods still missing) must not hold back the others.
+      for (const doc of chunk) {
+        try { await commitReportChanges(db, [autoCheckChange(doc, now)], AUTO_CHECK_ACTOR, now); checked += 1; } catch { failed += 1; }
+      }
+    }
+  }
+  return { checked, failed };
+}
+
+export async function autoCheckPastPending(db, nowMs = Date.now()) {
+  const today = bangkokDateKey(nowMs);
+  if (autoCheckDoneFor === today) return { ran: false };
+  const marker = db.collection(AUTO_CHECK_JOB.collection).doc(AUTO_CHECK_JOB.doc);
+  const seen = await marker.get();
+  if (seen.exists && seen.data().lastRunDate === today) { autoCheckDoneFor = today; return { ran: false }; }
+  const claimed = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(marker);
+    if (snap.exists && snap.data().lastRunDate === today) return false;
+    transaction.set(marker, { lastRunDate: today, startedAt: new Date(nowMs).toISOString() }, { merge: true });
+    return true;
+  });
+  if (!claimed) { autoCheckDoneFor = today; return { ran: false }; }
+  const now = new Date(nowMs).toISOString();
+  const since = new Date(Date.parse(`${AUTO_CHECK_SINCE}T00:00:00+07:00`)).toISOString();
+  // Anything created today was sent to pack today at the earliest, so it cannot be due yet.
+  const todayStart = new Date(Date.parse(`${today}T00:00:00+07:00`)).toISOString();
+  const started = Date.now();
+  const totals = { checked: 0, failed: 0 };
+  let cursor = null;
+  let finished = false;
+  // Same (packStatus, createdAt desc) index as the store alerts query; pages follow a cursor, so stuck
+  // reports can never hide due ones behind them.
+  while (Date.now() - started < AUTO_CHECK_BUDGET_MS) {
+    let query = db.collection("store_reports").where("packStatus", "==", "pending").where("createdAt", ">=", since).where("createdAt", "<", todayStart).orderBy("createdAt", "desc");
+    if (cursor) query = query.startAfter(cursor);
+    const page = await query.limit(AUTO_CHECK_PAGE).get();
+    const due = page.docs.filter((doc) => isAutoCheckDue(doc.data(), today));
+    const result = await commitAutoChecks(db, due, now);
+    totals.checked += result.checked;
+    totals.failed += result.failed;
+    if (page.docs.length < AUTO_CHECK_PAGE) { finished = true; break; }
+    cursor = page.docs[page.docs.length - 1];
+  }
+  // Out of time: clear the date so the next visit carries on (already confirmed reports are no longer pending).
+  await marker.set({ lastRunDate: finished ? today : "", finishedAt: new Date().toISOString(), ...totals }, { merge: true });
+  if (finished) autoCheckDoneFor = today;
+  return { ran: true, ...totals, more: !finished };
+}
+
+// Test hook: forget the per-instance "already ran today" memo.
+export function resetAutoCheckMemo() {
+  autoCheckDoneFor = "";
+}
+
 export async function GET(request) {
   try {
     const { profile, db } = await requireProfile(request, ["store", "pack", "admin"]);
+    try { await autoCheckPastPending(db); } catch (error) { console.error("pack auto-check failed", error?.message || error); }
     const params = new URL(request.url).searchParams;
     const type = params.get("type");
     if (profile.role === "pack" && type && !REPORT_TYPES.includes(type)) return Response.json({ ok: false, error: "Pack can view preparation reports only" }, { status: 403 });
@@ -136,12 +233,12 @@ export async function GET(request) {
       const alertCutoff = new Date(Date.now() - ALERT_WINDOW_DAYS * 86_400_000).toISOString();
       const [storeIssueSnap, packIssueSnap] = await Promise.all([
         db.collection("store_reports").where("status", "in", ["waiting", "partial"]).where("createdAt", ">=", alertCutoff).orderBy("createdAt", "desc").limit(ALERT_PAGE_LIMIT).get(),
-        db.collection("store_reports").where("packStatus", "in", ["waiting", "partial", "returned"]).where("createdAt", ">=", alertCutoff).orderBy("createdAt", "desc").limit(ALERT_PAGE_LIMIT).get()
+        db.collection("store_reports").where("packStatus", "in", ["waiting", "partial", "returned", "wrong"]).where("createdAt", ">=", alertCutoff).orderBy("createdAt", "desc").limit(ALERT_PAGE_LIMIT).get()
       ]);
       const incompleteById = new Map();
       [...storeIssueSnap.docs, ...packIssueSnap.docs].forEach((doc) => {
         const item = { id: doc.id, ...doc.data() };
-        if (!item.deletedAt && REPORT_TYPES.includes(item.type)) incompleteById.set(doc.id, item);
+        if (!item.deletedAt && REPORT_TYPES.includes(item.type) && !isClosedByStore(item)) incompleteById.set(doc.id, item);
       });
       const incomplete = [...incompleteById.values()]
         .sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
@@ -326,7 +423,7 @@ export async function PATCH(request) {
           if (!snap.exists) return;
           const item = snap.data();
           if (item.type !== type || item.deletedAt || item.packStatus !== "pending") return;
-          const patch = { packStatus: "checked", packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: "", status: "saved", updatedAt: now };
+          const patch = { packStatus: "checked", packAutoConfirmed: false, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: "", status: "saved", updatedAt: now };
           patch.workflowHistory = appendReportHistory(item, reportKpiEvent("pack_checked", profile, now, { ...item, ...patch }, "", checkerName));
           changes.push({ ref: snap.ref, item, patch, event: "pack_checked", checkerName });
           updatedIds.push(snap.id);
@@ -336,15 +433,16 @@ export async function PATCH(request) {
         return Response.json({ ok: true, data: { ids: updatedIds, confirmedAt: now } });
       }
       const id = clean(body?.id, 200);
-      const packStatus = ["checked", "partial", "returned"].includes(body?.packStatus) ? body.packStatus : "";
+      const packStatus = ["checked", "partial", "returned", "wrong"].includes(body?.packStatus) ? body.packStatus : "";
       const checkerName = clean(body?.checkerName, 160);
       if (!validDocId(id) || !packStatus) return Response.json({ ok: false, error: "Invalid online pack update" }, { status: 400 });
       if (!checkerName) return Response.json({ ok: false, error: "Pack checker name is required" }, { status: 400 });
       const ref = db.collection("store_reports").doc(id); const snap = await ref.get();
       if (!snap.exists || !REPORT_TYPES.includes(snap.data().type)) return Response.json({ ok: false, error: "Preparation report not found" }, { status: 404 });
       const item = snap.data(); const now = new Date().toISOString(); const reason = clean(body?.reason, 1000);
-      if (packStatus === "returned" && !reason) return Response.json({ ok: false, error: "Provide return reason" }, { status: 400 });
-      const patch = { packStatus, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: packStatus === "returned" ? reason : "", status: packStatus === "returned" ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
+      const needsReason = ["returned", "wrong"].includes(packStatus);
+      if (needsReason && !reason) return Response.json({ ok: false, error: packStatus === "wrong" ? "กรุณาระบุว่าจัดสินค้าผิดอะไร" : "Provide return reason" }, { status: 400 });
+      const patch = { packStatus, packAutoConfirmed: false, packUpdatedAt: now, packUpdatedBy: profile.name || profile.email, packCheckerName: checkerName, returnReason: needsReason ? reason : "", status: needsReason ? "waiting" : packStatus === "partial" ? "partial" : "saved", updatedAt: now };
       patch.workflowHistory = appendReportHistory(item, reportKpiEvent(`pack_${packStatus}`, profile, now, { ...item, ...patch }, reason, checkerName));
       await commitReportChanges(db, [{ ref, item, patch, event: `pack_${packStatus}`, reason, checkerName }], profile, now);
       return Response.json({ ok: true, data: { id, ...item, ...patch } });
@@ -358,9 +456,9 @@ export async function PATCH(request) {
       const snap = await ref.get();
       if (!snap.exists || !REPORT_TYPES.includes(snap.data().type)) return Response.json({ ok: false, error: "Preparation report not found" }, { status: 404 });
       const item = snap.data();
-      if (item.deletedAt || !["returned", "partial"].includes(item.packStatus)) return Response.json({ ok: false, error: "Report is not waiting for store correction" }, { status: 409 });
+      if (item.deletedAt || !["returned", "partial", "wrong"].includes(item.packStatus)) return Response.json({ ok: false, error: "Report is not waiting for store correction" }, { status: 409 });
       const now = new Date().toISOString();
-      const patch = { status: "saved", packStatus: "pending", returnReason: "", resubmittedAt: now, resubmittedBy: profile.name || profile.email, storeCheckerName: checkerName, updatedAt: now };
+      const patch = { status: "saved", packStatus: "pending", packAutoConfirmed: false, returnReason: "", resubmittedAt: now, resubmittedBy: profile.name || profile.email, storeCheckerName: checkerName, updatedAt: now };
       patch.workflowHistory = appendReportHistory(item, reportKpiEvent("store_resubmitted", profile, now, { ...item, ...patch }, clean(body?.reason, 1000), checkerName));
       await commitReportChanges(db, [{ ref, item, patch, event: "store_resubmitted", reason: clean(body?.reason, 1000), checkerName }], profile, now);
       return Response.json({ ok: true, data: { id, ...item, ...patch } });

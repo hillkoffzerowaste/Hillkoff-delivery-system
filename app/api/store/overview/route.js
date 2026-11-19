@@ -11,7 +11,7 @@ const LIMITS = { reports: 6000, transfers: 3000, audits: 3000, workLogs: 3000, o
 // ช่วงหลายเดือน/ทั้งปีอ่านเอกสารมากขึ้นตามจำนวนวัน
 const LONG_LIMITS = { ...LIMITS, reports: 24000, transfers: 12000, audits: 12000, workLogs: 12000 };
 const TOO_MANY = "ข้อมูลมากเกินขีดจำกัด กรุณาเลือกช่วงให้สั้นลง";
-const REPORT_FIELDS = ["type", "status", "packStatus", "createdAt", "deletedAt", "workflowHistory", "bookingNumber", "detail", "note", "returnReason", "serviceDate", "confirmedAt", "storeCheckerName"];
+const REPORT_FIELDS = ["type", "status", "packStatus", "packUpdatedAt", "caseStatus", "caseUpdatedAt", "createdAt", "deletedAt", "workflowHistory", "bookingNumber", "detail", "note", "returnReason", "serviceDate", "confirmedAt", "storeCheckerName"];
 
 function tooMany() {
   return Object.assign(new Error(TOO_MANY), { status: 422 });
@@ -32,7 +32,7 @@ async function readOptional(query, cap) {
 async function readOpenReports(db) {
   const [byStatus, byPack] = await Promise.all([
     readOptional(db.collection("store_reports").where("status", "in", ["waiting", "partial"]).select(...REPORT_FIELDS), LIMITS.openReports),
-    readOptional(db.collection("store_reports").where("packStatus", "in", ["partial", "returned"]).select(...REPORT_FIELDS), LIMITS.openReports)
+    readOptional(db.collection("store_reports").where("packStatus", "in", ["partial", "returned", "wrong"]).select(...REPORT_FIELDS), LIMITS.openReports)
   ]);
   return { capped: byStatus.capped || byPack.capped, rows: [...new Map([...byStatus.rows, ...byPack.rows].map((row) => [row.id, row])).values()] };
 }

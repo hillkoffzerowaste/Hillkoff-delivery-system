@@ -332,7 +332,7 @@ export function LegacyStoreOverviewPanel({ apiFetch, settings, onNavigate }) {
           {showDocs && <section className="so-card">
             <div className="so-card-head"><h3>ปัญหาใบสั่งจอง / ออนไลน์</h3><button type="button" className="so-link" onClick={() => onNavigate?.(source === "online" ? "store-online" : "store-booking")}>ไปตรวจเอกสาร</button></div>
             <div className="so-list">
-              {issues.map((item) => <div key={item.id} className="so-item is-danger"><div><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b> · {item.type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}<div className="so-item-note">{item.reason || item.detail || "ยังไม่ระบุรายละเอียด"}</div><small>{item.packStatus === "returned" ? "แนวทาง: ตรวจเหตุผล แก้ไขข้อมูล แล้วส่งตรวจใหม่" : "แนวทาง: ตรวจรายละเอียดและติดตามสินค้าหรือข้อมูลที่ค้าง"}</small></div></div>)}
+              {issues.map((item) => <div key={item.id} className="so-item is-danger"><div><b>{item.bookingNumber || "ไม่มีเลขเอกสาร"}</b> · {item.type === "booking" ? "ใบสั่งจอง" : "ใบขายออนไลน์"}<div className="so-item-note">{item.reason || item.detail || "ยังไม่ระบุรายละเอียด"}</div><small>{["returned", "wrong"].includes(item.packStatus) ? "แนวทาง: ตรวจเหตุผล แก้ไขข้อมูล แล้วส่งตรวจใหม่" : "แนวทาง: ตรวจรายละเอียดและติดตามสินค้าหรือข้อมูลที่ค้าง"}</small></div></div>)}
               {charts && !issues.length && <p className="so-empty">ไม่พบปัญหาค้างในช่วงวันที่เลือก</p>}
               {issues.length > 0 && <small className="muted">แสดงไม่เกิน 20 รายการล่าสุด</small>}
             </div>

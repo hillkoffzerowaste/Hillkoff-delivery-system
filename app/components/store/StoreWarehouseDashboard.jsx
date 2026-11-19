@@ -340,7 +340,7 @@ function Orders({ data, go, moduleName }) {
       <Card label="สัดส่วนประเภทงาน"><Title title="สัดส่วนประเภทงาน" /><Donut unit="รายการ" label="สัดส่วนประเภทงาน" parts={[{ label: bookingName, value: r.booking, color: C.cyan }, { label: onlineName, value: r.online, color: C.violet }]} /></Card>
       <Card label="สถานะปัจจุบัน"><Title title="สถานะปัจจุบัน" sub="นับจากสถานะล่าสุดของแต่ละรายการ" />
         <Table label="สถานะงาน" min={280}><thead><tr><th>สถานะ</th><th className="num">จำนวน</th></tr></thead>
-          <tbody>{r.statuses.map((s) => <tr key={s.id}><td>{s.label}</td><td className="num" style={{ color: s.count && ["shortage", "returned"].includes(s.id) ? C.red : undefined }}>{fmt(s.count)}</td></tr>)}<tr><td>ลบ / นำออกจากคิว</td><td className="num">{fmt(r.removed)}</td></tr></tbody></Table>
+          <tbody>{r.statuses.map((s) => <tr key={s.id}><td>{s.label}</td><td className="num" style={{ color: s.count && ["shortage", "returned", "wrong"].includes(s.id) ? C.red : undefined }}>{fmt(s.count)}</td></tr>)}<tr><td>ลบ / นำออกจากคิว</td><td className="num">{fmt(r.removed)}</td></tr></tbody></Table>
         <div className="swd-actions"><button type="button" className="swd-link" onClick={() => go("store-booking")}>ไปหน้า{bookingName}</button><button type="button" className="swd-link" onClick={() => go("store-online")}>ไปหน้า{onlineName}</button></div>
       </Card>
     </div>
