@@ -34,5 +34,5 @@ test('date validation and ambiguous IDs',()=>{
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
   const db={collection:name=>({where:(field,op,date)=>({limit:()=>({get:async()=>{const found=rows.filter(r=>r[field]===date);return {size:found.length,docs:found.map(r=>({id:r.id,data:()=>r}))};}})}),doc:id=>({id,name})}),getAll:async(...refs)=>refs.map(()=>({exists:true}))};
-  const text=await dailyPackReport(db,'G','2026-11-25');assert.match(text,/ทั้งหมด: 1 ออเดอร์/);assert.match(text,/รายงานผ่าน LINE กลุ่มนี้แล้ว: 1/);assert.match(text,/ตรวจแล้ว: 1/);
+  const text=await dailyPackReport(db,'G','2026-11-25');assert.match(text,/ทั้งหมด: 1 ออเดอร์/);assert.match(text,/รายงานผ่าน LINE กลุ่มนี้แล้ว: 1/);assert.match(text,/แพ็คเสร็จสิ้น: 1/);assert.doesNotMatch(text,/จัดส่ง/);
 });
