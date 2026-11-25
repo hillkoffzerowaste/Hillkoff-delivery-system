@@ -3938,7 +3938,7 @@ export default function App() {
     if (!validateWorkModal()) return;
     const { order, role } = workModal;
     const text = [
-      role === "store" ? "📦 สโตร์ยืนยันออเดอร์" : "📦 ห้องแพ็คยืนยันออเดอร์",
+      role === "store" ? "📦 สโตร์ยืนยันออเดอร์" : "/📦 ห้องแพ็คยืนยันออเดอร์",
       `งาน: ${order.id}`,
       `เลขที่ใบสั่งจอง: ${formatOrderBookingNumbers(order) || "-"}`,
       order.customerName ? `ลูกค้า: ${order.customerName}` : "",

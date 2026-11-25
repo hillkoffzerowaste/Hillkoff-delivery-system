@@ -42,7 +42,8 @@ Set these environment variables:
 
 - `LINE_CHANNEL_SECRET`
 - `LINE_CHANNEL_ACCESS_TOKEN`
-- `LINE_DEFAULT_TO`
+- `LINE_DEFAULT_TO` (existing order notifications)
+- `LINE_ALLOWED_GROUP_IDS` (comma-separated group IDs allowed to query pack reports)
 
 Endpoints:
 
@@ -51,7 +52,7 @@ Endpoints:
 
 Order creation now sends a best-effort LINE OA push through `LINE_DEFAULT_TO`. If LINE env vars are missing, order creation still succeeds and the notification result is stored as skipped in Firestore `notifications`.
 
-LINE webhook events are verified with `x-line-signature` and stored in Firestore `line_webhook_events`.
+LINE webhook events are verified with `x-line-signature`. Pack commands use `line_pack_receipts` and `line_bot_processed`; ordinary chat messages are not stored. See [LINE pack bot setup](docs/line-pack-bot-setup.md).
 
 ## Google Sheets: ระบบส่งของเชียงใหม่ประจำวัน
 

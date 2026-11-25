@@ -1,5 +1,6 @@
 import { getAdminDb } from "../../../../lib/firebaseAdmin";
-import { verifyLineSignature } from "../../../../lib/lineOa";
+import { processPackEvents } from "../../../../lib/linePackEvents";
+import { replyLineText, verifyLineSignature } from "../../../../lib/lineOa";
 
 export const runtime = "nodejs";
 
@@ -9,10 +10,6 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Payload too large" }, { status: 413 });
   }
   const signature = request.headers.get("x-line-signature") || "";
-  if (!verifyLineSignature(rawBody, signature)) {
-    return Response.json({ ok: false, error: "Invalid LINE signature" }, { status: 401 });
-  }
-
   let payload;
   try {
     payload = JSON.parse(rawBody);
@@ -20,18 +17,17 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const events = Array.isArray(payload?.events) ? payload.events.slice(0, 100) : [];
-  if (!events.length) return Response.json({ ok: true });
-
-  try {
-    await getAdminDb().collection("line_webhook_events").add({
-      events,
-      destination: payload?.destination || "",
-      createdAt: new Date().toISOString()
-    });
-  } catch (e) {
-    return Response.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
+  // LINE's console verification probe is an empty event batch without a signature.
+  // It carries no user data and must not bypass validation for real webhook events.
+  const verificationProbe = !signature && Array.isArray(payload?.events) && payload.events.length === 0;
+  if (!verificationProbe && !verifyLineSignature(rawBody, signature)) {
+    return Response.json({ ok: false, error: "Invalid LINE signature" }, { status: 401 });
   }
 
-  return Response.json({ ok: true });
+  const events = Array.isArray(payload?.events) ? payload.events : [];
+  if (!events.length) return Response.json({ ok: true });
+
+  const allowedGroups = new Set((process.env.LINE_ALLOWED_GROUP_IDS || "").split(",").map(s => s.trim()).filter(Boolean));
+  const result = await processPackEvents({ events, allowedGroups, getDb: getAdminDb, reply: replyLineText });
+  return Response.json(result, { status: result.ok ? 200 : 500 });
 }

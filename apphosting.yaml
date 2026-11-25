@@ -73,3 +73,7 @@ env:
     secret: SMTP_PASS
     availability:
       - RUNTIME
+  - variable: LINE_CHANNEL_SECRET
+    secret: LINE_CHANNEL_SECRET
+  - variable: LINE_CHANNEL_ACCESS_TOKEN
+    secret: LINE_CHANNEL_ACCESS_TOKEN
