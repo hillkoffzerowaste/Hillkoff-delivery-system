@@ -1,7 +1,7 @@
 import { getAdminDb } from "../../../../lib/firebaseAdmin";
 import { processPackEvents } from "../../../../lib/linePackEvents";
-import { forwardLineEvents, searchScanToSheet } from "../../../../lib/lineRelay";
-import { replyLineCard, verifyLineSignature } from "../../../../lib/lineOa";
+import { forwardLineEvents, searchScanToSheet, summarizeScanToSheet } from "../../../../lib/lineRelay";
+import { replyLineCard, replyLinePackMenu, verifyLineSignature } from "../../../../lib/lineOa";
 
 export const runtime = "nodejs";
 
@@ -29,7 +29,7 @@ export async function POST(request) {
   if (!events.length) return Response.json({ ok: true });
 
   const allowedGroups = new Set((process.env.LINE_ALLOWED_GROUP_IDS || "").split(",").map(s => s.trim()).filter(Boolean));
-  const result = await processPackEvents({ events, allowedGroups, getDb: getAdminDb, reply: replyLineCard, scanSearch: searchScanToSheet });
+  const result = await processPackEvents({ events, allowedGroups, getDb: getAdminDb, reply: replyLineCard, replyMenu: replyLinePackMenu, scanSearch: searchScanToSheet, scanSummary: summarizeScanToSheet });
   const relayEvents = events.filter((event) => (
     event?.source?.type === "group" && allowedGroups.has(String(event.source.groupId || ""))
   ));

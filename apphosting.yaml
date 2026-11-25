@@ -88,6 +88,10 @@ env:
     value: https://scan-to-sheet--hillkoff-twin-oganization.asia-southeast1.hosted.app/api/line-search
     availability:
       - RUNTIME
+  - variable: SCAN_TO_SHEET_LINE_SUMMARY_URL
+    value: https://scan-to-sheet--hillkoff-twin-oganization.asia-southeast1.hosted.app/api/line-summary
+    availability:
+      - RUNTIME
   - variable: SCAN_TO_SHEET_LINE_FORWARD_SECRET
     secret: SCAN_TO_SHEET_LINE_FORWARD_SECRET
     availability:

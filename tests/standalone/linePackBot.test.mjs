@@ -33,6 +33,9 @@ test('date validation and ambiguous IDs',()=>{
   assert.deepEqual(parsePackCommand('/วันนี'),{type:'daily',date:'2026-11-25'});
   assert.deepEqual(parsePackCommand('/ออเดอ สมชาย'),{type:'search',query:'สมชาย'});
   assert.deepEqual(parsePackCommand('/TH1234'),{type:'scan-search',query:'TH1234'});
+  assert.deepEqual(parsePackCommand('/pack'),{type:'menu'});
+  assert.deepEqual(parsePackCommand('/เชียงใหม่วันนี้'),{type:'daily',date:'2026-11-25'});
+  assert.deepEqual(parsePackCommand('/สแกนวันนี้'),{type:'scan-daily',date:'2026-11-25'});
 });
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
