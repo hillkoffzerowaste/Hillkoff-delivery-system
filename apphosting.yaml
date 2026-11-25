@@ -36,7 +36,8 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    value: "BBuNtbpAi3yN2yPbqM-3E_cGWk9FzqNUruJyf_XkvHAhLnDdVbI4AHpAmrlmPKAGyYZruc0_WpNnasowuTClt2Q"
+    value: "BBuNtbpAi3yN2yPbqM-3E_cGWk9FzqNUruJyf_XkvHAhLnDdVbI4AHpAmrlmPKAGyYZruc0\
+      _WpNnasowuTClt2Q"
     availability:
       - BUILD
       - RUNTIME
@@ -79,3 +80,13 @@ env:
     secret: LINE_CHANNEL_ACCESS_TOKEN
   - variable: LINE_ALLOWED_GROUP_IDS
     secret: LINE_ALLOWED_GROUP_IDS
+  - variable: SCAN_TO_SHEET_LINE_EVENTS_URL
+    value: https://scan-to-sheet--hillkoff-twin-oganization.asia-southeast1.hosted.app/api/line-events
+    availability:
+      - RUNTIME
+  - variable: SCAN_TO_SHEET_LINE_FORWARD_SECRET
+    secret: SCAN_TO_SHEET_LINE_FORWARD_SECRET
+    availability:
+      - RUNTIME
+  - variable: LINE_FORWARD_SECRET
+    secret: LINE_FORWARD_SECRET

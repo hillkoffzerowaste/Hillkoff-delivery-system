@@ -1,5 +1,6 @@
 import { getAdminDb } from "../../../../lib/firebaseAdmin";
 import { processPackEvents } from "../../../../lib/linePackEvents";
+import { forwardLineEvents } from "../../../../lib/lineRelay";
 import { replyLineText, verifyLineSignature } from "../../../../lib/lineOa";
 
 export const runtime = "nodejs";
@@ -29,5 +30,9 @@ export async function POST(request) {
 
   const allowedGroups = new Set((process.env.LINE_ALLOWED_GROUP_IDS || "").split(",").map(s => s.trim()).filter(Boolean));
   const result = await processPackEvents({ events, allowedGroups, getDb: getAdminDb, reply: replyLineText });
+  const relayEvents = events.filter((event) => (
+    event?.source?.type === "group" && allowedGroups.has(String(event.source.groupId || ""))
+  ));
+  await forwardLineEvents(relayEvents);
   return Response.json(result, { status: result.ok ? 200 : 500 });
 }
