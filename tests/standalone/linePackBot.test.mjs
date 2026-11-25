@@ -5,6 +5,9 @@ import { dailyPackReport, parsePackCommand } from '../../lib/linePackBot.js';
 function event(id, text='/ช่วยเหลือ', groupId='G') {
   return {type:'message',webhookEventId:id,replyToken:id,message:{type:'text',text},source:{type:'group',groupId}};
 }
+function userEvent(id, text='/ช่วยเหลือ', userId='U') {
+  return {type:'message',webhookEventId:id,replyToken:id,message:{type:'text',text},source:{type:'user',userId}};
+}
 function eventDb() {
   const saved = new Map();
   return {collection:()=>({doc:id=>({get:async()=>({exists:saved.has(id)}),set:async data=>saved.set(id,data)})})};
@@ -23,6 +26,11 @@ test('group onboarding works without order authorization and is deduplicated',as
   const db=eventDb();const sent=[];
   const args={events:[event('a','/รหัสกลุ่ม')],allowedGroups:new Set(),getDb:()=>db,reply:async(_,text)=>sent.push(text)};
   await processPackEvents(args);await processPackEvents(args);assert.equal(sent.length,1);assert.match(sent[0],/G/);
+});
+test('OA friends can use slash commands in direct chat',async()=>{
+  const db=eventDb();const sent=[];
+  const args={events:[userEvent('direct-command'),userEvent('direct-text','สวัสดี')],allowedGroups:new Set(),getDb:()=>db,reply:async(_,text)=>sent.push(text)};
+  assert.deepEqual(await processPackEvents(args),{ok:true});assert.equal(sent.length,1);assert.match(sent[0],/น้องบอทห้องแพ็ค/);
 });
 test('date validation and ambiguous IDs',()=>{
   assert.equal(parsePackCommand('/วันที่ 31/02/2569').type,'help');
