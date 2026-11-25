@@ -27,7 +27,9 @@ test('group onboarding works without order authorization and is deduplicated',as
 test('date validation and ambiguous IDs',()=>{
   assert.equal(parsePackCommand('/วันที่ 31/02/2569').type,'help');
   assert.equal(parsePackCommand('/วันที่ 25/11/2569').date,'2026-11-25');
-  assert.equal(parsePackCommand('/งาน: A\nงาน: B').type,'help');
+  assert.equal(parsePackCommand('/งาน: A\nงาน: B').type,'search');
+  assert.deepEqual(parsePackCommand('/สมชาย'),{type:'search',query:'สมชาย'});
+  assert.deepEqual(parsePackCommand('/ช่วยเหลือ'),{type:'help'});
 });
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
