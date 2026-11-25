@@ -77,3 +77,5 @@ env:
     secret: LINE_CHANNEL_SECRET
   - variable: LINE_CHANNEL_ACCESS_TOKEN
     secret: LINE_CHANNEL_ACCESS_TOKEN
+  - variable: LINE_ALLOWED_GROUP_IDS
+    secret: LINE_ALLOWED_GROUP_IDS
