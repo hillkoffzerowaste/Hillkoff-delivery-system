@@ -88,5 +88,3 @@ env:
     secret: SCAN_TO_SHEET_LINE_FORWARD_SECRET
     availability:
       - RUNTIME
-  - variable: LINE_FORWARD_SECRET
-    secret: LINE_FORWARD_SECRET
