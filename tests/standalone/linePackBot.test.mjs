@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { processPackEvents } from '../../lib/linePackEvents.js';
-import { dailyPackReport, parsePackCommand } from '../../lib/linePackBot.js';
+import { dailyPackReport, parseCustomerTrackingMessage, parsePackCommand } from '../../lib/linePackBot.js';
 const thailandToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 function event(id, text='/ช่วยเหลือ', groupId='G') {
   return {type:'message',webhookEventId:id,replyToken:id,message:{type:'text',text},source:{type:'group',groupId}};
@@ -45,6 +45,11 @@ test('date validation and ambiguous IDs',()=>{
   assert.deepEqual(parsePackCommand('/pack'),{type:'menu'});
   assert.deepEqual(parsePackCommand('/เชียงใหม่วันนี้'),{type:'daily',date:thailandToday});
   assert.deepEqual(parsePackCommand('/สแกนวันนี้'),{type:'scan-daily',date:thailandToday});
+});
+test('customer tracking parses logical list entries before the mention suffix',()=>{
+  assert.deepEqual(parseCustomerTrackingMessage('1. ร้านกาแฟบ้านดอย\n- คาเฟ่ช้างเผือก @ห้องแพ็ค'), { type:'customer-tracking', queries:['ร้านกาแฟบ้านดอย','คาเฟ่ช้างเผือก'] });
+  assert.deepEqual(parseCustomerTrackingMessage('ชื่อยาวที่ถูกส่งเป็นข้อความเดียวแม้จะแสดงหลายบรรทัดบนมือถือ @ห้องแพ็ค').queries, ['ชื่อยาวที่ถูกส่งเป็นข้อความเดียวแม้จะแสดงหลายบรรทัดบนมือถือ']);
+  assert.equal(parseCustomerTrackingMessage('ร้านกาแฟบ้านดอย'), null);
 });
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
