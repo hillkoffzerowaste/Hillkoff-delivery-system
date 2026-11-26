@@ -3,7 +3,7 @@ import { parsePackCommand, reportDate, isChiangmai, bangkokToday, handlePackComm
 describe('LINE pack commands', () => {
   it('reads existing multiline pack text and rejects ambiguous jobs', () => {
     expect(parsePackCommand('/📦 ห้องแพ็คยืนยันออเดอร์\nงาน: ABC-123\nลูกค้า: ทดสอบ')).toEqual({type:'order', id:'ABC-123', register:true});
-    expect(parsePackCommand('/งาน: A\nงาน: B').type).toBe('help');
+    expect(parsePackCommand('/งาน: A\nงาน: B').type).toBe('search');
     expect(parsePackCommand('งาน: A')).toBeNull();
     expect(parsePackCommand('/ออเดอร์ ../x').type).toBe('help');
   });
