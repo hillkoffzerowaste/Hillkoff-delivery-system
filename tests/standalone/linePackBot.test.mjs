@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { processPackEvents } from '../../lib/linePackEvents.js';
 import { dailyPackReport, parseCustomerTrackingMessage, parsePackCommand } from '../../lib/linePackBot.js';
+import { lineFlexCard } from '../../lib/lineOa.js';
 const thailandToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 function event(id, text='/ช่วยเหลือ', groupId='G') {
   return {type:'message',webhookEventId:id,replyToken:id,message:{type:'text',text},source:{type:'group',groupId}};
@@ -50,6 +51,14 @@ test('customer tracking parses logical list entries before the mention suffix',(
   assert.deepEqual(parseCustomerTrackingMessage('1. ร้านกาแฟบ้านดอย\n- คาเฟ่ช้างเผือก @ห้องแพ็ค'), { type:'customer-tracking', queries:['ร้านกาแฟบ้านดอย','คาเฟ่ช้างเผือก'] });
   assert.deepEqual(parseCustomerTrackingMessage('ชื่อยาวที่ถูกส่งเป็นข้อความเดียวแม้จะแสดงหลายบรรทัดบนมือถือ @ห้องแพ็ค').queries, ['ชื่อยาวที่ถูกส่งเป็นข้อความเดียวแม้จะแสดงหลายบรรทัดบนมือถือ']);
   assert.equal(parseCustomerTrackingMessage('ร้านกาแฟบ้านดอย'), null);
+});
+test('Chiang Mai card keeps a compact order summary and full-list action',()=>{
+  const card = lineFlexCard('📊 ออเดอร์เชียงใหม่ วันที่ 2026-11-26\nทั้งหมด: 30 ออเดอร์\nรายงานผ่าน LINE กลุ่มนี้แล้ว: 0\nยังไม่รายงาน: 30\n\nรายการออเดอร์\n13. ร้านกาแฟ · ใบสั่งจอง CSP-1\n   รอแพ็ค\n\nสรุปสถานะแพ็ค\nแพ็คเสร็จสิ้น: 29\nรอแพ็ค: 1');
+  const json = JSON.stringify(card);
+  assert.match(json, /สรุปรายการออเดอร์/);
+  assert.match(json, /30 รายการ/);
+  assert.match(json, /ดูออเดอร์ทั้งหมด/);
+  assert.match(json, /pack-daily:2026-11-26/);
 });
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
