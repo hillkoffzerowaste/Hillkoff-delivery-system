@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { processPackEvents } from '../../lib/linePackEvents.js';
-import { dailyPackReport, parseCustomerTrackingMessage, parsePackCommand } from '../../lib/linePackBot.js';
+import { customerTrackingReport, dailyPackReport, parseCustomerTrackingMessage, parsePackCommand } from '../../lib/linePackBot.js';
 import { lineFlexCard } from '../../lib/lineOa.js';
 const thailandToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 function event(id, text='/ช่วยเหลือ', groupId='G') {
@@ -59,6 +59,22 @@ test('Chiang Mai card keeps a compact order summary and full-list action',()=>{
   assert.match(json, /30 รายการ/);
   assert.match(json, /ดูออเดอร์ทั้งหมด/);
   assert.match(json, /pack-daily:2026-11-26/);
+});
+test('customer tracking only includes today and the previous day', async()=>{
+  const rows = [
+    { id:'today', customerName:'บริษัท ดิเอิร์ธ โฮเทล จำกัด', serviceDate:'2026-11-27', deliveryMethod:'company_driver', packStatus:'checked' },
+    { id:'yesterday', customerName:'บริษัท ดิเอิร์ธ โฮเทล จำกัด', serviceDate:'2026-11-26', deliveryMethod:'company_driver', packStatus:'pending' },
+    { id:'older', customerName:'บริษัท ดิเอิร์ธ โฮเทล จำกัด', serviceDate:'2026-11-25', deliveryMethod:'company_driver', packStatus:'pending' },
+  ];
+  const db = { collection: () => ({ where: (field, op, date) => ({ limit: () => ({ get: async () => {
+    const found = rows.filter((row) => row[field] === date);
+    return { size: found.length, docs: found.map((row) => ({ id: row.id, data: () => row })) };
+  } }) }) }) };
+  const text = await customerTrackingReport(db, ['บริษัท ดิเอิร์ธ โฮเทล จำกัด'], '2026-11-27');
+  assert.match(text, /เฉพาะวันนี้และวันก่อนหน้า 1 วัน/);
+  assert.match(text, /2026-11-27/);
+  assert.match(text, /2026-11-26/);
+  assert.doesNotMatch(text, /2026-11-25/);
 });
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
