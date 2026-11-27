@@ -72,8 +72,7 @@ test('customer tracking only includes today and the previous day', async()=>{
   } }) }) }) };
   const text = await customerTrackingReport(db, ['บริษัท ดิเอิร์ธ โฮเทล จำกัด'], '2026-11-27');
   assert.match(text, /เฉพาะวันนี้และวันก่อนหน้า 1 วัน/);
-  assert.match(text, /2026-11-27/);
-  assert.match(text, /2026-11-26/);
+  assert.match(text, /จัดเสร็จแล้ว/);
   assert.doesNotMatch(text, /2026-11-25/);
 });
 test('customer tracking card keeps later list entries instead of truncating after the eighth', () => {
@@ -83,6 +82,14 @@ test('customer tracking card keeps later list entries instead of truncating afte
   const json = JSON.stringify(card);
   assert.match(json, /ลูกค้า 9/);
   assert.match(json, /ลูกค้า 16/);
+});
+test('customer tracking card shows a next button only when another page exists', () => {
+  const text = '📋 ติดตามออเดอร์ลูกค้า\nแสดงรายการ 1-8 จาก 16 รายการ (เฉพาะวันนี้และวันก่อนหน้า 1 วัน)\ntracking-more:abc123:1\n\n🔎 ลูกค้า 1\n✅ ลูกค้า 1 · CSP-1 · 2026-11-27 · แพ็คเสร็จสิ้น';
+  const json = JSON.stringify(lineFlexCard(text));
+  assert.match(json, /ดูรายการที่เหลือ/);
+  assert.match(json, /pack-track:abc123:1/);
+  const finalText = text.replace(/แสดงรายการ 1-8 จาก 16 รายการ[^\n]*/, 'แสดงรายการ 9-16 จาก 16 รายการ').replace(/tracking-more:[^\n]+\n/, '');
+  assert.doesNotMatch(JSON.stringify(lineFlexCard(finalText)), /ดูรายการที่เหลือ/);
 });
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
