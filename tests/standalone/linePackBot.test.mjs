@@ -75,6 +75,12 @@ test('customer tracking only includes today and the previous day', async()=>{
   assert.match(text, /จัดเสร็จแล้ว/);
   assert.doesNotMatch(text, /2026-11-25/);
 });
+test('customer tracking tolerates extra or misspelled name fragments', async()=>{
+  const row = { id:'actual', customerName:'ร้าน กุ้ง  อั๊ยยะ', serviceDate:'2026-11-27', deliveryMethod:'company_driver', packStatus:'checked' };
+  const db = { collection: () => ({ where: (field, op, date) => ({ limit: () => ({ get: async () => ({ size: row[field] === date ? 1 : 0, docs: row[field] === date ? [{ id: row.id, data: () => row }] : [] }) }) }) }) };
+  const text = await customerTrackingReport(db, ['กุ้ง อ๊ยะยะ บด#9'], '2026-11-27');
+  assert.match(text, /จัดเสร็จแล้ว/);
+});
 test('customer tracking card keeps later list entries instead of truncating after the eighth', () => {
   const sections = ['📋 ติดตามออเดอร์ลูกค้า', 'ค้นหา 16 รายการ (เฉพาะวันนี้และวันก่อนหน้า 1 วัน)'];
   for (let index = 1; index <= 16; index += 1) sections.push('', `🔎 ลูกค้า ${index}`, `✅ ลูกค้า ${index} · CSP-${index} · 2026-11-27 · แพ็คเสร็จสิ้น`);
