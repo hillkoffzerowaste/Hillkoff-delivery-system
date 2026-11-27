@@ -76,6 +76,14 @@ test('customer tracking only includes today and the previous day', async()=>{
   assert.match(text, /2026-11-26/);
   assert.doesNotMatch(text, /2026-11-25/);
 });
+test('customer tracking card keeps later list entries instead of truncating after the eighth', () => {
+  const sections = ['📋 ติดตามออเดอร์ลูกค้า', 'ค้นหา 16 รายการ (เฉพาะวันนี้และวันก่อนหน้า 1 วัน)'];
+  for (let index = 1; index <= 16; index += 1) sections.push('', `🔎 ลูกค้า ${index}`, `✅ ลูกค้า ${index} · CSP-${index} · 2026-11-27 · แพ็คเสร็จสิ้น`);
+  const card = lineFlexCard(sections.join('\n'));
+  const json = JSON.stringify(card);
+  assert.match(json, /ลูกค้า 9/);
+  assert.match(json, /ลูกค้า 16/);
+});
 test('daily totals deduplicate queries, respect round dates and retain completed jobs',async()=>{
   const rows=[{id:'a',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-25',deliveryMethod:'company_driver',packStatus:'checked',queueStatus:'completed'}, {id:'b',serviceDate:'2026-11-25',chiangmaiRoundDate:'2026-11-26',deliveryMethod:'company_driver'}, {id:'c',serviceDate:'2026-11-25',deliveryMethod:'outstation'}];
   const db={collection:name=>({where:(field,op,date)=>({limit:()=>({get:async()=>{const found=rows.filter(r=>r[field]===date);return {size:found.length,docs:found.map(r=>({id:r.id,data:()=>r}))};}})}),doc:id=>({id,name})}),getAll:async(...refs)=>refs.map(()=>({exists:true}))};
